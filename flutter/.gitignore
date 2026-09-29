@@ -54,6 +54,9 @@ lib/generated_bridge.freezed.dart
 **/flutter/generated_plugin_registrant.h
 **/flutter/generated_plugins.cmake
 **/Runner/bridge_generated.h
+# NikoDesk: the generated bridge header is committed alongside the dart side
+# so tag-based CI builds work without a generation job.
+!**/Runner/bridge_generated.h
 flutter_export_environment.sh
 Flutter-Generated.xcconfig
 key.jks
