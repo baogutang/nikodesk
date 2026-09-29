@@ -5,44 +5,66 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NikoDesk - Remote desktop on your own server</title>
 <meta name="description" content="NikoDesk pairs a RustDesk-powered client with the rendezvous and relay you host yourself. macOS, Windows and Android, built in the open.">
-<link rel="icon" href="assets/favicon.png" type="image/png">
-<link rel="apple-touch-icon" href="assets/logo.png">
+<link rel="icon" href="assets/favicon.png?v=4" type="image/png">
+<link rel="apple-touch-icon" href="assets/logo.png?v=4">
+<link rel="preload" href="assets/fonts/space-grotesk-700.woff2?v=4" as="font" type="font/woff2" crossorigin>
 <meta property="og:title" content="NikoDesk - Remote desktop on your own server">
 <meta property="og:description" content="RustDesk-powered client, self-hosted rendezvous and relay. No public cloud in the loop.">
 <meta property="og:image" content="assets/og.jpg">
 <meta property="og:type" content="website">
 <style>
-/* NikoDesk site v3. Tokens mirror the app: light = lilac seed 6C4CF1 on a
+/* NikoDesk site v4. Brand tokens mirror the app: light = lilac 6C4CF1 on a
    F3EFFF->EAF1FF canvas, dark = night console 101319/191E27 with 5B8CFF.
-   Radius system: cards 14px, inline code 8px, buttons pill. One accent per theme. */
+   Display font is self-hosted Space Grotesk (latin only; CJK falls back to
+   system). Radius system: cards 16px, code 8px, buttons pill. One accent per
+   theme, one aurora pair per theme. All motion degrades under reduced-motion. */
+@font-face {
+  font-family: "Space Grotesk";
+  src: url("assets/fonts/space-grotesk-700.woff2?v=4") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Space Grotesk";
+  src: url("assets/fonts/space-grotesk-500.woff2?v=4") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
 :root {
   --ink: #14131f;
-  --muted: #5d5a72;
+  --muted: #5b5871;
   --accent: #6c4cf1;
+  --accent-2: #4a5dff;
   --accent-ink: #ffffff;
-  --accent-soft: rgba(108, 76, 241, 0.09);
+  --accent-soft: rgba(108, 76, 241, 0.10);
   --surface: #ffffff;
   --surface-2: #f7f6fc;
   --line: rgba(20, 19, 31, 0.09);
   --shadow: 0 18px 50px rgba(76, 58, 158, 0.13);
-  --canvas: linear-gradient(168deg, #f3efff 0%, #eaf1ff 62%, #eef1fb 100%);
+  --shadow-lg: 0 30px 80px rgba(76, 58, 158, 0.20);
   --code-bg: #14131f;
   --code-ink: #e9e7f7;
+  --blob-a: rgba(108, 76, 241, 0.20);
+  --blob-b: rgba(46, 107, 255, 0.16);
+  --display: "Space Grotesk", -apple-system, "SF Pro Display", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --ink: #eaecf4;
     --muted: #9aa3b5;
     --accent: #5b8cff;
+    --accent-2: #7c5cff;
     --accent-ink: #0b0e14;
     --accent-soft: rgba(91, 140, 255, 0.14);
     --surface: #191e27;
     --surface-2: #151a22;
     --line: rgba(234, 236, 244, 0.09);
     --shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
-    --canvas: #0f1319;
+    --shadow-lg: 0 34px 90px rgba(0, 0, 0, 0.55);
     --code-bg: #0b0e14;
     --code-ink: #d6dcf0;
+    --blob-a: rgba(91, 140, 255, 0.22);
+    --blob-b: rgba(124, 92, 255, 0.18);
   }
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -51,28 +73,42 @@ html { scroll-behavior: smooth; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
     "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  background: var(--canvas);
-  background-attachment: fixed;
+  background: #eef1fb;
   color: var(--ink);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
+/* Aurora: two slow drifting blobs behind everything, then fine grain. */
+.aurora { position: fixed; inset: 0; z-index: -2; overflow: hidden; }
+.aurora::before, .aurora::after { content: ""; position: absolute; border-radius: 50%; filter: blur(90px); }
+.aurora::before { width: 46vw; height: 46vw; left: -8vw; top: -12vw; background: var(--blob-a); }
+.aurora::after { width: 40vw; height: 40vw; right: -6vw; top: 22vh; background: var(--blob-b); }
+@media (prefers-reduced-motion: no-preference) {
+  .aurora::before { animation: drift-a 26s ease-in-out infinite alternate; }
+  .aurora::after { animation: drift-b 32s ease-in-out infinite alternate; }
+  @keyframes drift-a { to { transform: translate(9vw, 14vh) scale(1.15); } }
+  @keyframes drift-b { to { transform: translate(-8vw, -10vh) scale(0.9); } }
+}
+.grain { position: fixed; inset: 0; z-index: 60; pointer-events: none; opacity: .04; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E"); }
 a { color: inherit; text-decoration: none; }
 img { display: block; max-width: 100%; }
-.wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 28px; }
 
 /* Nav */
 .nav {
   position: sticky; top: 0; z-index: 20;
   backdrop-filter: blur(14px) saturate(1.4);
   -webkit-backdrop-filter: blur(14px) saturate(1.4);
-  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
   border-bottom: 1px solid var(--line);
 }
-.nav-in { display: flex; align-items: center; gap: 26px; height: 64px; }
-.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; letter-spacing: -0.01em; }
+.nav-in { display: flex; align-items: center; gap: 26px; height: 62px; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 700; font-size: 17.5px; letter-spacing: -0.01em; }
 .brand img { width: 26px; height: 26px; border-radius: 7px; }
 .nav-links { display: flex; gap: 22px; margin-left: auto; font-size: 14.5px; color: var(--muted); }
+.nav-links a { transition: color .2s; }
 .nav-links a:hover { color: var(--accent); }
 .nav-cta {
   font-size: 14px; font-weight: 600; padding: 8px 16px;
@@ -85,71 +121,102 @@ img { display: block; max-width: 100%; }
 @media (max-width: 900px) { .nav-links { display: none; } .nav-in { gap: 14px; } .nav-cta { margin-left: auto; } }
 
 /* Hero */
-.hero { padding: 76px 0 40px; }
-.hero-grid { display: grid; grid-template-columns: 6fr 6fr; gap: 56px; align-items: center; }
+.hero { padding: 84px 0 30px; position: relative; }
+.hero-grid { display: grid; grid-template-columns: 11fr 9fr; gap: 60px; align-items: center; }
 .hero h1 {
-  font-size: clamp(38px, 4.6vw, 56px);
-  line-height: 1.06; letter-spacing: -0.025em; font-weight: 800;
+  font-family: var(--display);
+  font-size: clamp(42px, 5vw, 76px);
+  line-height: 1.02; letter-spacing: -0.03em; font-weight: 700;
 }
-.hero h1 em { font-style: normal; color: var(--accent); }
-.hero p.sub { margin-top: 20px; font-size: 17.5px; color: var(--muted); max-width: 46ch; }
-.cta-row { display: flex; gap: 14px; margin-top: 30px; flex-wrap: wrap; }
+.hero h1 .grad {
+  background: linear-gradient(120deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.hero p.sub { margin-top: 22px; font-size: 18px; color: var(--muted); max-width: 46ch; }
+.cta-row { display: flex; gap: 14px; margin-top: 34px; flex-wrap: wrap; }
 .btn {
   display: inline-flex; align-items: center; gap: 8px;
-  font-size: 15.5px; font-weight: 650; padding: 13px 26px;
+  font-size: 15.5px; font-weight: 650; padding: 14px 28px;
   border-radius: 999px; transition: transform .18s, box-shadow .18s, border-color .18s;
 }
 .btn:active { transform: scale(0.98); }
-.btn-primary { background: var(--accent); color: var(--accent-ink); box-shadow: var(--shadow); }
-.btn-primary:hover { transform: translateY(-2px); }
+.btn-primary {
+  color: var(--accent-ink);
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  box-shadow: 0 12px 34px color-mix(in srgb, var(--accent) 34%, transparent);
+}
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 18px 44px color-mix(in srgb, var(--accent) 44%, transparent); }
 .btn-ghost { border: 1px solid var(--line); color: var(--ink); background: color-mix(in srgb, var(--surface) 55%, transparent); }
 .btn-ghost:hover { border-color: var(--accent); transform: translateY(-2px); }
 
-/* Hero screenshot frame with theme toggle */
+/* Hero screenshot: tilted frame, segmented toggle with sliding thumb, tilt on hover */
+.shot-wrap { position: relative; }
 .shot-frame {
-  position: relative; border-radius: 14px; border: 1px solid var(--line);
-  background: var(--surface); box-shadow: var(--shadow);
-  padding: 10px; overflow: hidden;
+  position: relative; border-radius: 16px; border: 1px solid var(--line);
+  background: var(--surface); box-shadow: var(--shadow-lg);
+  padding: 10px; transform: rotate(-1.4deg);
+  transition: transform .5s cubic-bezier(.16,1,.3,1), box-shadow .5s;
+  will-change: transform;
 }
+.shot-frame:hover { box-shadow: 0 40px 110px color-mix(in srgb, var(--accent) 26%, rgba(0,0,0,.3)); }
 .shot-bar { display: flex; align-items: center; gap: 6px; padding: 4px 6px 10px; }
 .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--line); }
 .dot.r { background: #ff5f57; } .dot.y { background: #febc2e; } .dot.g { background: #28c840; }
-.shot-stage { position: relative; aspect-ratio: 2560 / 2056; border-radius: 8px; overflow: hidden; background: #101319; }
-.shot-stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: opacity .55s ease; }
+.shot-stage { position: relative; aspect-ratio: 2560 / 2056; border-radius: 10px; overflow: hidden; background: #101319; }
+.shot-stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: opacity .5s ease; }
 .shot-stage img.off { opacity: 0; }
 .theme-toggle {
-  position: absolute; z-index: 5; right: 18px; top: 52px;
-  display: inline-flex; padding: 4px; gap: 2px;
+  position: absolute; z-index: 5; right: 18px; top: 54px;
+  display: grid; grid-template-columns: 1fr 1fr; padding: 4px; width: 148px;
   border-radius: 999px; border: 1px solid var(--line);
   background: color-mix(in srgb, var(--surface) 82%, transparent);
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
-.theme-toggle button {
-  border: 0; background: transparent; color: var(--muted);
-  font-size: 12.5px; font-weight: 600; padding: 6px 14px; border-radius: 999px;
-  cursor: pointer; transition: background .25s, color .25s;
+.theme-toggle .thumb {
+  position: absolute; top: 4px; left: 4px; width: calc(50% - 4px); height: calc(100% - 8px);
+  border-radius: 999px; background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  transition: transform .32s cubic-bezier(.16,1,.3,1);
 }
-.theme-toggle button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
-.shot-note { margin-top: 14px; font-size: 13.5px; color: var(--muted); text-align: center; }
+.theme-toggle[data-shot="dark"] .thumb { transform: translateX(100%); }
+.theme-toggle button {
+  position: relative; z-index: 1; border: 0; background: transparent; color: var(--muted);
+  font-size: 12.5px; font-weight: 650; padding: 7px 0; border-radius: 999px; cursor: pointer;
+  transition: color .3s;
+}
+.theme-toggle button[aria-pressed="true"] { color: var(--accent-ink); }
+@media (prefers-reduced-motion: reduce) { .shot-frame { transform: none; } }
 
-/* Facts strip */
-.facts { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin-top: 64px; }
-.facts-in { display: grid; grid-template-columns: repeat(4, 1fr); }
-.fact { padding: 22px 18px; font-size: 14.5px; color: var(--muted); border-left: 1px solid var(--line); }
-.fact:first-child { border-left: 0; padding-left: 0; }
-.fact b { display: block; color: var(--ink); font-size: 15.5px; font-weight: 650; }
-@media (max-width: 900px) { .facts-in { grid-template-columns: 1fr 1fr; } .fact:nth-child(3) { border-left: 0; padding-left: 0; } .fact { padding: 16px 12px; } }
+/* Meta pills under hero */
+.meta { margin-top: 58px; display: flex; flex-wrap: wrap; gap: 10px; }
+.pill {
+  font-size: 13px; font-weight: 600; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px;
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+}
+.pill b { color: var(--ink); font-weight: 650; }
 
-/* Section scaffolding */
-section { padding: 96px 0; }
-h2 { font-size: clamp(28px, 3vw, 38px); letter-spacing: -0.02em; line-height: 1.15; font-weight: 750; }
-.lede { margin-top: 14px; color: var(--muted); font-size: 16.5px; max-width: 58ch; }
+/* Sections */
+section { padding: 104px 0; }
+h2 {
+  font-family: var(--display);
+  font-size: clamp(30px, 3.4vw, 46px); letter-spacing: -0.025em; line-height: 1.08; font-weight: 700;
+  max-width: 22ch;
+}
+.lede { margin-top: 16px; color: var(--muted); font-size: 17px; max-width: 58ch; }
 
-/* Why: asymmetric text + topology diagram */
-.why-grid { display: grid; grid-template-columns: 5fr 7fr; gap: 64px; align-items: center; }
-.why-copy p { margin-top: 16px; color: var(--muted); font-size: 15.5px; max-width: 46ch; }
+/* Why: copy + topology + compiled-policy terminal card */
+.why-grid { display: grid; grid-template-columns: 6fr 6fr; gap: 64px; align-items: center; }
+.why-copy p { margin-top: 18px; color: var(--muted); font-size: 15.5px; max-width: 48ch; }
 .why-copy p b { color: var(--ink); font-weight: 650; }
-.topo { width: 100%; height: auto; }
+.term {
+  margin-top: 26px; background: var(--code-bg); border-radius: 12px; overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.term-bar { display: flex; gap: 6px; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,.06); }
+.term pre { padding: 16px 18px; color: var(--code-ink); font-size: 12.8px; line-height: 1.8; overflow-x: auto;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.term .c { color: #7d8698; } .term .k { color: #8be0a4; } .term .v { color: #9db4ff; }
+.topo { width: 100%; height: auto; margin-top: 6px; }
 .topo .link { stroke: var(--accent); stroke-width: 1.6; stroke-dasharray: 5 7; opacity: .85; fill: none; }
 .topo .node { fill: var(--surface); stroke: var(--line); }
 .topo .node-core { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.4; }
@@ -161,18 +228,25 @@ h2 { font-size: clamp(28px, 3vw, 38px); letter-spacing: -0.02em; line-height: 1.
 }
 
 /* Features bento */
-.bento { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; margin-top: 44px; }
+.bento { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; margin-top: 48px; }
 .cell {
-  border: 1px solid var(--line); border-radius: 14px; background: var(--surface);
-  padding: 24px; transition: transform .22s, box-shadow .22s;
+  border: 1px solid var(--line); border-radius: 16px; background: var(--surface);
+  padding: 26px; transition: transform .25s cubic-bezier(.16,1,.3,1), box-shadow .25s;
 }
-.cell:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
-.cell h3 { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
-.cell p { margin-top: 8px; font-size: 14.5px; color: var(--muted); }
+.cell:hover { transform: translateY(-4px); box-shadow: var(--shadow); }
+.cell h3 { font-family: var(--display); font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+.cell p { margin-top: 9px; font-size: 14.5px; color: var(--muted); }
 .cell-a { grid-column: span 4; padding: 0; overflow: hidden; }
-.cell-a img { width: 100%; height: 240px; object-fit: cover; object-position: left top; }
-.cell-a .cap { padding: 16px 20px 18px; }
-.cell-b { grid-column: span 2; display: flex; flex-direction: column; justify-content: center; background: linear-gradient(160deg, var(--accent-soft), transparent 70%); }
+.cell-a img { width: 100%; height: 250px; object-fit: cover; object-position: left top; }
+.cell-a .cap { padding: 18px 22px 20px; }
+.cell-b { grid-column: span 2; background: linear-gradient(165deg, var(--accent-soft), transparent 72%); }
+.mini-demo { margin-top: 14px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); }
+.mini-row { display: flex; align-items: center; gap: 8px; padding: 10px 12px; transition: background .3s, color .3s; font-size: 12px; font-weight: 600; }
+.mini-demo[data-side="light"] .mini-row { background: #f3efff; color: #14131f; }
+.mini-demo[data-side="dark"] .mini-row { background: #101319; color: #eaecf4; }
+.mini-dot { width: 8px; height: 8px; border-radius: 50%; }
+.mini-demo[data-side="light"] .mini-dot { background: #6c4cf1; }
+.mini-demo[data-side="dark"] .mini-dot { background: #5b8cff; }
 .cell-c, .cell-d, .cell-e { grid-column: span 2; }
 @media (max-width: 900px) {
   .bento { grid-template-columns: 1fr 1fr; }
@@ -183,87 +257,103 @@ h2 { font-size: clamp(28px, 3vw, 38px); letter-spacing: -0.02em; line-height: 1.
 .band { background: var(--code-bg); color: var(--code-ink); }
 .band h2 { color: #fff; }
 .band .lede { color: #aab2c8; }
-.sec-groups { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 40px; margin-top: 46px; }
-.sec-group { border-top: 2px solid var(--accent); padding-top: 18px; }
-.sec-group h3 { font-size: 16.5px; font-weight: 700; color: #fff; }
-.sec-group p { margin-top: 8px; font-size: 14.5px; color: #aab2c8; }
+.sec-groups { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 40px; margin-top: 50px; }
+.sec-group { border-top: 2px solid transparent; border-image: linear-gradient(90deg, var(--accent), transparent) 1; padding-top: 18px; }
+.sec-group h3 { font-family: var(--display); font-size: 17px; font-weight: 700; color: #fff; }
+.sec-group p { margin-top: 9px; font-size: 14.5px; color: #aab2c8; }
 .sec-group p + p { margin-top: 10px; }
 @media (max-width: 900px) { .sec-groups { grid-template-columns: 1fr; gap: 28px; } }
 
 /* Deploy steps */
-.steps { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; margin-top: 46px; }
-.step { border-left: 2px solid var(--line); padding-left: 22px; }
-.step h3 { font-size: 17px; font-weight: 700; }
+.steps { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; margin-top: 48px; }
+.step { border-left: 2px solid var(--line); padding-left: 24px; position: relative; }
+.step::before {
+  content: ""; position: absolute; left: -5px; top: 6px; width: 8px; height: 8px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+}
+.step h3 { font-family: var(--display); font-size: 18px; font-weight: 700; }
 .step p { margin-top: 8px; font-size: 14.5px; color: var(--muted); }
 .step pre {
   margin-top: 14px; background: var(--code-bg); color: var(--code-ink);
-  border-radius: 8px; padding: 14px 16px; font-size: 12.8px; line-height: 1.7;
+  border-radius: 8px; padding: 14px 16px; font-size: 12.6px; line-height: 1.7;
   overflow-x: auto; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 @media (max-width: 900px) { .steps { grid-template-columns: 1fr; } }
 
-/* Comparison */
-.compare { margin-top: 44px; border-top: 1px solid var(--line); }
-.cmp-row {
-  display: grid; grid-template-columns: 220px 1fr 1fr; gap: 24px;
-  padding: 20px 0; border-bottom: 1px solid var(--line); font-size: 15px;
+/* Collision comparison */
+.vs { display: grid; grid-template-columns: 1fr auto 1fr; gap: 26px; margin-top: 52px; align-items: stretch; }
+.vs-card { border: 1px solid var(--line); border-radius: 16px; padding: 30px; background: var(--surface); }
+.vs-card.us { background: linear-gradient(170deg, var(--accent-soft), var(--surface) 60%); border-color: color-mix(in srgb, var(--accent) 32%, var(--line)); }
+.vs-card h3 { font-family: var(--display); font-size: 20px; font-weight: 700; }
+.vs-card ul { list-style: none; margin-top: 18px; }
+.vs-card li { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 14.5px; color: var(--muted); }
+.vs-card li:first-child { border-top: 0; }
+.vs-card li .mark { flex: 0 0 auto; font-weight: 700; }
+.vs-card.them .mark { color: #b3483f; }
+.vs-card.us .mark { color: var(--accent); }
+.vs-card.us li { color: var(--ink); }
+.vs-badge {
+  align-self: center; width: 58px; height: 58px; border-radius: 50%;
+  display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 15px;
+  color: var(--accent-ink); background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--accent) 38%, transparent);
 }
-.cmp-row.head { font-size: 13.5px; color: var(--muted); font-weight: 650; padding: 12px 0; }
-.cmp-row .k { font-weight: 650; }
-.cmp-row .them { color: var(--muted); }
-.cmp-row .us b { color: var(--accent); font-weight: 650; }
-@media (max-width: 900px) { .cmp-row { grid-template-columns: 1fr; gap: 6px; } }
+@media (max-width: 900px) { .vs { grid-template-columns: 1fr; } .vs-badge { margin: 0 auto; } }
 
-/* Download */
-.dl-grid { display: grid; grid-template-columns: 3fr 2fr 2fr; gap: 16px; margin-top: 44px; }
+/* Download rows */
+.dl-list { margin-top: 48px; border-top: 1px solid var(--line); }
 .dl {
-  border: 1px solid var(--line); border-radius: 14px; background: var(--surface);
-  padding: 26px; display: flex; flex-direction: column; transition: transform .22s, box-shadow .22s;
+  display: grid; grid-template-columns: 170px 1fr auto; align-items: center; gap: 24px;
+  padding: 26px 6px; border-bottom: 1px solid var(--line);
+  transition: background .25s, padding .25s;
 }
-.dl:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
-.dl h3 { font-size: 19px; font-weight: 750; }
-.dl .arch { margin-top: 4px; font-size: 13.5px; color: var(--muted); font-family: ui-monospace, Menlo, monospace; }
-.dl .go { margin-top: auto; padding-top: 18px; font-size: 14.5px; font-weight: 650; color: var(--accent); }
-.dl-primary { background: linear-gradient(160deg, var(--accent-soft), var(--surface) 65%); }
-.dl-note { margin-top: 26px; font-size: 14px; color: var(--muted); max-width: 72ch; }
+.dl:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); padding-left: 16px; padding-right: 16px; }
+.dl h3 { font-family: var(--display); font-size: 21px; font-weight: 700; }
+.dl .arch { font-size: 13.5px; color: var(--muted); font-family: ui-monospace, Menlo, monospace; }
+.dl .note { font-size: 14px; color: var(--muted); max-width: 52ch; }
+.dl .go { font-size: 14.5px; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 8px; }
+.dl .go::after { content: ""; width: 8px; height: 8px; border-top: 2px solid var(--accent); border-right: 2px solid var(--accent); transform: rotate(45deg); transition: transform .25s; }
+.dl:hover .go::after { transform: rotate(45deg) translateX(4px); }
+.dl-note { margin-top: 24px; font-size: 14px; color: var(--muted); max-width: 74ch; }
 .dl-note a { color: var(--accent); font-weight: 600; }
-@media (max-width: 900px) { .dl-grid { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .dl { grid-template-columns: 1fr; gap: 6px; } }
 
 /* FAQ */
 .faq details { border-bottom: 1px solid var(--line); }
 .faq summary {
-  cursor: pointer; list-style: none; padding: 20px 0;
-  font-size: 16.5px; font-weight: 650; display: flex; justify-content: space-between; gap: 20px;
+  cursor: pointer; list-style: none; padding: 22px 0;
+  font-size: 17px; font-weight: 650; display: flex; justify-content: space-between; gap: 20px;
 }
 .faq summary::-webkit-details-marker { display: none; }
-.faq summary::after { content: "+"; color: var(--muted); font-size: 20px; transition: transform .2s; }
+.faq summary::after { content: "+"; color: var(--muted); font-size: 22px; transition: transform .2s; }
 .faq details[open] summary::after { transform: rotate(45deg); }
-.faq .a { padding: 0 0 22px; color: var(--muted); font-size: 15px; max-width: 72ch; }
+.faq .a { padding: 0 0 24px; color: var(--muted); font-size: 15px; max-width: 72ch; }
 
 /* Footer */
-footer { border-top: 1px solid var(--line); padding: 44px 0 56px; font-size: 14px; color: var(--muted); }
+footer { border-top: 1px solid var(--line); padding: 46px 0 60px; font-size: 14px; color: var(--muted); }
 .foot { display: flex; gap: 28px; flex-wrap: wrap; align-items: center; }
 .foot a:hover { color: var(--accent); }
 .foot .legal { margin-top: 18px; max-width: 76ch; font-size: 13px; line-height: 1.7; }
 
 /* Scroll reveal */
-.reveal { opacity: 0; transform: translateY(22px); transition: opacity .7s cubic-bezier(.16,1,.3,1), transform .7s cubic-bezier(.16,1,.3,1); transition-delay: var(--d, 0s); }
+.reveal { opacity: 0; transform: translateY(26px); transition: opacity .8s cubic-bezier(.16,1,.3,1), transform .8s cubic-bezier(.16,1,.3,1); transition-delay: var(--d, 0s); }
 .reveal.in { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } }
-/* Hero entrance */
-@keyframes rise { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
-.hero .h-copy > * { animation: rise .8s cubic-bezier(.16,1,.3,1) both; }
-.hero .h-copy > *:nth-child(2) { animation-delay: .08s; }
-.hero .h-copy > *:nth-child(3) { animation-delay: .16s; }
-.hero .shot-frame { animation: rise .9s .15s cubic-bezier(.16,1,.3,1) both; }
-@media (prefers-reduced-motion: reduce) { .hero .h-copy > *, .hero .shot-frame { animation: none; } }
+@keyframes rise { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: none; } }
+.hero .h-copy > * { animation: rise .9s cubic-bezier(.16,1,.3,1) both; }
+.hero .h-copy > *:nth-child(2) { animation-delay: .1s; }
+.hero .h-copy > *:nth-child(3) { animation-delay: .2s; }
+.hero .shot-wrap { animation: rise 1s .18s cubic-bezier(.16,1,.3,1) both; }
+@media (prefers-reduced-motion: reduce) { .hero .h-copy > *, .hero .shot-wrap { animation: none; } }
 </style>
 </head>
 <body>
+<div class="aurora" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
 
 <nav class="nav">
   <div class="wrap nav-in">
-    <a class="brand" href="#"><img src="assets/logo.png" alt="NikoDesk logo">NikoDesk</a>
+    <a class="brand" href="#"><img src="assets/logo.png?v=4" alt="NikoDesk logo">NikoDesk</a>
     <div class="nav-links">
       <a href="#why">Why private</a>
       <a href="#features">Features</a>
@@ -279,47 +369,50 @@ footer { border-top: 1px solid var(--line); padding: 44px 0 56px; font-size: 14p
 <header class="hero wrap">
   <div class="hero-grid">
     <div class="h-copy">
-      <h1>Your machines.<br>Your server.<br><em>Your remote desktop.</em></h1>
+      <h1>Your machines.<br>Your server.<br><span class="grad">Your remote desktop.</span></h1>
       <p class="sub">NikoDesk pairs a RustDesk-powered client with the rendezvous and relay you host yourself. No public cloud in the loop.</p>
       <div class="cta-row">
-        <a class="btn btn-primary" href="#download">Download v1.0.0</a>
+        <a class="btn btn-primary" href="#download">Download NikoDesk</a>
         <a class="btn btn-ghost" href="https://github.com/baogutang/nikodesk" target="_blank" rel="noopener">Read the source</a>
       </div>
     </div>
-    <div>
-      <div class="shot-frame">
+    <div class="shot-wrap">
+      <div class="shot-frame" id="shot-frame">
         <div class="shot-bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
-        <div class="theme-toggle" role="group" aria-label="Preview theme">
-          <button type="button" data-shot="light" aria-pressed="true">Light</button>
-          <button type="button" data-shot="dark" aria-pressed="false">Dark</button>
+        <div class="theme-toggle" role="group" aria-label="Preview theme" data-shot="dark" id="shot-toggle">
+          <span class="thumb" aria-hidden="true"></span>
+          <button type="button" data-shot="light" aria-pressed="false">Light</button>
+          <button type="button" data-shot="dark" aria-pressed="true">Dark</button>
         </div>
         <div class="shot-stage">
-          <img src="assets/app-light.jpg" alt="NikoDesk light theme, device workspace with connect card" id="shot-light">
-          <img src="assets/app-dark.jpg" alt="NikoDesk dark theme, device workspace with connect card" id="shot-dark" class="off">
+          <img src="assets/app-light-v4.jpg?v=4" alt="NikoDesk light theme, device workspace with connect card" id="shot-light">
+          <img src="assets/app-dark-v4.jpg?v=4" alt="NikoDesk dark theme, device workspace with connect card" id="shot-dark">
         </div>
       </div>
-      <p class="shot-note">The same window, both themes. NikoDesk follows your system appearance and can be switched in settings.</p>
     </div>
   </div>
-  <div class="facts reveal">
-    <div class="facts-in">
-      <div class="fact"><b>RustDesk 1.5 core</b> battle-tested streaming and control</div>
-      <div class="fact"><b>Three platforms</b> macOS, Windows and Android</div>
-      <div class="fact"><b>P2P first</b> direct when possible, your relay as fallback</div>
-      <div class="fact"><b>Open source</b> AGPL-3.0, reproducible builds</div>
-    </div>
+  <div class="meta reveal">
+    <span class="pill"><b>RustDesk 1.5</b> core</span>
+    <span class="pill"><b>macOS / Windows / Android</b></span>
+    <span class="pill"><b>P2P first</b>, your relay as fallback</span>
+    <span class="pill"><b>AGPL-3.0</b>, reproducible builds</span>
   </div>
 </header>
 
 <section id="why" class="wrap">
   <div class="why-grid">
     <div class="why-copy reveal">
-      <h2>Remote desktop that never phones home</h2>
-      <p>Every remote desktop needs two services: a <b>rendezvous server</b> (hbbs) where devices register and find each other, and a <b>relay</b> (hbbr) that carries traffic when a direct connection is not possible.</p>
-      <p>With public tools, both belong to someone else. With NikoDesk, both run on <b>your own machine</b>: a NAS, a VPS, or any box you control. Sessions negotiate through your server, punch a direct hole when they can, and fall back to your relay when they cannot.</p>
-      <p>The private-server policy is <b>compiled into the client</b>. A NikoDesk build does not register with public rendezvous servers, so an experiment can never leak onto shared infrastructure.</p>
+      <h2>It never phones home</h2>
+      <p>Every remote desktop needs a <b>rendezvous server</b> (hbbs) where devices register, and a <b>relay</b> (hbbr) for traffic when a direct link is not possible. Public tools run both for someone else's benefit. NikoDesk runs both for you.</p>
+      <p>Sessions negotiate through <b>your server</b>, punch a direct hole when they can, and fall back to your relay when they cannot. And the policy is not a promise in a policy document:</p>
+      <div class="term reveal" style="--d:.1s">
+        <div class="term-bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
+        <pre><span class="c"># the private-server rule is compiled in, not a setting</span>
+<span class="v">$</span> cargo build --features flutter,hwcodec,<span class="k">nikodesk</span>
+<span class="c"># a NikoDesk build cannot register with public rendezvous</span></pre>
+      </div>
     </div>
-    <div class="reveal" style="--d:.12s">
+    <div class="reveal" style="--d:.14s">
       <svg class="topo" viewBox="0 0 560 360" role="img" aria-label="Your laptop and phone connect through your own server">
         <path class="link" d="M120 96 C 200 96, 220 168, 280 180"/>
         <path class="link" d="M120 264 C 200 264, 220 192, 280 180"/>
@@ -342,61 +435,64 @@ footer { border-top: 1px solid var(--line); padding: 44px 0 56px; font-size: 14p
 </section>
 
 <section id="features" class="wrap">
-  <h2 class="reveal">Built for daily driving, not for demos</h2>
+  <h2 class="reveal">Made for daily driving</h2>
   <p class="lede reveal">Everything below ships in v1.0.0 today. Where something is not verified yet, the interface says so instead of pretending.</p>
   <div class="bento">
     <div class="cell cell-a reveal">
-      <img src="assets/detail-connect.jpg" alt="Connect card asking for remote ID and password" loading="lazy">
+      <img src="assets/detail-connect-v4.jpg?v=4" alt="Connect card asking for remote ID and password" loading="lazy">
       <div class="cap">
         <h3>The password is the gate</h3>
-        <p>Entering an ID alone never dispatches a session. NikoDesk only connects when the remote password is present, so a typo can never ring someone else's machine.</p>
+        <p>An ID alone never dispatches a session. NikoDesk connects only when the remote password is present, so one typo can never ring someone else's machine.</p>
       </div>
     </div>
     <div class="cell cell-b reveal" style="--d:.08s">
       <h3>Two themes, one workspace</h3>
-      <p>A night console and a daylight canvas, following your system with a manual override in settings.</p>
+      <div class="mini-demo" data-side="dark" id="mini-demo">
+        <div class="mini-row"><span class="mini-dot"></span><span>我的设备 &nbsp;/&nbsp; My devices</span></div>
+      </div>
+      <p style="margin-top:12px">A night console and a daylight canvas. It follows your system, and it follows this toggle.</p>
     </div>
     <div class="cell cell-c reveal">
       <h3>Presence you can trust</h3>
-      <p>Device cards poll your own rendezvous every six seconds and show online, offline, or unknown. Unknown stays unknown.</p>
+      <p>Device cards poll your own rendezvous every six seconds: online, offline, or unknown. Unknown stays unknown.</p>
     </div>
     <div class="cell cell-d reveal" style="--d:.06s">
       <h3>History and recording</h3>
-      <p>The last 200 sessions are kept locally with one-tap reconnect, and sessions can be recorded for later review.</p>
+      <p>The last 200 sessions live locally with one-tap reconnect, and any session can be recorded for review.</p>
     </div>
     <div class="cell cell-e reveal" style="--d:.12s">
       <h3>Updates that verify</h3>
-      <p>Check for updates inside the app. Downloads come only from GitHub Releases over HTTPS and install only when the SHA256 sum matches.</p>
+      <p>Check from inside the app. Downloads come only from GitHub Releases over HTTPS, and a SHA256 mismatch means no install.</p>
     </div>
   </div>
 </section>
 
 <section id="security" class="band">
   <div class="wrap">
-    <h2 class="reveal">Security posture, stated plainly</h2>
+    <h2 class="reveal">Security, in plain words</h2>
     <p class="lede reveal">NikoDesk inherits end-to-end encrypted sessions from the RustDesk core and adds its own house rules.</p>
     <div class="sec-groups">
       <div class="sec-group reveal">
         <h3>Admission</h3>
         <p>Sessions require the remote password before connecting. Temporary and permanent passwords are managed on the controlled side.</p>
-        <p>Accepting an incoming session grants keyboard, mouse, clipboard and file transfer, each revocable per session. Audio stays off until you turn it on.</p>
+        <p>Accepting a session grants keyboard, mouse, clipboard and file transfer, each revocable per session. Audio stays off until you say otherwise.</p>
       </div>
       <div class="sec-group reveal" style="--d:.08s">
         <h3>Network</h3>
         <p>Registration and relay traffic point at the server you configure. The private-server-only build cannot fall back to public rendezvous.</p>
-        <p>Traffic prefers direct peer-to-peer connections; your relay sees encrypted frames only when punching fails.</p>
+        <p>Traffic prefers direct peer-to-peer links; your relay only ever sees encrypted frames, and only when punching fails.</p>
       </div>
       <div class="sec-group reveal" style="--d:.16s">
         <h3>Supply chain</h3>
-        <p>Release artifacts are built by public GitHub Actions runs, hashed in SHA256SUMS, and installed by an updater that fails closed on any mismatch.</p>
-        <p>Update downloads accept HTTPS hosts on a fixed allowlist and re-validate after redirects.</p>
+        <p>Artifacts come from public GitHub Actions runs, hashed in SHA256SUMS. The updater fails closed on any mismatch.</p>
+        <p>Update downloads accept HTTPS hosts from a fixed allowlist and re-validate after redirects.</p>
       </div>
     </div>
   </div>
 </section>
 
 <section id="deploy" class="wrap">
-  <h2 class="reveal">Three commands to your own server</h2>
+  <h2 class="reveal">Own the server in three commands</h2>
   <p class="lede reveal">NikoDesk speaks the open RustDesk server protocol. If you already run hbbs and hbbr, point the client at them and you are done.</p>
   <div class="steps">
     <div class="step reveal">
@@ -413,14 +509,14 @@ docker run -d --name hbbr -v /data:/root \
     </div>
     <div class="step reveal" style="--d:.08s">
       <h3>Expose and harden</h3>
-      <p>Give the host a reachable name, forward the ports, and copy the public key from the data volume. A home line works with port forwarding or a WireGuard tunnel.</p>
+      <p>Give the host a reachable name, forward the ports, copy the public key. A home line works with port forwarding or a WireGuard tunnel.</p>
       <pre>cat /data/id_ed25519.pub
 # point DNS at the host
 # keep tcp 21115-21119 open</pre>
     </div>
     <div class="step reveal" style="--d:.16s">
       <h3>Point the clients</h3>
-      <p>Fill the same three fields on every device you trust. The connection test in settings tells you immediately whether registration succeeded.</p>
+      <p>The same three fields on every device you trust. The connection test in settings tells you at once whether registration succeeded.</p>
       <pre>ID server:  desk.example.com
 Relay:      desk.example.com:21117
 Key:        (id_ed25519.pub)</pre>
@@ -429,36 +525,46 @@ Key:        (id_ed25519.pub)</pre>
 </section>
 
 <section class="wrap">
-  <h2 class="reveal">Public cloud remote desktop vs NikoDesk</h2>
-  <div class="compare reveal">
-    <div class="cmp-row head"><span></span><span>Public cloud tools</span><span>NikoDesk</span></div>
-    <div class="cmp-row"><span class="k">Session routing</span><span class="them">Vendor servers see your signaling, and often your relay traffic</span><span class="us"><b>Your</b> hbbs and hbbr, on hardware you control</span></div>
-    <div class="cmp-row"><span class="k">Accounts</span><span class="them">Vendor account required, devices tied to it</span><span class="us">No account. Keys live on your machines</span></div>
-    <div class="cmp-row"><span class="k">Audit</span><span class="them">Closed clients, you take the claims on faith</span><span class="us"><b>Open</b> source under AGPL-3.0 with reproducible CI builds</span></div>
-    <div class="cmp-row"><span class="k">Cost at scale</span><span class="them">Per-device or per-bandwidth subscription</span><span class="us">Your server cost, nothing per device</span></div>
-    <div class="cmp-row"><span class="k">Guarantee</span><span class="them">Policy can change with the next release</span><span class="us">The private-server policy is <b>compiled in</b></span></div>
+  <h2 class="reveal">Public cloud vs NikoDesk</h2>
+  <div class="vs">
+    <div class="vs-card them reveal">
+      <h3>Public cloud tools</h3>
+      <ul>
+        <li><span class="mark">x</span>Vendor servers see your signaling, and often your relay traffic</li>
+        <li><span class="mark">x</span>A vendor account is required and devices are tied to it</li>
+        <li><span class="mark">x</span>Closed clients: you take the claims on faith, and policy can change next release</li>
+      </ul>
+    </div>
+    <div class="vs-badge reveal" style="--d:.08s">VS</div>
+    <div class="vs-card us reveal" style="--d:.12s">
+      <h3>NikoDesk</h3>
+      <ul>
+        <li><span class="mark">v</span>Your hbbs and hbbr, on hardware you control, encrypted end to end</li>
+        <li><span class="mark">v</span>No account anywhere: keys live on your machines alone</li>
+        <li><span class="mark">v</span>Open under AGPL-3.0 with reproducible CI builds, policy compiled in</li>
+      </ul>
+    </div>
   </div>
 </section>
 
 <section id="download" class="wrap">
   <h2 class="reveal">Download</h2>
   <p class="lede reveal">Free builds for v1.0.0, produced by public CI runs and hashed in SHA256SUMS.</p>
-  <div class="dl-grid">
-    <a class="dl dl-primary reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.0/NikoDesk-macos-arm64.zip">
+  <div class="dl-list reveal">
+    <a class="dl" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.0/NikoDesk-macos-arm64.zip">
       <h3>macOS</h3>
-      <div class="arch">Apple Silicon, zip, ad-hoc signed</div>
-      <p style="margin-top:10px;color:var(--muted);font-size:14.5px">First launch: right-click, Open, then grant Screen Recording and Accessibility.</p>
-      <div class="go">Download for macOS</div>
+      <span class="note"><span class="arch">Apple Silicon, zip, ad-hoc signed</span><br>First launch: right-click, Open, then grant Screen Recording and Accessibility.</span>
+      <span class="go">Download</span>
     </a>
-    <a class="dl reveal" style="--d:.08s" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.0/NikoDesk-windows-x64.zip">
+    <a class="dl" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.0/NikoDesk-windows-x64.zip">
       <h3>Windows</h3>
-      <div class="arch">x64, zip</div>
-      <div class="go">Download for Windows</div>
+      <span class="note"><span class="arch">x64, zip</span><br>Unblock the zip before extracting if your browser marks it.</span>
+      <span class="go">Download</span>
     </a>
-    <a class="dl reveal" style="--d:.16s" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.0/NikoDesk-android-arm64.apk">
+    <a class="dl" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.0/NikoDesk-android-arm64.apk">
       <h3>Android</h3>
-      <div class="arch">arm64, apk</div>
-      <div class="go">Download APK</div>
+      <span class="note"><span class="arch">arm64, apk</span><br>Install the APK directly; no store listing yet.</span>
+      <span class="go">Download</span>
     </a>
   </div>
   <p class="dl-note reveal">Verify against <a href="https://github.com/baogutang/nikodesk/releases">SHA256SUMS on the releases page</a>. All platforms check for updates in settings and install only when the hash matches. If GitHub is slow from your network, any mirror of the release assets works as long as the hash still matches.</p>
@@ -467,7 +573,7 @@ Key:        (id_ed25519.pub)</pre>
 <section id="faq" class="wrap faq">
   <h2 class="reveal">Questions people actually ask</h2>
   <div style="margin-top:26px">
-    <details class="reveal">
+    <details class="reveal" open>
       <summary>Do I need a public IP?</summary>
       <div class="a">The hbbs and hbbr ports must be reachable by both ends. A home connection works with port forwarding or by putting the pair behind a WireGuard or Tailscale tunnel. Sessions still try to connect peer-to-peer directly; the relay only carries traffic when punching fails.</div>
     </details>
@@ -488,7 +594,7 @@ Key:        (id_ed25519.pub)</pre>
 
 <footer>
   <div class="wrap foot">
-    <a class="brand" href="#"><img src="assets/logo.png" alt="NikoDesk logo">NikoDesk</a>
+    <a class="brand" href="#"><img src="assets/logo.png?v=4" alt="NikoDesk logo">NikoDesk</a>
     <a href="https://github.com/baogutang/nikodesk" target="_blank" rel="noopener">Source</a>
     <a href="https://github.com/baogutang/nikodesk/releases" target="_blank" rel="noopener">Releases</a>
     <a href="https://github.com/baogutang/nikodesk/issues" target="_blank" rel="noopener">Issues</a>
@@ -499,24 +605,52 @@ Key:        (id_ed25519.pub)</pre>
 
 <script>
 (function () {
-  // Theme toggle for the hero screenshot pair. The page itself follows the
-  // system appearance; only the previewed screenshot is switched.
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Hero screenshot theme toggle with sliding thumb. The page itself follows
+  // the system appearance; only the previewed screenshot is switched.
   var light = document.getElementById('shot-light');
   var dark = document.getElementById('shot-dark');
-  var buttons = document.querySelectorAll('.theme-toggle button');
-  if (!light || !dark) return;
+  var toggle = document.getElementById('shot-toggle');
   function show(which) {
     var toLight = which === 'light';
     light.classList.toggle('off', !toLight);
     dark.classList.toggle('off', toLight);
-    buttons.forEach(function (b) {
+    toggle.dataset.shot = which;
+    toggle.querySelectorAll('button').forEach(function (b) {
       b.setAttribute('aria-pressed', b.dataset.shot === which ? 'true' : 'false');
     });
+    var mini = document.getElementById('mini-demo');
+    if (mini) mini.dataset.side = which;
   }
-  buttons.forEach(function (b) {
-    b.addEventListener('click', function () { show(b.dataset.shot); });
-  });
-  show(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  if (light && dark && toggle) {
+    toggle.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () { show(b.dataset.shot); });
+    });
+    show(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  }
+
+  // Gentle 3D tilt on the screenshot frame (pointer devices only).
+  var frame = document.getElementById('shot-frame');
+  if (frame && !reduce && window.matchMedia && window.matchMedia('(pointer: fine)').matches) {
+    var raf = 0, target = { x: 0, y: 0 }, current = { x: 0, y: 0 };
+    frame.addEventListener('pointermove', function (e) {
+      var r = frame.getBoundingClientRect();
+      target.y = ((e.clientX - r.left) / r.width - 0.5) * 5;
+      target.x = -((e.clientY - r.top) / r.height - 0.5) * 5;
+      if (!raf) loop();
+    });
+    frame.addEventListener('pointerleave', function () { target.x = 0; target.y = 0; if (!raf) loop(); });
+    function loop() {
+      raf = requestAnimationFrame(function () {
+        current.x += (target.x - current.x) * 0.12;
+        current.y += (target.y - current.y) * 0.12;
+        frame.style.transform = 'rotate(-1.4deg) perspective(1100px) rotateX(' + current.x.toFixed(2) + 'deg) rotateY(' + current.y.toFixed(2) + 'deg)';
+        if (Math.abs(target.x - current.x) + Math.abs(target.y - current.y) > 0.02) { loop(); }
+        else { raf = 0; frame.style.transform = 'rotate(-1.4deg) perspective(1100px) rotateX(' + current.x.toFixed(2) + 'deg) rotateY(' + current.y.toFixed(2) + 'deg)'; }
+      });
+    }
+  }
 
   // Scroll reveals via IntersectionObserver, no scroll listeners.
   if (!('IntersectionObserver' in window)) {
@@ -527,7 +661,7 @@ Key:        (id_ed25519.pub)</pre>
     entries.forEach(function (e) {
       if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
     });
-  }, { threshold: 0.18, rootMargin: '0px 0px -40px 0px' });
+  }, { threshold: 0.16, rootMargin: '0px 0px -40px 0px' });
   document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
 })();
 </script>
