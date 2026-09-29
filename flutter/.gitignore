@@ -43,6 +43,10 @@ jniLibs
 # flutter rust bridge
 lib/generated_bridge.dart
 lib/generated_bridge.freezed.dart
+# NikoDesk: the generated bridge is committed so tag-based CI builds work
+# without a separate generation job (pinned flutter_rust_bridge 1.80.1).
+!lib/generated_bridge.dart
+!lib/generated_bridge.freezed.dart
 
 # Flutter Generated Files
 **/GeneratedPluginRegistrant.swift

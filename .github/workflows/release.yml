@@ -206,7 +206,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             clang cmake curl gcc-multilib g++-multilib gcc git g++ \
-            libc6-dev libclang-dev llvm-dev ninja-build \
+            libc6-dev libclang-dev libunwind-dev llvm-dev nasm ninja-build \
             pkg-config wget unzip
 
       - uses: actions/setup-java@v4
@@ -233,10 +233,27 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: aarch64-linux-android
+          components: "rustfmt"
 
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           prefix-key: android-arm64
+
+      # hwcodec's build script unconditionally links the vcpkg-built ffmpeg,
+      # so the Android triplet must be installed before the Rust build and
+      # VCPKG_ROOT must be present (it panics on a missing variable).
+      - name: Setup vcpkg with GitHub Actions binary cache
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a7e6a35d5ca353c964f410 # v11
+        with:
+          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: ./flutter/build_android_deps.sh arm64-v8a
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --version ${{ env.CARGO_NDK_VERSION }} --locked
