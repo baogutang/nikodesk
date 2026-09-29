@@ -8,6 +8,10 @@ on:
     tags:
       - 'v*'
 
+# The release job creates a GitHub Release, which needs contents write.
+permissions:
+  contents: write
+
 env:
   FLUTTER_VERSION: "3.24.5"
   RUST_VERSION: "1.88.0"
