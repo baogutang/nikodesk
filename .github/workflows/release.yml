@@ -243,7 +243,7 @@ jobs:
       # so the Android triplet must be installed before the Rust build and
       # VCPKG_ROOT must be present (it panics on a missing variable).
       - name: Setup vcpkg with GitHub Actions binary cache
-        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a7e6a35d5ca353c964f410 # v11
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
         with:
           vcpkgDirectory: /opt/artifacts/vcpkg
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
