@@ -67,3 +67,4 @@ flutter/.mimosa/
 !flutter/assets/readme-dark.png
 !flutter/assets/readme-logo.png
 !website/assets/*.png
+!website/assets/*.jpg
