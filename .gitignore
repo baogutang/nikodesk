@@ -59,3 +59,11 @@ flutter/web/
 flutter/.mimosa/
 
 # Bridge artifacts are committed so CI and consumers can build without codegen.
+
+# Product images required by the build, docs and website.
+!res/nikodesk-tray.png
+!flutter/assets/nikodesk.png
+!flutter/assets/readme-light.png
+!flutter/assets/readme-dark.png
+!flutter/assets/readme-logo.png
+!website/assets/*.png

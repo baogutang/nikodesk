@@ -213,8 +213,8 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
-
+      # The ubuntu-24.04 runner ships the Android SDK preinstalled; the
+      # extra setup-android step failed on it, so only the NDK is added.
       - name: Install NDK
         uses: nttld/setup-ndk@v1
         id: setup-ndk
