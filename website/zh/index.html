@@ -5,359 +5,310 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NikoDesk - 跑在自己服务器上的远程桌面</title>
 <meta name="description" content="NikoDesk 基于 RustDesk 内核，注册与中继服务全部由你自己托管。macOS、Windows、Android 三端，构建过程完全公开。">
-<link rel="icon" href="../assets/favicon.png?v=4" type="image/png">
-<link rel="apple-touch-icon" href="../assets/logo.png?v=4">
+<link rel="icon" href="../assets/favicon.png?v=5" type="image/png">
+<link rel="apple-touch-icon" href="../assets/logo.png?v=5">
+<link rel="preload" href="../assets/fonts/inter-800.woff2?v=5" as="font" type="font/woff2" crossorigin>
 <meta property="og:title" content="NikoDesk - 跑在自己服务器上的远程桌面">
 <meta property="og:description" content="基于 RustDesk 内核的客户端，注册与中继服务自己托管，链路里没有公共云。">
 <meta property="og:image" content="../assets/og.jpg">
 <meta property="og:type" content="website">
 <style>
-/* NikoDesk 官网 v4 中文版。令牌与英文版一致：亮色紫罗兰 6C4CF1 配
-   F3EFFF->EAF1FF 画布，暗色夜间控制台 101319/191E27 配 5B8CFF。
-   显示字体自托管 Space Grotesk（仅拉丁，中文回退系统字体）。
-   圆角体系：卡片 16px，代码 8px，按钮胶囊。每主题一个强调色。 */
-@font-face {
-  font-family: "Space Grotesk";
-  src: url("../assets/fonts/space-grotesk-700.woff2?v=4") format("woff2");
-  font-weight: 700;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Space Grotesk";
-  src: url("../assets/fonts/space-grotesk-500.woff2?v=4") format("woff2");
-  font-weight: 500;
-  font-display: swap;
-}
+/* NikoDesk 官网 v5 中文版：复刻 ccswitch.io 的设计语言。
+   暖奶油纸底、陶土橘主色、暖棕文字、Inter + Fira Code、毛玻璃导航、
+   居中 hero 压大圆角截图卡、胶囊小标签、暖色卡片、Fira 代码块、深色下载带。
+   明暗两套都保持同一暖色家族。 */
+@font-face { font-family: "Inter"; src: url("../assets/fonts/inter-400.woff2?v=5") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Inter"; src: url("../assets/fonts/inter-600.woff2?v=5") format("woff2"); font-weight: 600; font-display: swap; }
+@font-face { font-family: "Inter"; src: url("../assets/fonts/inter-800.woff2?v=5") format("woff2"); font-weight: 800; font-display: swap; }
+@font-face { font-family: "Fira Code"; src: url("../assets/fonts/fira-code-400.woff2?v=5") format("woff2"); font-weight: 400; font-display: swap; }
 :root {
-  --ink: #14131f;
-  --muted: #514e63;
-  --accent: #6c4cf1;
-  --accent-2: #4a5dff;
-  --accent-ink: #ffffff;
-  --accent-soft: rgba(108, 76, 241, 0.10);
-  --surface: #ffffff;
-  --surface-2: #f7f6fc;
-  --line: rgba(20, 19, 31, 0.12);
-  --page-bg: #eef1fb;
-  --shadow: 0 18px 50px rgba(76, 58, 158, 0.13);
-  --shadow-lg: 0 30px 80px rgba(76, 58, 158, 0.20);
-  --code-bg: #14131f;
-  --code-ink: #e9e7f7;
-  --blob-a: rgba(108, 76, 241, 0.13);
-  --blob-b: rgba(46, 107, 255, 0.11);
-  --display: "Space Grotesk", -apple-system, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --bg: hsl(38 28% 91%);
+  --fg: hsl(30 15% 15%);
+  --card: hsl(35 24% 86%);
+  --card-deep: hsl(35 22% 82%);
+  --muted-fg: hsl(30 12% 38%);
+  --border: hsl(35 18% 78%);
+  --primary: hsl(15 65% 52%);
+  --primary-hover: hsl(15 65% 46%);
+  --primary-fg: hsl(40 30% 96%);
+  --primary-soft: hsl(15 65% 52% / 0.12);
+  --code-bg: hsl(30 18% 14%);
+  --code-ink: hsl(38 25% 88%);
+  --shadow-card: 0 2px 10px hsl(30 15% 15% / 0.05);
+  --shadow-shot: 0 24px 60px hsl(30 15% 15% / 0.14);
+  --glow: hsl(15 65% 52% / 0.10);
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --ink: #eaecf4;
-    --muted: #a4adc0;
-    --accent: #5b8cff;
-    --accent-2: #7c5cff;
-    --accent-ink: #0b0e14;
-    --accent-soft: rgba(91, 140, 255, 0.14);
-    --surface: #191e27;
-    --surface-2: #151a22;
-    --line: rgba(234, 236, 244, 0.13);
-    --page-bg: #0f1319;
-    --shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
-    --shadow-lg: 0 34px 90px rgba(0, 0, 0, 0.55);
-    --code-bg: #0b0e14;
-    --code-ink: #d6dcf0;
-    --blob-a: rgba(91, 140, 255, 0.20);
-    --blob-b: rgba(124, 92, 255, 0.16);
+    --bg: hsl(30 8% 11%);
+    --fg: hsl(35 22% 92%);
+    --card: hsl(30 8% 16%);
+    --card-deep: hsl(30 8% 20%);
+    --muted-fg: hsl(30 10% 66%);
+    --border: hsl(30 8% 24%);
+    --primary: hsl(15 70% 58%);
+    --primary-hover: hsl(15 70% 64%);
+    --primary-fg: hsl(15 30% 10%);
+    --primary-soft: hsl(15 70% 58% / 0.16);
+    --code-bg: hsl(30 10% 8%);
+    --code-ink: hsl(38 20% 84%);
+    --shadow-card: 0 2px 10px hsl(0 0% 0% / 0.25);
+    --shadow-shot: 0 24px 60px hsl(0 0% 0% / 0.5);
+    --glow: hsl(15 70% 58% / 0.12);
   }
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
-    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  background: var(--page-bg);
-  color: var(--ink);
-  line-height: 1.7;
-  -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
+  font-family: "Inter", -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  background: var(--bg); color: var(--fg);
+  line-height: 1.75; -webkit-font-smoothing: antialiased;
 }
-::selection { background: color-mix(in srgb, var(--accent) 26%, transparent); }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
-.aurora { position: fixed; inset: 0; z-index: -2; overflow: hidden; }
-.aurora::before, .aurora::after { content: ""; position: absolute; border-radius: 50%; filter: blur(90px); }
-.aurora::before { width: 46vw; height: 46vw; left: -8vw; top: -12vw; background: var(--blob-a); }
-.aurora::after { width: 40vw; height: 40vw; right: -6vw; top: 22vh; background: var(--blob-b); }
-@media (prefers-reduced-motion: no-preference) {
-  .aurora::before { animation: drift-a 26s ease-in-out infinite alternate; }
-  .aurora::after { animation: drift-b 32s ease-in-out infinite alternate; }
-  @keyframes drift-a { to { transform: translate(9vw, 14vh) scale(1.15); } }
-  @keyframes drift-b { to { transform: translate(-8vw, -10vh) scale(0.9); } }
-}
-.grain { position: fixed; inset: 0; z-index: 60; pointer-events: none; opacity: .04; mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E"); }
 a { color: inherit; text-decoration: none; }
 img { display: block; max-width: 100%; }
-.wrap { max-width: 1200px; margin: 0 auto; padding: 0 28px; }
+::selection { background: var(--primary-soft); }
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 4px; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
 
 /* 导航 */
 .nav {
-  position: sticky; top: 0; z-index: 20;
-  backdrop-filter: blur(14px) saturate(1.4);
-  -webkit-backdrop-filter: blur(14px) saturate(1.4);
-  background: var(--surface);
-  background: color-mix(in srgb, var(--surface) 84%, transparent);
-  border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 30;
+  background: var(--bg);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
 }
-.nav-in { display: flex; align-items: center; gap: 26px; height: 62px; }
-.brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 700; font-size: 17.5px; letter-spacing: -0.01em; }
+.nav-in { display: flex; align-items: center; gap: 24px; height: 64px; }
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 800; font-size: 17px; letter-spacing: -0.02em; }
 .brand img { width: 26px; height: 26px; border-radius: 7px; }
-.nav-links { display: flex; gap: 22px; margin-left: auto; font-size: 14.5px; color: var(--muted); }
-.nav-links a { transition: color .2s; }
-.nav-links a:hover { color: var(--accent); }
-.nav-cta {
-  font-size: 14px; font-weight: 600; padding: 8px 16px;
-  border: 1px solid var(--line); border-radius: 999px; color: var(--ink);
-  transition: border-color .2s, transform .2s;
-}
-.nav-cta:hover { border-color: var(--accent); transform: translateY(-1px); }
-.lang { font-size: 13.5px; color: var(--muted); }
-.lang:hover { color: var(--accent); }
-@media (max-width: 900px) { .nav-links { display: none; } .nav-in { gap: 14px; } .nav-cta { margin-left: auto; } }
-
-/* 首屏 */
-.hero { padding: 84px 0 30px; position: relative; }
-.hero-grid { display: grid; grid-template-columns: 11fr 9fr; gap: 60px; align-items: center; }
-.hero h1 {
-  font-family: var(--display);
-  font-size: clamp(40px, 4.6vw, 68px);
-  line-height: 1.14; letter-spacing: 0.01em; font-weight: 800;
-}
-.hero h1 .grad {
-  background: linear-gradient(120deg, var(--accent), var(--accent-2));
-  -webkit-background-clip: text; background-clip: text; color: transparent;
-}
-.hero p.sub { margin-top: 22px; font-size: 18px; color: var(--muted); max-width: 44ch; }
-.cta-row { display: flex; gap: 14px; margin-top: 34px; flex-wrap: wrap; }
+.nav-links { display: flex; gap: 22px; margin-left: auto; font-size: 14px; font-weight: 500; color: var(--muted-fg); }
+.nav-links a:hover { color: var(--fg); }
+.nav .lang { font-size: 13.5px; color: var(--muted-fg); font-weight: 500; }
+.nav .lang:hover { color: var(--fg); }
 .btn {
-  display: inline-flex; align-items: center; gap: 8px;
-  font-size: 15.5px; font-weight: 650; padding: 14px 28px;
-  border-radius: 999px; transition: transform .18s, box-shadow .18s, border-color .18s;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-family: inherit; font-size: 14.5px; font-weight: 600;
+  border-radius: 12px; padding: 10px 20px; cursor: pointer;
+  transition: background .18s, border-color .18s, transform .18s, box-shadow .18s;
 }
 .btn:active { transform: scale(0.98); }
-.btn-primary {
-  color: var(--accent-ink);
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  box-shadow: 0 12px 34px color-mix(in srgb, var(--accent) 34%, transparent);
-}
-.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 18px 44px color-mix(in srgb, var(--accent) 44%, transparent); }
-.btn-ghost { border: 1px solid var(--line); color: var(--ink); background: var(--surface); background: color-mix(in srgb, var(--surface) 80%, transparent); }
-.btn-ghost:hover { border-color: var(--accent); transform: translateY(-2px); }
+.btn-primary { background: var(--primary); color: var(--primary-fg); border: 1px solid var(--primary); box-shadow: var(--shadow-card); }
+.btn-primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); transform: translateY(-1px); }
+.btn-outline { background: transparent; color: var(--fg); border: 1px solid var(--border); }
+.btn-outline:hover { border-color: var(--fg); transform: translateY(-1px); }
+@media (max-width: 900px) { .nav-links { display: none; } .nav .lang { margin-left: auto; } }
 
-/* 截图框：倾斜 + 滑块切换 + 悬停 3D */
-.shot-wrap { position: relative; }
-.shot-frame {
-  position: relative; border-radius: 16px; border: 1px solid var(--line);
-  background: var(--surface); box-shadow: var(--shadow-lg);
-  padding: 10px; transform: rotate(-1.4deg);
-  transition: transform .5s cubic-bezier(.16,1,.3,1), box-shadow .5s;
-  will-change: transform;
+/* 首屏 */
+.hero { padding: 88px 0 30px; text-align: center; position: relative; }
+.badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 600; color: var(--primary);
+  border: 1px solid var(--border); border-radius: 999px;
+  background: var(--card); padding: 6px 14px;
+  transition: border-color .2s, background .2s;
 }
-.shot-frame:hover { box-shadow: 0 40px 110px color-mix(in srgb, var(--accent) 26%, rgba(0,0,0,.3)); }
-.shot-bar { display: flex; align-items: center; gap: 6px; padding: 4px 6px 10px; }
-.dot { width: 11px; height: 11px; border-radius: 50%; background: var(--line); }
-.dot.r { background: #ff5f57; } .dot.y { background: #febc2e; } .dot.g { background: #28c840; }
-.shot-stage { position: relative; aspect-ratio: 2560 / 2056; border-radius: 10px; overflow: hidden; background: #101319; }
-.shot-stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: opacity .5s ease; }
+.badge:hover { border-color: var(--primary); background: var(--primary-soft); }
+.badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); }
+.badge .arrow { font-size: 14px; line-height: 1; }
+.hero h1 {
+  margin: 26px auto 0; max-width: 18ch;
+  font-size: clamp(38px, 5vw, 62px); line-height: 1.18;
+  letter-spacing: 0; font-weight: 800;
+}
+.hero h1 .accent { color: var(--primary); }
+.hero .sub { margin: 22px auto 0; max-width: 52ch; font-size: 17px; color: var(--muted-fg); }
+.cta-row { margin-top: 34px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.cta-row .btn { padding: 13px 26px; font-size: 15px; border-radius: 13px; }
+
+/* 首屏截图 */
+.shot-zone { position: relative; margin: 56px auto 0; max-width: 900px; }
+.shot-zone::before {
+  content: ""; position: absolute; inset: -12% -18%;
+  background: radial-gradient(closest-side, var(--glow), transparent);
+  pointer-events: none;
+}
+.shot-card {
+  position: relative; border-radius: 20px; border: 1px solid var(--border);
+  background: var(--card); box-shadow: var(--shadow-shot); padding: 10px;
+  transition: transform .4s cubic-bezier(.16,1,.3,1);
+}
+.shot-card:hover { transform: translateY(-4px); }
+.shot-stage { position: relative; aspect-ratio: 2560 / 2056; border-radius: 12px; overflow: hidden; background: #101319; }
+.shot-stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: opacity .45s ease; }
 .shot-stage img.off { opacity: 0; }
 .theme-toggle {
-  position: absolute; z-index: 5; right: 18px; top: 54px;
-  display: grid; grid-template-columns: 1fr 1fr; padding: 4px; width: 148px;
-  border-radius: 999px; border: 1px solid var(--line);
-  background: var(--surface);
-  background: color-mix(in srgb, var(--surface) 90%, transparent);
-  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  position: absolute; z-index: 5; right: 16px; top: 50px;
+  display: grid; grid-template-columns: 1fr 1fr; padding: 3px; width: 124px;
+  border-radius: 999px; border: 1px solid var(--border);
+  background: var(--bg);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
 }
 .theme-toggle .thumb {
-  position: absolute; top: 4px; left: 4px; width: calc(50% - 4px); height: calc(100% - 8px);
-  border-radius: 999px; background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  transition: transform .32s cubic-bezier(.16,1,.3,1);
+  position: absolute; top: 3px; left: 3px; width: calc(50% - 3px); height: calc(100% - 6px);
+  border-radius: 999px; background: var(--primary);
+  transition: transform .3s cubic-bezier(.16,1,.3,1);
 }
 .theme-toggle[data-shot="dark"] .thumb { transform: translateX(100%); }
 .theme-toggle button {
-  position: relative; z-index: 1; border: 0; background: transparent; color: var(--muted);
-  font-size: 12.5px; font-weight: 650; padding: 7px 0; border-radius: 999px; cursor: pointer;
-  transition: color .3s;
+  position: relative; z-index: 1; border: 0; background: transparent; color: var(--muted-fg);
+  font-family: inherit; font-size: 12px; font-weight: 600; padding: 6px 0; border-radius: 999px; cursor: pointer;
+  transition: color .25s;
 }
-.theme-toggle button[aria-pressed="true"] { color: var(--accent-ink); }
-@media (prefers-reduced-motion: reduce) { .shot-frame { transform: none; } }
-
-/* 首屏下方徽章行 */
-.meta { margin-top: 58px; display: flex; flex-wrap: wrap; gap: 10px; }
-.pill {
-  font-size: 13px; font-weight: 600; color: var(--muted);
-  border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px;
-  background: var(--surface);
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-}
-.pill b { color: var(--ink); font-weight: 650; }
+.theme-toggle button[aria-pressed="true"] { color: var(--primary-fg); }
 
 /* 区块 */
-section { padding: 104px 0; }
-h2 {
-  font-family: var(--display);
-  font-size: clamp(28px, 3.2vw, 42px); letter-spacing: 0.01em; line-height: 1.18; font-weight: 750;
-  max-width: 24ch;
+section { padding: 92px 0; }
+.sec-head { text-align: center; margin: 0 auto; }
+.sec-pill {
+  display: inline-flex; font-size: 12.5px; font-weight: 600; letter-spacing: .02em;
+  color: var(--primary); background: var(--primary-soft);
+  border: 1px solid transparent; border-radius: 999px; padding: 5px 13px;
 }
-.lede { margin-top: 16px; color: var(--muted); font-size: 17px; max-width: 58ch; }
+h2 { margin-top: 16px; font-size: clamp(26px, 3.2vw, 38px); letter-spacing: 0; line-height: 1.25; font-weight: 800; }
+.sec-sub { margin: 14px auto 0; max-width: 56ch; color: var(--muted-fg); font-size: 16px; }
+
+/* 功能网格 */
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 44px; }
+.card {
+  border: 1px solid var(--border); border-radius: 18px; background: var(--card);
+  padding: 24px; transition: background .2s, border-color .2s, transform .2s, box-shadow .2s;
+}
+.card:hover { background: var(--card-deep); border-color: var(--primary); transform: translateY(-3px); box-shadow: var(--shadow-card); }
+.card .icon {
+  width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center;
+  background: var(--primary-soft); color: var(--primary); margin-bottom: 14px;
+}
+.card .icon svg { width: 19px; height: 19px; }
+.card h3 { font-size: 16.5px; font-weight: 700; }
+.card p { margin-top: 7px; font-size: 14px; color: var(--muted-fg); }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
 
 /* 为什么 */
-.why-grid { display: grid; grid-template-columns: 6fr 6fr; gap: 64px; align-items: center; }
-.why-copy p { margin-top: 18px; color: var(--muted); font-size: 15.5px; max-width: 48ch; }
-.why-copy p b { color: var(--ink); font-weight: 650; }
-.term {
-  margin-top: 26px; background: var(--code-bg); border-radius: 12px; overflow: hidden;
-  box-shadow: var(--shadow);
-}
-.term-bar { display: flex; gap: 6px; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,.06); }
-.term pre { padding: 16px 18px; color: var(--code-ink); font-size: 12.8px; line-height: 1.8; overflow-x: auto;
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
-.term .c { color: #7d8698; } .term .k { color: #8be0a4; } .term .v { color: #9db4ff; }
-.topo { width: 100%; height: auto; margin-top: 6px; }
-.topo .link { stroke: var(--accent); stroke-width: 1.6; stroke-dasharray: 5 7; opacity: .85; fill: none; }
-.topo .node { fill: var(--surface); stroke: var(--line); }
-.topo .node-core { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.4; }
-.topo text { fill: var(--ink); font-size: 13px; font-weight: 650; font-family: inherit; }
-.topo .sub { fill: var(--muted); font-size: 11.5px; font-weight: 400; }
+.why-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 48px; align-items: start; text-align: left; }
+.why-copy p { color: var(--muted-fg); font-size: 15.5px; margin-top: 14px; }
+.why-copy p b { color: var(--fg); font-weight: 600; }
+.term { margin-top: 22px; border-radius: 14px; overflow: hidden; border: 1px solid var(--border); box-shadow: var(--shadow-card); }
+.term-bar { display: flex; gap: 6px; padding: 10px 12px; background: var(--code-bg); border-bottom: 1px solid hsl(30 10% 22%); }
+.term-bar i { width: 10px; height: 10px; border-radius: 50%; background: hsl(30 10% 30%); }
+.term pre { background: var(--code-bg); color: var(--code-ink); padding: 16px 18px; font-family: "Fira Code", ui-monospace, monospace; font-size: 12.6px; line-height: 1.8; overflow-x: auto; }
+.term .c { color: hsl(30 8% 55%); } .term .k { color: hsl(150 35% 60%); } .term .v { color: hsl(20 80% 70%); }
+.topo { width: 100%; height: auto; }
+.topo .link { stroke: var(--primary); stroke-width: 1.6; stroke-dasharray: 5 7; opacity: .8; fill: none; }
+.topo .node { fill: var(--card); stroke: var(--border); }
+.topo .node-core { fill: var(--primary-soft); stroke: var(--primary); stroke-width: 1.4; }
+.topo text { fill: var(--fg); font-size: 13px; font-weight: 650; font-family: inherit; }
+.topo .sub { fill: var(--muted-fg); font-size: 11.5px; font-weight: 400; }
 @media (prefers-reduced-motion: no-preference) {
-  .topo .link { animation: dashmove 2.6s linear infinite; }
-  @keyframes dashmove { to { stroke-dashoffset: -24; } }
+  .topo .link { animation: dash 2.6s linear infinite; }
+  @keyframes dash { to { stroke-dashoffset: -24; } }
 }
-
-/* 功能 bento */
-.bento { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; margin-top: 48px; }
-.cell {
-  border: 1px solid var(--line); border-radius: 16px; background: var(--surface);
-  padding: 26px; transition: transform .25s cubic-bezier(.16,1,.3,1), box-shadow .25s;
-}
-.cell:hover { transform: translateY(-4px); box-shadow: var(--shadow); }
-.cell h3 { font-family: var(--display); font-size: 18px; font-weight: 700; }
-.cell p { margin-top: 9px; font-size: 14.5px; color: var(--muted); }
-.cell-a { grid-column: span 4; padding: 0; overflow: hidden; }
-.cell-a img { width: 100%; height: 250px; object-fit: cover; object-position: left top; }
-.cell-a .cap { padding: 18px 22px 20px; }
-.cell-b { grid-column: span 2; background: linear-gradient(165deg, var(--accent-soft), transparent 72%); }
-.mini-demo { margin-top: 14px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); }
-.mini-row { display: flex; align-items: center; gap: 8px; padding: 10px 12px; transition: background .3s, color .3s; font-size: 12px; font-weight: 600; }
-.mini-demo[data-side="light"] .mini-row { background: #f3efff; color: #14131f; }
-.mini-demo[data-side="dark"] .mini-row { background: #101319; color: #eaecf4; }
-.mini-dot { width: 8px; height: 8px; border-radius: 50%; }
-.mini-demo[data-side="light"] .mini-dot { background: #6c4cf1; }
-.mini-demo[data-side="dark"] .mini-dot { background: #5b8cff; }
-.cell-c, .cell-d, .cell-e { grid-column: span 2; }
-@media (max-width: 900px) {
-  .bento { grid-template-columns: 1fr 1fr; }
-  .cell-a, .cell-b, .cell-c, .cell-d, .cell-e { grid-column: span 2; }
-}
+@media (max-width: 900px) { .why-grid { grid-template-columns: 1fr; } }
 
 /* 安全长条 */
-.band { background: var(--code-bg); color: var(--code-ink); }
-.band h2 { color: #fff; }
-.band .lede { color: #b7c0d4; }
-.sec-groups { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 40px; margin-top: 50px; }
-.sec-group { border-top: 2px solid transparent; border-image: linear-gradient(90deg, var(--accent), transparent) 1; padding-top: 18px; }
-.sec-group h3 { font-family: var(--display); font-size: 17px; font-weight: 700; color: #fff; }
-.sec-group p { margin-top: 9px; font-size: 14.5px; color: #b7c0d4; }
-.sec-group p + p { margin-top: 10px; }
-@media (max-width: 900px) { .sec-groups { grid-template-columns: 1fr; gap: 28px; } }
+.band { background: var(--code-bg); border-radius: 28px; margin: 0 24px; }
+@media (min-width: 1168px) { .band { margin: 0 auto; max-width: 1072px; } }
+.band-in { padding: 56px 48px; color: var(--code-ink); }
+.band .sec-pill { background: hsl(15 65% 52% / 0.18); }
+.band h2 { color: hsl(38 30% 96%); }
+.band .sec-sub { color: hsl(35 12% 72%); }
+.sec-groups { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin-top: 40px; text-align: left; }
+.sec-group { border-top: 2px solid var(--primary); padding-top: 16px; }
+.sec-group h3 { font-size: 16px; font-weight: 700; color: hsl(38 30% 96%); }
+.sec-group p { margin-top: 8px; font-size: 14px; color: hsl(35 12% 72%); }
+@media (max-width: 900px) { .band-in { padding: 44px 24px; } .sec-groups { grid-template-columns: 1fr; } }
 
-/* 自建步骤 */
-.steps { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; margin-top: 48px; }
-.step { border-left: 2px solid var(--line); padding-left: 24px; position: relative; }
-.step::before {
-  content: ""; position: absolute; left: -5px; top: 8px; width: 8px; height: 8px; border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+/* 步骤 */
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 44px; text-align: left; }
+.step { border: 1px solid var(--border); border-radius: 18px; background: var(--card); padding: 24px; }
+.step .n {
+  width: 30px; height: 30px; border-radius: 999px; display: grid; place-items: center;
+  background: var(--primary); color: var(--primary-fg); font-size: 13.5px; font-weight: 700; margin-bottom: 14px;
 }
-.step h3 { font-family: var(--display); font-size: 18px; font-weight: 700; }
-.step p { margin-top: 8px; font-size: 14.5px; color: var(--muted); }
+.step h3 { font-size: 16.5px; font-weight: 700; }
+.step p { margin-top: 7px; font-size: 14px; color: var(--muted-fg); }
 .step pre {
   margin-top: 14px; background: var(--code-bg); color: var(--code-ink);
-  border-radius: 8px; padding: 14px 16px; font-size: 12.6px; line-height: 1.7;
-  overflow-x: auto; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  border-radius: 10px; padding: 13px 15px; font-family: "Fira Code", ui-monospace, monospace;
+  font-size: 12.2px; line-height: 1.7; overflow-x: auto;
 }
 @media (max-width: 900px) { .steps { grid-template-columns: 1fr; } }
 
-/* 对撞对比 */
-.vs { display: grid; grid-template-columns: 1fr auto 1fr; gap: 26px; margin-top: 52px; align-items: stretch; }
-.vs-card { border: 1px solid var(--line); border-radius: 16px; padding: 30px; background: var(--surface); }
-.vs-card.us { background: linear-gradient(170deg, var(--accent-soft), var(--surface) 60%); border-color: color-mix(in srgb, var(--accent) 32%, var(--line)); }
-.vs-card h3 { font-family: var(--display); font-size: 20px; font-weight: 700; }
-.vs-card ul { list-style: none; margin-top: 18px; }
-.vs-card li { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 14.5px; color: var(--muted); }
+/* 对比 */
+.vs { display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; margin-top: 44px; align-items: stretch; text-align: left; }
+.vs-card { border: 1px solid var(--border); border-radius: 18px; background: var(--card); padding: 26px; }
+.vs-card.us { border-color: var(--primary); background: var(--primary-soft); }
+.vs-card h3 { font-size: 18px; font-weight: 800; }
+.vs-card ul { list-style: none; margin-top: 14px; }
+.vs-card li { display: flex; gap: 10px; padding: 11px 0; border-top: 1px solid var(--border); font-size: 14px; color: var(--muted-fg); }
 .vs-card li:first-child { border-top: 0; }
-.vs-card li .mark { flex: 0 0 auto; font-weight: 700; font-family: var(--display); }
-.vs-card.them .mark { color: #b3483f; }
-.vs-card.us .mark { color: var(--accent); }
-.vs-card.us li { color: var(--ink); }
+.vs-card.us li { color: var(--fg); }
+.mark { flex: 0 0 auto; font-weight: 700; font-family: "Fira Code", monospace; }
+.them .mark { color: hsl(0 30% 50%); }
+.us .mark { color: var(--primary); }
 .vs-badge {
-  align-self: center; width: 58px; height: 58px; border-radius: 50%;
-  display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 15px;
-  color: var(--accent-ink); background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  box-shadow: 0 12px 30px color-mix(in srgb, var(--accent) 38%, transparent);
+  align-self: center; width: 52px; height: 52px; border-radius: 999px;
+  display: grid; place-items: center; font-weight: 800; font-size: 14px;
+  color: var(--primary-fg); background: var(--primary); box-shadow: var(--shadow-card);
 }
 @media (max-width: 900px) { .vs { grid-template-columns: 1fr; } .vs-badge { margin: 0 auto; } }
 
-/* 下载行 */
-.dl-list { margin-top: 48px; border-top: 1px solid var(--line); }
+/* 下载 */
+.dl-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 40px; }
 .dl {
-  display: grid; grid-template-columns: 150px 1fr auto; align-items: center; gap: 24px;
-  padding: 26px 6px; border-bottom: 1px solid var(--line);
-  transition: background .25s, padding .25s;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  border: 1px solid var(--border); border-radius: 16px; background: var(--card);
+  padding: 22px; text-align: left; transition: border-color .2s, transform .2s, box-shadow .2s;
 }
-.dl:hover { background: var(--accent-soft); padding-left: 16px; padding-right: 16px; }
-.dl h3 { font-family: var(--display); font-size: 21px; font-weight: 700; }
-.dl .arch { font-size: 13.5px; color: var(--muted); font-family: ui-monospace, Menlo, monospace; }
-.dl .note { font-size: 14px; color: var(--muted); max-width: 52ch; }
-.dl .go { font-size: 14.5px; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 8px; }
-.dl .go::after { content: ""; width: 8px; height: 8px; border-top: 2px solid var(--accent); border-right: 2px solid var(--accent); transform: rotate(45deg); transition: transform .25s; }
-.dl:hover .go::after { transform: rotate(45deg) translateX(4px); }
-.dl-note { margin-top: 24px; font-size: 14px; color: var(--muted); max-width: 74ch; }
-.dl-note a { color: var(--accent); font-weight: 600; }
-@media (max-width: 900px) { .dl { grid-template-columns: 1fr; gap: 6px; } }
+.dl:hover { border-color: var(--primary); transform: translateY(-3px); box-shadow: var(--shadow-card); }
+.dl h3 { font-size: 17px; font-weight: 700; }
+.dl .arch { font-size: 12.5px; color: var(--muted-fg); font-family: "Fira Code", monospace; }
+.dl .note { margin-top: 8px; font-size: 13px; color: var(--muted-fg); }
+.dl .go { margin-top: 14px; font-size: 14px; font-weight: 700; color: var(--primary); }
+.dl-note { margin: 24px auto 0; max-width: 68ch; text-align: center; font-size: 13.5px; color: var(--muted-fg); }
+.dl-note a { color: var(--primary); font-weight: 600; }
+@media (max-width: 900px) { .dl-list { grid-template-columns: 1fr; } }
 
 /* 常见问题 */
-.faq details { border-bottom: 1px solid var(--line); }
+.faq-list { max-width: 720px; margin: 40px auto 0; text-align: left; }
+.faq details { border: 1px solid var(--border); border-radius: 14px; background: var(--card); padding: 0 20px; margin-top: 10px; }
 .faq summary {
-  cursor: pointer; list-style: none; padding: 22px 0;
-  font-size: 17px; font-weight: 650; display: flex; justify-content: space-between; gap: 20px;
+  cursor: pointer; list-style: none; padding: 17px 0;
+  font-size: 15.5px; font-weight: 600; display: flex; justify-content: space-between; gap: 18px;
 }
 .faq summary::-webkit-details-marker { display: none; }
-.faq summary::after { content: "+"; color: var(--muted); font-size: 22px; transition: transform .2s; }
-.faq details[open] summary::after { transform: rotate(45deg); }
-.faq .a { padding: 0 0 24px; color: var(--muted); font-size: 15px; max-width: 72ch; }
+.faq summary::after { content: "+"; color: var(--muted-fg); font-size: 19px; line-height: 1.2; transition: transform .2s; }
+.faq details[open] summary::after { transform: rotate(45deg); color: var(--primary); }
+.faq .a { padding: 0 0 18px; color: var(--muted-fg); font-size: 14.5px; }
 
 /* 页脚 */
-footer { border-top: 1px solid var(--line); padding: 46px 0 60px; font-size: 14px; color: var(--muted); }
-.foot { display: flex; gap: 28px; flex-wrap: wrap; align-items: center; }
-.foot a:hover { color: var(--accent); }
-.foot .legal { margin-top: 18px; max-width: 76ch; font-size: 13px; line-height: 1.8; }
+footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 14px; color: var(--muted-fg); }
+.foot { display: flex; gap: 56px; flex-wrap: wrap; align-items: flex-start; }
+.foot .brand { color: var(--fg); }
+.foot-col { display: flex; flex-direction: column; gap: 9px; }
+.foot-col b { color: var(--fg); font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+.foot-col a:hover { color: var(--fg); }
+.legal { margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 12.5px; max-width: 80ch; line-height: 1.8; }
 
-/* 滚动显现 */
-.reveal { opacity: 0; transform: translateY(26px); transition: opacity .8s cubic-bezier(.16,1,.3,1), transform .8s cubic-bezier(.16,1,.3,1); transition-delay: var(--d, 0s); }
+/* 滚动显现与入场 */
+.reveal { opacity: 0; transform: translateY(20px); transition: opacity .7s cubic-bezier(.16,1,.3,1), transform .7s cubic-bezier(.16,1,.3,1); transition-delay: var(--d, 0s); }
 .reveal.in { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } }
-@keyframes rise { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: none; } }
-.hero .h-copy > * { animation: rise .9s cubic-bezier(.16,1,.3,1) both; }
-.hero .h-copy > *:nth-child(2) { animation-delay: .1s; }
-.hero .h-copy > *:nth-child(3) { animation-delay: .2s; }
-.hero .shot-wrap { animation: rise 1s .18s cubic-bezier(.16,1,.3,1) both; }
-@media (prefers-reduced-motion: reduce) { .hero .h-copy > *, .hero .shot-wrap { animation: none; } }
+@keyframes rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+.hero > * { animation: rise .7s cubic-bezier(.16,1,.3,1) both; }
+.hero > *:nth-child(2) { animation-delay: .07s; }
+.hero > *:nth-child(3) { animation-delay: .14s; }
+.hero > *:nth-child(4) { animation-delay: .21s; }
+.hero .shot-zone { animation-delay: .28s; }
+@media (prefers-reduced-motion: reduce) { .hero > *, .hero .shot-zone { animation: none; } }
 </style>
 </head>
 <body>
-<div class="aurora" aria-hidden="true"></div>
-<div class="grain" aria-hidden="true"></div>
 
 <nav class="nav">
   <div class="wrap nav-in">
-    <a class="brand" href="#"><img src="../assets/logo.png?v=4" alt="NikoDesk 徽标">NikoDesk</a>
+    <a class="brand" href="#"><img src="../assets/logo.png?v=5" alt="NikoDesk 徽标">NikoDesk</a>
     <div class="nav-links">
       <a href="#why">为什么自建</a>
       <a href="#features">功能</a>
@@ -366,140 +317,152 @@ footer { border-top: 1px solid var(--line); padding: 46px 0 60px; font-size: 14p
       <a href="#faq">常见问题</a>
     </div>
     <a class="lang" href="../" hreflang="en">English</a>
-    <a class="nav-cta" href="https://github.com/baogutang/nikodesk" target="_blank" rel="noopener">GitHub</a>
+    <a class="btn btn-primary" href="#download">下载</a>
   </div>
 </nav>
 
 <header class="hero wrap">
-  <div class="hero-grid">
-    <div class="h-copy">
-      <h1>你的设备。<br>你的服务器。<br><span class="grad">你的远程桌面。</span></h1>
-      <p class="sub">NikoDesk 基于 RustDesk 内核，注册与中继服务全部由你自己托管。整条链路里没有公共云。</p>
-      <div class="cta-row">
-        <a class="btn btn-primary" href="#download">下载 NikoDesk</a>
-        <a class="btn btn-ghost" href="https://github.com/baogutang/nikodesk" target="_blank" rel="noopener">阅读源码</a>
-      </div>
-    </div>
-    <div class="shot-wrap">
-      <div class="shot-frame" id="shot-frame">
-        <div class="shot-bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
-        <div class="theme-toggle" role="group" aria-label="预览主题" data-shot="dark" id="shot-toggle">
-          <span class="thumb" aria-hidden="true"></span>
-          <button type="button" data-shot="light" aria-pressed="false">明亮</button>
-          <button type="button" data-shot="dark" aria-pressed="true">暗黑</button>
-        </div>
-        <div class="shot-stage">
-          <img src="../assets/app-light-v4.jpg?v=4" alt="NikoDesk 明亮主题，设备工作区与连接卡片" id="shot-light">
-          <img src="../assets/app-dark-v4.jpg?v=4" alt="NikoDesk 暗黑主题，设备工作区与连接卡片" id="shot-dark">
-        </div>
-      </div>
-    </div>
+  <a class="badge" href="https://github.com/baogutang/nikodesk/releases" target="_blank" rel="noopener">
+    <span class="dot"></span>v1.0.0 现已发布<span class="arrow">→</span>
+  </a>
+  <h1>你的设备，你的服务器，<br><span class="accent">你的远程桌面。</span></h1>
+  <p class="sub">NikoDesk 基于 RustDesk 内核，注册与中继服务全部由你自己托管。整条链路里没有公共云。</p>
+  <div class="cta-row">
+    <a class="btn btn-primary" href="#download">下载 NikoDesk</a>
+    <a class="btn btn-outline" href="https://github.com/baogutang/nikodesk" target="_blank" rel="noopener">阅读源码</a>
   </div>
-  <div class="meta reveal">
-    <span class="pill"><b>RustDesk 1.5</b> 内核</span>
-    <span class="pill"><b>macOS / Windows / Android</b></span>
-    <span class="pill"><b>P2P 优先</b>，中继只做兜底</span>
-    <span class="pill"><b>AGPL-3.0</b>，构建可复现</span>
+  <div class="shot-zone">
+    <div class="shot-card">
+      <div class="theme-toggle" role="group" aria-label="预览主题" data-shot="dark" id="shot-toggle">
+        <span class="thumb" aria-hidden="true"></span>
+        <button type="button" data-shot="light" aria-pressed="false">明亮</button>
+        <button type="button" data-shot="dark" aria-pressed="true">暗黑</button>
+      </div>
+      <div class="shot-stage">
+        <img src="../assets/app-light-v4.jpg?v=5" alt="NikoDesk 明亮主题，设备工作区与连接卡片" id="shot-light">
+        <img src="../assets/app-dark-v4.jpg?v=5" alt="NikoDesk 暗黑主题，设备工作区与连接卡片" id="shot-dark">
+      </div>
+    </div>
   </div>
 </header>
 
+<section id="features" class="wrap">
+  <div class="sec-head reveal">
+    <span class="sec-pill">功能</span>
+    <h2>为日常驾驭而生</h2>
+    <p class="sec-sub">以下功能全部随 v1.0.0 交付。尚未验证的地方，界面会如实标注，而不是装作没有问题。</p>
+  </div>
+  <div class="grid">
+    <div class="card reveal">
+      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m10.85 12.15 8.9-8.9"/><path d="m18 5 3 3"/><path d="m15 8 3 3"/></svg></div>
+      <h3>密码就是门禁</h3>
+      <p>只输入 ID 永远不会发起连接。远程密码就位 NikoDesk 才出手，一次手滑也不会敲响别人的机器。</p>
+    </div>
+    <div class="card reveal" style="--d:.06s">
+      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+      <h3>在线状态真实可信</h3>
+      <p>设备卡片每六秒向你的注册服务器查询一次：在线、离线或未知。未知就是未知，不含糊。</p>
+    </div>
+    <div class="card reveal" style="--d:.12s">
+      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg></div>
+      <h3>历史与录像</h3>
+      <p>本地保存最近 200 次连接记录，一键复连；任意会话可以录像留档。</p>
+    </div>
+    <div class="card reveal">
+      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9z"/><path d="M13 3v6h6"/></svg></div>
+      <h3>文件与剪贴板</h3>
+      <p>接受一次会话即授予键盘、鼠标、剪贴板与文件传输，逐会话可收回。音频默认关闭，需要时再打开。</p>
+    </div>
+    <div class="card reveal" style="--d:.06s">
+      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg></div>
+      <h3>更新先验哈希</h3>
+      <p>应用内即可检查更新。下载只走 GitHub Release 的 HTTPS 通道，SHA256 校验不过就拒绝安装。</p>
+    </div>
+    <div class="card reveal" style="--d:.12s">
+      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></div>
+      <h3>一套界面，两种气质</h3>
+      <p>夜间控制台与日光画布，跟随系统外观，也跟随上方这个切换。</p>
+    </div>
+  </div>
+</section>
+
 <section id="why" class="wrap">
+  <div class="sec-head reveal">
+    <span class="sec-pill">为什么自建</span>
+    <h2>它不向任何公共服务器报到</h2>
+    <p class="sec-sub">远程桌面离不开注册服务器（hbbs）与中继（hbbr）。公共远控把两者握在厂商手里，NikoDesk 把它们交还给你。</p>
+  </div>
   <div class="why-grid">
     <div class="why-copy reveal">
-      <h2>它不向任何公共服务器报到</h2>
-      <p>远程桌面离不开两个服务：<b>注册服务器</b>（hbbs）让设备互相找到对方，<b>中继</b>（hbbr）在无法直连时转发流量。公共远控把这两个服务握在厂商手里，NikoDesk 把它们交还给你。</p>
-      <p>会话经<b>你的服务器</b>协商，能打洞就点对点直连，打不通才走你的中继。而且这条规矩不写在隐私政策里，写在代码里：</p>
-      <div class="term reveal" style="--d:.1s">
-        <div class="term-bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
+      <p>会话经<b>你的服务器</b>协商：NAS、VPS 或任何你能控制的主机。能打洞就点对点直连，打不通才走你的中继，而且中继只见加密数据帧。</p>
+      <p>这条规矩不写在隐私政策里，写在代码里：</p>
+      <div class="term">
+        <div class="term-bar"><i></i><i></i><i></i></div>
         <pre><span class="c"># 私服规则是编译期固化的，不是可选项</span>
 <span class="v">$</span> cargo build --features flutter,hwcodec,<span class="k">nikodesk</span>
 <span class="c"># NikoDesk 构建无法向公共注册服务器发起注册</span></pre>
       </div>
     </div>
-    <div class="reveal" style="--d:.14s">
+    <div class="reveal" style="--d:.1s">
       <svg class="topo" viewBox="0 0 560 360" role="img" aria-label="笔记本与手机经由你自己的服务器互连">
         <path class="link" d="M120 96 C 200 96, 220 168, 280 180"/>
         <path class="link" d="M120 264 C 200 264, 220 192, 280 180"/>
         <path class="link" d="M356 180 C 420 180, 430 120, 452 110"/>
         <path class="link" d="M356 180 C 420 180, 430 250, 452 258"/>
-        <rect class="node" x="40" y="72" width="80" height="48" rx="10"/>
+        <rect class="node" x="40" y="72" width="80" height="48" rx="12"/>
         <text x="80" y="101" text-anchor="middle">笔记本</text>
-        <rect class="node" x="40" y="240" width="80" height="48" rx="10"/>
+        <rect class="node" x="40" y="240" width="80" height="48" rx="12"/>
         <text x="80" y="269" text-anchor="middle">手机</text>
-        <rect class="node-core" x="278" y="142" width="80" height="76" rx="12"/>
+        <rect class="node-core" x="278" y="142" width="80" height="76" rx="14"/>
         <text x="318" y="174" text-anchor="middle">你的服务器</text>
         <text class="sub" x="318" y="194" text-anchor="middle">hbbs + hbbr</text>
-        <rect class="node" x="448" y="86" width="80" height="48" rx="10"/>
+        <rect class="node" x="448" y="86" width="80" height="48" rx="12"/>
         <text x="488" y="115" text-anchor="middle">工作室 Mac</text>
-        <rect class="node" x="448" y="234" width="80" height="48" rx="10"/>
+        <rect class="node" x="448" y="234" width="80" height="48" rx="12"/>
         <text x="488" y="263" text-anchor="middle">NAS</text>
       </svg>
     </div>
   </div>
 </section>
 
-<section id="features" class="wrap">
-  <h2 class="reveal">为日常驾驭而生</h2>
-  <p class="lede reveal">以下功能全部随 v1.0.0 交付。尚未验证的地方，界面会如实标注，而不是装作没有问题。</p>
-  <div class="bento">
-    <div class="cell cell-a reveal">
-      <img src="../assets/detail-connect-v4.jpg?v=4" alt="连接卡片，要求同时输入远程 ID 与密码" loading="lazy">
-      <div class="cap">
-        <h3>密码就是门禁</h3>
-        <p>只输入 ID 永远不会发起连接。远程密码就位 NikoDesk 才出手，一次手滑也不会敲响别人的机器。</p>
+<section id="security" style="padding: 20px 0 92px;">
+  <div class="band reveal">
+    <div class="band-in">
+      <div class="sec-head">
+        <span class="sec-pill">安全</span>
+        <h2>安全，摊开来讲</h2>
+        <p class="sec-sub">NikoDesk 继承 RustDesk 内核的端到端加密会话，并加上自己的规矩。</p>
       </div>
-    </div>
-    <div class="cell cell-b reveal" style="--d:.08s">
-      <h3>一套界面，两种气质</h3>
-      <div class="mini-demo" data-side="dark" id="mini-demo">
-        <div class="mini-row"><span class="mini-dot"></span><span>我的设备 &nbsp;/&nbsp; My devices</span></div>
-      </div>
-      <p style="margin-top:12px">夜间控制台与日光画布，跟随系统外观，也跟随这个切换。</p>
-    </div>
-    <div class="cell cell-c reveal">
-      <h3>在线状态真实可信</h3>
-      <p>设备卡片每六秒向你的注册服务器查询一次：在线、离线或未知。未知就是未知，不含糊。</p>
-    </div>
-    <div class="cell cell-d reveal" style="--d:.06s">
-      <h3>历史与录像</h3>
-      <p>本地保存最近 200 次连接记录，一键复连；任意会话可以录像留档。</p>
-    </div>
-    <div class="cell cell-e reveal" style="--d:.12s">
-      <h3>更新先验哈希</h3>
-      <p>应用内即可检查更新。下载只走 GitHub Release 的 HTTPS 通道，SHA256 校验不过就拒绝安装。</p>
-    </div>
-  </div>
-</section>
-
-<section id="security" class="band">
-  <div class="wrap">
-    <h2 class="reveal">安全，摊开来讲</h2>
-    <p class="lede reveal">NikoDesk 继承 RustDesk 内核的端到端加密会话，并加上自己的规矩。</p>
-    <div class="sec-groups">
-      <div class="sec-group reveal">
-        <h3>准入</h3>
-        <p>连接必须先过密码关。临时密码与永久密码都在受控端管理。</p>
-        <p>接受一次入站会话，等于授予键盘、鼠标、剪贴板与文件传输，逐会话可随时收回。音频默认关闭，需要时再打开。</p>
-      </div>
-      <div class="sec-group reveal" style="--d:.08s">
-        <h3>网络</h3>
-        <p>注册与中继流量只指向你配置的服务器。仅私服构建没有回落到公共注册服务器的选项。</p>
-        <p>流量优先点对点直连；只有打洞失败时，你的中继才经手加密数据帧。</p>
-      </div>
-      <div class="sec-group reveal" style="--d:.16s">
-        <h3>供应链</h3>
-        <p>发布产物由公开的 GitHub Actions 构建并写入 SHA256SUMS，更新器在任何不匹配时一律拒装。</p>
-        <p>更新下载只接受固定白名单里的 HTTPS 主机，重定向后重新校验。</p>
+      <div class="sec-groups">
+        <div class="sec-group">
+          <h3>准入</h3>
+          <p>连接必须先过密码关。临时密码与永久密码都在受控端管理。</p>
+          <p>权限按会话授予，随时可收回。</p>
+        </div>
+        <div class="sec-group">
+          <h3>网络</h3>
+          <p>注册与中继流量只指向你配置的服务器。仅私服构建没有回落到公共注册服务器的选项。</p>
+          <p>流量优先点对点直连，端到端加密。</p>
+        </div>
+        <div class="sec-group">
+          <h3>供应链</h3>
+          <p>发布产物由公开的 GitHub Actions 构建并写入 SHA256SUMS，更新器在任何不匹配时一律拒装。</p>
+          <p>更新下载只接受固定白名单里的 HTTPS 主机。</p>
+        </div>
       </div>
     </div>
   </div>
 </section>
 
 <section id="deploy" class="wrap">
-  <h2 class="reveal">三条命令，服务归你</h2>
-  <p class="lede reveal">NikoDesk 说的是开放的 RustDesk 服务端协议。如果你已经在跑 hbbs 和 hbbr，把客户端指过去就能用。</p>
+  <div class="sec-head reveal">
+    <span class="sec-pill">自建服务</span>
+    <h2>三条命令，服务归你</h2>
+    <p class="sec-sub">NikoDesk 说的是开放的 RustDesk 服务端协议。如果你已经在跑 hbbs 和 hbbr，把客户端指过去就能用。</p>
+  </div>
   <div class="steps">
     <div class="step reveal">
+      <div class="n">1</div>
       <h3>起服务</h3>
       <p>任意 Docker 主机上两个容器。保留数据卷，密钥对在升级后依然有效。</p>
       <pre>docker run -d --name hbbs -v /data:/root \
@@ -511,14 +474,16 @@ docker run -d --name hbbr -v /data:/root \
   -p 21117:21117 -p 21119:21119 \
   rustdesk/rustdesk-server hbbr</pre>
     </div>
-    <div class="step reveal" style="--d:.08s">
+    <div class="step reveal" style="--d:.07s">
+      <div class="n">2</div>
       <h3>通网络</h3>
       <p>给主机一个可访问的域名，放行端口，再从数据卷取出公钥。家庭宽带用端口映射或 WireGuard 隧道都可以。</p>
       <pre>cat /data/id_ed25519.pub
 # DNS 指向主机
 # 放行 tcp 21115-21119</pre>
     </div>
-    <div class="step reveal" style="--d:.16s">
+    <div class="step reveal" style="--d:.14s">
+      <div class="n">3</div>
       <h3>填客户端</h3>
       <p>在每台信任的设备上填同样的三栏。设置页的连接测试会立刻告诉你注册是否成功。</p>
       <pre>ID 服务器:  desk.example.com
@@ -529,7 +494,10 @@ Key:      (id_ed25519.pub)</pre>
 </section>
 
 <section class="wrap">
-  <h2 class="reveal">公共云远控 vs NikoDesk</h2>
+  <div class="sec-head reveal">
+    <span class="sec-pill">对比</span>
+    <h2>公共云远控 vs NikoDesk</h2>
+  </div>
   <div class="vs">
     <div class="vs-card them reveal">
       <h3>公共云远控</h3>
@@ -539,7 +507,7 @@ Key:      (id_ed25519.pub)</pre>
         <li><span class="mark">x</span>客户端闭源只能选择相信，政策还可能随下个版本改变</li>
       </ul>
     </div>
-    <div class="vs-badge reveal" style="--d:.08s">VS</div>
+    <div class="vs-badge reveal" style="--d:.07s">VS</div>
     <div class="vs-card us reveal" style="--d:.12s">
       <h3>NikoDesk</h3>
       <ul>
@@ -551,32 +519,41 @@ Key:      (id_ed25519.pub)</pre>
   </div>
 </section>
 
-<section id="download" class="wrap">
-  <h2 class="reveal">下载</h2>
-  <p class="lede reveal">v1.0.0 全部免费，产物出自公开 CI，哈希写入 SHA256SUMS。</p>
-  <div class="dl-list reveal">
-    <a class="dl" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.0/NikoDesk-macos-arm64.zip">
+<section id="download" class="wrap" style="padding-top: 20px;">
+  <div class="sec-head reveal">
+    <span class="sec-pill">下载</span>
+    <h2>获取 NikoDesk v1.0.0</h2>
+    <p class="sec-sub">v1.0.0 全部免费，产物出自公开 CI，哈希写入 SHA256SUMS。</p>
+  </div>
+  <div class="dl-list">
+    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.0/NikoDesk-macos-arm64.zip">
       <h3>macOS</h3>
-      <span class="note"><span class="arch">Apple Silicon, zip, ad-hoc 签名</span><br>首次启动：右键打开，再在系统设置里授予屏幕录制与辅助功能权限。</span>
-      <span class="go">下载</span>
+      <span class="arch">Apple Silicon, zip, ad-hoc</span>
+      <span class="note">首次启动：右键打开，再授予屏幕录制与辅助功能权限。</span>
+      <span class="go">下载 →</span>
     </a>
-    <a class="dl" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.0/NikoDesk-windows-x64.zip">
+    <a class="dl reveal" style="--d:.07s" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.0/NikoDesk-windows-x64.zip">
       <h3>Windows</h3>
-      <span class="note"><span class="arch">x64, zip</span><br>解压前如浏览器提示锁定，先解除再解压。</span>
-      <span class="go">下载</span>
+      <span class="arch">x64, zip</span>
+      <span class="note">解压前如浏览器提示锁定，先解除再解压。</span>
+      <span class="go">下载 →</span>
     </a>
-    <a class="dl" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.0/NikoDesk-android-arm64.apk">
+    <a class="dl reveal" style="--d:.14s" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.0/NikoDesk-android-arm64.apk">
       <h3>Android</h3>
-      <span class="note"><span class="arch">arm64, apk</span><br>直接安装 APK，暂无商店上架。</span>
-      <span class="go">下载</span>
+      <span class="arch">arm64, apk</span>
+      <span class="note">直接安装 APK，暂无商店上架。</span>
+      <span class="go">下载 →</span>
     </a>
   </div>
-  <p class="dl-note reveal">下载后请对照 <a href="https://github.com/baogutang/nikodesk/releases">发布页的 SHA256SUMS</a> 校验。三端都能在设置里检查更新，哈希不匹配一律拒装。如果你的网络访问 GitHub 缓慢，任何镜像源都可以，只要哈希对得上。</p>
+  <p class="dl-note reveal">下载后请对照 <a href="https://github.com/baogutang/nikodesk/releases">发布页的 SHA256SUMS</a> 校验。三端都能在设置里检查更新，哈希不匹配一律拒装。</p>
 </section>
 
-<section id="faq" class="wrap faq">
-  <h2 class="reveal">大家真正会问的问题</h2>
-  <div style="margin-top:26px">
+<section id="faq" class="wrap faq" style="padding-top: 20px;">
+  <div class="sec-head reveal">
+    <span class="sec-pill">常见问题</span>
+    <h2>大家真正会问的问题</h2>
+  </div>
+  <div class="faq-list">
     <details class="reveal" open>
       <summary>必须有公网 IP 吗？</summary>
       <div class="a">hbbs 与 hbbr 的端口需要能被两端访问。家庭宽带做端口映射，或者把这对服务放进 WireGuard、Tailscale 隧道都可以。会话依然会优先尝试点对点直连，中继只在打洞失败时才参与。</div>
@@ -597,62 +574,51 @@ Key:      (id_ed25519.pub)</pre>
 </section>
 
 <footer>
-  <div class="wrap foot">
-    <a class="brand" href="#"><img src="../assets/logo.png?v=4" alt="NikoDesk 徽标">NikoDesk</a>
-    <a href="https://github.com/baogutang/nikodesk" target="_blank" rel="noopener">源码</a>
-    <a href="https://github.com/baogutang/nikodesk/releases" target="_blank" rel="noopener">发布</a>
-    <a href="https://github.com/baogutang/nikodesk/issues" target="_blank" rel="noopener">问题反馈</a>
-    <a href="../">English</a>
+  <div class="wrap">
+    <div class="foot">
+      <a class="brand" href="#"><img src="../assets/logo.png?v=5" alt="NikoDesk 徽标">NikoDesk</a>
+      <div class="foot-col">
+        <b>产品</b>
+        <a href="#download">下载</a>
+        <a href="https://github.com/baogutang/nikodesk/releases" target="_blank" rel="noopener">发布</a>
+        <a href="#features">功能</a>
+      </div>
+      <div class="foot-col">
+        <b>项目</b>
+        <a href="https://github.com/baogutang/nikodesk" target="_blank" rel="noopener">源码</a>
+        <a href="https://github.com/baogutang/nikodesk/issues" target="_blank" rel="noopener">问题反馈</a>
+        <a href="#security">安全</a>
+      </div>
+      <div class="foot-col">
+        <b>语言</b>
+        <a href="../">English</a>
+        <a href="#">中文</a>
+      </div>
+    </div>
     <p class="legal">NikoDesk 是基于 RustDesk 的独立项目，遵循 AGPL-3.0 开源许可。RustDesk 名称及徽标归其权利人所有，本项目与 RustDesk 官方无从属或背书关系。</p>
   </div>
 </footer>
 
 <script>
 (function () {
-  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  // 首屏截图明暗切换（滑块跟随）。页面本身跟随系统外观，这里只切换预览图。
+  // 首屏截图明暗切换（滑块跟随），页面本身跟随系统外观。
   var light = document.getElementById('shot-light');
   var dark = document.getElementById('shot-dark');
   var toggle = document.getElementById('shot-toggle');
-  function show(which) {
-    var toLight = which === 'light';
-    light.classList.toggle('off', !toLight);
-    dark.classList.toggle('off', toLight);
-    toggle.dataset.shot = which;
-    toggle.querySelectorAll('button').forEach(function (b) {
-      b.setAttribute('aria-pressed', b.dataset.shot === which ? 'true' : 'false');
-    });
-    var mini = document.getElementById('mini-demo');
-    if (mini) mini.dataset.side = which;
-  }
   if (light && dark && toggle) {
+    function show(which) {
+      var toLight = which === 'light';
+      light.classList.toggle('off', !toLight);
+      dark.classList.toggle('off', toLight);
+      toggle.dataset.shot = which;
+      toggle.querySelectorAll('button').forEach(function (b) {
+        b.setAttribute('aria-pressed', b.dataset.shot === which ? 'true' : 'false');
+      });
+    }
     toggle.querySelectorAll('button').forEach(function (b) {
       b.addEventListener('click', function () { show(b.dataset.shot); });
     });
     show(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
-  }
-
-  // 截图框轻微 3D 倾斜（仅精确指针设备）。
-  var frame = document.getElementById('shot-frame');
-  if (frame && !reduce && window.matchMedia && window.matchMedia('(pointer: fine)').matches) {
-    var raf = 0, target = { x: 0, y: 0 }, current = { x: 0, y: 0 };
-    frame.addEventListener('pointermove', function (e) {
-      var r = frame.getBoundingClientRect();
-      target.y = ((e.clientX - r.left) / r.width - 0.5) * 5;
-      target.x = -((e.clientY - r.top) / r.height - 0.5) * 5;
-      if (!raf) loop();
-    });
-    frame.addEventListener('pointerleave', function () { target.x = 0; target.y = 0; if (!raf) loop(); });
-    function loop() {
-      raf = requestAnimationFrame(function () {
-        current.x += (target.x - current.x) * 0.12;
-        current.y += (target.y - current.y) * 0.12;
-        frame.style.transform = 'rotate(-1.4deg) perspective(1100px) rotateX(' + current.x.toFixed(2) + 'deg) rotateY(' + current.y.toFixed(2) + 'deg)';
-        if (Math.abs(target.x - current.x) + Math.abs(target.y - current.y) > 0.02) { loop(); }
-        else { raf = 0; frame.style.transform = 'rotate(-1.4deg) perspective(1100px) rotateX(' + current.x.toFixed(2) + 'deg) rotateY(' + current.y.toFixed(2) + 'deg)'; }
-      });
-    }
   }
 
   // 滚动显现用 IntersectionObserver，不挂滚动监听。
@@ -664,7 +630,7 @@ Key:      (id_ed25519.pub)</pre>
     entries.forEach(function (e) {
       if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
     });
-  }, { threshold: 0.16, rootMargin: '0px 0px -40px 0px' });
+  }, { threshold: 0.15, rootMargin: '0px 0px -36px 0px' });
   document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
 })();
 </script>
