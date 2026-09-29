@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NikoDesk — 你的服务器，你的密钥，你的桌面</title>
+<meta name="description" content="基于 RustDesk 内核、私有优先的自托管远程桌面：仅私服、密码门控、可验证更新。">
+<style>
+  :root {
+    --brand:#6C4CF1; --brand2:#4C7CFF; --ink:#241B3E; --muted:#7A6FA6;
+    --card:rgba(255,255,255,.72); --border:rgba(255,255,255,.85);
+    --ok:#22A06B; --warn:#E8930C;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body {
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Segoe UI",sans-serif;
+    color:var(--ink); background:#F3EFFF; line-height:1.6; overflow-x:hidden;
+  }
+  .bg { position:fixed; inset:0; z-index:-1;
+    background:linear-gradient(160deg,#F3EFFF 0%,#EAF1FF 55%,#F7F3FF 100%); }
+  .nav { position:sticky; top:0; z-index:10; backdrop-filter:blur(14px);
+    background:rgba(255,255,255,.55); border-bottom:1px solid rgba(255,255,255,.7); }
+  .nav-in { max-width:1080px; margin:0 auto; padding:14px 24px; display:flex; align-items:center; gap:12px; }
+  .nav img { width:30px; height:30px; border-radius:8px; }
+  .nav b { font-size:17px; letter-spacing:.2px; }
+  .nav .links { margin-left:auto; display:flex; gap:22px; font-size:14.5px; }
+  .nav a { color:var(--muted); text-decoration:none; font-weight:600; }
+  .nav a:hover { color:var(--brand); }
+  .hero { max-width:1080px; margin:0 auto; padding:72px 24px 40px; text-align:center; }
+  .hero h1 { font-size:clamp(34px,5.4vw,56px); letter-spacing:-.5px; line-height:1.12; }
+  .hero h1 span { background:linear-gradient(120deg,#8E6CFF,#4C7CFF);
+    -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .hero p.tag { margin:18px auto 0; max-width:640px; font-size:18px; color:var(--muted); }
+  .cta { margin-top:30px; display:flex; gap:14px; justify-content:center; flex-wrap:wrap; }
+  .btn { display:inline-flex; align-items:center; gap:8px; padding:14px 26px; border-radius:12px;
+    font-size:15px; font-weight:700; text-decoration:none; transition:transform .15s ease, box-shadow .15s ease; }
+  .btn-primary { color:#fff; background:linear-gradient(135deg,#8E6CFF,#4C7CFF);
+    box-shadow:0 8px 24px rgba(108,76,241,.35); }
+  .btn-primary:hover { transform:translateY(-2px); box-shadow:0 12px 30px rgba(108,76,241,.45); }
+  .btn-ghost { color:var(--brand); background:rgba(255,255,255,.7);
+    border:1px solid rgba(108,76,241,.25); }
+  .btn-ghost:hover { transform:translateY(-2px); }
+  .badges { margin-top:22px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+  .badge { font-size:12px; font-weight:700; padding:5px 12px; border-radius:999px;
+    background:rgba(108,76,241,.1); color:var(--brand); border:1px solid rgba(108,76,241,.22); }
+  .shots { max-width:1080px; margin:44px auto 0; padding:0 24px; display:grid;
+    grid-template-columns:1fr 1fr; gap:18px; }
+  .shots img { width:100%; border-radius:16px; border:1px solid var(--border);
+    box-shadow:0 12px 40px rgba(84,60,160,.12); }
+  section { max-width:1080px; margin:0 auto; padding:64px 24px 8px; }
+  h2 { font-size:30px; letter-spacing:-.3px; margin-bottom:8px; }
+  .sub { color:var(--muted); margin-bottom:30px; font-size:16.5px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:16px;
+    padding:22px; backdrop-filter:blur(10px);
+    box-shadow:0 8px 24px rgba(84,60,160,.08); }
+  .card .ic { font-size:26px; }
+  .card h3 { margin:10px 0 6px; font-size:16.5px; }
+  .card p { font-size:14px; color:var(--muted); }
+  .steps { counter-reset:s; display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; }
+  .step { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:22px; }
+  .step::before { counter-increment:s; content:counter(s);
+    display:inline-flex; width:30px; height:30px; border-radius:10px; align-items:center;
+    justify-content:center; color:#fff; font-weight:800; margin-bottom:10px;
+    background:linear-gradient(135deg,#8E6CFF,#4C7CFF); }
+  .step h3 { font-size:15.5px; margin-bottom:6px; }
+  .step p { font-size:13.5px; color:var(--muted); }
+  .sec-note { font-size:13px; color:var(--muted); margin-top:14px; }
+  table.cmp { width:100%; border-collapse:separate; border-spacing:0; background:var(--card);
+    border:1px solid var(--border); border-radius:16px; overflow:hidden; font-size:14px; }
+  table.cmp th, table.cmp td { padding:13px 18px; text-align:left; border-bottom:1px solid rgba(108,76,241,.08); }
+  table.cmp tr:last-child td { border-bottom:none; }
+  table.cmp th { font-size:13px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); }
+  .yes { color:var(--ok); font-weight:700; }
+  .no { color:var(--warn); font-weight:700; }
+  footer { max-width:1080px; margin:56px auto 0; padding:26px 24px 42px; border-top:1px solid rgba(108,76,241,.14);
+    color:var(--muted); font-size:13px; display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; }
+  @media (max-width:760px){ .shots{grid-template-columns:1fr;} .nav .links{display:none;} }
+</style>
+</head>
+<body>
+<div class="bg"></div>
+
+<nav class="nav"><div class="nav-in">
+  <img src="../assets/readme-logo.png" alt="NikoDesk"><b>NikoDesk</b>
+  <div class="links">
+    <a href="#features">功能</a><a href="#start">快速开始</a>
+    <a href="#compare">为什么私有</a><a href="https://github.com/baogutang/nikodesk">GitHub</a>
+    <a href="../">English</a>
+  </div>
+</div></nav>
+
+<header class="hero">
+  <h1>你的服务器，你的密钥，<br><span>你的桌面。</span></h1>
+  <p class="tag">基于 RustDesk 内核的自托管远程桌面。它只连接<b>你自己的</b>协调服务器——绝不连公共云；没有远端密码，绝不发起连接。</p>
+  <div class="cta">
+    <a class="btn btn-primary" href="https://github.com/baogutang/nikodesk/releases/latest">⬇ 下载 v1.0.0</a>
+    <a class="btn btn-ghost" href="https://github.com/baogutang/nikodesk">★ GitHub 加星</a>
+  </div>
+  <div class="badges">
+    <span class="badge">macOS ARM64</span><span class="badge">Windows x64</span>
+    <span class="badge">Android ARM64</span><span class="badge">AGPL-3.0</span>
+    <span class="badge">SHA256 校验更新</span>
+  </div>
+</header>
+
+<div class="shots">
+  <img src="../assets/readme-light.png" alt="NikoDesk light theme">
+  <img src="../assets/readme-dark.png" alt="NikoDesk dark theme">
+</div>
+
+<section id="features">
+  <h2>私有优先的设计</h2>
+  <p class="sub">每一条可能泄漏控制权的路径，都有策略兜底，而不是口头承诺。</p>
+  <div class="grid">
+    <div class="card"><div class="ic">🔒</div><h3>仅私服</h3>
+      <p>ID 服务器 / 中继 / 公钥三要素联合校验；配置不完整就不连接。公共服务器回退已在编译层裁掉。</p></div>
+    <div class="card"><div class="ic">🗝️</div><h3>密码门控控制端</h3>
+      <p>只有设备 ID 绝不会发起会话。空密码在任何握手开始前即被拒绝。</p></div>
+    <div class="card"><div class="ic">🖥️</div><h3>完整 RustDesk 内核</h3>
+      <p>远程控制、文件传输、剪贴板、多显示器与硬件编解码（VP8/VP9/AV1/H.264/HEVC）——没有任何模拟组件。</p></div>
+    <div class="card"><div class="ic">🌗</div><h3>双主题</h3>
+      <p>渐变毛玻璃明亮皮肤与深蓝暗夜控制台，默认跟随系统并可手动切换。</p></div>
+    <div class="card"><div class="ic">🕓</div><h3>诚实的会话记录</h3>
+      <p>本地、限量、抗损坏的发起记录。“已发起”绝不冒充“远端已接受”。</p></div>
+    <div class="card"><div class="ic">⬆️</div><h3>可验证更新</h3>
+      <p>应用内检查 GitHub Releases；替换任何文件前先做 SHA256 校验，失败即中止。</p></div>
+  </div>
+</section>
+
+<section id="compare">
+  <h2>为什么私有优于方便</h2>
+  <p class="sub">信令路径决定了谁能看到你的屏幕。</p>
+  <table class="cmp">
+    <tr><th></th><th>NikoDesk</th><th>SaaS 远控</th></tr>
+    <tr><td>信令路径</td><td class="yes">仅你的服务器</td><td>厂商云</td></tr>
+    <tr><td>公共回退</td><td class="yes">设计上拒绝</td><td class="no">默认开启</td></tr>
+    <tr><td>免密连接</td><td class="yes">绝不</td><td class="no">常见</td></tr>
+    <tr><td>更新信任</td><td class="yes">GitHub Releases + SHA256</td><td>厂商流水线</td></tr>
+  </table>
+</section>
+
+<section id="start">
+  <h2>快速开始</h2>
+  <p class="sub">从零到掌控你自己的设备。</p>
+  <div class="steps">
+    <div class="step"><h3>部署服务器</h3><p>在任意 NAS 或 VPS 上运行 <a href="https://github.com/rustdesk/rustdesk-server">rustdesk-server</a> 的 hbbs/hbbr。</p></div>
+    <div class="step"><h3>安装 NikoDesk</h3><p>下载对应平台版本。macOS 按提示授予屏幕录制与辅助功能权限。</p></div>
+    <div class="step"><h3>指向你的服务器</h3><p>设置 → 私有服务器：ID 服务器、中继与服务器公钥。</p></div>
+    <div class="step"><h3>带密码连接</h3><p>任意 RustDesk 客户端均可作为控制端——输入设备 ID <b>和</b> 对应密码。</p></div>
+  </div>
+  <p class="sec-note">终端、端口转发、摄像头、远程重启、隐私模式与屏蔽本机输入在本产品构建中被有意禁用。</p>
+</section>
+
+<footer>
+  <span>NikoDesk — AGPL-3.0。远控内核来自 <a href="https://github.com/rustdesk/rustdesk">RustDesk</a>。</span>
+  <span><a href="../">English</a> · <a href="https://github.com/baogutang/nikodesk">GitHub</a> · <a href="https://github.com/baogutang/nikodesk/releases">Releases</a></span>
+</footer>
+</body>
+</html>

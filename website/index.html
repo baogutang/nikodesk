@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NikoDesk — Your server. Your keys. Your desk.</title>
+<meta name="description" content="A self-hosted, private-by-design remote desktop built on the RustDesk core. Private-server only, password-gated, verifiable updates.">
+<style>
+  :root {
+    --brand:#6C4CF1; --brand2:#4C7CFF; --ink:#241B3E; --muted:#7A6FA6;
+    --card:rgba(255,255,255,.72); --border:rgba(255,255,255,.85);
+    --ok:#22A06B; --warn:#E8930C;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body {
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Segoe UI",sans-serif;
+    color:var(--ink); background:#F3EFFF; line-height:1.6; overflow-x:hidden;
+  }
+  .bg { position:fixed; inset:0; z-index:-1;
+    background:linear-gradient(160deg,#F3EFFF 0%,#EAF1FF 55%,#F7F3FF 100%); }
+  .nav { position:sticky; top:0; z-index:10; backdrop-filter:blur(14px);
+    background:rgba(255,255,255,.55); border-bottom:1px solid rgba(255,255,255,.7); }
+  .nav-in { max-width:1080px; margin:0 auto; padding:14px 24px; display:flex; align-items:center; gap:12px; }
+  .nav img { width:30px; height:30px; border-radius:8px; }
+  .nav b { font-size:17px; letter-spacing:.2px; }
+  .nav .links { margin-left:auto; display:flex; gap:22px; font-size:14.5px; }
+  .nav a { color:var(--muted); text-decoration:none; font-weight:600; }
+  .nav a:hover { color:var(--brand); }
+  .hero { max-width:1080px; margin:0 auto; padding:72px 24px 40px; text-align:center; }
+  .hero h1 { font-size:clamp(34px,5.4vw,56px); letter-spacing:-.5px; line-height:1.12; }
+  .hero h1 span { background:linear-gradient(120deg,#8E6CFF,#4C7CFF);
+    -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .hero p.tag { margin:18px auto 0; max-width:640px; font-size:18px; color:var(--muted); }
+  .cta { margin-top:30px; display:flex; gap:14px; justify-content:center; flex-wrap:wrap; }
+  .btn { display:inline-flex; align-items:center; gap:8px; padding:14px 26px; border-radius:12px;
+    font-size:15px; font-weight:700; text-decoration:none; transition:transform .15s ease, box-shadow .15s ease; }
+  .btn-primary { color:#fff; background:linear-gradient(135deg,#8E6CFF,#4C7CFF);
+    box-shadow:0 8px 24px rgba(108,76,241,.35); }
+  .btn-primary:hover { transform:translateY(-2px); box-shadow:0 12px 30px rgba(108,76,241,.45); }
+  .btn-ghost { color:var(--brand); background:rgba(255,255,255,.7);
+    border:1px solid rgba(108,76,241,.25); }
+  .btn-ghost:hover { transform:translateY(-2px); }
+  .badges { margin-top:22px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+  .badge { font-size:12px; font-weight:700; padding:5px 12px; border-radius:999px;
+    background:rgba(108,76,241,.1); color:var(--brand); border:1px solid rgba(108,76,241,.22); }
+  .shots { max-width:1080px; margin:44px auto 0; padding:0 24px; display:grid;
+    grid-template-columns:1fr 1fr; gap:18px; }
+  .shots img { width:100%; border-radius:16px; border:1px solid var(--border);
+    box-shadow:0 12px 40px rgba(84,60,160,.12); }
+  section { max-width:1080px; margin:0 auto; padding:64px 24px 8px; }
+  h2 { font-size:30px; letter-spacing:-.3px; margin-bottom:8px; }
+  .sub { color:var(--muted); margin-bottom:30px; font-size:16.5px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:16px;
+    padding:22px; backdrop-filter:blur(10px);
+    box-shadow:0 8px 24px rgba(84,60,160,.08); }
+  .card .ic { font-size:26px; }
+  .card h3 { margin:10px 0 6px; font-size:16.5px; }
+  .card p { font-size:14px; color:var(--muted); }
+  .steps { counter-reset:s; display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; }
+  .step { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:22px; }
+  .step::before { counter-increment:s; content:counter(s);
+    display:inline-flex; width:30px; height:30px; border-radius:10px; align-items:center;
+    justify-content:center; color:#fff; font-weight:800; margin-bottom:10px;
+    background:linear-gradient(135deg,#8E6CFF,#4C7CFF); }
+  .step h3 { font-size:15.5px; margin-bottom:6px; }
+  .step p { font-size:13.5px; color:var(--muted); }
+  .sec-note { font-size:13px; color:var(--muted); margin-top:14px; }
+  table.cmp { width:100%; border-collapse:separate; border-spacing:0; background:var(--card);
+    border:1px solid var(--border); border-radius:16px; overflow:hidden; font-size:14px; }
+  table.cmp th, table.cmp td { padding:13px 18px; text-align:left; border-bottom:1px solid rgba(108,76,241,.08); }
+  table.cmp tr:last-child td { border-bottom:none; }
+  table.cmp th { font-size:13px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); }
+  .yes { color:var(--ok); font-weight:700; }
+  .no { color:var(--warn); font-weight:700; }
+  footer { max-width:1080px; margin:56px auto 0; padding:26px 24px 42px; border-top:1px solid rgba(108,76,241,.14);
+    color:var(--muted); font-size:13px; display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; }
+  @media (max-width:760px){ .shots{grid-template-columns:1fr;} .nav .links{display:none;} }
+</style>
+</head>
+<body>
+<div class="bg"></div>
+
+<nav class="nav"><div class="nav-in">
+  <img src="assets/readme-logo.png" alt="NikoDesk"><b>NikoDesk</b>
+  <div class="links">
+    <a href="#features">Features</a><a href="#start">Quick start</a>
+    <a href="#compare">Why private</a><a href="https://github.com/baogutang/nikodesk">GitHub</a>
+    <a href="zh/">中文</a>
+  </div>
+</div></nav>
+
+<header class="hero">
+  <h1>Your server. Your keys.<br><span>Your desk.</span></h1>
+  <p class="tag">A self-hosted remote desktop built on the RustDesk core. It only ever talks to
+    <b>your</b> rendezvous server — never a public cloud — and never connects without the remote password.</p>
+  <div class="cta">
+    <a class="btn btn-primary" href="https://github.com/baogutang/nikodesk/releases/latest">⬇ Download v1.0.0</a>
+    <a class="btn btn-ghost" href="https://github.com/baogutang/nikodesk">★ Star on GitHub</a>
+  </div>
+  <div class="badges">
+    <span class="badge">macOS ARM64</span><span class="badge">Windows x64</span>
+    <span class="badge">Android ARM64</span><span class="badge">AGPL-3.0</span>
+    <span class="badge">SHA256-verified updates</span>
+  </div>
+</header>
+
+<div class="shots">
+  <img src="assets/readme-light.png" alt="NikoDesk light theme">
+  <img src="assets/readme-dark.png" alt="NikoDesk dark theme">
+</div>
+
+<section id="features">
+  <h2>Private by design</h2>
+  <p class="sub">Every path that could leak control has a policy, not a promise.</p>
+  <div class="grid">
+    <div class="card"><div class="ic">🔒</div><h3>Private-server only</h3>
+      <p>ID / relay / public-key are validated together; misconfigured means no connection. Public-rendezvous fallback is compiled out.</p></div>
+    <div class="card"><div class="ic">🗝️</div><h3>Password-gated controlling</h3>
+      <p>A device ID alone never dispatches a session. Empty passwords are refused before any handshake starts.</p></div>
+    <div class="card"><div class="ic">🖥️</div><h3>Full RustDesk core</h3>
+      <p>Remote control, file transfer, clipboard, multi-display and hardware codecs (VP8/VP9/AV1/H.264/HEVC) — nothing mocked.</p></div>
+    <div class="card"><div class="ic">🌗</div><h3>Two real themes</h3>
+      <p>A gradient-glass light skin and a deep-navy night console, following your system with a manual override.</p></div>
+    <div class="card"><div class="ic">🕓</div><h3>Honest session history</h3>
+      <p>Local, capped, corruption-tolerant records of what you initiated. “Initiated” never masquerades as “accepted”.</p></div>
+    <div class="card"><div class="ic">⬆️</div><h3>Verifiable updates</h3>
+      <p>In-app checks against GitHub Releases; downloads are SHA256-verified before anything on disk is replaced. Fail-closed.</p></div>
+  </div>
+</section>
+
+<section id="compare">
+  <h2>Why private beats convenient</h2>
+  <p class="sub">The signal path decides who can see your screen.</p>
+  <table class="cmp">
+    <tr><th></th><th>NikoDesk</th><th>SaaS remote desktop</th></tr>
+    <tr><td>Signal path</td><td class="yes">Your server only</td><td>Vendor cloud</td></tr>
+    <tr><td>Public fallback</td><td class="yes">Refused by design</td><td class="no">Default</td></tr>
+    <tr><td>Passwordless connect</td><td class="yes">Never</td><td class="no">Common</td></tr>
+    <tr><td>Update trust</td><td class="yes">SHA256 on GitHub Releases</td><td>Vendor pipeline</td></tr>
+  </table>
+</section>
+
+<section id="start">
+  <h2>Quick start</h2>
+  <p class="sub">From zero to controlling your own machines.</p>
+  <div class="steps">
+    <div class="step"><h3>Deploy your server</h3><p>Run hbbs/hbbr from <a href="https://github.com/rustdesk/rustdesk-server">rustdesk-server</a> on any NAS or VPS.</p></div>
+    <div class="step"><h3>Install NikoDesk</h3><p>Grab the release for your platform. On macOS grant Screen Recording & Accessibility when prompted.</p></div>
+    <div class="step"><h3>Point it at your server</h3><p>Settings → Private server: ID server, relay, and the server public key.</p></div>
+    <div class="step"><h3>Connect with a password</h3><p>Any RustDesk client works as controller — enter the device ID <b>and</b> its password.</p></div>
+  </div>
+  <p class="sec-note">Terminal, port forwarding, camera, remote restart, privacy mode and input blocking are deliberately disabled in this product build.</p>
+</section>
+
+<footer>
+  <span>NikoDesk — AGPL-3.0. Remote-control core by <a href="https://github.com/rustdesk/rustdesk">RustDesk</a>.</span>
+  <span><a href="zh/">中文</a> · <a href="https://github.com/baogutang/nikodesk">GitHub</a> · <a href="https://github.com/baogutang/nikodesk/releases">Releases</a></span>
+</footer>
+</body>
+</html>

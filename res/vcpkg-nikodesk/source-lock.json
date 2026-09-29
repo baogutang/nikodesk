@@ -1,0 +1,82 @@
+{
+  "verified_at_utc": "2026-09-29T03:14:14.019667+00:00",
+  "status": "source_archives_verified_build_status_recorded_separately",
+  "verification": "SHA256/SHA512 computed locally; every archive file, executable mode and symlink hashed using Git object rules; complete root tree matched official commit metadata.",
+  "signature_status": "AOM detached signature downloaded for reference; trusted signing key/signature verification not performed.",
+  "sources": [
+    {
+      "library": "ffmpeg",
+      "version": "7.1.5",
+      "tag": "n7.1.5",
+      "file": "ffmpeg-ffmpeg-n7.1.5.tar.gz",
+      "url": "https://github.com/ffmpeg/ffmpeg/archive/n7.1.5.tar.gz",
+      "commit_metadata": "ffmpeg-7.1.5-commit.json",
+      "tag_metadata": "ffmpeg-7.1.5-tag.json",
+      "bytes": 15931570,
+      "sha256": "e3963a50831c985933e1a625ed566ec4c7adb5c012c34fa9f84438e1d61bdacc",
+      "sha512": "eddcd57e4f048f62a95ccbf4ed9ef713d56fe22d4ecaac4175ed3ad8d664c2552f547d668662be04dc469f96109872749bcbbdd2412d3c15d2fa797565028e16",
+      "commit": "3a0867c2bfda4a4d4309ca1a8cbdc6175e67f587",
+      "expected_tree": "ec218fbb1f1e754639803bf7a67c93205029b93c",
+      "commit_evidence_url": "https://api.github.com/repos/FFmpeg/FFmpeg/git/commits/3a0867c2bfda4a4d4309ca1a8cbdc6175e67f587",
+      "tag_object": "eefb3654c445a9004712036be4ffb01a68b2c3e1",
+      "tag_evidence_url": "https://api.github.com/repos/FFmpeg/FFmpeg/git/tags/eefb3654c445a9004712036be4ffb01a68b2c3e1",
+      "effective_url": "https://codeload.github.com/FFmpeg/FFmpeg/tar.gz/refs/tags/n7.1.5",
+      "archive_pax_headers": {
+        "comment": "3a0867c2bfda4a4d4309ca1a8cbdc6175e67f587"
+      },
+      "archive_root": "FFmpeg-n7.1.5",
+      "file_count": 8568,
+      "calculated_tree": "ec218fbb1f1e754639803bf7a67c93205029b93c",
+      "tree_matches_official_commit": true
+    },
+    {
+      "library": "libvpx",
+      "version": "1.17.0",
+      "tag": "v1.17.0",
+      "file": "webmproject-libvpx-v1.17.0.tar.gz",
+      "url": "https://github.com/webmproject/libvpx/archive/v1.17.0.tar.gz",
+      "commit_metadata": "libvpx-1.17.0-commit.json",
+      "tag_metadata": "libvpx-1.17.0-tag.json",
+      "bytes": 5670546,
+      "sha256": "1020f184046187baa2985dbde38e0691f49c44088bca7a1842b0236c6081dc0a",
+      "sha512": "be98d1b913575e538fefefe657c9944df85118fe2d0558361495a72c75ac6a2251048cb645fca49e60d6941c823a923f31d4ebc4de9b778008c267c42805b339",
+      "commit": "6df3ec34557879fff673706f4a1d9fbd0f3a6f0e",
+      "expected_tree": "f83d33a1ba18b3a203e43596b5223042b62417a3",
+      "commit_evidence_url": "https://api.github.com/repos/webmproject/libvpx/git/commits/6df3ec34557879fff673706f4a1d9fbd0f3a6f0e",
+      "tag_object": "82615ff0733cd4063838c352bc2e2ab225f37ade",
+      "tag_evidence_url": "https://api.github.com/repos/webmproject/libvpx/git/tags/82615ff0733cd4063838c352bc2e2ab225f37ade",
+      "effective_url": "https://codeload.github.com/webmproject/libvpx/tar.gz/refs/tags/v1.17.0",
+      "archive_pax_headers": {
+        "comment": "6df3ec34557879fff673706f4a1d9fbd0f3a6f0e"
+      },
+      "archive_root": "libvpx-1.17.0",
+      "file_count": 1258,
+      "calculated_tree": "f83d33a1ba18b3a203e43596b5223042b62417a3",
+      "tree_matches_official_commit": true
+    },
+    {
+      "library": "aom",
+      "version": "3.15.1",
+      "tag": "v3.15.1",
+      "file": "libaom-3.15.1.tar.gz",
+      "url": "https://storage.googleapis.com/aom-releases/libaom-3.15.1.tar.gz",
+      "commit_metadata": "aom-3.15.1-git-evidence.json",
+      "bytes": 6623477,
+      "sha256": "8ca0c52746174603500f0adb6f2a215d69c9ca2aab2acb3caa06fb791d8d01bf",
+      "sha512": "0e1f93b0ddff4754d408e48adc2c4c0985db2f3b55aa89706e8584c9a386bafd2217a2dd4e4b08dfe82be85208038f2b3ae5a8ba908b6b04396ee612840a5cc5",
+      "commit": "44d0a57786f432d933ff64b653347c66f4d0fa1d",
+      "expected_tree": "1083b6eece30f9d8279a057b9cc05bded50c5ed8",
+      "commit_evidence_url": "https://aomedia.googlesource.com/aom/+/44d0a57786f432d933ff64b653347c66f4d0fa1d",
+      "tag_object": "07a36fde37aaab02f00e210c4c5035310b94213d",
+      "tag_evidence_url": "https://aomedia.googlesource.com/aom/+log/v3.15.0..v3.15.1",
+      "effective_url": "https://storage.googleapis.com/aom-releases/libaom-3.15.1.tar.gz",
+      "archive_pax_headers": {
+        "comment": "44d0a57786f432d933ff64b653347c66f4d0fa1d"
+      },
+      "archive_root": "libaom-3.15.1",
+      "file_count": 1520,
+      "calculated_tree": "1083b6eece30f9d8279a057b9cc05bded50c5ed8",
+      "tree_matches_official_commit": true
+    }
+  ]
+}
