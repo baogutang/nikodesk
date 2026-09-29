@@ -617,13 +617,16 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
             const SizedBox(height: 14),
             statusCard,
           ])
-        : Row(
+        // IntrinsicHeight keeps both cards the same height at wide sizes;
+        // plain stretch leaves the shorter status card's border ragged.
+        : IntrinsicHeight(
+            child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(flex: 5, child: connectCard),
               const SizedBox(width: 14),
               Expanded(flex: 3, child: statusCard),
-            ]);
+            ]));
   }
 
   Widget _empty(BuildContext context) => NikoGlassCard(

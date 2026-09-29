@@ -58,6 +58,7 @@ class MainFlutterWindow: NSWindow {
     override func awakeFromNib() {
         rustdesk_core_main();
         _ = MainFlutterWindow.fullscreenObserver
+        installStaleFrameObservers()
         let flutterViewController = FlutterViewController.init()
         let windowFrame = self.frame
         self.contentViewController = flutterViewController
@@ -93,6 +94,34 @@ class MainFlutterWindow: NSWindow {
     override public func order(_ place: NSWindow.OrderingMode, relativeTo otherWin: Int) {
         super.order(place, relativeTo: otherWin)
         hiddenWindowAtLaunch()
+    }
+
+    /// Moving the window between displays with a different scale factor can
+    /// leave the layer-backed Flutter view compositing a stale frame (content
+    /// offset/cropped at the window edge) because no Dart frame is scheduled
+    /// when the logical size is unchanged. Nudge a recomposite on screen and
+    /// backing-store changes; harmless when nothing is stale.
+    private func installStaleFrameObservers() {
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeScreenNotification,
+            object: self,
+            queue: .main
+        ) { [weak self] _ in
+            self?.forceFlutterRedraw()
+        }
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeBackingPropertiesNotification,
+            object: self,
+            queue: .main
+        ) { [weak self] _ in
+            self?.forceFlutterRedraw()
+        }
+    }
+
+    private func forceFlutterRedraw() {
+        guard Thread.isMainThread, let view = contentViewController?.view else { return }
+        view.needsDisplay = true
+        view.layer?.setNeedsDisplay()
     }
 
     /// Override window theme.

@@ -205,7 +205,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            clang cmake curl gcc git g++ libclang-dev llvm-dev ninja-build \
+            clang cmake curl gcc-multilib g++-multilib gcc git g++ \
+            libc6-dev libclang-dev llvm-dev ninja-build \
             pkg-config wget unzip
 
       - uses: actions/setup-java@v4
