@@ -325,7 +325,17 @@ jobs:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
-          /opt/artifacts/vcpkg/vcpkg install --triplet arm64-android --overlay-ports=res/vcpkg-nikodesk
+          "$VCPKG_ROOT/vcpkg" install --triplet arm64-android \
+            --overlay-ports=res/vcpkg-nikodesk \
+            --x-install-root="$VCPKG_ROOT/installed"
+          # hwcodec reads this exact triplet path; fail here rather than during C++ compilation.
+          android_deps="$VCPKG_ROOT/installed/arm64-android"
+          for header in libavutil/attributes.h libavutil/opt.h libavcodec/avcodec.h; do
+            test -s "$android_deps/include/$header" || { echo "Missing Android dependency header: $header"; exit 1; }
+          done
+          for library in avcodec avformat avutil; do
+            test -s "$android_deps/lib/lib$library.a" || { echo "Missing Android dependency library: $library"; exit 1; }
+          done
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --version ${{ env.CARGO_NDK_VERSION }} --locked

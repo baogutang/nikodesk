@@ -3,6 +3,13 @@ use std::sync::{
     Arc,
 };
 
+// Use the same backend as cpal_impl: identically named CPAL error types
+// from the upstream and Niko Windows dependencies are distinct Rust types.
+#[cfg(not(all(feature = "nikodesk", target_os = "windows")))]
+use cpal;
+#[cfg(all(feature = "nikodesk", target_os = "windows"))]
+use nikodesk_cpal as cpal;
+
 // Each stream owns its flag so a late callback cannot restart a replacement.
 #[derive(Clone, Default)]
 pub(super) struct CaptureErrorHandler {
@@ -48,7 +55,7 @@ impl CaptureErrorHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cpal::{BackendSpecificError, StreamError};
+    use super::cpal::{BackendSpecificError, StreamError};
 
     fn system_interruption() -> StreamError {
         StreamError::StreamInterrupted {
