@@ -358,6 +358,9 @@ jobs:
           PRODUCT_VERSION: ${{ steps.product-version.outputs.version_name }}
           PRODUCT_BUILD_NUMBER: ${{ steps.product-version.outputs.build_number }}
         run: |
+          # Gradle's offline metadata also needs unbuilt workspace and dev dependencies.
+          cargo fetch --locked --target aarch64-linux-android
+          cargo metadata --locked --offline --format-version 1 --filter-platform aarch64-linux-android > "$RUNNER_TEMP/nikodesk-android-cargo-metadata.json"
           sed -i "s/org.gradle.jvmargs=-Xmx1024M/org.gradle.jvmargs=-Xmx2g/g" ./flutter/android/gradle.properties
           mkdir -p ./flutter/android/app/src/main/jniLibs/arm64-v8a
           cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/
