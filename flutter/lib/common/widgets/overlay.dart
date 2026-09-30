@@ -10,6 +10,7 @@ import '../../consts.dart';
 import '../../desktop/widgets/tabbar_widget.dart';
 import '../../models/chat_model.dart';
 import '../../models/model.dart';
+import '../../nikodesk/quality_overlay.dart';
 import 'chat_page.dart';
 
 class DraggableChatWindow extends StatelessWidget {
@@ -587,7 +588,11 @@ class QualityMonitor extends StatelessWidget {
       child: Consumer<QualityMonitorModel>(
           builder: (context, qualityMonitorModel, child) => qualityMonitorModel
                   .show
-              ? Container(
+              ? const bool.fromEnvironment('NIKODESK')
+                  ? NikoQualityOverlay(
+                      metrics: qualityMonitorModel.nikoMetrics,
+                      display: qualityMonitorModel.parent.target?.ffiModel.pi.currentDisplay)
+                  : Container(
                   constraints: BoxConstraints(maxWidth: 200),
                   padding: const EdgeInsets.all(8),
                   color: MyTheme.canvasColor.withAlpha(150),

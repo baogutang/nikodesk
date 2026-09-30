@@ -18,6 +18,7 @@ import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/nikodesk/device_page.dart';
 import 'package:flutter_hbb/nikodesk/home_shell.dart';
+import 'package:flutter_hbb/nikodesk/remote_window_scope.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_hbb/utils/platform_channel.dart';
 import 'package:get/get.dart';
@@ -783,8 +784,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       if (!isChattyMethod(call.method)) {
-        debugPrint(
-          "[Main] call ${call.method} with args ${call.arguments} from window $fromWindowId");
+        if (bind.mainGetAppNameSync() == 'NikoDesk') {
+          debugPrint("[Main] call ${call.method} from window $fromWindowId");
+        } else {
+          debugPrint(
+            "[Main] call ${call.method} with args ${call.arguments} from window $fromWindowId");
+        }
       }
       if (call.method == kWindowMainWindowOnTop) {
         windowOnTop(null);
@@ -802,6 +807,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       } else if (call.method == kWindowConnect) {
         await connectMainDesktop(
           call.arguments['id'],
+          serverNamespace: call.arguments['serverNamespace'],
           isFileTransfer: call.arguments['isFileTransfer'],
           isViewCamera: call.arguments['isViewCamera'],
           isTerminal: call.arguments['isTerminal'],
@@ -821,13 +827,21 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         try {
           windowId = int.parse(args[0]);
         } catch (e) {
-          debugPrint("Failed to parse window id '${call.arguments}': $e");
+          if (bind.mainGetAppNameSync() == 'NikoDesk') {
+            debugPrint('Failed to parse NikoDesk window id');
+          } else {
+            debugPrint("Failed to parse window id '${call.arguments}': $e");
+          }
         }
         WindowType? windowType;
         try {
           windowType = WindowType.values.byName(args[3]);
         } catch (e) {
-          debugPrint("Failed to parse window type '${call.arguments}': $e");
+          if (bind.mainGetAppNameSync() == 'NikoDesk') {
+            debugPrint('Failed to parse NikoDesk window type');
+          } else {
+            debugPrint("Failed to parse window type '${call.arguments}': $e");
+          }
         }
         if (windowId != null && windowType != null) {
           await rustDeskWinManager.moveTabToNewWindow(
@@ -842,8 +856,18 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         final windowType = args['window_type'] as int;
         final screenRect = parseParamScreenRect(args);
         await rustDeskWinManager.openMonitorSession(
-            windowId, peerId, display, displayCount, screenRect, windowType);
+            windowId, peerId, display, displayCount, screenRect, windowType,
+            serverNamespace: args['serverNamespace']);
       } else if (call.method == kWindowEventRemoteWindowCoords) {
+        if (const bool.fromEnvironment('NIKODESK')) {
+          final origin = NikoRemoteWindowIdentity.parse(call.arguments);
+          if (origin == null || origin.windowId != fromWindowId) return '[]';
+          return jsonEncode(await rustDeskWinManager.getOtherRemoteWindowCoords(
+              origin.windowId,
+              peerId: origin.peerId,
+              serverNamespace: origin.namespace,
+              fromWindowId: fromWindowId));
+        }
         final windowId = int.tryParse(call.arguments);
         if (windowId != null) {
           return jsonEncode(

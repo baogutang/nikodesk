@@ -1,3 +1,4 @@
+import '../../nikodesk/window_scope.dart';
 import 'dart:convert';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -27,6 +28,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
   static const IconData unselectedIcon = Icons.forward_outlined;
 
   _PortForwardTabPageState(Map<String, dynamic> params) {
+    if (const bool.fromEnvironment('NIKODESK')) NikoWindowScope.initialize(params);
     isRDP = params['isRDP'];
     tabController =
         Get.put(DesktopTabController(tabType: DesktopTabType.portForward));
@@ -44,6 +46,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
           key: ValueKey(params['id']),
           id: params['id'],
           password: params['password'],
+          serverNamespace: NikoWindowScope.current,
           isSharedPassword: params['isSharedPassword'],
           tabController: tabController,
           isRDP: isRDP,
@@ -57,18 +60,27 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
     super.initState();
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
+      if (call.method == nikoWindowScopeMethod) return NikoWindowScope.current;
+      if (const bool.fromEnvironment('NIKODESK')) {
+        debugPrint('NikoDesk window event: ${call.method} from $fromWindowId');
+      } else {
       debugPrint(
           "[Port Forward] call ${call.method} with args ${call.arguments} from window $fromWindowId");
+      }
       // for simplify, just replace connectionId
       if (call.method == kWindowEventNewPortForward) {
         final args = jsonDecode(call.arguments);
+      if (const bool.fromEnvironment('NIKODESK') &&
+          nikoWindowNamespace(args) != NikoWindowScope.current) {
+        throw StateError('The private server identity does not match this window');
+      }
         final id = args['id'];
         final isRDP = args['isRDP'];
         windowOnTop(windowId());
         if (tabController.state.value.tabs.indexWhere((e) => e.key == id) >=
             0) {
           debugPrint("port forward $id exists");
-          return;
+          return null;
         }
         tabController.add(TabInfo(
             key: id,
@@ -79,6 +91,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
               key: ValueKey(args['id']),
               id: id,
               password: args['password'],
+          serverNamespace: NikoWindowScope.current,
               isSharedPassword: args['isSharedPassword'],
               isRDP: isRDP,
               tabController: tabController,
@@ -90,6 +103,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
       } else if (call.method == kWindowActionRebuild) {
         reloadCurrentWindow();
       }
+      return null;
     });
     Future.delayed(Duration.zero, () {
       restoreWindowPosition(WindowType.PortForward, windowId: windowId());

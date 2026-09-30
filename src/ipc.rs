@@ -353,6 +353,12 @@ pub enum Data {
     ClickTime(i64),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     MouseMoveTime(i64),
+    #[cfg(feature="nikodesk")]
+    NikoCapabilityDecision(crate::nikodesk::connection_capabilities::Decision),
+    #[cfg(feature="nikodesk")]
+    NikoCapabilityRevoke(crate::nikodesk::connection_capabilities::Identity),
+    #[cfg(feature="nikodesk")]
+    NikoCapabilityStatus(crate::nikodesk::connection_capabilities::Status),
     Authorize,
     Close,
     #[cfg(windows)]
@@ -361,6 +367,12 @@ pub enum Data {
     OnlineStatus(Option<(i64, bool)>),
     Config((String, Option<String>)),
     Options(Option<HashMap<String, String>>),
+    #[cfg(feature = "nikodesk")]
+    NikoPrivateServerSettings(String, u64),
+    #[cfg(feature = "nikodesk")]
+    NikoOptionPatch(String, String, u64),
+    #[cfg(feature = "nikodesk")]
+    NikoPrivateServerSettingsResult(String),
     NatType(Option<i32>),
     ConfirmedKey(Option<(Vec<u8>, Vec<u8>)>),
     RawMessage(Vec<u8>),
@@ -815,6 +827,7 @@ impl Drop for CheckIfRestart {
         if self.audio_input != Config::get_option("audio-input") {
             crate::audio_service::restart();
         }
+        #[cfg(not(feature = "nikodesk"))]
         if self.voice_call_input != Config::get_option("voice-call-input") {
             crate::audio_service::set_voice_call_input_device(
                 Some(Config::get_option("voice-call-input")),
@@ -1035,7 +1048,11 @@ async fn handle(data: Data, stream: &mut Connection) {
                 } else if name == "salt" {
                     Config::set_salt(&value);
                 } else if name == "voice-call-input" {
-                    crate::audio_service::set_voice_call_input_device(Some(value), true);
+                    if cfg!(feature = "nikodesk") {
+                        updated = false;
+                    } else {
+                        crate::audio_service::set_voice_call_input_device(Some(value), true);
+                    }
                 } else if name == "unlock-pin" {
                     Config::set_unlock_pin(&value);
                 } else {
@@ -1046,35 +1063,51 @@ async fn handle(data: Data, stream: &mut Connection) {
                 }
             }
         },
+        #[cfg(feature = "nikodesk")]
+        Data::NikoPrivateServerSettings(json, expires_at_ms) => {
+            let result = tokio::task::spawn_blocking(move || {
+                crate::nikodesk::server_settings::save_locally(&json, expires_at_ms).json()
+            }).await.unwrap_or_else(|_| crate::nikodesk::server_settings::SaveResult::unknown().json());
+            allow_err!(stream.send(&Data::NikoPrivateServerSettingsResult(result)).await);
+        }
+        #[cfg(feature = "nikodesk")]
+        Data::NikoOptionPatch(key, value, expires_at_ms) => {
+            let _chk = CheckIfRestart::new();
+            let _nat = CheckTestNatType::new();
+            let result = tokio::task::spawn_blocking(move || {
+                crate::nikodesk::server_settings::patch_locally(&key, &value, expires_at_ms).json()
+            }).await.unwrap_or_else(|_| crate::nikodesk::server_settings::SaveResult::unknown().json());
+            allow_err!(stream.send(&Data::NikoPrivateServerSettingsResult(result)).await);
+        }
         Data::Options(value) => match value {
             None => {
+                #[cfg(not(feature = "nikodesk"))]
                 let v = Config::get_options();
+                #[cfg(feature = "nikodesk")]
+                let v = tokio::task::spawn_blocking(crate::nikodesk::server_settings::read_verified_options)
+                    .await.ok().and_then(Result::ok).unwrap_or_default();
                 allow_err!(stream.send(&Data::Options(Some(v))).await);
             }
             Some(value) => {
                 #[cfg(feature = "nikodesk")]
-                let value = {
-                    let mut value = value;
-                    if let Err(err) = crate::nikodesk::prepare_options(&mut value) {
+                {
+                    if let Err(err) = crate::nikodesk::save_options_locally(value) {
                         log::error!("NikoDesk settings rejected: {err}");
-                        return;
                     }
-                    value
-                };
+                    allow_err!(stream.send(&Data::Options(Some(HashMap::new()))).await);
+                    return;
+                }
+                #[cfg(not(feature = "nikodesk"))]
+                {
                 let _chk = CheckIfRestart::new();
                 let _nat = CheckTestNatType::new();
                 if let Some(v) = value.get("privacy-mode-impl-key") {
                     crate::privacy_mode::switch(v);
                 }
-                #[cfg(feature = "nikodesk")]
-                if let Err(err) = crate::nikodesk::save_options_locally(value.clone()) {
-                    log::error!("NikoDesk settings persistence rejected: {err}");
-                    allow_err!(stream.send(&Data::Options(Some(Config::get_options()))).await);
-                    return;
-                }
                 #[cfg(not(feature = "nikodesk"))]
                 Config::set_options(value);
                 allow_err!(stream.send(&Data::Options(None)).await);
+                }
             }
         },
         Data::NatType(_) => {
@@ -1399,6 +1432,10 @@ where
 
 #[inline]
 async fn connect_with_path(ms_timeout: u64, path: &str) -> ResultType<ConnectionTmpl<ConnClient>> {
+    #[cfg(all(feature = "nikodesk", windows))]
+    if crate::nikodesk::background::is_system_worker() {
+        bail!("System desktop workers use the dedicated background IPC only");
+    }
     let client = timeout(ms_timeout, Endpoint::connect(path)).await??;
     Ok(ConnectionTmpl::new(client))
 }
@@ -1868,6 +1905,8 @@ pub fn clear_trusted_devices() {
 }
 
 pub fn get_id() -> String {
+    #[cfg(all(feature = "nikodesk", windows))]
+    if crate::nikodesk::background::is_system_worker() { return Config::get_id(); }
     // An empty id may come from a process that took over the main IPC with a
     // config scope that has no id yet (e.g. a user GUI that became the server
     // while the installed service was restarting). Treat it as no answer,
@@ -1911,14 +1950,36 @@ async fn get_options_(ms_timeout: u64) -> ResultType<HashMap<String, String>> {
     let mut c = connect(ms_timeout, "").await?;
     c.send(&Data::Options(None)).await?;
     if let Some(Data::Options(Some(value))) = c.next_timeout(ms_timeout).await? {
+        #[cfg(not(feature = "nikodesk"))]
         Config::set_options(value.clone());
+        #[cfg(feature = "nikodesk")]
+        {
+            if value.is_empty() { bail!("NikoDesk service settings have not been confirmed"); }
+            return tokio::task::spawn_blocking(crate::nikodesk::server_settings::read_verified_options)
+                .await?;
+        }
+        #[cfg(not(feature = "nikodesk"))]
         Ok(value)
     } else {
+        #[cfg(feature = "nikodesk")]
+        bail!("NikoDesk service settings have not been confirmed");
+        #[cfg(not(feature = "nikodesk"))]
         Ok(Config::get_options())
     }
 }
 
 pub async fn get_options_async() -> HashMap<String, String> {
+    #[cfg(feature = "nikodesk")]
+    {
+        return match tokio::task::spawn_blocking(crate::nikodesk::server_settings::read_verified_options).await {
+            Ok(Ok(options)) => options,
+            _ => {
+                crate::nikodesk::server_settings::reject_snapshot_write();
+                HashMap::new()
+            }
+        };
+    }
+    #[cfg(not(feature = "nikodesk"))]
     get_options_(1000).await.unwrap_or(Config::get_options())
 }
 
@@ -1936,6 +1997,15 @@ pub async fn get_option_async(key: &str) -> String {
 }
 
 pub fn set_option(key: &str, value: &str) {
+    #[cfg(feature = "nikodesk")]
+    {
+        if let Err(err) = set_niko_option(key, value) {
+            log::error!("NikoDesk option rejected: {err}");
+        }
+        return;
+    }
+    #[cfg(not(feature = "nikodesk"))]
+    {
     let mut options = get_options();
     if value.is_empty() {
         options.remove(key);
@@ -1943,8 +2013,22 @@ pub fn set_option(key: &str, value: &str) {
         options.insert(key.to_owned(), value.to_owned());
     }
     set_options(options).ok();
+    }
 }
 
+#[cfg(feature = "nikodesk")]
+pub fn set_niko_option(key: &str, value: &str) -> ResultType<()> {
+    let result = crate::nikodesk::set_option(key.to_owned(), value.to_owned());
+    if result.is_err() { crate::nikodesk::server_settings::reject_snapshot_write(); }
+    result
+}
+
+#[cfg(feature = "nikodesk")]
+pub fn set_options(value: HashMap<String, String>) -> ResultType<()> {
+    crate::nikodesk::save_options_locally(value)
+}
+
+#[cfg(not(feature = "nikodesk"))]
 #[tokio::main(flavor = "current_thread")]
 pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
     #[cfg(feature = "nikodesk")]
@@ -1972,6 +2056,60 @@ pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
     #[cfg(not(feature = "nikodesk"))]
     Config::set_options(value);
     Ok(())
+}
+
+#[cfg(feature = "nikodesk")]
+pub(crate) async fn save_niko_private_server(json: String, deadline: crate::nikodesk::server_settings::Deadline) -> String {
+    if deadline.check().is_err() {
+        return crate::nikodesk::server_settings::SaveResult::unknown().json();
+    }
+    if let Ok(mut connection) = connect(1000, "").await {
+        if connection.send(&Data::NikoPrivateServerSettings(json.clone(), deadline.wire())).await.is_ok() {
+            if let Ok(Some(Data::NikoPrivateServerSettingsResult(result))) = connection.next_timeout(deadline.wait_ms()).await {
+                let result = tokio::task::spawn_blocking(move || {
+                    crate::nikodesk::server_settings::confirm_remote_result(&result,
+                        |options| crate::nikodesk::server_settings::matches_server(&json, options))
+                }).await.unwrap_or_else(|_| crate::nikodesk::server_settings::SaveResult::unknown().json());
+                crate::ui_interface::refresh_options();
+                return result;
+            }
+        }
+        return crate::nikodesk::server_settings::SaveResult::unknown().json();
+    }
+    let result = tokio::task::spawn_blocking(move || {
+        crate::nikodesk::server_settings::save_locally(&json, deadline.wire()).json()
+    }).await.unwrap_or_else(|_| crate::nikodesk::server_settings::SaveResult::unknown().json());
+    crate::ui_interface::refresh_options();
+    result
+}
+
+#[cfg(feature = "nikodesk")]
+pub(crate) async fn patch_niko_option(key: String, value: String,
+    deadline: crate::nikodesk::server_settings::Deadline) -> String {
+    if deadline.check().is_err() {
+        return crate::nikodesk::server_settings::SaveResult::unknown().json();
+    }
+    if let Ok(mut connection) = connect(1000, "").await {
+        if connection.send(&Data::NikoOptionPatch(key.clone(), value.clone(), deadline.wire())).await.is_ok() {
+            if let Ok(Some(Data::NikoPrivateServerSettingsResult(result))) = connection.next_timeout(deadline.wait_ms()).await {
+                let result = tokio::task::spawn_blocking(move || {
+                    crate::nikodesk::server_settings::confirm_remote_result(&result, |options| {
+                        if value.is_empty() {
+                            options.get(&key) == config::DEFAULT_SETTINGS.read().unwrap().get(&key)
+                        } else { options.get(&key) == Some(&value) }
+                    })
+                }).await.unwrap_or_else(|_| crate::nikodesk::server_settings::SaveResult::unknown().json());
+                crate::ui_interface::refresh_options();
+                return result;
+            }
+        }
+        return crate::nikodesk::server_settings::SaveResult::unknown().json();
+    }
+    let result = tokio::task::spawn_blocking(move || {
+        crate::nikodesk::server_settings::patch_locally(&key, &value, deadline.wire()).json()
+    }).await.unwrap_or_else(|_| crate::nikodesk::server_settings::SaveResult::unknown().json());
+    crate::ui_interface::refresh_options();
+    result
 }
 
 #[inline]

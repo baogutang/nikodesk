@@ -1038,6 +1038,11 @@ pub fn desktop_changed() -> bool {
 }
 
 pub fn try_change_desktop() -> bool {
+    #[cfg(feature = "nikodesk")]
+    if crate::nikodesk::background::is_system_worker() && !crate::nikodesk::background::desktop_matches() {
+        crate::nikodesk::background::revoke_worker();
+        return false;
+    }
     unsafe {
         if inputDesktopSelected() == FALSE {
             let res = selectInputDesktop() == TRUE;
@@ -1313,6 +1318,8 @@ fn get_subkey(name: &str, wow: bool) -> String {
 
 fn get_valid_subkey() -> String {
     let app_name = crate::get_app_name();
+    #[cfg(feature = "nikodesk")]
+    return get_subkey(&app_name, false);
     let subkey = format!("{HKLM_PREFIX}Software\\{app_name}\\InstallState\\{app_name}");
     if !get_reg_of(&subkey, "InstallLocation").is_empty() {
         return subkey;
@@ -1405,6 +1412,8 @@ fn get_default_install_path() -> String {
 }
 
 pub fn check_update_broker_process() -> ResultType<()> {
+    #[cfg(feature = "nikodesk")]
+    return Ok(());
     let process_exe = win_topmost_window::INJECTED_PROCESS_EXE;
     let origin_process_exe = win_topmost_window::ORIGIN_PROCESS_EXE;
 
@@ -1583,6 +1592,8 @@ fn get_after_install(
 }
 
 pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> ResultType<()> {
+    #[cfg(feature = "nikodesk")]
+    bail!("NikoDesk does not install privileged Windows services");
     // MSI and EXE installations use different registry layouts, so MSI-to-EXE upgrades are not supported.
     let (installed_subkey, _, _, _) = get_install_info();
     if get_windows_installer_state(&installed_subkey)? == Some(true) {
@@ -1859,6 +1870,8 @@ fn get_uninstall(kill_self: bool, uninstall_printer: bool) -> ResultType<String>
 }
 
 pub fn uninstall_me(kill_self: bool) -> ResultType<()> {
+    #[cfg(feature = "nikodesk")]
+    bail!("NikoDesk is a portable application; remove only its own application folder");
     run_cmds(get_uninstall(kill_self, true)?, true, "uninstall")
 }
 
@@ -1924,6 +1937,8 @@ pub fn add_recent_document(path: &str) {
 }
 
 pub fn is_installed() -> bool {
+    #[cfg(feature = "nikodesk")]
+    return false;
     let (_, _, _, exe) = get_install_info();
     std::fs::metadata(exe).is_ok()
 }
@@ -2138,6 +2153,7 @@ pub fn is_win_10_or_greater() -> bool {
 }
 
 pub fn bootstrap() -> bool {
+    #[cfg(not(feature = "nikodesk"))]
     if let Ok(lic) = get_license_from_exe_name() {
         *config::EXE_RENDEZVOUS_SERVER.write().unwrap() = lic.host.clone();
     }
@@ -2358,6 +2374,8 @@ pub fn run_background(exe: &str, arg: &str) -> ResultType<bool> {
 }
 
 pub fn run_uac(exe: &str, arg: &str) -> ResultType<bool> {
+    #[cfg(feature = "nikodesk")]
+    bail!("Privilege elevation is disabled in NikoDesk");
     let wop = wide_string("runas");
     let wexe = wide_string(exe);
     let warg;
@@ -2400,6 +2418,8 @@ pub fn elevate(arg: &str) -> ResultType<bool> {
 }
 
 pub fn run_as_system(arg: &str) -> ResultType<()> {
+    #[cfg(feature = "nikodesk")]
+    bail!("NikoDesk cannot run as SYSTEM");
     let exe = std::env::current_exe()?.to_string_lossy().to_string();
     if impersonate_system::run_as_system(&exe, arg).is_err() {
         bail!(format!("Failed to run {} as system", exe));
@@ -2408,6 +2428,8 @@ pub fn run_as_system(arg: &str) -> ResultType<()> {
 }
 
 pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_system: bool) {
+    #[cfg(feature = "nikodesk")]
+    return;
     // avoid possible run recursively due to failed run.
     log::info!(
         "elevate: {} -> {:?}, run_as_system: {} -> {}",
@@ -3282,6 +3304,8 @@ pub fn try_lock_tray_single_instance() -> bool {
 }
 
 pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
+    #[cfg(feature = "nikodesk")]
+    return false;
     log::info!("Uninstalling service...");
     let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
     Config::set_option("stop-service".into(), "Y".into());
@@ -3339,6 +3363,8 @@ copy /Y \"%RUSTDESK_OUTPUT_DIR%\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsof
 }
 
 pub fn install_service() -> bool {
+    #[cfg(feature = "nikodesk")]
+    return false;
     log::info!("Installing service...");
     let _installing = crate::platform::InstallingService::new();
     let (_, path, _, exe) = get_install_info();
@@ -4010,6 +4036,8 @@ pub fn try_remove_temp_update_files() {
 
 #[inline]
 pub fn try_kill_broker() {
+    #[cfg(feature = "nikodesk")]
+    return;
     allow_err!(std::process::Command::new("cmd")
         .arg("/c")
         .arg(&format!(

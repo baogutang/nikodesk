@@ -152,7 +152,7 @@ pub fn core_main() -> Option<Vec<String>> {
             return None;
         }
     }
-    #[cfg(windows)]
+    #[cfg(all(windows, not(feature = "nikodesk")))]
     {
         _is_quick_support |= !crate::platform::is_installed()
             && args.is_empty()
@@ -182,7 +182,7 @@ pub fn core_main() -> Option<Vec<String>> {
         return try_send_by_dbus(args[0].clone());
     }
 
-    #[cfg(windows)]
+    #[cfg(all(windows, not(feature = "nikodesk")))]
     if !crate::platform::is_installed()
         && args.is_empty()
         && _is_quick_support
@@ -194,7 +194,7 @@ pub fn core_main() -> Option<Vec<String>> {
             log::error!("Failed to start portable service: {:?}", e);
         }
     }
-    #[cfg(windows)]
+    #[cfg(all(windows, not(feature = "nikodesk")))]
     if !crate::platform::is_installed() && (_is_elevate || _is_run_as_system) {
         crate::platform::elevate_or_run_as_system(click_setup, _is_elevate, _is_run_as_system);
         return None;
@@ -208,6 +208,7 @@ pub fn core_main() -> Option<Vec<String>> {
         #[cfg(windows)]
         {
             crate::platform::try_remove_temp_update_files();
+            #[cfg(not(feature = "nikodesk"))]
             hbb_common::config::PeerConfig::preload_peers();
         }
         std::thread::spawn(move || crate::start_server(false, no_server));

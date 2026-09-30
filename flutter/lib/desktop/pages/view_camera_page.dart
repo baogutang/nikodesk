@@ -42,12 +42,14 @@ class ViewCameraPage extends StatefulWidget {
     this.tabController,
     this.connToken,
     this.forceRelay,
+    this.serverNamespace,
     this.isSharedPassword,
   }) : super(key: key) {
     initSharedStates(id);
   }
 
   final String id;
+  final String? serverNamespace;
   final SessionID? sessionId;
   final int? tabWindowId;
   final int? display;
@@ -112,6 +114,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
       widget.id,
       isViewCamera: true,
       password: widget.password,
+      serverNamespace: widget.serverNamespace,
       isSharedPassword: widget.isSharedPassword,
       forceRelay: widget.forceRelay,
       tabWindowId: widget.tabWindowId,

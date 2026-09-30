@@ -4,6 +4,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
 import 'package:flutter_hbb/models/file_model.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/nikodesk/file_transfer.dart';
+import 'package:flutter_hbb/nikodesk/file_tasks.dart';
+import 'package:flutter_hbb/nikodesk/mobile_file_owner.dart';
+import '../../models/model.dart' show FFI;
+import 'package:flutter_hbb/nikodesk/ui.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:toggle_switch/toggle_switch.dart';
 
@@ -17,9 +24,11 @@ class FileManagerPage extends StatefulWidget {
       required this.id,
       this.password,
       this.isSharedPassword,
+      this.serverNamespace,
       this.forceRelay})
       : super(key: key);
   final String id;
+  final String? serverNamespace;
   final String? password;
   final bool? isSharedPassword;
   final bool? forceRelay;
@@ -64,39 +73,71 @@ extension SelectModeExt on Rx<SelectMode> {
 }
 
 class _FileManagerPageState extends State<FileManagerPage> {
-  final model = gFFI.fileModel;
+  late final FFI _ffi;
+  late final FileModel model;
+  NikoMobileFileOwner? _nikoOwner;
   final selectMode = SelectMode.none.obs;
 
   var showLocal = true;
+  int _nikoPane = 0;
+
+  void _switchFileSide() => setState(() {
+    showLocal = !showLocal;
+    if (const bool.fromEnvironment('NIKODESK')) _nikoPane = showLocal ? 0 : 1;
+  });
 
   FileController get currentFileController =>
       showLocal ? model.localController : model.remoteController;
   FileDirectory get currentDir => currentFileController.directory.value;
   DirectoryOptions get currentOptions => currentFileController.options.value;
   final _uniqueKey = UniqueKey();
+  String? _nikoDocumentStatus;
+
+  void _nikoDocumentFeedback(String action, NikoDocumentOutcome outcome) {
+    if (mounted) setState(() => _nikoDocumentStatus = nikoDocumentFeedback(action, outcome));
+  }
+
+  String _nikoDocumentError(Object error) => error is PlatformException
+      ? error.code : 'file_io_failed';
+
+  Widget _menuText(String text) => const bool.fromEnvironment('NIKODESK')
+      ? Flexible(child: Text(text)) : Text(text);
 
   Future<T> _runAndroidDocumentPicker<T>(Future<T> Function() action) async {
-    gFFI.ffiModel.beginAndroidDocumentPicker();
+    _ffi.ffiModel.beginAndroidDocumentPicker();
     try {
       return await action();
     } finally {
-      gFFI.ffiModel.endAndroidDocumentPicker();
+      _ffi.ffiModel.endAndroidDocumentPicker();
     }
   }
 
   Future<void> _importFiles() async {
     var imported = 0;
     var failed = false;
+    var failedCount = 0;
+    var skippedCount = 0;
+    var cancelled = false;
+    var incomplete = false;
+    String? errorCode;
     final importController = currentFileController;
     final importDirectory = currentDir.path;
     final importIsWindows = currentOptions.isWindows;
     try {
       final selectedFiles = await _runAndroidDocumentPicker(() =>
-          gFFI.invokeMethodWithResult<List<dynamic>>(
+          _ffi.invokeMethodWithResult<List<dynamic>>(
               AndroidChannel.kPickImportFiles));
-      if (selectedFiles == null || selectedFiles.isEmpty) return;
+      if (const bool.fromEnvironment('NIKODESK') && !mounted) return;
+      if (selectedFiles == null || selectedFiles.isEmpty) {
+        if (const bool.fromEnvironment('NIKODESK')) {
+          _nikoDocumentFeedback(nikoText('导入文件', 'Import files'),
+              const NikoDocumentOutcome(cancelled: true));
+        }
+        return;
+      }
 
       for (final selected in selectedFiles) {
+        if (const bool.fromEnvironment('NIKODESK') && !mounted) { cancelled = true; break; }
         final uri = (selected as Map<dynamic, dynamic>)['uri'] as String?;
         final selectedName = selected['name'] as String?;
         final name = selectedName?.replaceAll('\\', '/').split('/').last;
@@ -104,6 +145,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
             name == null ||
             !PathUtil.validName(name, importIsWindows)) {
           failed = true;
+          failedCount++;
           continue;
         }
         final destination =
@@ -112,46 +154,81 @@ class _FileManagerPageState extends State<FileManagerPage> {
         if (await File(destination).exists()) {
           final overwriteResult = await model.showFileConfirmDialog(
               translate('Overwrite'), destination, false, false);
-          if (overwriteResult == false) break;
-          if (overwriteResult != true) continue;
+          if (overwriteResult == false) { cancelled = true; break; }
+          if (overwriteResult != true) { skippedCount++; continue; }
           overwrite = true;
         }
         try {
-          final success = await gFFI.invokeMethod(
+          final success = await _ffi.invokeMethod(
               AndroidChannel.kImportFile,
               {'uri': uri, 'path': destination, 'overwrite': overwrite});
           if (success == true) {
             imported++;
           } else {
             failed = true;
+            failedCount++;
           }
         } catch (e) {
           failed = true;
-          debugPrint('Failed to import $name: $e');
+          failedCount++;
+          errorCode = _nikoDocumentError(e);
+          if (const bool.fromEnvironment('NIKODESK')) {
+            debugPrint('NikoDesk file import failed');
+          } else {
+            debugPrint('Failed to import $name: $e');
+          }
         }
       }
     } catch (e) {
       failed = true;
-      debugPrint('Failed to select files for import: $e');
+      incomplete = true;
+      errorCode = _nikoDocumentError(e);
+      if (const bool.fromEnvironment('NIKODESK')) {
+        debugPrint('NikoDesk document selection failed');
+      } else {
+        debugPrint('Failed to select files for import: $e');
+      }
     }
-    await importController.refresh();
-    if (failed) {
-      showToast(translate('Failed'));
-    } else if (imported > 0) {
-      showToast(translate('Successful'));
+    if (const bool.fromEnvironment('NIKODESK')) {
+      try {
+        if (!await importController.refresh()) errorCode = 'directory_refresh_failed';
+      } catch (_) {
+        errorCode = 'directory_refresh_failed';
+      }
+      _nikoDocumentFeedback(nikoText('导入文件', 'Import files'),
+          NikoDocumentOutcome(succeeded: imported, failed: failedCount,
+              skipped: skippedCount, cancelled: cancelled, incomplete: incomplete,
+              errorCode: errorCode));
+    } else {
+      await importController.refresh();
+      if (failed) {
+        showToast(translate('Failed'));
+      } else if (imported > 0) {
+        showToast(translate('Successful'));
+      }
     }
   }
 
   Future<void> _exportFile(Entry entry) async {
     try {
-      final exported = await _runAndroidDocumentPicker(() => gFFI
+      final exported = await _runAndroidDocumentPicker(() => _ffi
           .invokeMethod(AndroidChannel.kExportFile, {'path': entry.path}));
-      if (exported == true) {
+      if (const bool.fromEnvironment('NIKODESK')) {
+        _nikoDocumentFeedback(nikoText('另存到系统', 'Save to system files'),
+            NikoDocumentOutcome(succeeded: exported == true ? 1 : 0,
+                cancelled: exported != true));
+      } else if (exported == true) {
         showToast(translate('Successful'));
       }
     } catch (e) {
-      debugPrint('Failed to export ${entry.name}: $e');
-      showToast(translate('Failed'));
+      if (const bool.fromEnvironment('NIKODESK')) {
+        debugPrint('NikoDesk document export failed');
+        _nikoDocumentFeedback(nikoText('另存到系统', 'Save to system files'),
+            NikoDocumentOutcome(failed: 1, errorCode: _nikoDocumentError(e)));
+      } else {
+        debugPrint('Failed to export ${entry.name}: $e');
+        showToast(translate('Failed'));
+      }
     }
   }
 
@@ -161,9 +238,16 @@ class _FileManagerPageState extends State<FileManagerPage> {
     final importIsWindows = currentOptions.isWindows;
     try {
       final picked = await _runAndroidDocumentPicker(() =>
-          gFFI.invokeMethodWithResult<Map<dynamic, dynamic>>(
+          _ffi.invokeMethodWithResult<Map<dynamic, dynamic>>(
               AndroidChannel.kPickImportDirectory));
-      if (picked == null || picked.isEmpty) return;
+      if (const bool.fromEnvironment('NIKODESK') && !mounted) return;
+      if (picked == null || picked.isEmpty) {
+        if (const bool.fromEnvironment('NIKODESK')) {
+          _nikoDocumentFeedback(nikoText('导入文件夹', 'Import folder'),
+              const NikoDocumentOutcome(cancelled: true));
+        }
+        return;
+      }
       final uri = picked['uri'] as String?;
       final name =
           (picked['name'] as String?)?.replaceAll('\\', '/').split('/').last;
@@ -172,7 +256,12 @@ class _FileManagerPageState extends State<FileManagerPage> {
           name == '.' ||
           name == '..' ||
           !PathUtil.validName(name, importIsWindows)) {
-        showToast(translate('Failed'));
+        if (const bool.fromEnvironment('NIKODESK')) {
+          _nikoDocumentFeedback(nikoText('导入文件夹', 'Import folder'),
+              const NikoDocumentOutcome(failed: 1, errorCode: 'invalid_uri'));
+        } else {
+          showToast(translate('Failed'));
+        }
         return;
       }
       final destination = PathUtil.join(importDirectory, name, importIsWindows);
@@ -181,24 +270,52 @@ class _FileManagerPageState extends State<FileManagerPage> {
       if (destinationType == FileSystemEntityType.directory) {
         final overwriteResult = await model.showFileConfirmDialog(
             translate('Overwrite'), destination, false, false);
-        if (overwriteResult != true) return;
+        if (overwriteResult != true) {
+          if (const bool.fromEnvironment('NIKODESK')) {
+            _nikoDocumentFeedback(nikoText('导入文件夹', 'Import folder'), NikoDocumentOutcome(
+                skipped: overwriteResult == null ? 1 : 0,
+                cancelled: overwriteResult == false));
+          }
+          return;
+        }
         overwrite = true;
       } else if (destinationType != FileSystemEntityType.notFound) {
-        showToast(translate('Failed'));
+        if (const bool.fromEnvironment('NIKODESK')) {
+          _nikoDocumentFeedback(nikoText('导入文件夹', 'Import folder'),
+              const NikoDocumentOutcome(failed: 1, errorCode: 'destination_exists'));
+        } else {
+          showToast(translate('Failed'));
+        }
         return;
       }
-      final success = await gFFI.invokeMethod(AndroidChannel.kImportDirectory,
+      final success = await _ffi.invokeMethod(AndroidChannel.kImportDirectory,
           {'uri': uri, 'path': destination, 'overwrite': overwrite});
-      if (success == true) {
+      if (const bool.fromEnvironment('NIKODESK')) {
+        String? refreshError;
+        try {
+          if (!await importController.refresh()) refreshError = 'directory_refresh_failed';
+        } catch (_) {
+          refreshError = 'directory_refresh_failed';
+        }
+        _nikoDocumentFeedback(nikoText('导入文件夹', 'Import folder'),
+            NikoDocumentOutcome(succeeded: success == true ? 1 : 0,
+                failed: success == true ? 0 : 1, errorCode: refreshError));
+      } else if (success == true) {
         showToast(translate('Successful'));
       } else {
         showToast(translate('Failed'));
       }
     } catch (e) {
-      debugPrint('Failed to import folder: $e');
-      showToast(translate('Failed'));
+      if (const bool.fromEnvironment('NIKODESK')) {
+        debugPrint('NikoDesk folder import failed');
+        _nikoDocumentFeedback(nikoText('导入文件夹', 'Import folder'),
+            NikoDocumentOutcome(failed: 1, errorCode: _nikoDocumentError(e)));
+      } else {
+        debugPrint('Failed to import folder: $e');
+        showToast(translate('Failed'));
+      }
     }
-    await importController.refresh();
+    if (!(const bool.fromEnvironment('NIKODESK'))) await importController.refresh();
   }
 
   Future<void> _exportItems(SelectedItems items) async {
@@ -208,6 +325,11 @@ class _FileManagerPageState extends State<FileManagerPage> {
   Future<void> _exportLogs() async {
     final home = currentFileController.homePath;
     if (home.isEmpty) {
+      if (const bool.fromEnvironment('NIKODESK')) {
+        _nikoDocumentFeedback(nikoText('导出日志', 'Export logs'),
+            const NikoDocumentOutcome(errorCode: 'nothing_to_export'));
+        return;
+      }
       showToast(translate('Failed'));
       return;
     }
@@ -217,6 +339,11 @@ class _FileManagerPageState extends State<FileManagerPage> {
       PathUtil.join(appDir, 'ScreenRecord', false),
     ].where((p) => File(p).existsSync() || Directory(p).existsSync()).toList();
     if (paths.isEmpty) {
+      if (const bool.fromEnvironment('NIKODESK')) {
+        _nikoDocumentFeedback(nikoText('导出日志', 'Export logs'),
+            const NikoDocumentOutcome(errorCode: 'nothing_to_export'));
+        return;
+      }
       showToast(translate('Failed'));
       return;
     }
@@ -226,9 +353,20 @@ class _FileManagerPageState extends State<FileManagerPage> {
   Future<void> _exportPaths(Iterable<String> paths) async {
     try {
       final result = await _runAndroidDocumentPicker(() =>
-          gFFI.invokeMethodWithResult<Map<dynamic, dynamic>>(
+          _ffi.invokeMethodWithResult<Map<dynamic, dynamic>>(
               AndroidChannel.kExportFiles, {'paths': paths.toList()}));
-      if (result == null) return;
+      if (result == null) {
+        if (const bool.fromEnvironment('NIKODESK')) {
+          _nikoDocumentFeedback(nikoText('导出到系统文件', 'Export to system files'),
+              const NikoDocumentOutcome(cancelled: true));
+        }
+        return;
+      }
+      if (const bool.fromEnvironment('NIKODESK')) {
+        _nikoDocumentFeedback(nikoText('导出到系统文件', 'Export to system files'),
+            nikoDocumentExportOutcome(result));
+        return;
+      }
       final exported = result['exported'] as int? ?? 0;
       final failed = result['failed'] as int? ?? 0;
       if (failed > 0) {
@@ -237,34 +375,60 @@ class _FileManagerPageState extends State<FileManagerPage> {
         showToast(translate('Successful'));
       }
     } catch (e) {
-      debugPrint('Failed to export paths: $e');
-      showToast(translate('Failed'));
+      if (const bool.fromEnvironment('NIKODESK')) {
+        debugPrint('NikoDesk batch export failed');
+        _nikoDocumentFeedback(nikoText('导出到系统文件', 'Export to system files'),
+            NikoDocumentOutcome(incomplete: true, errorCode: _nikoDocumentError(e)));
+      } else {
+        debugPrint('Failed to export paths: $e');
+        showToast(translate('Failed'));
+      }
     }
   }
 
   @override
   void initState() {
     super.initState();
-    gFFI.start(widget.id,
+    if (const bool.fromEnvironment('NIKODESK')) {
+      _nikoOwner = NikoMobileFileOwner.open(globalOwner: gFFI);
+      _ffi = _nikoOwner!.ffi;
+    } else {
+      _ffi = gFFI;
+    }
+    model = _ffi.fileModel;
+    if (const bool.fromEnvironment('NIKODESK')) {
+      final language = bind.mainGetLocalOption(key: 'lang');
+      NikoLanguage.english = language.isNotEmpty && !language.startsWith('zh');
+    }
+    _ffi.start(widget.id,
         isFileTransfer: true,
         password: widget.password,
+        serverNamespace: widget.serverNamespace,
         isSharedPassword: widget.isSharedPassword,
         forceRelay: widget.forceRelay);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      gFFI.dialogManager
+      if (const bool.fromEnvironment('NIKODESK') && (!mounted || _ffi.closed)) return;
+      _ffi.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
-    gFFI.ffiModel.updateEventListener(gFFI.sessionId, widget.id);
+    _ffi.ffiModel.updateEventListener(_ffi.sessionId, widget.id);
     WakelockManager.enable(_uniqueKey);
   }
 
   @override
   void dispose() {
-    model.close().whenComplete(() {
-      gFFI.close();
-      gFFI.dialogManager.dismissAll();
-      WakelockManager.disable(_uniqueKey);
-    });
+    final owner = _nikoOwner;
+    if (owner != null) {
+      unawaited(owner.close().catchError((Object _) {
+        debugPrint('NikoDesk file session cleanup failed');
+      }).whenComplete(() => WakelockManager.disable(_uniqueKey)));
+    } else {
+      model.close().whenComplete(() {
+        _ffi.close();
+        _ffi.dialogManager.dismissAll();
+        WakelockManager.disable(_uniqueKey);
+      });
+    }
     model.jobController.clear();
     super.dispose();
   }
@@ -272,6 +436,10 @@ class _FileManagerPageState extends State<FileManagerPage> {
   @override
   Widget build(BuildContext context) => WillPopScope(
       onWillPop: () async {
+        if (const bool.fromEnvironment('NIKODESK') && _nikoPane == 2) {
+          setState(() => _nikoPane = showLocal ? 0 : 1);
+          return false;
+        }
         if (selectMode.value != SelectMode.none) {
           selectMode.value = SelectMode.none;
           setState(() {});
@@ -286,10 +454,14 @@ class _FileManagerPageState extends State<FileManagerPage> {
           leading: Row(children: [
             IconButton(
                 icon: Icon(Icons.close),
-                onPressed: () => clientClose(gFFI.sessionId, gFFI)),
+                tooltip: const bool.fromEnvironment('NIKODESK')
+                    ? nikoText('关闭文件会话', 'Close file session') : null,
+                onPressed: () => clientClose(_ffi.sessionId, _ffi)),
           ]),
           centerTitle: true,
-          title: ToggleSwitch(
+          title: const bool.fromEnvironment('NIKODESK')
+              ? Text(nikoText('文件传输', 'File transfer'))
+              : ToggleSwitch(
             initialLabelIndex: showLocal ? 0 : 1,
             activeBgColor: [MyTheme.idColor],
             inactiveBgColor: Theme.of(context).brightness == Brightness.light
@@ -313,7 +485,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
           ),
           actions: [
             PopupMenuButton<String>(
-                tooltip: "",
+                enabled: !(const bool.fromEnvironment('NIKODESK')) || _nikoPane != 2,
+                tooltip: const bool.fromEnvironment('NIKODESK') ? nikoText('文件操作', 'File actions') : "",
                 icon: Icon(Icons.more_vert),
                 itemBuilder: (context) {
                   return [
@@ -323,7 +496,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                           Icon(Icons.refresh,
                               color: Theme.of(context).iconTheme.color),
                           SizedBox(width: 5),
-                          Text(translate("Refresh File"))
+                          _menuText(translate("Refresh File"))
                         ],
                       ),
                       value: "refresh",
@@ -337,7 +510,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                             Icon(Icons.add_to_drive,
                                 color: Theme.of(context).iconTheme.color),
                             SizedBox(width: 5),
-                            Text(translate("Add"))
+                            _menuText(const bool.fromEnvironment('NIKODESK') ? nikoText('从系统导入文件', 'Import system files') : translate("Add"))
                           ],
                         ),
                       ),
@@ -350,7 +523,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                             Icon(Icons.create_new_folder_outlined,
                                 color: Theme.of(context).iconTheme.color),
                             SizedBox(width: 5),
-                            Text(translate("Import Folder"))
+                            _menuText(const bool.fromEnvironment('NIKODESK') ? nikoText('从系统导入文件夹', 'Import system folder') : translate("Import Folder"))
                           ],
                         ),
                       ),
@@ -363,7 +536,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                             Icon(Icons.article_outlined,
                                 color: Theme.of(context).iconTheme.color),
                             SizedBox(width: 5),
-                            Text(translate("Export Logs"))
+                            _menuText(translate("Export Logs"))
                           ],
                         ),
                       ),
@@ -374,7 +547,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                           Icon(Icons.check,
                               color: Theme.of(context).iconTheme.color),
                           SizedBox(width: 5),
-                          Text(translate("Multi Select"))
+                          _menuText(translate("Multi Select"))
                         ],
                       ),
                       value: "select",
@@ -386,7 +559,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                           Icon(Icons.folder_outlined,
                               color: Theme.of(context).iconTheme.color),
                           SizedBox(width: 5),
-                          Text(translate("Create Folder"))
+                          _menuText(translate("Create Folder"))
                         ],
                       ),
                       value: "folder",
@@ -401,7 +574,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                                   : Icons.check_box_outline_blank,
                               color: Theme.of(context).iconTheme.color),
                           SizedBox(width: 5),
-                          Text(translate("Show Hidden Files"))
+                          _menuText(translate("Show Hidden Files"))
                         ],
                       ),
                       value: "hidden",
@@ -425,7 +598,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                   } else if (v == "folder") {
                     final name = TextEditingController();
                     String? errorText;
-                    gFFI.dialogManager.show((setState, close, context) {
+                    _ffi.dialogManager.show((setState, close, context) {
                       name.addListener(() {
                         if (errorText != null) {
                           setState(() {
@@ -478,7 +651,23 @@ class _FileManagerPageState extends State<FileManagerPage> {
                 }),
           ],
         ),
-        body: showLocal
+        body: const bool.fromEnvironment('NIKODESK')
+            ? Column(children: [
+                NikoAppFileAreaNotice(status: _nikoDocumentStatus,
+                    showGuide: showLocal && _nikoPane != 2,
+                    onDismiss: () => setState(() => _nikoDocumentStatus = null)),
+                Expanded(child: NikoFileWorkspace(alwaysCompact: true,
+                    selectedPane: _nikoPane,
+                    localLabel: nikoText('应用文件', 'App files'),
+                    onPaneChanged: (pane) => setState(() {
+                      _nikoPane = pane;
+                      if (pane < 2) showLocal = pane == 0;
+                    }),
+                    local: FileManagerView(controller: model.localController, selectMode: selectMode),
+                    remote: FileManagerView(controller: model.remoteController, selectMode: selectMode),
+                    tasks: NikoFileTasks(controller: model.jobController))),
+              ])
+            : showLocal
             ? FileManagerView(
                 controller: model.localController,
                 selectMode: selectMode,
@@ -492,6 +681,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
 
   Widget? bottomSheet() {
     return Obx(() {
+      if (const bool.fromEnvironment('NIKODESK') && _nikoPane == 2) return const SizedBox.shrink();
       final selectedItems = getActiveSelectedItems();
       final jobTable = model.jobController.jobTable;
 
@@ -518,26 +708,28 @@ class _FileManagerPageState extends State<FileManagerPage> {
                     selectedItems?.isLocal == true &&
                     selectedItems?.items.isNotEmpty == true) ...[
                   if (selectedItems!.items.length == 1 &&
-                      selectedItems!.items.single.isFile)
+                      selectedItems.items.single.isFile)
                     IconButton(
-                      tooltip: translate("Save as"),
+                      tooltip: const bool.fromEnvironment('NIKODESK') ? nikoText('另存到系统文件', 'Save to system files') : translate("Save as"),
                       icon: Icon(Icons.save_alt),
                       onPressed: () =>
-                          _exportFile(selectedItems!.items.single),
+                          _exportFile(selectedItems.items.single),
                     )
                   else
                     IconButton(
-                      tooltip: translate("Export"),
+                      tooltip: const bool.fromEnvironment('NIKODESK') ? nikoText('导出到系统文件', 'Export to system files') : translate("Export"),
                       icon: Icon(Icons.drive_folder_upload),
-                      onPressed: () => _exportItems(selectedItems!),
+                      onPressed: () => _exportItems(selectedItems),
                     ),
                 ],
                 IconButton(
                   icon: Icon(Icons.compare_arrows),
-                  onPressed: () => setState(() => showLocal = !showLocal),
+                  tooltip: const bool.fromEnvironment('NIKODESK') ? nikoText('切换目标文件区', 'Switch destination area') : null,
+                  onPressed: _switchFileSide,
                 ),
                 IconButton(
                   icon: Icon(Icons.delete_forever),
+                  tooltip: const bool.fromEnvironment('NIKODESK') ? nikoText('删除所选文件', 'Delete selected files') : null,
                   onPressed: selectedItems != null
                       ? () async {
                           if (selectedItems.items.isNotEmpty) {
@@ -563,10 +755,12 @@ class _FileManagerPageState extends State<FileManagerPage> {
               actions: [
                 IconButton(
                   icon: Icon(Icons.compare_arrows),
-                  onPressed: () => setState(() => showLocal = !showLocal),
+                  tooltip: const bool.fromEnvironment('NIKODESK') ? nikoText('切换目标文件区', 'Switch destination area') : null,
+                  onPressed: _switchFileSide,
                 ),
                 IconButton(
                   icon: Icon(Icons.paste),
+                  tooltip: const bool.fromEnvironment('NIKODESK') ? nikoText('传输到当前目录', 'Transfer to this directory') : null,
                   onPressed: () {
                     selectMode.value = SelectMode.none;
                     final otherSide = showLocal
@@ -582,6 +776,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
               ]);
         }
       }
+
+      if (const bool.fromEnvironment('NIKODESK')) return const SizedBox.shrink();
 
       if (jobTable.isEmpty) {
         return Offstage();
@@ -665,6 +861,7 @@ class FileManagerView extends StatefulWidget {
 class _FileManagerViewState extends State<FileManagerView> {
   final _listScrollController = ScrollController();
   final _breadCrumbScroller = ScrollController();
+  StreamSubscription<FileDirectory>? _nikoDirectorySubscription;
   late final ascending = Rx<bool>(controller.sortAscending);
 
   bool get isLocal => widget.controller.isLocal;
@@ -674,7 +871,21 @@ class _FileManagerViewState extends State<FileManagerView> {
   @override
   void initState() {
     super.initState();
-    controller.directory.listen((e) => breadCrumbScrollToEnd());
+    if (const bool.fromEnvironment('NIKODESK')) {
+      _nikoDirectorySubscription = controller.directory.listen((e) => breadCrumbScrollToEnd());
+    } else {
+      controller.directory.listen((e) => breadCrumbScrollToEnd());
+    }
+  }
+
+  @override
+  void dispose() {
+    if (const bool.fromEnvironment('NIKODESK')) {
+      _nikoDirectorySubscription?.cancel();
+      _listScrollController.dispose();
+      _breadCrumbScroller.dispose();
+    }
+    super.dispose();
   }
 
   @override
@@ -761,7 +972,9 @@ class _FileManagerViewState extends State<FileManagerView> {
                                   enabled: false,
                                 ),
                                 if (!entries[index].isDrive &&
-                                    versionCmp(gFFI.ffiModel.pi.version,
+                                    versionCmp(const bool.fromEnvironment('NIKODESK')
+                                        ? controller.rootState.target?.ffiModel.pi.version ?? ''
+                                        : gFFI.ffiModel.pi.version,
                                             "1.3.0") >=
                                         0)
                                   PopupMenuItem(
@@ -894,7 +1107,8 @@ class _FileManagerViewState extends State<FileManagerView> {
       ));
 
   Widget listTail() => Obx(() => Container(
-        height: 100,
+        height: const bool.fromEnvironment('NIKODESK') ? null : 100,
+        padding: const bool.fromEnvironment('NIKODESK') ? const EdgeInsets.only(bottom: 32) : null,
         child: Column(
           children: [
             Padding(
@@ -929,7 +1143,8 @@ class _FileManagerViewState extends State<FileManagerView> {
         content: TextButton(
             child: Text(e.value),
             style:
-                ButtonStyle(minimumSize: MaterialStateProperty.all(Size(0, 0))),
+                ButtonStyle(minimumSize: MaterialStateProperty.all(
+                    const bool.fromEnvironment('NIKODESK') ? const Size(48, 48) : const Size(0, 0))),
             onPressed: () => onPressed(list.sublist(0, e.key + 1))))));
     return breadCrumbList;
   }
@@ -951,6 +1166,23 @@ class BottomSheetBody extends StatelessWidget {
 
   @override
   BottomSheet build(BuildContext context) {
+    if (const bool.fromEnvironment('NIKODESK')) {
+      return BottomSheet(
+      enableDrag: false, onClosing: () {}, builder: (_) => Padding(
+        padding: const EdgeInsets.all(12), child: Column(mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            Text(text),
+            Wrap(spacing: 4, runSpacing: 4, children: [
+              for (final action in actions ?? <IconButton>[]) SizedBox(
+                width: 48, height: 48, child: action),
+              IconButton(tooltip: nikoText('取消选择', 'Cancel selection'),
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                icon: const Icon(Icons.cancel_outlined), onPressed: onCanceled),
+            ]),
+          ])),
+      );
+    }
     // ignore: no_leading_underscores_for_local_identifiers
     final _actions = actions ?? [];
     return BottomSheet(

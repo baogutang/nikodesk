@@ -51,12 +51,15 @@ class _PrivateServerFormState extends State<PrivateServerForm> {
       await widget.gateway.save(PrivateServerConfig(
           _id.text.trim(), _relay.text.trim(), _key.text.trim()));
       if (mounted) Navigator.of(context).pop(true);
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
         setState(() {
           _saving = false;
-          _error = nikoText('保存或回读失败。客户端保持停止；请检查本地配置目录是否可写，再重试。',
-              'Save or read-back failed. The client stays stopped. Check local configuration permissions and retry.');
+          _error = error is PrivateServerSaveException && error.stoppedVerified
+              ? nikoText('保存或启用失败，已确认连接处于暂停状态。请检查配置目录权限后重试。',
+                  'Save or activation failed. Connections are confirmed paused. Check configuration permissions and retry.')
+              : nikoText('保存未确认，停止状态未知。请核对连接状态并暂停客户端后重试。',
+                  'Save was not confirmed; the stopped state is unknown. Check connection status and pause the client before retrying.');
         });
       }
     }

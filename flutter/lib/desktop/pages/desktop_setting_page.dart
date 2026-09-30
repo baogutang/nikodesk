@@ -19,6 +19,7 @@ import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/nikodesk/server_settings.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
+import 'package:flutter_hbb/nikodesk/product_build_info.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -2537,6 +2538,13 @@ class _About extends StatefulWidget {
 class _AboutState extends State<_About> {
   @override
   Widget build(BuildContext context) {
+    if (bind.mainGetAppNameSync() == 'NikoDesk') {
+      return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: NikoProductAbout(
+              loadInfo: () => ProductBuildInfo.read(
+                  nativeVersionLoader: bind.mainGetVersion)));
+    }
     return futureBuilder(future: () async {
       final license = await bind.mainGetLicense();
       final version = await bind.mainGetVersion();

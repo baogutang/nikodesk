@@ -20,8 +20,13 @@ path = "src/naming.rs"
 name = "service"
 path = "src/service.rs"
 
+[[bin]]
+name = "nikodesk-host"
+path = "src/nikodesk/background/main.rs"
+required-features = ["nikodesk"]
+
 [features]
-nikodesk = []
+nikodesk = ["scrap/nikodesk", "dep:nikodesk-cpal"]
 inline = []
 use_samplerate = ["samplerate", "libsamplerate-sys"]
 use_rubato = ["rubato"]
@@ -128,23 +133,34 @@ winapi = { version = "0.3", features = [
     "winspool",
 ] }
 windows = { version = "0.61", features = [
+    "Devices_Enumeration",
     "Win32",
     "Win32_Foundation",
+    "Win32_Media_Audio",
+    "Win32_Media_KernelStreaming",
     "Win32_Security",
     "Win32_Security_Authorization",
     "Win32_Storage_FileSystem",
     "Win32_System",
     "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
     "Win32_System_Diagnostics",
     "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_Environment",
     "Win32_System_IO",
+    "Win32_System_JobObjects",
+    "Win32_System_LibraryLoader",
     "Win32_System_Memory",
     "Win32_System_Pipes",
     "Win32_System_Registry",
+    "Win32_System_RemoteDesktop",
+    "Win32_System_StationsAndDesktops",
     "Win32_System_SystemInformation",
     "Win32_System_Threading",
+    "Win32_System_Variant",
+    "Win32_System_WinRT",
     "Win32_UI_Shell",
+    "Win32_UI_Shell_PropertiesSystem",
     "Win32_UI_WindowsAndMessaging",
 ] }
 winreg = "0.11"
@@ -154,6 +170,11 @@ remote_printer = { path = "libs/remote_printer" }
 impersonate_system = { git = "https://github.com/rustdesk-org/impersonate-system" }
 shared_memory = "0.12"
 tauri-winrt-notification = "0.1"
+
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+# Fixed Niko source: CoreAudio identity accessor and bounded WASAPI loopback wait.
+# The feature-off CPAL dependency retains its existing pinned Git source.
+nikodesk-cpal = { package = "cpal", path = "libs/nikodesk_cpal", optional = true, default-features = false }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"
@@ -213,7 +234,7 @@ android-wakelock = { git = "https://github.com/rustdesk-org/android-wakelock" }
 
 [workspace]
 members = ["libs/scrap", "libs/hbb_common", "libs/base", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/portable", "libs/remote_printer"]
-exclude = ["vdi/host"]
+exclude = ["vdi/host", "libs/nikodesk_cpal"]
 
 # Patch libxdo-sys to use a stub implementation that doesn't require libxdo
 # This allows building and running on systems without libxdo installed (e.g., Wayland-only)

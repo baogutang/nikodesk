@@ -8,6 +8,9 @@ use std::{
 use bin_reader::{normalize_path, BinaryReader};
 
 pub mod bin_reader;
+#[cfg(test)]
+#[path = "../version.rs"]
+mod product_version_tests;
 #[cfg(windows)]
 mod ui;
 
@@ -19,6 +22,7 @@ const APP_METADATA_CONFIG: &str = "meta.toml";
 const META_LINE_PREFIX_TIMESTAMP: &str = "timestamp = ";
 const META_LINE_PREFIX_FILE: &str = "file = ";
 const APP_PREFIX: &str = "rustdesk";
+#[cfg(not(feature = "nikodesk"))]
 const APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
 #[cfg(windows)]
 const SET_FOREGROUND_WINDOW_ENV_KEY: &str = "SET_FOREGROUND_WINDOW";
@@ -173,7 +177,7 @@ fn setup(
 
     let mut ts = 0;
     if clear || !is_timestamp_matches(&dir, &mut ts) {
-        #[cfg(windows)]
+        #[cfg(all(windows, not(feature = "nikodesk")))]
         if _args.is_empty() {
             *_ui = true;
             ui::setup();
@@ -186,7 +190,7 @@ fn setup(
         file.write_to_file(&dir);
     }
     write_meta(&dir, ts, &metadata_paths);
-    #[cfg(windows)]
+    #[cfg(all(windows, not(feature = "nikodesk")))]
     win::copy_runtime_broker(&dir);
     #[cfg(linux)]
     reader.configure_permission(&dir);
@@ -230,7 +234,9 @@ fn is_windows_7() -> bool {
 fn execute(path: PathBuf, args: Vec<String>, _ui: bool) {
     println!("executing {}", path.display());
     // setup env
+    #[cfg(not(feature = "nikodesk"))]
     let exe = std::env::current_exe().unwrap_or_default();
+    #[cfg(not(feature = "nikodesk"))]
     let exe_name = exe.file_name().unwrap_or_default();
     // run executable
     let mut cmd = Command::new(path);
@@ -244,6 +250,7 @@ fn execute(path: PathBuf, args: Vec<String>, _ui: bool) {
         }
     }
 
+    #[cfg(not(feature = "nikodesk"))]
     cmd.env(APPNAME_RUNTIME_ENV_KEY, exe_name);
     if use_null_stdio() {
         cmd.stdin(Stdio::null())
@@ -271,28 +278,39 @@ fn execute(path: PathBuf, args: Vec<String>, _ui: bool) {
 
 fn main() -> Result<(), String> {
     let mut args = Vec::new();
+    #[cfg(not(feature = "nikodesk"))]
     let mut arg_exe = Default::default();
     let mut i = 0;
     for arg in std::env::args() {
         if i == 0 {
-            arg_exe = arg.clone();
+            #[cfg(not(feature = "nikodesk"))]
+            {
+                arg_exe = arg.clone();
+            }
         } else {
             args.push(arg);
         }
         i += 1;
     }
+    #[cfg(not(feature = "nikodesk"))]
     let click_setup = args.is_empty() && arg_exe.to_lowercase().ends_with("install.exe");
-    #[cfg(windows)]
+    #[cfg(feature = "nikodesk")]
+    let click_setup = false;
+    #[cfg(all(windows, not(feature = "nikodesk")))]
     let quick_support = args.is_empty() && win::is_quick_support_exe(&arg_exe);
-    #[cfg(not(windows))]
+    #[cfg(any(not(windows), feature = "nikodesk"))]
     let quick_support = false;
 
     let mut ui = false;
     let reader = BinaryReader::new()?;
+    #[cfg(feature = "nikodesk")]
+    if normalize_path(&reader.exe) != "nikodesk.exe" {
+        return Err("NikoDesk portable payload has an unexpected launch target".to_owned());
+    }
     if let Some(exe) = setup(
         reader,
         None,
-        click_setup || args.contains(&"--silent-install".to_owned()),
+        !cfg!(feature = "nikodesk") && (click_setup || args.contains(&"--silent-install".to_owned())),
         &args,
         &mut ui,
     ) {
@@ -346,6 +364,12 @@ mod win {
 #[cfg(test)]
 mod meta_tests {
     use super::*;
+
+    #[test]
+    fn product_payload_uses_an_independent_extraction_directory() {
+        assert_eq!(app_dir_name(".\\NikoDesk.exe"), "nikodesk");
+        assert_ne!(app_dir_name(".\\NikoDesk.exe"), app_dir_name(".\\rustdesk.exe"));
+    }
 
     #[test]
     fn resolve_within_rejects_paths_that_escape() {

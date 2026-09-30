@@ -22,6 +22,7 @@ import '../../models/input_model.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../utils/image.dart';
+import '../../nikodesk/mobile_session_guide.dart';
 import '../widgets/dialog.dart';
 import '../widgets/custom_scale_widget.dart';
 
@@ -46,10 +47,12 @@ class RemotePage extends StatefulWidget {
       required this.id,
       this.password,
       this.isSharedPassword,
+      this.serverNamespace,
       this.forceRelay})
       : super(key: key);
 
   final String id;
+  final String? serverNamespace;
   final String? password;
   final bool? isSharedPassword;
   final bool? forceRelay;
@@ -62,6 +65,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   Timer? _timer;
   bool _showBar = !isWebDesktop;
   bool _showGestureHelp = false;
+  bool _nikoGuideScheduled = false;
   String _value = '';
   Orientation? _currentOrientation;
   final _uniqueKey = UniqueKey();
@@ -97,6 +101,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     gFFI.start(
       widget.id,
       password: widget.password,
+      serverNamespace: widget.serverNamespace,
       isSharedPassword: widget.isSharedPassword,
       forceRelay: widget.forceRelay,
     );
@@ -122,6 +127,14 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       }
       _disableAndroidSoftKeyboard(
           isKeyboardVisible: keyboardVisibilityController.isVisible);
+      if (const bool.fromEnvironment('NIKODESK')) {
+        if (mounted && peerId == widget.id && !_nikoGuideScheduled) {
+          _nikoGuideScheduled = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && !gFFI.closed) unawaited(_offerNikoSessionGuide());
+          });
+        }
+      }
     });
     WidgetsBinding.instance.addObserver(this);
 
@@ -197,6 +210,22 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     return pi.platform == kPeerPlatformLinux && pi.isWayland;
   }
 
+  Future<void> _offerNikoSessionGuide() async {
+    try {
+      if (bind.getLocalFlutterOption(k: nikoMobileGuideSeenKey) == 'Y') return;
+      gFFI.inputModel.enterOrLeave(false);
+      final openGestures = await showDialog<bool>(
+          context: context,
+          builder: (_) => NikoMobileSessionGuide(
+              touchMode: gFFI.ffiModel.touchMode));
+      if (openGestures == null || !mounted || gFFI.closed) return;
+      if (openGestures) setState(() => _showGestureHelp = true);
+      await bind.setLocalFlutterOption(k: nikoMobileGuideSeenKey, v: 'Y');
+    } catch (_) {
+      debugPrint('NikoDesk mobile guidance could not be shown or saved');
+    }
+  }
+
   void _initWaylandKeyboardGateIfNeeded() {
     if (!mounted) return;
     if (_waylandKeyboardGateInitialized) return;
@@ -205,7 +234,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     _waylandKeyboardGateInitialized = true;
 
     final allowWaylandKeyboard =
-        mainGetPeerBoolOptionSync(widget.id, kPeerOptionAllowWaylandKeyboard);
+        sessionGetPeerBoolOptionSync(sessionId, widget.id, kPeerOptionAllowWaylandKeyboard);
     if (!shouldShowWaylandKeyboardPrompt(
       connectionId: sessionId.toString(),
       isWaylandPeer: _shouldGateKeyboardForWayland(),
@@ -392,7 +421,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   void openKeyboard() {
     final allowWaylandKeyboard =
-        mainGetPeerBoolOptionSync(widget.id, kPeerOptionAllowWaylandKeyboard);
+        sessionGetPeerBoolOptionSync(sessionId, widget.id, kPeerOptionAllowWaylandKeyboard);
     if (shouldShowWaylandKeyboardPrompt(
       connectionId: sessionId.toString(),
       isWaylandPeer: _shouldGateKeyboardForWayland(),

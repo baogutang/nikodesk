@@ -1717,6 +1717,27 @@ dependencies = [
 [[package]]
 name = "cpal"
 version = "0.15.3"
+dependencies = [
+ "alsa",
+ "core-foundation-sys 0.8.7",
+ "coreaudio-rs",
+ "dasp_sample",
+ "jni",
+ "js-sys",
+ "libc",
+ "mach2",
+ "ndk 0.8.0",
+ "ndk-context",
+ "oboe",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "windows 0.54.0",
+]
+
+[[package]]
+name = "cpal"
+version = "0.15.3"
 source = "git+https://github.com/rustdesk-org/cpal?branch=osx-screencapturekit#96d4da121b7d949677ac5b6887413a9185fd7f39"
 dependencies = [
  "alsa",
@@ -7228,7 +7249,8 @@ dependencies = [
  "cocoa 0.24.1",
  "core-foundation 0.9.4",
  "core-graphics 0.22.3",
- "cpal",
+ "cpal 0.15.3",
+ "cpal 0.15.3 (git+https://github.com/rustdesk-org/cpal?branch=osx-screencapturekit)",
  "crossbeam-queue",
  "ctrlc",
  "dasp",
@@ -7543,6 +7565,7 @@ dependencies = [
  "base",
  "bindgen 0.72.1",
  "block",
+ "cc",
  "cfg-if 1.0.0",
  "dbus",
  "docopt",

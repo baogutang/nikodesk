@@ -229,9 +229,20 @@ fn ffmpeg() {
 fn main() {
     // in this crate, these are also valid configurations
     println!("cargo:rustc-check-cfg=cfg(dxgi,quartz,x11)");
+    println!("cargo:rustc-check-cfg=cfg(nikodesk_camera_native_tests)");
 
     // there is problem with cfg(target_os) in build.rs, so use our workaround
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+    if target_os == "macos" && env::var_os("CARGO_FEATURE_NIKODESK").is_some() {
+        for file in ["src/common/macos_camera.mm", "src/common/macos_camera.h", "src/common/macos_camera_state.h"] {
+            println!("cargo:rerun-if-changed={file}");
+        }
+        cc::Build::new().cpp(true).flag("-std=c++17").flag("-fobjc-arc").flag("-fblocks")
+            .file("src/common/macos_camera.mm").compile("nikodesk_camera");
+        for framework in ["AVFoundation", "Foundation", "CoreMedia", "CoreVideo"] {
+            println!("cargo:rustc-link-lib=framework={framework}");
+        }
+    }
 
     // note: all link symbol names in x86 (32-bit) are prefixed wth "_".
     // run "rustup show" to show current default toolchain, if it is stable-x86-pc-windows-msvc,

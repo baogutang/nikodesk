@@ -1,3 +1,5 @@
+import '../../nikodesk/window_scope.dart';
+import '../../nikodesk/remote_window_scope.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'dart:ui' as ui;
@@ -53,6 +55,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
   var connectionMap = RxList<Widget>.empty(growable: true);
 
   _ConnectionTabPageState(Map<String, dynamic> params) {
+    if (const bool.fromEnvironment('NIKODESK')) NikoWindowScope.initialize(params);
     RemoteCountState.init();
     peerId = params['id'];
     final sessionId = params['session_id'];
@@ -97,6 +100,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           display: display,
           displays: displays?.cast<int>(),
           password: params['password'],
+          serverNamespace: NikoWindowScope.current,
           toolbarState: ToolbarState(),
           tabController: tabController,
           switchUuid: params['switch_uuid'],
@@ -420,14 +424,41 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
   _update_remote_count() =>
       RemoteCountState.find().value = tabController.length;
 
+  RemotePage? _nikoCoordinatePage() {
+    final state = tabController.state.value;
+    if (state.tabs.isEmpty || state.selected < 0 ||
+        state.selected >= state.tabs.length) return null;
+    final page = state.selectedTabInfo.page;
+    return page is RemotePage && !page.ffi.closed ? page : null;
+  }
+
+  Object? _nikoCoordinateIdentity() {
+    final page = _nikoCoordinatePage();
+    if (page == null) return null;
+    return {
+      'windowId': windowId(),
+      'peerId': page.ffi.id,
+      'serverNamespace': page.ffi.serverNamespace,
+    };
+  }
+
   Future<dynamic> _remoteMethodHandler(call, fromWindowId) async {
+      if (call.method == nikoWindowScopeMethod) return NikoWindowScope.current;
+      if (const bool.fromEnvironment('NIKODESK')) {
+        debugPrint('NikoDesk window event: ${call.method} from $fromWindowId');
+      } else {
     debugPrint(
         "[Remote Page] call ${call.method} with args ${call.arguments} from window $fromWindowId");
+      }
 
     dynamic returnValue;
     // for simplify, just replace connectionId
     if (call.method == kWindowEventNewRemoteDesktop) {
       final args = jsonDecode(call.arguments);
+      if (const bool.fromEnvironment('NIKODESK') &&
+          nikoWindowNamespace(args) != NikoWindowScope.current) {
+        throw StateError('The private server identity does not match this window');
+      }
       final id = args['id'];
       final switchUuid = args['switch_uuid'];
       final sessionId = args['session_id'];
@@ -470,6 +501,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           display: display,
           displays: displays?.cast<int>(),
           password: args['password'],
+          serverNamespace: NikoWindowScope.current,
           toolbarState: ToolbarState(),
           tabController: tabController,
           switchUuid: switchUuid,
@@ -527,6 +559,31 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         closeSessionOnDispose[id] = false;
         tabController.closeBy(id);
       }
+    } else if (const bool.fromEnvironment('NIKODESK') &&
+        call.method == nikoRemoteWindowIdentityMethod) {
+      return _nikoCoordinateIdentity();
+    } else if (const bool.fromEnvironment('NIKODESK') &&
+        call.method == kWindowEventRemoteWindowCoords) {
+      if (fromWindowId != kMainWindowId) return null;
+      return nikoRemoteWindowCoordinateReply(
+          request: call.arguments,
+          readIdentity: _nikoCoordinateIdentity,
+          readCoordinates: () async {
+            final page = _nikoCoordinatePage();
+            if (page == null) return null;
+            final ffi = page.ffi;
+            final displayRect = ffi.ffiModel.displaysRect();
+            if (displayRect == null) return null;
+            try {
+              final frame = await WindowController.fromWindowId(windowId()).getFrame();
+              return RemoteWindowCoords(frame,
+                  CanvasCoords.fromCanvasModel(ffi.canvasModel),
+                  CursorCoords.fromCursorModel(ffi.cursorModel),
+                  displayRect).toJson();
+            } catch (_) {
+              return null;
+            }
+          });
     } else if (call.method == kWindowEventRemoteWindowCoords) {
       final remotePage =
           tabController.state.value.selectedTabInfo.page as RemotePage;

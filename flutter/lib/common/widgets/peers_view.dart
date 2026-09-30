@@ -16,6 +16,8 @@ import 'package:window_manager/window_manager.dart';
 import '../../common.dart';
 import '../../models/peer_model.dart';
 import '../../models/platform_model.dart';
+import '../../nikodesk/peer_load_notice.dart';
+import '../../nikodesk/server_scope.dart';
 import 'peer_card.dart';
 
 typedef PeerFilter = bool Function(Peer peer);
@@ -185,6 +187,42 @@ class _PeersViewState extends State<_PeersView>
     return ChangeNotifierProvider<Peers>.value(
       value: widget.peers,
       child: Consumer<Peers>(builder: (context, peers, child) {
+        if (peers.nikoScopedLocal &&
+            (!peers.nikoHasLoaded || peers.nikoLoadFailure != null)) {
+          final hasRows = peers.peers.isNotEmpty;
+          if (!hasRows) gFFI.peerTabModel.setCurrentTabCachedPeers([]);
+          final notice = NikoPeerLoadNotice(
+              configured: NikoServerScope.current != null,
+              hasPreviousRows: hasRows,
+              failure: peers.nikoLoadFailure,
+              onRetry: () async {
+                final namespace = NikoServerScope.current;
+                if (namespace == null) return;
+                try {
+                  if (peers.loadEvent == LoadEvent.favorite) {
+                    await bind.mainLoadFavPeers();
+                  } else {
+                    await bind.mainLoadRecentPeers();
+                  }
+                } catch (_) {
+                  peers.reportNikoLoadFailure(namespace);
+                }
+              });
+          return LayoutBuilder(builder: (context, constraints) {
+            if (!hasRows) return Center(child: notice);
+            return Column(children: [
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                    maxHeight: constraints.maxHeight.isFinite
+                        ? constraints.maxHeight * .45
+                        : 240),
+                child: notice,
+              ),
+              const SizedBox(height: 8),
+              Expanded(child: _buildPeersView(peers)),
+            ]);
+          });
+        }
         if (peers.peers.isEmpty) {
           gFFI.peerTabModel.setCurrentTabCachedPeers([]);
           return Center(

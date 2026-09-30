@@ -1,16 +1,22 @@
 name: Release NikoDesk
 
-# Builds the three supported controller/controlled platforms on every
-# version tag and publishes a GitHub Release with SHA256SUMS. The in-app
-# updater consumes these assets (SHA256-verified before install).
+# Cross-platform compilation stays in manual experiments until target-device
+# acceptance. Only the macOS package is currently eligible for tag publication.
 on:
   push:
+    branches:
+      - 'validation/**'
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      experimental_platforms:
+        description: Build Windows and Android experiments (runtime acceptance pending)
+        type: boolean
+        default: true
 
-# The release job creates a GitHub Release, which needs contents write.
 permissions:
-  contents: write
+  contents: read
 
 env:
   FLUTTER_VERSION: "3.24.5"
@@ -24,6 +30,12 @@ jobs:
   build-macos:
     name: macOS ARM64
     runs-on: macos-14
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '12.3'
+      FLUTTER_XCODE_ARCHS: arm64
+      FLUTTER_XCODE_ONLY_ACTIVE_ARCH: 'YES'
+      VCPKG_DEFAULT_TRIPLET: arm64-osx
+      VCPKG_DEFAULT_HOST_TRIPLET: arm64-osx
     steps:
       - name: Export GitHub Actions cache environment variables
         uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
@@ -36,9 +48,13 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Read product version
+        id: product-version
+        run: python3 .github/scripts/product-version.py --github-output
+
       - name: Install build runtime
         run: |
-          brew install llvm create-dmg pkg-config
+          brew install llvm pkg-config
 
       - name: Install NASM 2.16
         run: |
@@ -90,25 +106,33 @@ jobs:
 
       - name: Build the Flutter app
         working-directory: flutter
+        env:
+          PRODUCT_VERSION: ${{ steps.product-version.outputs.version_name }}
+          PRODUCT_BUILD_NUMBER: ${{ steps.product-version.outputs.build_number }}
         run: |
           flutter pub get
-          flutter build macos --release
+          flutter build macos --release --dart-define=NIKODESK=true --build-name "$PRODUCT_VERSION" --build-number "$PRODUCT_BUILD_NUMBER"
 
       - name: Sign and package
         run: |
           APP="flutter/build/macos/Build/Products/Release/NikoDesk.app"
-          codesign --force --deep --sign - --options runtime \
-            --entitlements flutter/macos/Runner/NikoLocalDevelopment.entitlements "$APP"
-          codesign --verify --deep --strict "$APP"
-          ditto -c -k --sequesterRsrc --keepParent "$APP" NikoDesk-macos-arm64.zip
+          python3 .github/scripts/prepare-macos-camera.py "$APP"
+          python3 .github/scripts/build-macos-privacy-watchdog.py "$APP" --architecture arm64
+          cp LICENCE "$APP/Contents/Resources/NikoDesk-LICENCE.txt"
+          printf 'NikoDesk source: https://github.com/%s/tree/%s\n' "$GITHUB_REPOSITORY" "$GITHUB_SHA" \
+            > "$APP/Contents/Resources/NikoDesk-SOURCE.txt"
+          bash .github/scripts/sign-macos-app.sh "$APP" - flutter/macos/Runner/NikoLocalDevelopment.entitlements
+          python3 .github/scripts/package-macos.py "$APP" dist --require-privacy-watchdog --require-camera --require-voice
 
       - uses: actions/upload-artifact@v4
         with:
           name: NikoDesk-macos-arm64
-          path: NikoDesk-macos-arm64.zip
+          path: dist/NikoDesk-macos-arm64*
+          if-no-files-found: error
 
   build-windows:
-    name: Windows x64
+    name: Experimental Windows x64 (build only)
+    if: (github.event_name == 'workflow_dispatch' && inputs.experimental_platforms) || startsWith(github.ref, 'refs/heads/validation/')
     runs-on: windows-2022
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -121,6 +145,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Read product version
+        id: product-version
+        run: python3 .github/scripts/product-version.py --github-output
 
       - name: Install LLVM and NASM
         run: choco install -y llvm nasm
@@ -159,28 +187,63 @@ jobs:
         env:
           VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
         run: |
-          $env:VCPKG_ROOT="C:\vcpkg\vcpkg"
-          & $env:VCPKG_ROOT install --triplet x64-windows-static --x-install-root="$env:VCPKG_ROOT\installed"
+          & "$env:VCPKG_ROOT\vcpkg.exe" install --triplet x64-windows-static --overlay-ports="$env:GITHUB_WORKSPACE\res\vcpkg-nikodesk" --x-install-root="$env:VCPKG_ROOT\installed"
           if ($LASTEXITCODE -ne 0) { Get-ChildItem "$env:VCPKG_ROOT\buildtrees" -Recurse -Filter "*.log" | ForEach-Object { Write-Host $_.FullName; Get-Content $_.FullName }; exit 1 }
 
       - name: Build NikoDesk
         shell: pwsh
         env:
-          VCPKG_ROOT: C:\vcpkg\vcpkg
-        run: python3 .\build.py --flutter --hwcodec --nikodesk
+          NIKODESK_SOURCE_REVISION: ${{ github.sha }}
+          NIKODESK_SOURCE_DIRTY: 'false'
+          PRODUCT_VERSION: ${{ steps.product-version.outputs.version_name }}
+          PRODUCT_BUILD_NUMBER: ${{ steps.product-version.outputs.build_number }}
+        run: python3 .\build.py --flutter --hwcodec --nikodesk --build-name "$env:PRODUCT_VERSION" --build-number "$env:PRODUCT_BUILD_NUMBER"
+
+      - name: Test Windows identity and portable boundaries
+        shell: pwsh
+        run: |
+          cargo test --locked --lib --features flutter,hwcodec,nikodesk nikodesk_windows_
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --locked -p rustdesk-portable-packer --features nikodesk
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python3 -m unittest discover -s libs/portable/tests -v
 
       - name: Package
         shell: pwsh
         run: |
-          Compress-Archive -Path "flutter\build\windows\x64\runner\Release\*" -DestinationPath NikoDesk-windows-x64.zip
+          $bundle="flutter\build\windows\x64\runner\Release"
+          foreach ($required in @('NikoDesk.exe', 'librustdesk.dll', 'flutter_windows.dll', 'data\app.so', 'data\icudtl.dat')) {
+            if (!(Test-Path "$bundle\$required")) { throw "Missing bundle file: $required" }
+          }
+          if (!(Test-Path 'NikoDesk-windows-x64.exe')) { throw 'Missing NikoDesk portable executable' }
+          Copy-Item NikoDesk-windows-x64.exe NikoDesk-windows-x64-experimental.exe
+          Set-Content "$bundle\EXPERIMENTAL.txt" 'Experimental user-mode client. Real Windows launch and remote-session acceptance are pending. Do not replace RustDesk or install a privileged service.'
+          Copy-Item "$bundle\EXPERIMENTAL.txt" NikoDesk-windows-x64-experimental.txt
+          Compress-Archive -Path "$bundle\*" -DestinationPath NikoDesk-windows-x64-experimental.zip
+
+      - name: Verify Windows package contents without launching
+        shell: pwsh
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.tools/package-verifier
+          PRODUCT_VERSION: ${{ steps.product-version.outputs.version_name }}
+          PRODUCT_BUILD_NUMBER: ${{ steps.product-version.outputs.build_number }}
+        run: |
+          python3 -m pip install --disable-pip-version-check --only-binary=:all: --index-url https://pypi.org/simple --target .tools/package-verifier Brotli==1.2.0
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python3 -m unittest discover -s .github/scripts/tests -p test_package_windows.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python3 .github/scripts/verify-package-windows.py --bundle flutter/build/windows/x64/runner/Release --portable NikoDesk-windows-x64-experimental.exe --zip NikoDesk-windows-x64-experimental.zip --blob libs/portable/data.bin --version-name "$env:PRODUCT_VERSION" --build-number "$env:PRODUCT_BUILD_NUMBER" --license-file LICENCE --source-revision "$env:GITHUB_SHA" --source-dirty false --native-protocol-version 1.5.0 --report-output NikoDesk-windows-x64-experimental.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - uses: actions/upload-artifact@v4
         with:
-          name: NikoDesk-windows-x64
-          path: NikoDesk-windows-x64.zip
+          name: NikoDesk-windows-x64-experimental
+          path: NikoDesk-windows-x64-experimental.*
+          if-no-files-found: error
 
   build-android:
-    name: Android ARM64
+    name: Experimental Android ARM64 (build only)
+    if: (github.event_name == 'workflow_dispatch' && inputs.experimental_platforms) || startsWith(github.ref, 'refs/heads/validation/')
     runs-on: ubuntu-24.04
     steps:
       - name: Free disk space
@@ -204,6 +267,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Read product version
+        id: product-version
+        run: python3 .github/scripts/product-version.py --github-output
 
       - name: Install dependencies
         run: |
@@ -257,7 +324,8 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
-        run: ./flutter/build_android_deps.sh arm64-v8a
+        run: |
+          /opt/artifacts/vcpkg/vcpkg install --triplet arm64-android --overlay-ports=res/vcpkg-nikodesk
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --version ${{ env.CARGO_NDK_VERSION }} --locked
@@ -266,50 +334,76 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS: '-C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wl,-z,common-page-size=16384'
         run: |
-          cargo ndk --platform 21 --target aarch64-linux-android build --locked --release \
+          export LIBCLANG_PATH="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/lib"
+          export BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android="--sysroot=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot -I$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/aarch64-linux-android -D__ANDROID_API__=22"
+          cargo ndk --platform 22 --target aarch64-linux-android build --locked --release \
             --features flutter,hwcodec,nikodesk
 
       - name: Build the APK
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          NIKODESK_UNSIGNED_BUILD: '1'
+          PRODUCT_VERSION: ${{ steps.product-version.outputs.version_name }}
+          PRODUCT_BUILD_NUMBER: ${{ steps.product-version.outputs.build_number }}
         run: |
           sed -i "s/org.gradle.jvmargs=-Xmx1024M/org.gradle.jvmargs=-Xmx2g/g" ./flutter/android/gradle.properties
-          sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
           mkdir -p ./flutter/android/app/src/main/jniLibs/arm64-v8a
           cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/
           cp ./target/aarch64-linux-android/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
           pushd flutter
-          flutter build apk --release --target-platform android-arm64 --split-per-abi
-          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ../NikoDesk-android-arm64.apk
+          flutter pub get --enforce-lockfile
+          flutter build apk --release --flavor nikodesk --target-platform android-arm64 --no-pub --dart-define=NIKODESK=true --build-name "$PRODUCT_VERSION" --build-number "$PRODUCT_BUILD_NUMBER"
+          mv build/app/outputs/flutter-apk/app-nikodesk-release.apk ../NikoDesk-android-arm64-unsigned.apk
           popd
+          printf '%s\n' 'Unsigned structural experiment (io.nikodesk.android.dev). This APK cannot be installed or used for upgrade validation. A separately verified stable signed test APK is required for device acceptance.' > NikoDesk-android-arm64-unsigned.txt
+
+      - name: Verify final controller APK
+        env:
+          PRODUCT_VERSION: ${{ steps.product-version.outputs.version_name }}
+          PRODUCT_BUILD_NUMBER: ${{ steps.product-version.outputs.build_number }}
+        run: |
+          python3 -m unittest discover -s .github/scripts/tests -v
+          python3 .github/scripts/verify-package-android.py NikoDesk-android-arm64-unsigned.apk \
+            --application-id io.nikodesk.android.dev --version-name "$PRODUCT_VERSION" --version-code "$PRODUCT_BUILD_NUMBER" --unsigned \
+            --manifest-output NikoDesk-android-arm64-unsigned-manifest.xml \
+            --report-output NikoDesk-android-arm64-unsigned-report.json
 
       - uses: actions/upload-artifact@v4
         with:
-          name: NikoDesk-android-arm64
-          path: NikoDesk-android-arm64.apk
+          name: NikoDesk-android-arm64-unsigned
+          path: NikoDesk-android-arm64-unsigned.*
+          if-no-files-found: error
 
   release:
     name: Publish release
-    needs: [build-macos, build-windows, build-android]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [build-macos]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
         with:
+          name: NikoDesk-macos-arm64
           path: dist
-          merge-multiple: true
 
       - name: Generate SHA256SUMS
         working-directory: dist
         run: |
-          shasum -a 256 NikoDesk-* | tee SHA256SUMS
+          shasum -a 256 NikoDesk-macos-arm64* | tee SHA256SUMS
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          body: |
+            macOS ARM64 package: use the DMG for manual installation; the ZIP preserves the updater bundle format.
+            Package identity, ARM64 native code, bundled dependencies, signature integrity and archive contents are checked. Launch and real remote sessions are separate validation steps.
+            Ad-hoc signature only: no Apple Developer ID or notarization. Windows and Android remain manual experimental artifacts until target-device acceptance and stable Android release signing are completed.
           files: |
-            dist/NikoDesk-*
+            dist/NikoDesk-macos-arm64*
             dist/SHA256SUMS

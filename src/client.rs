@@ -377,13 +377,32 @@ impl Client {
     )> {
         debug_assert!(peer == interface.get_id());
         #[cfg(feature = "nikodesk")]
+        let captured_peer_key = {
+            let handler = interface.get_lch();
+            let handler = handler.read().map_err(|_| anyhow!("NikoDesk session lock is unavailable"))?;
+            handler.peer_storage_key.clone()
+        };
+        #[cfg(feature = "nikodesk")]
+        let route = interface.connection_snapshot()?;
+        #[cfg(feature = "nikodesk")]
+        let key = route.key();
+        #[cfg(feature = "nikodesk")]
+        let token = "";
+        #[cfg(feature = "nikodesk")]
         {
-            crate::nikodesk::validate_private_server()?;
+            crate::nikodesk::validate_active_private_server()?;
             crate::nikodesk::validate_remote_id(peer)?;
+            let key = captured_peer_key.clone();
+            let scope_matches = tokio::task::spawn_blocking(move || {
+                key.as_ref().map_or(false, |key| key.is_current())
+            }).await.context("Cannot verify NikoDesk server identity")?;
+            if !scope_matches {
+                bail!("NikoDesk server identity changed or is paused; start a new session");
+            }
             if interface.get_lch().read().unwrap().other_server.is_some()
-                || !matches!(conn_type, ConnType::DEFAULT_CONN | ConnType::FILE_TRANSFER)
+                || !matches!(conn_type, ConnType::DEFAULT_CONN | ConnType::FILE_TRANSFER | ConnType::TERMINAL)
             {
-                bail!("NikoDesk supports private-server desktop and file sessions only");
+                bail!("NikoDesk supports private-server desktop, file and locally approved terminal requests");
             }
         }
         interface.update_direct(None);
@@ -398,6 +417,15 @@ impl Client {
                 }
             }
             Ok(x) => {
+                #[cfg(feature = "nikodesk")]
+                {
+                    let scope_matches = tokio::task::spawn_blocking(move || {
+                        captured_peer_key.as_ref().map_or(false, |key| key.is_current())
+                    }).await.context("Cannot verify NikoDesk server identity")?;
+                    if !scope_matches {
+                        bail!("NikoDesk server identity changed or was paused during connection; start a new session");
+                    }
+                }
                 #[cfg(feature = "nikodesk")]
                 crate::nikodesk_security::require_encrypted(x.0 .0.is_secured())?;
                 // Set x.2 to true only in the connect() function to indicate that direct_failures needs to be updated; everywhere else it should be set to false.
@@ -433,10 +461,13 @@ impl Client {
         (i32, String),
         bool,
     )> {
+        #[cfg(feature = "nikodesk")]
+        let route = interface.connection_snapshot()?;
         if config::is_incoming_only() && !is_switch_sides_back(conn_type, &interface).await {
             bail!("Incoming only mode");
         }
         // to-do: remember the port for each peer, so that we can retry easier
+        #[cfg(not(feature = "nikodesk"))]
         if hbb_common::is_ip_str(peer) {
             return Ok((
                 (
@@ -452,6 +483,7 @@ impl Client {
             ));
         }
         // Allow connect to {domain}:{port}
+        #[cfg(not(feature = "nikodesk"))]
         if hbb_common::is_domain_port_str(peer) {
             return Ok((
                 (
@@ -472,6 +504,9 @@ impl Client {
         } else {
             (peer, "", key, token)
         };
+        #[cfg(feature = "nikodesk")]
+        let (rendezvous_server, servers, contained) = (route.rendezvous().to_owned(), Vec::new(), true);
+        #[cfg(not(feature = "nikodesk"))]
         let (rendezvous_server, servers, contained) = if other_server.is_empty() {
             crate::get_rendezvous_server(1_000).await
         } else {
@@ -495,12 +530,24 @@ impl Client {
             crate::test_ipv6().await;
         }
 
+        #[cfg(feature = "nikodesk")]
+        let udp_enabled = route.udp_punch;
+        #[cfg(not(feature = "nikodesk"))]
+        let udp_enabled = crate::get_udp_punch_enabled();
+        #[cfg(feature = "nikodesk")]
+        let tcp_enabled = route.tcp_punch;
+        #[cfg(not(feature = "nikodesk"))]
+        let tcp_enabled = tcp_punch_allowed();
         let (stop_udp_tx, stop_udp_rx) = oneshot::channel::<()>();
         let udp =
         // no need to care about multiple rendezvous servers case, since it is acutally not used any more.
         // Shared state for UDP NAT test result
-        if crate::get_udp_punch_enabled() && !interface.is_force_relay() {
-            if let Ok((socket, addr)) = new_direct_udp_for_unverified(&rendezvous_server).await {
+        if udp_enabled && !interface.is_force_relay() {
+            #[cfg(feature = "nikodesk")]
+            let attempt = route.direct_udp().await;
+            #[cfg(not(feature = "nikodesk"))]
+            let attempt = new_direct_udp_for_unverified(&rendezvous_server).await;
+            if let Ok((socket, addr)) = attempt {
                 let udp_port = Arc::new(Mutex::new(0));
                 let up_cloned = udp_port.clone();
                 let socket_cloned = socket.clone();
@@ -559,7 +606,7 @@ impl Client {
         // relay.
         if interface.is_force_relay()
             || (udp.0.is_none() && !has_webrtc_offerer)
-            || !tcp_punch_allowed()
+            || !tcp_enabled
         {
             return fut.await;
         }
@@ -818,11 +865,16 @@ impl Client {
         (i32, String),
         bool,
     )> {
+        #[cfg(feature = "nikodesk")]
+        let route = interface.connection_snapshot()?;
         // Wrap the offerer so any early return below (?/bail) or cancellation of this future by
         // the outer select_ok closes its pc instead of leaking it in SESSIONS. Disarmed via
         // into_inner() once the stream is adopted into a connection attempt.
         let mut webrtc_offerer = webrtc_offerer.map(OffererGuard::new);
         let mut start = Instant::now();
+        #[cfg(feature = "nikodesk")]
+        let mut socket = route.connect_server(rendezvous_server.clone(), false, CONNECT_TIMEOUT).await;
+        #[cfg(not(feature = "nikodesk"))]
         let mut socket = connect_tcp(&*rendezvous_server, CONNECT_TIMEOUT).await;
         debug_assert!(!servers.contains(&rendezvous_server));
         let rtt = start.elapsed();
@@ -831,7 +883,10 @@ impl Client {
             log::info!("try the other servers: {:?}", servers);
             for server in servers {
                 let server = check_port(server, RENDEZVOUS_PORT);
-                socket = connect_tcp(&*server, CONNECT_TIMEOUT).await;
+                #[cfg(feature = "nikodesk")]
+                { socket = route.connect_server(server.clone(), false, CONNECT_TIMEOUT).await; }
+                #[cfg(not(feature = "nikodesk"))]
+                { socket = connect_tcp(&*server, CONNECT_TIMEOUT).await; }
                 if socket.is_ok() {
                     rendezvous_server = server;
                     break;
@@ -881,7 +936,10 @@ impl Client {
                         err
                     );
                     webrtc_offerer = None;
-                    socket = connect_tcp(&*rendezvous_server, CONNECT_TIMEOUT).await?;
+                    #[cfg(feature = "nikodesk")]
+                    { socket = route.connect_server(rendezvous_server.clone(), false, CONNECT_TIMEOUT).await?; }
+                    #[cfg(not(feature = "nikodesk"))]
+                    { socket = connect_tcp(&*rendezvous_server, CONNECT_TIMEOUT).await?; }
                     my_addr = socket.local_addr();
                 }
             }
@@ -929,6 +987,9 @@ impl Client {
             .and_then(|g| g.stream())
             .map(|stream| stream.local_endpoint().to_owned())
             .unwrap_or_default();
+        #[cfg(feature = "nikodesk")]
+        let allow_tcp_punch = route.tcp_punch && request_allows_tcp_punch(&webrtc_sdp_offer);
+        #[cfg(not(feature = "nikodesk"))]
         let allow_tcp_punch = tcp_punch_allowed() && request_allows_tcp_punch(&webrtc_sdp_offer);
         // Every direct transport this round carries, not one of them: a round can carry several
         // at once (a NAT port and an offer and a v6 address), and since the TCP punch became a
@@ -1025,7 +1086,10 @@ impl Client {
                             peer_nat_type = ph.nat_type();
                             is_local = ph.is_local();
                             signed_id_pk = ph.pk.into();
-                            relay_server = ph.relay_server;
+                            #[cfg(feature = "nikodesk")]
+                            { relay_server = route.optional_relay_target(&ph.relay_server)?; }
+                            #[cfg(not(feature = "nikodesk"))]
+                            { relay_server = ph.relay_server; }
                             peer_addr = AddrMangle::decode(&ph.socket_addr);
                             feedback = ph.feedback;
                             webrtc_sdp_answer = ph.webrtc_sdp_answer;
@@ -1125,6 +1189,9 @@ impl Client {
                         // Keep relay_server for a WebRTC secure-failure fallback: request_relay
                         // coordinates a FRESH uuid via the rendezvous server, so it works even if
                         // the raced create_relay already consumed the original uuid pairing.
+                        #[cfg(feature = "nikodesk")]
+                        let relay_server_rr = route.relay_target(&rr.relay_server)?;
+                        #[cfg(not(feature = "nikodesk"))]
                         let relay_server_rr = rr.relay_server.clone();
                         let fut = Self::create_relay(
                             &peer,
@@ -1133,14 +1200,20 @@ impl Client {
                             &key,
                             conn_type,
                             my_addr.is_ipv4(),
+                            #[cfg(feature = "nikodesk")]
+                            route.clone(),
                         );
+                        #[cfg(feature = "nikodesk")]
+                        let relay_protocol = route.relay_protocol();
+                        #[cfg(not(feature = "nikodesk"))]
+                        let relay_protocol = if use_ws() { "WebSocket" } else { "Relay" };
                         connect_futures.push(
                             async move {
                                 let conn = fut.await?;
                                 Ok((
                                     conn,
                                     None,
-                                    if use_ws() { "WebSocket" } else { "Relay" },
+                                    relay_protocol,
                                     false,
                                 ))
                             }
@@ -1226,6 +1299,8 @@ impl Client {
                                     &token,
                                     conn_type,
                                     &interface.get_switch_code(),
+                                    #[cfg(feature = "nikodesk")]
+                                    route.clone(),
                                 )
                                 .await
                                 .map_err(|relay_e| {
@@ -1243,7 +1318,10 @@ impl Client {
                                 )
                                 .await?;
                                 conn = relay_conn;
-                                typ = if use_ws() { "WebSocket" } else { "Relay" };
+                                #[cfg(feature = "nikodesk")]
+                                { typ = route.relay_protocol(); }
+                                #[cfg(not(feature = "nikodesk"))]
+                                { typ = if use_ws() { "WebSocket" } else { "Relay" }; }
                                 // The transport is now a relay: the WebRTC win it replaced must
                                 // not carry its direct flag into the return, or the relay is
                                 // reported P2P and the outer race treats it as one.
@@ -1424,6 +1502,8 @@ impl Client {
         Option<KcpStream>,
         &'static str,
     )> {
+        #[cfg(feature = "nikodesk")]
+        let route = interface.connection_snapshot()?;
         // Guard the offerer for the whole of connect(): any early return — cancellation during the
         // awaits below, the relay override, or a secure_connection failure — closes its pc via the
         // guard's drop. Disarmed only once WebRTC is the confirmed winning, secured transport.
@@ -1467,6 +1547,9 @@ impl Client {
         // always direct; WebRTC is direct only when ICE nominated a non-TURN pair.
         let mut direct_futures = Vec::new();
         if allow_tcp_punch {
+            #[cfg(feature = "nikodesk")]
+            let fut = route.connect_direct(peer.to_string(), Some(local_addr), connect_timeout);
+            #[cfg(not(feature = "nikodesk"))]
             let fut = connect_tcp_local(peer, Some(local_addr), connect_timeout);
             direct_futures.push(
                 async move {
@@ -1561,6 +1644,8 @@ impl Client {
                     token,
                     conn_type,
                     &switch_code,
+                    #[cfg(feature = "nikodesk")]
+                    route.clone(),
                 )
                 .await;
                 if let Err(e) = conn {
@@ -1598,6 +1683,8 @@ impl Client {
                     token,
                     conn_type,
                     &interface.get_switch_code(),
+                    #[cfg(feature = "nikodesk")]
+                    route.clone(),
                 )
                 .await
                 {
@@ -1812,15 +1899,22 @@ impl Client {
         token: &str,
         conn_type: ConnType,
         switch_code: &str,
+        #[cfg(feature = "nikodesk")]
+        route: Arc<crate::nikodesk::connection_snapshot::ConnectionSnapshot>,
     ) -> ResultType<Stream> {
+        #[cfg(feature = "nikodesk")]
+        let relay_server = route.relay_target(&relay_server)?;
         let mut succeed = false;
         let mut uuid = "".to_owned();
         let mut ipv4 = true;
 
         for i in 1..=3 {
             // use different socket due to current hbbs implementation requiring different nat address for each attempt
-            let mut socket = connect_tcp(rendezvous_server, CONNECT_TIMEOUT)
-                .await
+            #[cfg(feature = "nikodesk")]
+            let attempt = route.connect_server(route.rendezvous().to_owned(), false, CONNECT_TIMEOUT).await;
+            #[cfg(not(feature = "nikodesk"))]
+            let attempt = connect_tcp(rendezvous_server, CONNECT_TIMEOUT).await;
+            let mut socket = attempt
                 .with_context(|| "Failed to connect to rendezvous server")?;
 
             if !key.is_empty() && (!token.is_empty() || !switch_code.is_empty()) {
@@ -1864,7 +1958,9 @@ impl Client {
         if !succeed {
             bail!("Timeout");
         }
-        Self::create_relay(peer, uuid, relay_server, key, conn_type, ipv4).await
+        Self::create_relay(peer, uuid, relay_server, key, conn_type, ipv4,
+            #[cfg(feature = "nikodesk")]
+            route).await
     }
 
     /// Create a relay connection to the server.
@@ -1875,7 +1971,13 @@ impl Client {
         key: &str,
         conn_type: ConnType,
         ipv4: bool,
+        #[cfg(feature = "nikodesk")]
+        route: Arc<crate::nikodesk::connection_snapshot::ConnectionSnapshot>,
     ) -> ResultType<Stream> {
+        #[cfg(feature = "nikodesk")]
+        let mut conn = route.connect_server(route.relay_target(&relay_server)?, true, CONNECT_TIMEOUT).await
+            .with_context(|| "Failed to connect to relay server")?;
+        #[cfg(not(feature = "nikodesk"))]
         let mut conn = connect_tcp(
             ipv4_to_ipv6(check_port(relay_server, RELAY_PORT), ipv4),
             CONNECT_TIMEOUT,
@@ -2750,10 +2852,14 @@ impl VideoHandler {
     ) -> ResultType<bool> {
         let format = CodecFormat::from(&vf);
         if format != self.decoder.format() {
+            #[cfg(feature = "nikodesk")]
+            crate::nikodesk::video_metrics::clear_decoder();
             self.reset(Some(format));
         }
         match &vf.union {
             Some(frame) => {
+                #[cfg(feature = "nikodesk")]
+                let decode_timer = crate::nikodesk::video_metrics::measure(crate::nikodesk::video_metrics::Stage::DecodeConvert);
                 let res = self.decoder.handle_video_frame(
                     frame,
                     &mut self.rgb,
@@ -2761,6 +2867,15 @@ impl VideoHandler {
                     pixelbuffer,
                     chroma,
                 );
+                #[cfg(feature = "nikodesk")]
+                {
+                    drop(decode_timer);
+                    if res.as_ref().is_ok_and(|output| *output) {
+                        crate::nikodesk::video_metrics::decoder_output(|| self.decoder.niko_backend());
+                    } else if res.is_err() {
+                        crate::nikodesk::video_metrics::count(crate::nikodesk::video_metrics::Counter::DecodeErrors);
+                    }
+                }
                 if res.as_ref().is_ok_and(|x| *x) {
                     self.fail_counter = 0;
                 } else {
@@ -2888,6 +3003,12 @@ struct ConnToken {
 #[derive(Default)]
 pub struct LoginConfigHandler {
     id: String,
+    #[cfg(feature = "nikodesk")]
+    peer_storage_key: Option<crate::nikodesk::server_scope::PeerStorageKey>,
+    #[cfg(feature = "nikodesk")]
+    peer_storage_lease: Option<Arc<crate::nikodesk::peer_migration::PeerLease>>,
+    #[cfg(feature = "nikodesk")]
+    connection_snapshot: Option<Arc<crate::nikodesk::connection_snapshot::ConnectionSnapshot>>,
     pub conn_type: ConnType,
     pub is_terminal_admin: bool,
     hash: Hash,
@@ -2967,10 +3088,32 @@ impl LoginConfigHandler {
         id: String,
         conn_type: ConnType,
         switch_uuid: Option<String>,
-        mut force_relay: bool,
+        force_relay: bool,
         adapter_luid: Option<i64>,
         shared_password: Option<String>,
         conn_token: Option<String>,
+    ) {
+        self.initialize_inner(id, conn_type, switch_uuid, force_relay, adapter_luid, shared_password, conn_token,
+            #[cfg(feature = "nikodesk")]
+            crate::nikodesk::connection_snapshot::ConnectionSnapshot::capture_current().ok());
+    }
+
+    #[cfg(feature = "nikodesk")]
+    pub(crate) fn initialize_with_snapshot(
+        &mut self, id: String, conn_type: ConnType, switch_uuid: Option<String>, force_relay: bool,
+        adapter_luid: Option<i64>, shared_password: Option<String>, conn_token: Option<String>,
+        snapshot: Arc<crate::nikodesk::connection_snapshot::ConnectionSnapshot>,
+    ) -> ResultType<()> {
+        self.initialize_inner(id, conn_type, switch_uuid, force_relay, adapter_luid, shared_password, conn_token, Some(snapshot));
+        if self.peer_storage_lease.is_none() { bail!("NikoDesk peer storage is unavailable"); }
+        Ok(())
+    }
+
+    fn initialize_inner(
+        &mut self, id: String, conn_type: ConnType, switch_uuid: Option<String>, mut force_relay: bool,
+        adapter_luid: Option<i64>, shared_password: Option<String>, conn_token: Option<String>,
+        #[cfg(feature = "nikodesk")]
+        snapshot: Option<Arc<crate::nikodesk::connection_snapshot::ConnectionSnapshot>>,
     ) {
         let mut id = id;
         if id.contains("@") {
@@ -3010,6 +3153,14 @@ impl LoginConfigHandler {
         }
 
         self.id = id;
+        #[cfg(feature = "nikodesk")]
+        {
+            self.peer_storage_key = snapshot.as_ref().and_then(|snapshot| snapshot.peer_key(&self.id));
+            self.peer_storage_lease = self.peer_storage_key.as_ref()
+                .and_then(|key| crate::nikodesk::peer_migration::acquire_lease(key.storage()).ok());
+            if self.peer_storage_lease.is_none() { self.peer_storage_key = None; }
+            self.connection_snapshot = snapshot;
+        }
         self.conn_type = conn_type;
         let config = self.load_config();
         self.remember = !config.password.is_empty();
@@ -3044,8 +3195,16 @@ impl LoginConfigHandler {
         self.peer_relay =
             config::option2bool("force-always-relay", &self.get_option("force-always-relay"))
                 || force_relay;
-        self.policy_relay = self.peer_relay || Config::is_proxy();
-        self.force_relay = self.policy_relay || use_ws();
+        #[cfg(feature = "nikodesk")]
+        {
+            self.policy_relay = self.peer_relay || self.connection_snapshot.as_ref().map_or(false, |route| route.proxy_enabled());
+            self.force_relay = self.peer_relay || self.connection_snapshot.as_ref().map_or(false, |route| route.forces_relay());
+        }
+        #[cfg(not(feature = "nikodesk"))]
+        {
+            self.policy_relay = self.peer_relay || Config::is_proxy();
+            self.force_relay = self.policy_relay || use_ws();
+        }
         if let Some((real_id, server, key)) = &self.other_server {
             let other_server_key = self.get_option("other-server-key");
             if !other_server_key.is_empty() && key.is_empty() {
@@ -3068,9 +3227,14 @@ impl LoginConfigHandler {
         self.record_permission = true;
 
         // `std::env::remove_var("IS_TERMINAL_ADMIN");` is called in `session_add_sync()` - `flutter_ffi.rs`.
-        let is_terminal_admin = conn_type == ConnType::TERMINAL
+        let is_terminal_admin = !cfg!(feature="nikodesk") && conn_type == ConnType::TERMINAL
             && std::env::var("IS_TERMINAL_ADMIN").map_or(false, |v| v == "Y");
         self.is_terminal_admin = is_terminal_admin;
+    }
+
+    #[cfg(feature = "nikodesk")]
+    pub(crate) fn connection_snapshot(&self) -> Option<Arc<crate::nikodesk::connection_snapshot::ConnectionSnapshot>> {
+        self.connection_snapshot.clone()
     }
 
     #[cfg(feature = "flutter")]
@@ -3108,10 +3272,10 @@ impl LoginConfigHandler {
         debug_assert!(self.id.len() > 0);
         #[cfg(feature = "nikodesk")]
         {
-            let mut config = PeerConfig::load(&self.id);
-            crate::nikodesk::clear_saved_credentials(&mut config.password, &mut config.options);
-            return config;
+            return self.peer_storage_key.as_ref()
+                .map_or_else(PeerConfig::default, |key| key.load());
         }
+        #[cfg(not(feature = "nikodesk"))]
         PeerConfig::load(&self.id)
     }
 
@@ -3127,6 +3291,11 @@ impl LoginConfigHandler {
             crate::nikodesk::clear_saved_credentials(&mut config.password, &mut config.options);
             config
         };
+        #[cfg(feature = "nikodesk")]
+        if let Some(key) = &self.peer_storage_key {
+            key.store(&config);
+        }
+        #[cfg(not(feature = "nikodesk"))]
         config.store(&self.id);
         self.config = config;
     }
@@ -3275,6 +3444,8 @@ impl LoginConfigHandler {
     // `toggle_option()` is only called in a session.
     // Custom client advanced settings will not effect this function.
     pub fn toggle_option(&mut self, name: String) -> Option<Message> {
+        #[cfg(feature="nikodesk")]
+        if name==keys::OPTION_TERMINAL_PERSISTENT {return None;}
         let mut option = OptionMessage::default();
         let mut config = self.load_config();
         if name == "show-remote-cursor" {
@@ -3407,6 +3578,11 @@ impl LoginConfigHandler {
                 &mut self.config.password,
                 &mut self.config.options,
             );
+            #[cfg(feature = "nikodesk")]
+            if let Some(key) = &self.peer_storage_key {
+                key.store(&self.config);
+            }
+            #[cfg(not(feature = "nikodesk"))]
             self.config.store(&self.id);
             return None;
         }
@@ -3448,6 +3624,8 @@ impl LoginConfigHandler {
         }
         let mut msg = OptionMessage::new();
         if self.conn_type.eq(&ConnType::TERMINAL) {
+            #[cfg(feature="nikodesk")]
+            return None;
             if self.get_toggle_option(keys::OPTION_TERMINAL_PERSISTENT) {
                 msg.terminal_persistent = BoolOption::Yes.into();
                 return Some(msg);
@@ -3560,7 +3738,7 @@ impl LoginConfigHandler {
         } else if name == "lock-after-session-end" {
             self.config.lock_after_session_end.v
         } else if name == keys::OPTION_TERMINAL_PERSISTENT {
-            self.config.terminal_persistent.v
+            !cfg!(feature="nikodesk") && self.config.terminal_persistent.v
         } else if name == "privacy-mode" {
             self.config.privacy_mode.v
         } else if name == keys::OPTION_ENABLE_FILE_COPY_PASTE {
@@ -3923,7 +4101,7 @@ impl LoginConfigHandler {
         } else {
             Bytes::new()
         };
-        let os_login: MessageField<OSLogin> = if self.conn_type == ConnType::TERMINAL {
+        let os_login: MessageField<OSLogin> = if !cfg!(feature="nikodesk") && self.conn_type == ConnType::TERMINAL {
             Some(OSLogin {
                 username: os_username,
                 password: os_password,
@@ -3962,7 +4140,8 @@ impl LoginConfigHandler {
             }),
             ConnType::TERMINAL => {
                 let mut terminal = Terminal::new();
-                terminal.service_id = self.get_option(self.get_key_terminal_service_id());
+                #[cfg(not(feature="nikodesk"))]
+                {terminal.service_id = self.get_option(self.get_key_terminal_service_id());}
                 lr.set_terminal(terminal);
             }
             _ => {}
@@ -4072,6 +4251,8 @@ pub fn start_video_thread<F, T>(
     fps: Arc<RwLock<Option<usize>>>,
     chroma: Arc<RwLock<Option<Chroma>>>,
     discard_queue: Arc<RwLock<bool>>,
+    #[cfg(feature = "nikodesk")]
+    video_metrics: Option<Arc<crate::nikodesk::video_metrics::DisplayTelemetry>>,
     video_callback: F,
 ) where
     F: 'static + FnMut(usize, &mut scrap::ImageRgb, *mut c_void, bool) + Send,
@@ -4082,6 +4263,8 @@ pub fn start_video_thread<F, T>(
     let is_view_camera = session.is_view_camera();
 
     std::thread::spawn(move || {
+        #[cfg(feature = "nikodesk")]
+        let _metrics_thread = crate::nikodesk::video_metrics::install_thread(video_metrics);
         #[cfg(windows)]
         sync_cpu_usage();
         get_hwcodec_config();
@@ -4101,6 +4284,8 @@ pub fn start_video_thread<F, T>(
                             MediaData::VideoQueue => {
                                 if let Some(vf) = video_queue.read().unwrap().pop() {
                                     if discard_queue.read().unwrap().clone() {
+                                        #[cfg(feature = "nikodesk")]
+                                        crate::nikodesk::video_metrics::count(crate::nikodesk::video_metrics::Counter::RefreshDiscard);
                                         continue;
                                     }
                                     vf
@@ -4132,6 +4317,8 @@ pub fn start_video_thread<F, T>(
                             let format_changed = handler.decoder.format() != format;
                             match handler.handle_frame(vf, &mut pixelbuffer, &mut tmp_chroma) {
                                 Ok(true) => {
+                                    #[cfg(feature = "nikodesk")]
+                                    crate::nikodesk::video_metrics::count(crate::nikodesk::video_metrics::Counter::DecodedCallbacks);
                                     video_callback(
                                         display,
                                         &mut handler.rgb,
@@ -4196,6 +4383,8 @@ pub fn start_video_thread<F, T>(
                         }
                     }
                     MediaData::Reset => {
+                        #[cfg(feature = "nikodesk")]
+                        crate::nikodesk::video_metrics::clear_decoder();
                         if let Some(handler) = video_handler.as_mut() {
                             handler.reset(None);
                         }
@@ -4961,6 +5150,13 @@ pub trait Interface: Send + Clone + 'static + Sized {
 
     fn get_lch(&self) -> Arc<RwLock<LoginConfigHandler>>;
 
+    #[cfg(feature = "nikodesk")]
+    fn connection_snapshot(&self) -> ResultType<Arc<crate::nikodesk::connection_snapshot::ConnectionSnapshot>> {
+        let handler = self.get_lch();
+        let handler = handler.read().map_err(|_| anyhow!("NikoDesk session lock is unavailable"))?;
+        handler.connection_snapshot().ok_or_else(|| anyhow!("NikoDesk session has no captured server identity"))
+    }
+
     fn get_id(&self) -> String {
         self.get_lch().read().unwrap().id.clone()
     }
@@ -5292,6 +5488,10 @@ pub async fn hc_connection(
     rendezvous_server: String,
     token: &str,
 ) -> Option<tokio::sync::mpsc::UnboundedSender<()>> {
+    #[cfg(feature = "nikodesk")]
+    { let _ = (feedback, rendezvous_server, token); return None; }
+    #[cfg(not(feature = "nikodesk"))]
+    {
     if feedback == 0 || rendezvous_server.is_empty() || token.is_empty() {
         return None;
     }
@@ -5301,6 +5501,7 @@ pub async fn hc_connection(
         allow_err!(hc_connection_(rendezvous_server, rx, token).await);
     });
     Some(tx)
+    }
 }
 
 async fn hc_connection_(

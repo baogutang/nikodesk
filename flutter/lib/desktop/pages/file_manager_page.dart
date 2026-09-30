@@ -15,6 +15,9 @@ import 'package:flutter_hbb/desktop/widgets/list_search_action_listener.dart';
 import 'package:flutter_hbb/desktop/widgets/menu_button.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/file_model.dart';
+import 'package:flutter_hbb/nikodesk/file_tasks.dart';
+import 'package:flutter_hbb/nikodesk/file_drop.dart';
+import 'package:flutter_hbb/nikodesk/ui.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:flutter_hbb/web/dummy.dart'
@@ -59,9 +62,11 @@ class FileManagerPage extends StatefulWidget {
       required this.isSharedPassword,
       this.tabController,
       this.connToken,
+      this.serverNamespace,
       this.forceRelay})
       : super(key: key);
   final String id;
+  final String? serverNamespace;
   final String? password;
   final bool? isSharedPassword;
   final bool? forceRelay;
@@ -95,10 +100,15 @@ class _FileManagerPageState extends State<FileManagerPage>
   @override
   void initState() {
     super.initState();
+    if (const bool.fromEnvironment('NIKODESK')) {
+      final language = bind.mainGetLocalOption(key: 'lang');
+      NikoLanguage.english = language.isNotEmpty && !language.startsWith('zh');
+    }
     _ffi = FFI(null);
     _ffi.start(widget.id,
         isFileTransfer: true,
         password: widget.password,
+        serverNamespace: widget.serverNamespace,
         isSharedPassword: widget.isSharedPassword,
         connToken: widget.connToken,
         forceRelay: widget.forceRelay);
@@ -111,7 +121,9 @@ class _FileManagerPageState extends State<FileManagerPage>
     if (isWeb) {
       _ffi.ffiModel.updateEventListener(_ffi.sessionId, widget.id);
     }
-    debugPrint("File manager page init success with id ${widget.id}");
+    debugPrint(const bool.fromEnvironment('NIKODESK')
+        ? 'NikoDesk file manager page initialized'
+        : "File manager page init success with id ${widget.id}");
     _ffi.dialogManager.setOverlayState(_overlayKeyState);
     // Call onSelected in post frame callback, since we cannot guarantee that the callback will not call setState.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -164,7 +176,12 @@ class _FileManagerPageState extends State<FileManagerPage>
       OverlayEntry(builder: (_) {
         return willPopScope(Scaffold(
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-          body: Row(
+          body: const bool.fromEnvironment('NIKODESK') && !isWeb
+              ? NikoFileWorkspace(
+                  local: dropArea(FileManagerView(model.localController, _ffi, _mouseFocusScope)),
+                  remote: dropArea(FileManagerView(model.remoteController, _ffi, _mouseFocusScope)),
+                  tasks: NikoFileTasks(controller: jobController))
+              : Row(
             children: [
               if (!isWeb)
                 Flexible(
@@ -400,6 +417,20 @@ class _FileManagerPageState extends State<FileManagerPage>
   }
 
   void handleDragDone(DropDoneDetails details, bool isLocal) {
+    if (const bool.fromEnvironment('NIKODESK')) {
+      unawaited(nikoSendLocalDrop(droppedOnLocal: isLocal,
+          files: details.files.map((file) => NikoDroppedFile(file.path, file.name)),
+          destination: model.remoteController.directoryData(),
+          capturedContext: model.nikoTransferContext,
+          currentContext: () => model.nikoTransferContext,
+          send: model.localController.sendFiles).catchError((Object _) {
+        if (mounted) {
+          nikoNotice(context, nikoText('无法读取拖入的文件或会话已变化，请重新选择。',
+              'The dropped files could not be read or the session changed. Select them again.'));
+        }
+      }));
+      return;
+    }
     if (isLocal) {
       // ignore local
       return;
@@ -441,6 +472,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   final _sizeColWidth = 0.0.obs;
   final _fileListScrollController = ScrollController();
   final _globalHeaderKey = GlobalKey();
+  StreamSubscription<FileDirectory>? _nikoDirectorySubscription;
 
   /// [_lastClickTime], [_lastClickEntry] help to handle double click
   var _lastClickTime =
@@ -460,11 +492,16 @@ class _FileManagerViewState extends State<FileManagerView> {
     super.initState();
     // register location listener
     _locationNode.addListener(onLocationFocusChanged);
-    controller.directory.listen((e) => breadCrumbScrollToEnd());
+    if (const bool.fromEnvironment('NIKODESK')) {
+      _nikoDirectorySubscription = controller.directory.listen((e) => breadCrumbScrollToEnd());
+    } else {
+      controller.directory.listen((e) => breadCrumbScrollToEnd());
+    }
   }
 
   @override
   void dispose() {
+    _nikoDirectorySubscription?.cancel();
     _locationNode.removeListener(onLocationFocusChanged);
     _locationNode.dispose();
     _keyboardNode.dispose();
@@ -482,7 +519,8 @@ class _FileManagerViewState extends State<FileManagerView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          headTools(),
+          const bool.fromEnvironment('NIKODESK')
+              ? NikoFilePaneTools(child: headTools()) : headTools(),
           Expanded(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -497,7 +535,9 @@ class _FileManagerViewState extends State<FileManagerView> {
                   },
                   onExit: (evt) =>
                       widget._mouseFocusScope.value = MouseFocusScope.none,
-                  child: _buildFileList(context, _fileListScrollController),
+                  child: const bool.fromEnvironment('NIKODESK')
+                      ? NikoFileDirectoryTable(child: _buildFileList(context, _fileListScrollController))
+                      : _buildFileList(context, _fileListScrollController),
                 ))
               ],
             ),
@@ -508,6 +548,14 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   void _handleColumnPorportions() {
+    if (const bool.fromEnvironment('NIKODESK')) {
+      final scale = max(1.0, MediaQuery.textScalerOf(context).scale(16) / 16);
+      _fileTransferMinimumWidth = 64 * scale;
+      _nameColWidth.value = max(_nameColWidth.value, 190 * scale);
+      _modifiedColWidth.value = max(_modifiedColWidth.value, 160 * scale);
+      _sizeColWidth.value = max(_sizeColWidth.value, 90 * scale);
+      return;
+    }
     final windowWidthNow = MediaQuery.of(context).size.width;
     if (_windowWidthPrev == null) {
       _windowWidthPrev = windowWidthNow;
@@ -1104,7 +1152,7 @@ class _FileManagerViewState extends State<FileManagerView> {
           return;
         }
         _jumpToEntry(isLocal, searchResult.first, scrollController,
-            kDesktopFileTransferRowHeight);
+            _fileRowHeight);
       },
       onSearch: (buffer) {
         debugPrint("searching for $buffer");
@@ -1117,7 +1165,7 @@ class _FileManagerViewState extends State<FileManagerView> {
           return;
         }
         _jumpToEntry(isLocal, searchResult.first, scrollController,
-            kDesktopFileTransferRowHeight);
+            _fileRowHeight);
       },
       child: Obx(() {
         final entries = controller.directory.value.entries;
@@ -1199,7 +1247,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                       : null,
                 ),
                 key: ValueKey(entry.name),
-                height: kDesktopFileTransferRowHeight,
+                height: _fileRowHeight,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
@@ -1323,7 +1371,7 @@ class _FileManagerViewState extends State<FileManagerView> {
             Expanded(
               child: ListView.builder(
                 controller: scrollController,
-                itemExtent: kDesktopFileTransferRowHeight,
+                itemExtent: _fileRowHeight,
                 itemBuilder: (context, index) {
                   return rows.elementAt(index);
                 },
@@ -1424,11 +1472,19 @@ class _FileManagerViewState extends State<FileManagerView> {
     column2.value = max(_fileTransferMinimumWidth, column2.value);
   }
 
+  double get _fileRowHeight => const bool.fromEnvironment('NIKODESK')
+      ? nikoFileRowExtent(context, kDesktopFileTransferRowHeight)
+      : kDesktopFileTransferRowHeight;
+
+  double get _fileHeaderHeight => const bool.fromEnvironment('NIKODESK')
+      ? nikoFileRowExtent(context, kDesktopFileTransferHeaderHeight)
+      : kDesktopFileTransferHeaderHeight;
+
   Widget _buildFileBrowserHeader(BuildContext context) {
     final padding = EdgeInsets.all(1.0);
     return SizedBox(
       key: _globalHeaderKey,
-      height: kDesktopFileTransferHeaderHeight,
+      height: _fileHeaderHeight,
       child: Row(
         children: [
           Obx(
@@ -1474,7 +1530,7 @@ class _FileManagerViewState extends State<FileManagerView> {
               },
               child: SizedBox(
                 width: width,
-                height: kDesktopFileTransferHeaderHeight,
+                height: _fileHeaderHeight,
                 child: Row(
                   children: [
                     Expanded(

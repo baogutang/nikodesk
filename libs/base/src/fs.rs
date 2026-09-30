@@ -251,6 +251,81 @@ pub fn get_empty_dirs_recursive(
     read_empty_dirs_recursive(&get_path(path), &get_path(""), include_hidden)
 }
 
+struct EmptyDirectoryScan {
+    empty: bool,
+    children: Vec<PathBuf>,
+}
+
+fn scan_empty_directory(path: &Path, include_hidden: bool) -> ResultType<EmptyDirectoryScan> {
+    let metadata = std::fs::symlink_metadata(path)?;
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        bail!("empty-directory source is not a directory");
+    }
+    let mut scan = EmptyDirectoryScan {
+        empty: true,
+        children: Vec::new(),
+    };
+    for entry in std::fs::read_dir(path)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        let _name = name
+            .to_str()
+            .ok_or_else(|| anyhow!("empty-directory name is not UTF-8"))?;
+        let child = entry.path();
+        let metadata = std::fs::symlink_metadata(&child)?;
+        #[cfg(windows)]
+        let hidden = metadata.file_attributes() & 0x2 != 0;
+        #[cfg(not(windows))]
+        let hidden = _name.starts_with('.');
+        if hidden && !include_hidden {
+            continue;
+        }
+        scan.empty = false;
+        // Keep links as entries, matching the old walk without following them
+        // into a tree outside the selected source.
+        if metadata.is_dir() && !metadata.file_type().is_symlink() {
+            scan.children.push(child);
+        }
+    }
+    Ok(scan)
+}
+
+fn read_empty_dirs_fallible_with<F>(
+    root: &Path,
+    include_hidden: bool,
+    mut scan: F,
+) -> ResultType<Vec<FileDirectory>>
+where
+    F: FnMut(&Path, bool) -> ResultType<EmptyDirectoryScan>,
+{
+    let mut pending = vec![root.to_path_buf()];
+    let mut directories = Vec::new();
+    while let Some(path) = pending.pop() {
+        let result = scan(&path, include_hidden)?;
+        if result.empty {
+            if directories.len() >= 4096 {
+                bail!("too many empty directories");
+            }
+            directories.push(FileDirectory {
+                path: get_string(&path),
+                ..Default::default()
+            });
+        }
+        pending.extend(result.children);
+    }
+    Ok(directories)
+}
+
+/// No partial empty-directory list is returned after a failed entry or subtree
+/// read. Callers can stop the independent directory-creation phase safely.
+pub fn get_empty_dirs_recursive_fallible(
+    path: &str,
+    include_hidden: bool,
+) -> ResultType<Vec<FileDirectory>> {
+    validate_fs_path_argument(path, "empty-directory source")?;
+    read_empty_dirs_fallible_with(&get_path(path), include_hidden, scan_empty_directory)
+}
+
 #[inline]
 pub fn is_file_exists(file_path: &str) -> bool {
     return Path::new(file_path).exists();
@@ -1570,6 +1645,87 @@ mod tests {
         let mut entry = FileEntry::new();
         entry.name = name.to_string();
         entry
+    }
+
+    #[test]
+    fn nikodesk_empty_directory_walk_keeps_real_nested_and_empty_paths() {
+        let dir = TestTempDir::new("nikodesk_empty_directories");
+        std::fs::create_dir_all(dir.join("a/empty")).unwrap();
+        std::fs::create_dir_all(dir.join("b")).unwrap();
+        std::fs::write(dir.join("file.txt"), b"content").unwrap();
+        let mut paths: Vec<_> = get_empty_dirs_recursive_fallible(
+            dir.path.to_str().unwrap(), true,
+        ).unwrap().into_iter().map(|fd| fd.path).collect();
+        paths.sort();
+        assert_eq!(paths, vec![get_string(&dir.join("a/empty")), get_string(&dir.join("b"))]);
+        let empty = TestTempDir::new("nikodesk_empty_root");
+        std::fs::create_dir_all(&empty.path).unwrap();
+        let result = get_empty_dirs_recursive_fallible(empty.path.to_str().unwrap(), true).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].path, get_string(&empty.path));
+    }
+
+    #[test]
+    fn nikodesk_empty_directory_walk_propagates_subtree_read_failure() {
+        let dir = TestTempDir::new("nikodesk_empty_read_failure");
+        std::fs::create_dir_all(dir.join("good")).unwrap();
+        std::fs::create_dir_all(dir.join("denied")).unwrap();
+        let mut scans = 0;
+        let result = read_empty_dirs_fallible_with(&dir.path, true, |path, hidden| {
+            scans += 1;
+            if path == dir.join("denied") {
+                return Err(anyhow!("injected directory read denied"));
+            }
+            scan_empty_directory(path, hidden)
+        });
+        assert!(result.is_err());
+        assert!(scans >= 2);
+    }
+
+    #[test]
+    fn nikodesk_empty_directory_walk_rejects_deleted_child_and_missing_root() {
+        let dir = TestTempDir::new("nikodesk_empty_deleted_child");
+        std::fs::create_dir_all(dir.join("child")).unwrap();
+        let result = read_empty_dirs_fallible_with(&dir.path, true, |path, hidden| {
+            let scan = scan_empty_directory(path, hidden)?;
+            if path == dir.path { std::fs::remove_dir(dir.join("child"))?; }
+            Ok(scan)
+        });
+        assert!(result.is_err());
+        assert!(get_empty_dirs_recursive_fallible(dir.join("missing").to_str().unwrap(), true).is_err());
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn nikodesk_empty_directory_walk_honors_the_captured_hidden_option() {
+        let dir = TestTempDir::new("nikodesk_empty_hidden");
+        std::fs::create_dir_all(dir.join(".hidden")).unwrap();
+        assert_eq!(get_empty_dirs_recursive_fallible(dir.path.to_str().unwrap(), false).unwrap()[0].path, get_string(&dir.path));
+        assert_eq!(get_empty_dirs_recursive_fallible(dir.path.to_str().unwrap(), true).unwrap()[0].path, get_string(&dir.join(".hidden")));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn nikodesk_empty_directory_walk_does_not_follow_directory_links() {
+        let dir = TestTempDir::new("nikodesk_empty_link_root");
+        let outside = TestTempDir::new("nikodesk_empty_link_destination");
+        std::fs::create_dir_all(&dir.path).unwrap();
+        std::fs::create_dir_all(&outside.path).unwrap();
+        std::os::unix::fs::symlink(&outside.path, dir.join("link")).unwrap();
+        assert!(get_empty_dirs_recursive_fallible(dir.path.to_str().unwrap(), true).unwrap().is_empty());
+        assert!(get_empty_dirs_recursive_fallible(dir.join("link").to_str().unwrap(), true).is_err());
+    }
+
+    #[test]
+    fn nikodesk_empty_directory_walk_bounds_the_returned_directory_list() {
+        let root = Path::new("/isolated-fixture");
+        let result = read_empty_dirs_fallible_with(root, true, |path, _| {
+            Ok(EmptyDirectoryScan {
+                empty: path != root,
+                children: if path == root { (0..4097).map(|index| root.join(index.to_string())).collect() } else { vec![] },
+            })
+        });
+        assert!(result.is_err());
     }
 
     fn new_validation_job(id: i32) -> TransferJob {

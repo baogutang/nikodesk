@@ -18,11 +18,13 @@ class TerminalPage extends StatefulWidget {
     required this.terminalId,
     required this.tabKey,
     this.forceRelay,
+    this.serverNamespace,
     this.connToken,
     this.onClipboardWriteBlocked,
     this.onClipboardWriteSucceeded,
   }) : super(key: key);
   final String id;
+  final String? serverNamespace;
   final String? password;
   final DesktopTabController tabController;
   final bool? forceRelay;
@@ -68,6 +70,7 @@ class _TerminalPageState extends State<TerminalPage>
     _ffi = TerminalConnectionManager.getConnection(
       peerId: widget.id,
       password: widget.password,
+      serverNamespace: widget.serverNamespace,
       isSharedPassword: widget.isSharedPassword,
       forceRelay: widget.forceRelay,
       connToken: widget.connToken,
@@ -115,8 +118,8 @@ class _TerminalPageState extends State<TerminalPage>
       // Check if this is a new connection or additional terminal
       // Note: When a connection exists, the ref count will be > 1 after this terminal is added
       final isExistingConnection =
-          TerminalConnectionManager.hasConnection(widget.id) &&
-              TerminalConnectionManager.getTerminalCount(widget.id) > 1;
+          TerminalConnectionManager.hasConnection(widget.id, serverNamespace: widget.serverNamespace) &&
+              TerminalConnectionManager.getTerminalCount(widget.id, serverNamespace: widget.serverNamespace) > 1;
 
       if (!isExistingConnection) {
         // First terminal - show loading dialog, wait for onReady
@@ -139,7 +142,7 @@ class _TerminalPageState extends State<TerminalPage>
     _terminalModel.dispose();
     _terminalFocusNode.dispose();
     // Release connection reference instead of closing directly
-    TerminalConnectionManager.releaseConnection(widget.id);
+    TerminalConnectionManager.releaseConnection(widget.id, serverNamespace: widget.serverNamespace);
     super.dispose();
   }
 

@@ -4,7 +4,12 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
+import 'package:flutter_hbb/generated_bridge.dart'
+    if (dart.library.html) 'package:flutter_hbb/web/bridge.dart' show Rustdesk;
 import 'package:flutter_hbb/utils/event_loop.dart';
+import 'package:flutter_hbb/nikodesk/file_transfer.dart';
+import 'package:flutter_hbb/nikodesk/file_conflict_dialog.dart';
+import 'package:flutter_hbb/nikodesk/file_directory_transfer.dart';
 import 'package:get/get.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter_hbb/web/dummy.dart'
@@ -66,12 +71,38 @@ class FileModel {
   late final GetDialogManager getDialogManager;
   SessionID get sessionId => getSessionID();
   late final FileDialogEventLoop evtLoop;
+  bool _nikoReady = false;
+  int _nikoConnection = 0;
+
+  void nikoConnectionLost() {
+    _nikoReady = false;
+    fileFetcher.beginRemoteSession();
+    jobController.jobTable.refresh();
+  }
+
+  NikoTransferContext? get nikoTransferContext {
+    final ffi = parent.target;
+    final namespace = ffi?.serverNamespace;
+    if (ffi == null || namespace == null) return null;
+    return NikoTransferContext(sessionId: ffi.sessionId.toString(),
+        namespace: namespace, peerId: ffi.id, connection: _nikoConnection,
+        ready: _nikoReady && !ffi.closed,
+        fileAllowed: ffi.ffiModel.permissions['file'] != false);
+  }
 
   FileModel(this.parent) {
     getSessionID = () => parent.target!.sessionId;
     getDialogManager = () => parent.target?.dialogManager;
     fileFetcher = FileFetcher(getSessionID);
     jobController = JobController(getSessionID, getDialogManager);
+    if (const bool.fromEnvironment('NIKODESK')) {
+      jobController.nikoContext = () => nikoTransferContext;
+      jobController.nikoFolderTransfer = _nikoSendFolder;
+      jobController.nikoRequestProbe = (id, request) async {
+        await _nikoProbeTransferPaths(id, request,
+            destinationRequired: request.destinationExisted == true);
+      };
+    }
     localController = FileController(
         isLocal: true,
         getSessionID: getSessionID,
@@ -89,7 +120,87 @@ class FileModel {
     evtLoop = FileDialogEventLoop();
   }
 
+  Future<bool> _nikoProbeTransferPaths(int id, NikoTransferRequest request,
+      {required bool destinationRequired}) async {
+    void check() {
+      final reason = jobController.nikoFolderBlocked(id, request);
+      if (reason != null) throw NikoFolderFailure(reason);
+    }
+    check();
+    final sourcePath = request.sourceWindows! ? PathUtil.windowsContext : PathUtil.posixContext;
+    final targetPath = request.destinationWindows! ? PathUtil.windowsContext : PathUtil.posixContext;
+    final sourceParent = await fileFetcher.fetchDirectory(
+        sourcePath.dirname(request.source), !request.remoteToLocal, true);
+    check();
+    final sourceName = sourcePath.basename(request.source);
+    final source = sourceParent.entries.firstWhereOrNull((entry) =>
+        request.sourceWindows! ? entry.name.toLowerCase() == sourceName.toLowerCase() : entry.name == sourceName);
+    if (request.isDirectory ? source?.isDirectory != true : source?.isFile != true) {
+      throw const NikoFolderFailure(NikoFolderIssue.sourceChanged);
+    }
+    final targetParent = await fileFetcher.fetchDirectory(
+        targetPath.dirname(request.destination), request.remoteToLocal, true);
+    check();
+    final targetName = targetPath.basename(request.destination);
+    final target = targetParent.entries.firstWhereOrNull((entry) =>
+        request.destinationWindows! ? entry.name.toLowerCase() == targetName.toLowerCase() : entry.name == targetName);
+    if ((target != null && (request.isDirectory ? !target.isDirectory : !target.isFile)) ||
+        (destinationRequired && target == null)) {
+      throw const NikoFolderFailure(NikoFolderIssue.destinationChanged);
+    }
+    return target != null;
+  }
+
+  Future<void> _nikoSendFolder(int id, NikoTransferRequest request,
+      Future<void> Function() sendFiles) async {
+    var destinationObserved = request.destinationWasDirectory!;
+    final transfer = NikoDirectoryTransfer(
+      probe: (request) async {
+        destinationObserved = await _nikoProbeTransferPaths(id, request,
+            destinationRequired: destinationObserved) || destinationObserved;
+      },
+      readEmptyDirectories: (request) async => (await fileFetcher.readEmptyDirs(
+          request.source, !request.remoteToLocal, request.includeHidden)).map((dir) => dir.path).toList(),
+      probeEmptyDirectory: (request, source, _) async {
+        final reason = jobController.nikoFolderBlocked(id, request);
+        if (reason != null) throw NikoFolderFailure(reason);
+        final paths = request.sourceWindows! ? PathUtil.windowsContext : PathUtil.posixContext;
+        // The original root has already been verified; a listed child may have
+        // disappeared or changed type while earlier directory receipts waited.
+        if (paths.equals(paths.normalize(source), paths.normalize(request.source))) return;
+        final parent = await fileFetcher.fetchDirectory(
+            paths.dirname(source), !request.remoteToLocal, true);
+        final afterRead = jobController.nikoFolderBlocked(id, request);
+        if (afterRead != null) throw NikoFolderFailure(afterRead);
+        final name = paths.basename(source);
+        final entry = parent.entries.firstWhereOrNull((entry) => request.sourceWindows!
+            ? entry.name.toLowerCase() == name.toLowerCase() : entry.name == name);
+        if (entry?.isDirectory != true) {
+          throw const NikoFolderFailure(NikoFolderIssue.sourceChanged);
+        }
+      },
+      createDirectory: (target) async {
+        final receipt = await jobController.nikoCreateDirectory(id, request, target);
+        if (receipt == NikoFileReceipt.confirmed) destinationObserved = true;
+        return receipt;
+      },
+      blocked: () => jobController.nikoFolderBlocked(id, request),
+      progress: (progress) {
+        if (jobController.getJob(id) >= 0) {
+          jobController.niko.updateFolder(id, progress);
+          jobController.jobTable.refresh();
+        }
+      });
+    await transfer.send(request, sendFiles);
+    if (jobController.nikoFolderBlocked(id, request) == null) await refreshAll();
+  }
+
   Future<void> onReady() async {
+    if (const bool.fromEnvironment('NIKODESK')) {
+      _nikoConnection++;
+      _nikoReady = true;
+      jobController.jobTable.refresh();
+    }
     fileFetcher.beginRemoteSession();
     await evtLoop.onReady();
     if (!isWeb) await localController.onReady();
@@ -97,6 +208,7 @@ class FileModel {
   }
 
   Future<void> close() async {
+    if (const bool.fromEnvironment('NIKODESK')) nikoConnectionLost();
     await evtLoop.close();
     parent.target?.dialogManager.dismissAll();
     await localController.close();
@@ -138,6 +250,14 @@ class FileModel {
   // a pending readRecursiveTasks with this ID and complete it with the error.
   void handleJobError(Map<String, dynamic> evt) {
     final id = int.tryParse(evt['id']?.toString() ?? '');
+    if (const bool.fromEnvironment('NIKODESK') && id == -1 &&
+        evt['file_num']?.toString() == '-1' &&
+        evt['err'] == 'NIKODESK_EMPTY_DIRECTORY_READ_FAILED') {
+      // This legacy response has no path/request ID. End all pending empty-dir
+      // reads conservatively, without completing ordinary file/read jobs.
+      fileFetcher.failNikoEmptyDirectoryReads();
+      return;
+    }
     if (id != null) {
       final err = evt['err']?.toString() ?? 'Unknown error';
       if (id == 0) {
@@ -155,7 +275,8 @@ class FileModel {
   Future<void> postOverrideFileConfirm(Map<String, dynamic> evt) async {
     final id = int.tryParse(evt['id']?.toString() ?? '');
     if (id == null || !jobController.hasTransferConflictJob(id)) {
-      debugPrint("Ignore stale override confirm event: $evt");
+      debugPrint(const bool.fromEnvironment('NIKODESK')
+          ? 'NikoDesk ignored a stale file conflict' : "Ignore stale override confirm event: $evt");
       return;
     }
     evtLoop.pushEvent(
@@ -166,7 +287,8 @@ class FileModel {
       {bool? overrideConfirm, bool skip = false}) async {
     final id = int.tryParse(evt['id']?.toString() ?? '') ?? 0;
     if (id == 0 || !jobController.hasTransferConflictJob(id)) {
-      debugPrint("Ignore override confirm for inactive job: $evt");
+      debugPrint(const bool.fromEnvironment('NIKODESK')
+          ? 'NikoDesk ignored an inactive file conflict' : "Ignore override confirm for inactive job: $evt");
       return;
     }
     // If `skip == true`, it means to skip this file without showing dialog.
@@ -178,7 +300,8 @@ class FileModel {
                 "${evt['read_path']}", true, evt['is_identical'] == "true")
             : null);
     if (!jobController.hasTransferConflictJob(id)) {
-      debugPrint("Ignore override confirm result for inactive job: $evt");
+      debugPrint(const bool.fromEnvironment('NIKODESK')
+          ? 'NikoDesk ignored an inactive conflict result' : "Ignore override confirm result for inactive job: $evt");
       return;
     }
     if (false == resp) {
@@ -218,6 +341,12 @@ class FileModel {
     fileConfirmCheckboxRemember = false;
     return await parent.target?.dialogManager.show<bool?>(
         (setState, Function(bool? v) close, context) {
+      if (const bool.fromEnvironment('NIKODESK')) {
+        return NikoFileConflictDialog(path: content, identical: isIdentical,
+            showRemember: showCheckbox, remember: fileConfirmCheckboxRemember,
+            onRemember: (value) => setState(() => fileConfirmCheckboxRemember = value),
+            onDecision: close);
+      }
       cancel() => close(false);
       submit() => close(true);
       return CustomAlertDialog(
@@ -622,16 +751,41 @@ class FileController {
 
     final toPath = otherSideData.directory.path;
     final isWindows = otherSideData.options.isWindows;
-    final showHidden = otherSideData.options.showHidden;
+    final showHidden = const bool.fromEnvironment('NIKODESK')
+        ? options.value.showHidden : otherSideData.options.showHidden;
+    final nikoCapturedContext = const bool.fromEnvironment('NIKODESK')
+        ? jobController.nikoContext?.call() : null;
+    final nikoSourceWindows = options.value.isWindows;
     final transferJobs = <(Entry, int)>[];
     final transferJobIds = <int>[];
     for (var from in items.items) {
       final jobID = jobController.addTransferJob(from, isRemoteToLocal);
+      if (const bool.fromEnvironment('NIKODESK')) {
+        jobController.jobTable.last.state = JobState.none;
+        final context = nikoCapturedContext;
+        if (context != null) {
+          jobController.niko.capture(jobID,
+            NikoTransferRequest(context: context, source: from.path,
+              destination: PathUtil.join(toPath, from.name, isWindows),
+              remoteToLocal: isRemoteToLocal, includeHidden: showHidden,
+              isDirectory: from.isDirectory, size: from.size,
+              sourceWindows: nikoSourceWindows, destinationWindows: isWindows,
+              destinationExisted: otherSideData.directory.entries.any((entry) => isWindows
+                  ? entry.name.toLowerCase() == from.name.toLowerCase() : entry.name == from.name),
+              destinationWasDirectory: otherSideData.directory.entries
+                  .firstWhereOrNull((entry) => isWindows
+                    ? entry.name.toLowerCase() == from.name.toLowerCase() : entry.name == from.name)?.isDirectory == true));
+        }
+      }
       transferJobs.add((from, jobID));
       transferJobIds.add(jobID);
     }
     jobController.registerTransferConflictBatch(transferJobIds);
     for (final (from, jobID) in transferJobs) {
+      if (const bool.fromEnvironment('NIKODESK')) {
+        await jobController.nikoSendInitial(jobID);
+        continue;
+      }
       bind.sessionSendFiles(
           sessionId: sessionId,
           actId: jobID,
@@ -644,6 +798,8 @@ class FileController {
       debugPrint(
           "path: ${from.path}, toPath: $toPath, to: ${PathUtil.join(toPath, from.name, isWindows)}");
     }
+
+    if (const bool.fromEnvironment('NIKODESK')) return;
 
     if (isWeb ||
         (!isLocal &&
@@ -976,6 +1132,158 @@ const _kOneWayFileTransferError = 'one-way-file-transfer-tip';
 class JobController {
   static final JobID jobID = JobID();
   final jobTable = List<JobProgress>.empty(growable: true).obs;
+  final niko = NikoFileTransferLedger();
+  NikoTransferContext? Function()? nikoContext;
+  Future<void> Function(int, NikoTransferRequest, Future<void> Function())? nikoFolderTransfer;
+  Future<void> Function(int, NikoTransferRequest)? nikoRequestProbe;
+  final nikoDirectoryReceipts = NikoFileTaskReceipts();
+
+  int _nikoFreshId() {
+    final next = _nikoNextId?.call() ?? jobID.next();
+    if (getJob(next) >= 0) throw StateError('duplicate job');
+    return next;
+  }
+
+  NikoFolderIssue? nikoFolderBlocked(int id, NikoTransferRequest request) {
+    final current = nikoContext?.call();
+    if (current == null || !request.context.matches(current) || getJob(id) < 0) {
+      return NikoFolderIssue.sessionChanged;
+    }
+    if (niko.cancellation(id) != NikoCancelState.none) return NikoFolderIssue.cancelled;
+    if (!current.ready) return NikoFolderIssue.disconnected;
+    if (!current.fileAllowed) return NikoFolderIssue.permission;
+    if (jobTable[getJob(id)].state == JobState.error) return NikoFolderIssue.nativeError;
+    return null;
+  }
+
+  Future<NikoFileReceipt> nikoCreateDirectory(int transferId, NikoTransferRequest request, String target) async {
+    final id = _nikoFreshId();
+    final receipt = nikoDirectoryReceipts.wait(id, _nikoDirectoryTimeout);
+    try {
+      final reason = nikoFolderBlocked(transferId, request);
+      if (reason != null) throw NikoFolderFailure(reason);
+      await (_nikoBridge ?? bind).sessionCreateDir(
+          sessionId: SessionID(request.context.sessionId), actId: id,
+          path: target, isRemote: !request.remoteToLocal);
+    } catch (_) {
+      nikoDirectoryReceipts.accept(id, NikoFileReceipt.failed);
+    }
+    return await receipt;
+  }
+
+  Future<void> _nikoSendNew(int id, NikoTransferRequest request) async {
+    Future<void> send() async {
+      final reason = nikoFolderBlocked(id, request);
+      if (reason != null) throw NikoFolderFailure(reason);
+      jobTable[getJob(id)].state = JobState.inProgress;
+      jobTable.refresh();
+      try {
+        await (_nikoBridge ?? bind).sessionSendFiles(
+          sessionId: SessionID(request.context.sessionId), actId: id,
+          path: request.source, to: request.destination, fileNum: 0,
+          includeHidden: request.includeHidden,
+          isRemote: request.remoteToLocal, isDir: request.isDirectory);
+      } catch (_) {
+        jobError({'id': id.toString(), 'file_num': '0',
+          'err': 'The transfer request could not be sent. Reconnect and select the source again.'});
+        throw const NikoFolderFailure(NikoFolderIssue.nativeError);
+      }
+    }
+    if (request.isDirectory) {
+      if (!request.hasDirectoryContext || nikoFolderTransfer == null) {
+        niko.updateFolder(id, const NikoFolderProgress(NikoFolderState.blocked,
+            issue: NikoFolderIssue.invalidPaths));
+        throw const NikoFolderFailure(NikoFolderIssue.invalidPaths);
+      }
+      await nikoFolderTransfer!(id, request, send);
+    } else {
+      try {
+        await nikoRequestProbe?.call(id, request);
+        await send();
+      } on NikoFolderFailure catch (failure) {
+        if (getJob(id) >= 0) {
+          niko.updateFailure(id, failure.issue);
+          jobTable.refresh();
+        }
+        rethrow;
+      }
+    }
+  }
+
+  Future<bool> nikoSendInitial(int id) async {
+    try {
+      final request = niko.request(id);
+      if (request == null) throw StateError('missing request');
+      await _nikoSendNew(id, request);
+      return true;
+    } catch (_) {
+      final index = getJob(id);
+      if (index >= 0 && jobTable[index].state == JobState.none) {
+        jobError({'id': id.toString(), 'file_num': '0',
+          'err': niko.request(id) == null
+              ? 'The source, destination or session is unverified. Reopen file transfer and select absolute paths.'
+              : 'The transfer could not finish. Check the file task details or reconnect.'});
+      }
+      return false;
+    }
+  }
+
+  NikoRetryBlock? nikoRetryBlock(JobProgress job) =>
+      niko.retryBlock(job.id, job.type == JobType.transfer &&
+          (job.state == JobState.error ||
+            (job.state == JobState.done && niko.folder(job.id)?.incomplete == true)), nikoContext?.call());
+
+  Future<void> nikoCancelJob(int id) async {
+    if (getJob(id) < 0) return;
+    unregisterTransferConflictJob(id);
+    await niko.cancel(id,
+        (id) => (_nikoBridge ?? bind).sessionCancelJob(sessionId: sessionId, actId: id),
+        jobTable.refresh);
+  }
+
+  void nikoRemoveRecord(int id) {
+    final index = getJob(id);
+    if (index < 0) return;
+    final state = jobTable[index].state;
+    if ((state == JobState.inProgress || state == JobState.none ||
+          niko.folder(id)?.pending == true) &&
+        niko.cancellation(id) != NikoCancelState.requested) return;
+    jobTable.removeWhere((job) => job.id == id);
+    niko.remove(id);
+  }
+
+  Future<bool> nikoResendJob(int id) async {
+    final index = getJob(id);
+    if (index < 0) return false;
+    int? addedId;
+    try {
+      await niko.resend(id,
+          failed: jobTable[index].type == JobType.transfer &&
+              (jobTable[index].state == JobState.error ||
+                (jobTable[index].state == JobState.done && niko.folder(id)?.incomplete == true)),
+          current: () => nikoContext?.call(), nextId: _nikoFreshId,
+          add: (newId, request) {
+            addedId = newId;
+            jobTable.add(JobProgress()
+              ..type = JobType.transfer ..id = newId
+              ..fileName = path.basename(request.source)
+              ..jobName = request.source ..totalSize = request.size
+              ..state = JobState.none
+              ..isRemoteToLocal = request.remoteToLocal);
+            registerTransferConflictBatch([newId]);
+          },
+          send: _nikoSendNew,
+          refresh: jobTable.refresh);
+      return true;
+    } catch (_) {
+      if (addedId != null && getJob(addedId!) >= 0 &&
+          jobTable[getJob(addedId!)].state == JobState.none) {
+        jobError({'id': addedId.toString(),
+        'file_num': '0', 'err': 'The new transfer could not be sent. Reconnect and select the source again.'});
+      }
+      return false;
+    }
+  }
   final jobResultListener = JobResultListener<Map<String, dynamic>>();
   int _nextTransferConflictBatchId = 1;
   final Map<int, int> _transferConflictJobToBatch = {};
@@ -983,11 +1291,18 @@ class JobController {
   bool? _transferConflictRememberOverrideConfirm;
   final GetSessionID getSessionID;
   final GetDialogManager getDialogManager;
+  final Rustdesk? _nikoBridge;
+  final int Function()? _nikoNextId;
+  final Duration _nikoDirectoryTimeout;
   SessionID get sessionId => getSessionID();
   OverlayDialogManager? get alogManager => getDialogManager();
   int _lastTimeShowMsgbox = DateTime.now().millisecondsSinceEpoch;
 
-  JobController(this.getSessionID, this.getDialogManager);
+  JobController(this.getSessionID, this.getDialogManager,
+      {Rustdesk? nikoBridge, int Function()? nikoNextId,
+        Duration nikoDirectoryTimeout = const Duration(seconds: 5)})
+      : _nikoBridge = nikoBridge, _nikoNextId = nikoNextId,
+        _nikoDirectoryTimeout = nikoDirectoryTimeout;
 
   int getJob(int id) {
     return jobTable.indexWhere((element) => element.id == id);
@@ -1046,7 +1361,8 @@ class JobController {
 
   // return jobID
   int addTransferJob(Entry from, bool isRemoteToLocal) {
-    final jobID = JobController.jobID.next();
+    final jobID = const bool.fromEnvironment('NIKODESK')
+        ? _nikoFreshId() : JobController.jobID.next();
     jobTable.add(JobProgress()
       ..type = JobType.transfer
       ..fileName = path.basename(from.path)
@@ -1104,6 +1420,10 @@ class JobController {
   }
 
   Future<bool> jobDone(Map<String, dynamic> evt) async {
+    if (const bool.fromEnvironment('NIKODESK')) {
+      final id = int.tryParse(evt['id']?.toString() ?? '');
+      if (id != null && nikoDirectoryReceipts.accept(id, NikoFileReceipt.confirmed)) return false;
+    }
     if (jobResultListener.isListening) {
       jobResultListener.complete(evt);
       // return;
@@ -1155,10 +1475,15 @@ class JobController {
   }
 
   void jobError(Map<String, dynamic> evt) {
+    if (const bool.fromEnvironment('NIKODESK')) {
+      final id = int.tryParse(evt['id']?.toString() ?? '');
+      if (id != null && nikoDirectoryReceipts.accept(id, NikoFileReceipt.failed)) return;
+    }
     final err = evt['err'].toString();
     final id = int.tryParse(evt['id']?.toString() ?? '');
     if (id == null) {
-      debugPrint("Ignore job error with invalid id: $evt");
+      debugPrint(const bool.fromEnvironment('NIKODESK')
+          ? 'NikoDesk ignored a file error without a valid task ID' : "Ignore job error with invalid id: $evt");
       return;
     }
     int jobIndex = getJob(id);
@@ -1202,7 +1527,8 @@ class JobController {
         }
       }
     }
-    debugPrint("jobError $evt");
+    debugPrint(const bool.fromEnvironment('NIKODESK')
+        ? 'NikoDesk file task reported an error' : "jobError $evt");
   }
 
   void updateJobStatus(int id,
@@ -1246,6 +1572,14 @@ class JobController {
       }
     }
     final jobIdsToCancel = batchJobIds.toSet();
+    if (const bool.fromEnvironment('NIKODESK')) {
+      for (final id in jobIdsToCancel) {
+        if (getJob(id) >= 0 && (jobTable[getJob(id)].state != JobState.done || niko.folder(id)?.pending == true)) {
+          await nikoCancelJob(id);
+        }
+      }
+      return;
+    }
     for (final job in jobTable) {
       if (!jobIdsToCancel.contains(job.id) || job.state == JobState.done) {
         continue;
@@ -1357,6 +1691,10 @@ class JobController {
   }
 
   void clear() {
+    if (const bool.fromEnvironment('NIKODESK')) {
+      niko.clear();
+      nikoDirectoryReceipts.clear();
+    }
     jobTable.clear();
     _transferConflictJobToBatch.clear();
     _transferConflictRememberBatchId = null;
@@ -1423,14 +1761,21 @@ class FileFetcher {
 
   final GetSessionID getSessionID;
   final ReadRemoteDirectory _readRemoteDirectory;
+  final ReadRemoteDirectory _nikoReadRemoteEmptyDirectories;
+  final _nikoEmptyDirectoryTimers = <String, Timer>{};
+  final _nikoEmptyDirectoryGuard = NikoEmptyDirectoryReadGuard();
   SessionID get sessionId => getSessionID();
 
-  FileFetcher(this.getSessionID, {ReadRemoteDirectory? readRemoteDirectory})
+  FileFetcher(this.getSessionID, {ReadRemoteDirectory? readRemoteDirectory,
+      ReadRemoteDirectory? nikoReadRemoteEmptyDirectories})
       : _readRemoteDirectory = readRemoteDirectory ??
             ((sessionId, path, includeHidden) => bind.sessionReadRemoteDir(
                 sessionId: sessionId,
                 path: path,
-                includeHidden: includeHidden));
+                includeHidden: includeHidden)),
+        _nikoReadRemoteEmptyDirectories = nikoReadRemoteEmptyDirectories ??
+            ((sessionId, path, includeHidden) => bind.sessionReadRemoteEmptyDirsRecursiveSync(
+                sessionId: sessionId, path: path, includeHidden: includeHidden));
 
   bool hasPendingRemoteRead(String path) => _remoteReadTasks.containsKey(path);
 
@@ -1447,6 +1792,29 @@ class FileFetcher {
       final task = entry.value;
       if (!_removeRemoteReadTask(entry.key, task)) continue;
       task.completer.completeError(StateError(_kRemoteSessionChangedError));
+    }
+    if (const bool.fromEnvironment('NIKODESK')) {
+      _nikoEmptyDirectoryGuard.retire(remoteEmptyDirsTasks.keys);
+      for (final timer in _nikoEmptyDirectoryTimers.values) { timer.cancel(); }
+      _nikoEmptyDirectoryTimers.clear();
+      final pending = remoteEmptyDirsTasks.values.toList(growable: false);
+      remoteEmptyDirsTasks.clear();
+      for (final task in pending) {
+        if (!task.isCompleted) task.completeError(StateError(_kRemoteSessionChangedError));
+      }
+    }
+  }
+
+  void failNikoEmptyDirectoryReads() {
+    _nikoEmptyDirectoryGuard.retire(remoteEmptyDirsTasks.keys);
+    final pending = remoteEmptyDirsTasks.values.toList(growable: false);
+    remoteEmptyDirsTasks.clear();
+    for (final timer in _nikoEmptyDirectoryTimers.values) { timer.cancel(); }
+    _nikoEmptyDirectoryTimers.clear();
+    for (final task in pending) {
+      if (!task.isCompleted) {
+        task.completeError(const NikoFolderFailure(NikoFolderIssue.readUnconfirmed));
+      }
     }
   }
 
@@ -1480,6 +1848,9 @@ class FileFetcher {
 
   Future<List<FileDirectory>> registerReadEmptyDirsTask(
       bool isLocal, String path) {
+    if (const bool.fromEnvironment('NIKODESK') && _nikoEmptyDirectoryGuard.retired(path)) {
+      throw const NikoFolderFailure(NikoFolderIssue.readUnconfirmed);
+    }
     // final jobs = isLocal?localJobs:remoteJobs; // maybe we will use read local dir async later
     final tasks = remoteEmptyDirsTasks; // bypass now
     if (tasks.containsKey(path)) {
@@ -1488,6 +1859,18 @@ class FileFetcher {
     final c = Completer<List<FileDirectory>>();
     tasks[path] = c;
 
+    if (const bool.fromEnvironment('NIKODESK')) {
+      _nikoEmptyDirectoryTimers[path] = Timer(_kRemoteReadDirTimeout, () {
+        if (!identical(tasks[path], c)) return;
+        _nikoEmptyDirectoryGuard.retire([path]);
+        tasks.remove(path);
+        _nikoEmptyDirectoryTimers.remove(path);
+        if (!c.isCompleted) {
+          c.completeError(const NikoFolderFailure(NikoFolderIssue.readUnconfirmed));
+        }
+      });
+      return c.future;
+    }
     Timer(Duration(seconds: 2), () {
       tasks.remove(path);
       if (c.isCompleted) return;
@@ -1518,12 +1901,14 @@ class FileFetcher {
     try {
       final map = jsonDecode(msg);
       final String path = map["path"];
+      if (const bool.fromEnvironment('NIKODESK') && _nikoEmptyDirectoryGuard.retired(path)) return;
       final List<dynamic> fdJsons = map["empty_dirs"];
       final List<FileDirectory> fds =
           fdJsons.map((fdJson) => FileDirectory.fromJson(fdJson)).toList();
 
       tasks = remoteEmptyDirsTasks;
       final completer = tasks.remove(path);
+      if (const bool.fromEnvironment('NIKODESK')) _nikoEmptyDirectoryTimers.remove(path)?.cancel();
 
       completer?.complete(fds);
     } catch (e) {
@@ -1586,6 +1971,22 @@ class FileFetcher {
             fdJsons.map((fdJson) => FileDirectory.fromJson(fdJson)).toList();
         return fds;
       } else {
+        if (const bool.fromEnvironment('NIKODESK')) {
+          final result = registerReadEmptyDirsTask(isLocal, path);
+          final pending = remoteEmptyDirsTasks[path];
+          unawaited(Future<void>.sync(() => _nikoReadRemoteEmptyDirectories(
+              sessionId, path, showHidden)).catchError((Object error) {
+            if (pending != null && identical(remoteEmptyDirsTasks[path], pending)) {
+              _nikoEmptyDirectoryGuard.retire([path]);
+              remoteEmptyDirsTasks.remove(path);
+              _nikoEmptyDirectoryTimers.remove(path)?.cancel();
+              if (!pending.isCompleted) {
+                pending.completeError(const NikoFolderFailure(NikoFolderIssue.readUnconfirmed));
+              }
+            }
+          }));
+          return await result;
+        }
         await bind.sessionReadRemoteEmptyDirsRecursiveSync(
             sessionId: sessionId, path: path, includeHidden: showHidden);
         return registerReadEmptyDirsTask(isLocal, path);

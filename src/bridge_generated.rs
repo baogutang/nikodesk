@@ -165,6 +165,126 @@ fn wire_session_add_sync_impl(
         },
     )
 }
+fn wire_session_add_nikodesk_sync_impl(
+    session_id: impl Wire2Api<uuid::Uuid> + UnwindSafe,
+    id: impl Wire2Api<String> + UnwindSafe,
+    expected_server_namespace: impl Wire2Api<String> + UnwindSafe,
+    is_file_transfer: impl Wire2Api<bool> + UnwindSafe,
+    is_view_camera: impl Wire2Api<bool> + UnwindSafe,
+    is_port_forward: impl Wire2Api<bool> + UnwindSafe,
+    is_rdp: impl Wire2Api<bool> + UnwindSafe,
+    is_terminal: impl Wire2Api<bool> + UnwindSafe,
+    switch_uuid: impl Wire2Api<String> + UnwindSafe,
+    force_relay: impl Wire2Api<bool> + UnwindSafe,
+    password: impl Wire2Api<String> + UnwindSafe,
+    is_shared_password: impl Wire2Api<bool> + UnwindSafe,
+    conn_token: impl Wire2Api<Option<String>> + UnwindSafe,
+) -> support::WireSyncReturn {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync(
+        WrapInfo {
+            debug_name: "session_add_nikodesk_sync",
+            port: None,
+            mode: FfiCallMode::Sync,
+        },
+        move || {
+            let api_session_id = session_id.wire2api();
+            let api_id = id.wire2api();
+            let api_expected_server_namespace = expected_server_namespace.wire2api();
+            let api_is_file_transfer = is_file_transfer.wire2api();
+            let api_is_view_camera = is_view_camera.wire2api();
+            let api_is_port_forward = is_port_forward.wire2api();
+            let api_is_rdp = is_rdp.wire2api();
+            let api_is_terminal = is_terminal.wire2api();
+            let api_switch_uuid = switch_uuid.wire2api();
+            let api_force_relay = force_relay.wire2api();
+            let api_password = password.wire2api();
+            let api_is_shared_password = is_shared_password.wire2api();
+            let api_conn_token = conn_token.wire2api();
+            Ok(session_add_nikodesk_sync(
+                api_session_id,
+                api_id,
+                api_expected_server_namespace,
+                api_is_file_transfer,
+                api_is_view_camera,
+                api_is_port_forward,
+                api_is_rdp,
+                api_is_terminal,
+                api_switch_uuid,
+                api_force_relay,
+                api_password,
+                api_is_shared_password,
+                api_conn_token,
+            ))
+        },
+    )
+}
+fn wire_session_add_nikodesk_existed_sync_impl(
+    id: impl Wire2Api<String> + UnwindSafe,
+    session_id: impl Wire2Api<uuid::Uuid> + UnwindSafe,
+    displays: impl Wire2Api<Vec<i32>> + UnwindSafe,
+    is_view_camera: impl Wire2Api<bool> + UnwindSafe,
+    expected_server_namespace: impl Wire2Api<String> + UnwindSafe,
+) -> support::WireSyncReturn {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync(
+        WrapInfo {
+            debug_name: "session_add_nikodesk_existed_sync",
+            port: None,
+            mode: FfiCallMode::Sync,
+        },
+        move || {
+            let api_id = id.wire2api();
+            let api_session_id = session_id.wire2api();
+            let api_displays = displays.wire2api();
+            let api_is_view_camera = is_view_camera.wire2api();
+            let api_expected_server_namespace = expected_server_namespace.wire2api();
+            Ok(session_add_nikodesk_existed_sync(
+                api_id,
+                api_session_id,
+                api_displays,
+                api_is_view_camera,
+                api_expected_server_namespace,
+            ))
+        },
+    )
+}
+fn wire_peer_get_nikodesk_sessions_count_impl(
+    id: impl Wire2Api<String> + UnwindSafe,
+    conn_type: impl Wire2Api<i32> + UnwindSafe,
+    expected_server_namespace: impl Wire2Api<String> + UnwindSafe,
+) -> support::WireSyncReturn {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync(
+        WrapInfo {
+            debug_name: "peer_get_nikodesk_sessions_count",
+            port: None,
+            mode: FfiCallMode::Sync,
+        },
+        move || {
+            let api_id = id.wire2api();
+            let api_conn_type = conn_type.wire2api();
+            let api_expected_server_namespace = expected_server_namespace.wire2api();
+            Ok(peer_get_nikodesk_sessions_count(
+                api_id,
+                api_conn_type,
+                api_expected_server_namespace,
+            ))
+        },
+    )
+}
+fn wire_session_get_server_namespace_impl(
+    session_id: impl Wire2Api<uuid::Uuid> + UnwindSafe,
+) -> support::WireSyncReturn {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync(
+        WrapInfo {
+            debug_name: "session_get_server_namespace",
+            port: None,
+            mode: FfiCallMode::Sync,
+        },
+        move || {
+            let api_session_id = session_id.wire2api();
+            Ok(session_get_server_namespace(api_session_id))
+        },
+    )
+}
 fn wire_session_start_impl(
     port_: MessagePort,
     session_id: impl Wire2Api<uuid::Uuid> + UnwindSafe,
@@ -1423,6 +1543,23 @@ fn wire_session_get_peer_option_impl(
         },
     )
 }
+fn wire_session_get_peer_option_sync_impl(
+    session_id: impl Wire2Api<uuid::Uuid> + UnwindSafe,
+    name: impl Wire2Api<String> + UnwindSafe,
+) -> support::WireSyncReturn {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync(
+        WrapInfo {
+            debug_name: "session_get_peer_option_sync",
+            port: None,
+            mode: FfiCallMode::Sync,
+        },
+        move || {
+            let api_session_id = session_id.wire2api();
+            let api_name = name.wire2api();
+            Ok(session_get_peer_option_sync(api_session_id, api_name))
+        },
+    )
+}
 fn wire_session_input_os_password_impl(
     port_: MessagePort,
     session_id: impl Wire2Api<uuid::Uuid> + UnwindSafe,
@@ -2094,6 +2231,22 @@ fn wire_main_get_option_impl(port_: MessagePort, key: impl Wire2Api<String> + Un
         },
     )
 }
+fn wire_main_niko_save_private_server_impl(
+    port_: MessagePort,
+    config: impl Wire2Api<String> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "main_niko_save_private_server",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_config = config.wire2api();
+            move |task_callback| Ok(main_niko_save_private_server(api_config))
+        },
+    )
+}
 fn wire_main_get_option_sync_impl(
     key: impl Wire2Api<String> + UnwindSafe,
 ) -> support::WireSyncReturn {
@@ -2288,6 +2441,55 @@ fn wire_main_get_fav_impl(port_: MessagePort) {
         move || move |task_callback| Ok(main_get_fav()),
     )
 }
+fn wire_main_get_nikodesk_capability_policy_impl(
+    port_: MessagePort,
+    expected_server_namespace: impl Wire2Api<String> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "main_get_nikodesk_capability_policy",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_expected_server_namespace = expected_server_namespace.wire2api();
+            move |task_callback| {
+                Ok(main_get_nikodesk_capability_policy(
+                    api_expected_server_namespace,
+                ))
+            }
+        },
+    )
+}
+fn wire_main_set_nikodesk_capability_policy_impl(
+    port_: MessagePort,
+    expected_server_namespace: impl Wire2Api<String> + UnwindSafe,
+    expected_revision: impl Wire2Api<String> + UnwindSafe,
+    capability: impl Wire2Api<String> + UnwindSafe,
+    allow_requests: impl Wire2Api<bool> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "main_set_nikodesk_capability_policy",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_expected_server_namespace = expected_server_namespace.wire2api();
+            let api_expected_revision = expected_revision.wire2api();
+            let api_capability = capability.wire2api();
+            let api_allow_requests = allow_requests.wire2api();
+            move |task_callback| {
+                Ok(main_set_nikodesk_capability_policy(
+                    api_expected_server_namespace,
+                    api_expected_revision,
+                    api_capability,
+                    api_allow_requests,
+                ))
+            }
+        },
+    )
+}
 fn wire_main_store_fav_impl(port_: MessagePort, favs: impl Wire2Api<Vec<String>> + UnwindSafe) {
     FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, ()>(
         WrapInfo {
@@ -2298,6 +2500,97 @@ fn wire_main_store_fav_impl(port_: MessagePort, favs: impl Wire2Api<Vec<String>>
         move || {
             let api_favs = favs.wire2api();
             move |task_callback| Ok(main_store_fav(api_favs))
+        },
+    )
+}
+fn wire_main_get_nikodesk_favorites_impl(
+    port_: MessagePort,
+    expected_server_namespace: impl Wire2Api<String> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "main_get_nikodesk_favorites",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_expected_server_namespace = expected_server_namespace.wire2api();
+            move |task_callback| Ok(main_get_nikodesk_favorites(api_expected_server_namespace))
+        },
+    )
+}
+fn wire_main_patch_nikodesk_favorites_impl(
+    port_: MessagePort,
+    expected_server_namespace: impl Wire2Api<String> + UnwindSafe,
+    expected_revision: impl Wire2Api<String> + UnwindSafe,
+    add: impl Wire2Api<Vec<String>> + UnwindSafe,
+    remove: impl Wire2Api<Vec<String>> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "main_patch_nikodesk_favorites",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_expected_server_namespace = expected_server_namespace.wire2api();
+            let api_expected_revision = expected_revision.wire2api();
+            let api_add = add.wire2api();
+            let api_remove = remove.wire2api();
+            move |task_callback| {
+                Ok(main_patch_nikodesk_favorites(
+                    api_expected_server_namespace,
+                    api_expected_revision,
+                    api_add,
+                    api_remove,
+                ))
+            }
+        },
+    )
+}
+fn wire_main_preview_nikodesk_legacy_peer_preferences_impl(
+    port_: MessagePort,
+    expected_server_namespace: impl Wire2Api<String> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "main_preview_nikodesk_legacy_peer_preferences",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_expected_server_namespace = expected_server_namespace.wire2api();
+            move |task_callback| {
+                Ok(main_preview_nikodesk_legacy_peer_preferences(
+                    api_expected_server_namespace,
+                ))
+            }
+        },
+    )
+}
+fn wire_main_import_nikodesk_legacy_peer_preferences_impl(
+    port_: MessagePort,
+    expected_server_namespace: impl Wire2Api<String> + UnwindSafe,
+    preview_revision: impl Wire2Api<String> + UnwindSafe,
+    peer_ids: impl Wire2Api<Vec<String>> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "main_import_nikodesk_legacy_peer_preferences",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_expected_server_namespace = expected_server_namespace.wire2api();
+            let api_preview_revision = preview_revision.wire2api();
+            let api_peer_ids = peer_ids.wire2api();
+            move |task_callback| {
+                Ok(main_import_nikodesk_legacy_peer_preferences(
+                    api_expected_server_namespace,
+                    api_preview_revision,
+                    api_peer_ids,
+                ))
+            }
         },
     )
 }
@@ -2721,6 +3014,104 @@ fn wire_main_set_peer_option_sync_impl(
             let api_key = key.wire2api();
             let api_value = value.wire2api();
             Ok(main_set_peer_option_sync(api_id, api_key, api_value))
+        },
+    )
+}
+fn wire_main_get_nikodesk_peer_option_sync_impl(
+    id: impl Wire2Api<String> + UnwindSafe,
+    expected_server_namespace: impl Wire2Api<String> + UnwindSafe,
+    key: impl Wire2Api<String> + UnwindSafe,
+) -> support::WireSyncReturn {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync(
+        WrapInfo {
+            debug_name: "main_get_nikodesk_peer_option_sync",
+            port: None,
+            mode: FfiCallMode::Sync,
+        },
+        move || {
+            let api_id = id.wire2api();
+            let api_expected_server_namespace = expected_server_namespace.wire2api();
+            let api_key = key.wire2api();
+            Ok(main_get_nikodesk_peer_option_sync(
+                api_id,
+                api_expected_server_namespace,
+                api_key,
+            ))
+        },
+    )
+}
+fn wire_main_set_nikodesk_peer_option_sync_impl(
+    id: impl Wire2Api<String> + UnwindSafe,
+    expected_server_namespace: impl Wire2Api<String> + UnwindSafe,
+    key: impl Wire2Api<String> + UnwindSafe,
+    value: impl Wire2Api<String> + UnwindSafe,
+) -> support::WireSyncReturn {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync(
+        WrapInfo {
+            debug_name: "main_set_nikodesk_peer_option_sync",
+            port: None,
+            mode: FfiCallMode::Sync,
+        },
+        move || {
+            let api_id = id.wire2api();
+            let api_expected_server_namespace = expected_server_namespace.wire2api();
+            let api_key = key.wire2api();
+            let api_value = value.wire2api();
+            Ok(main_set_nikodesk_peer_option_sync(
+                api_id,
+                api_expected_server_namespace,
+                api_key,
+                api_value,
+            ))
+        },
+    )
+}
+fn wire_main_get_nikodesk_peer_flutter_option_sync_impl(
+    id: impl Wire2Api<String> + UnwindSafe,
+    expected_server_namespace: impl Wire2Api<String> + UnwindSafe,
+    k: impl Wire2Api<String> + UnwindSafe,
+) -> support::WireSyncReturn {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync(
+        WrapInfo {
+            debug_name: "main_get_nikodesk_peer_flutter_option_sync",
+            port: None,
+            mode: FfiCallMode::Sync,
+        },
+        move || {
+            let api_id = id.wire2api();
+            let api_expected_server_namespace = expected_server_namespace.wire2api();
+            let api_k = k.wire2api();
+            Ok(main_get_nikodesk_peer_flutter_option_sync(
+                api_id,
+                api_expected_server_namespace,
+                api_k,
+            ))
+        },
+    )
+}
+fn wire_main_set_nikodesk_peer_flutter_option_sync_impl(
+    id: impl Wire2Api<String> + UnwindSafe,
+    expected_server_namespace: impl Wire2Api<String> + UnwindSafe,
+    k: impl Wire2Api<String> + UnwindSafe,
+    v: impl Wire2Api<String> + UnwindSafe,
+) -> support::WireSyncReturn {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync(
+        WrapInfo {
+            debug_name: "main_set_nikodesk_peer_flutter_option_sync",
+            port: None,
+            mode: FfiCallMode::Sync,
+        },
+        move || {
+            let api_id = id.wire2api();
+            let api_expected_server_namespace = expected_server_namespace.wire2api();
+            let api_k = k.wire2api();
+            let api_v = v.wire2api();
+            Ok(main_set_nikodesk_peer_flutter_option_sync(
+                api_id,
+                api_expected_server_namespace,
+                api_k,
+                api_v,
+            ))
         },
     )
 }
@@ -4963,6 +5354,38 @@ fn wire_session_get_common_impl(
             let api_key = key.wire2api();
             let api_param = param.wire2api();
             move |task_callback| Ok(session_get_common(api_session_id, api_key, api_param))
+        },
+    )
+}
+fn wire_cm_nikodesk_capability_decision_impl(
+    port_: MessagePort,
+    json: impl Wire2Api<String> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "cm_nikodesk_capability_decision",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_json = json.wire2api();
+            move |task_callback| Ok(cm_nikodesk_capability_decision(api_json))
+        },
+    )
+}
+fn wire_cm_nikodesk_capability_revoke_impl(
+    port_: MessagePort,
+    json: impl Wire2Api<String> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "cm_nikodesk_capability_revoke",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_json = json.wire2api();
+            move |task_callback| Ok(cm_nikodesk_capability_revoke(api_json))
         },
     )
 }

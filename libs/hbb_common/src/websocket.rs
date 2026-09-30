@@ -9,7 +9,7 @@ use crate::{
     tls::{get_cached_tls_accept_invalid_cert, get_cached_tls_type, upsert_tls_cache, TlsType},
     ResultType,
 };
-use anyhow::bail;
+use anyhow::{bail, Context};
 use async_recursion::async_recursion;
 use bytes::{Bytes, BytesMut};
 use futures::{SinkExt, StreamExt};
@@ -209,6 +209,33 @@ impl WsFramedStream {
         };
 
         Ok(ws)
+    }
+
+    /// Verifies certificates without consulting TLS caches or retrying insecurely.
+    pub async fn new_strict<T: AsRef<str>>(url: T, ms_timeout: u64) -> ResultType<Self> {
+        let request = url
+            .as_ref()
+            .into_client_request()
+            .map_err(|e| Error::new(ErrorKind::Other, e))?;
+        let connector = Self::get_connector(&TlsType::NativeTls, false)?;
+        let (stream, _) = timeout(
+            Duration::from_millis(ms_timeout),
+            connect_async_tls_with_config(request, None, false, connector),
+        )
+        .await?
+        .context("WebSocket connection failed; TLS certificate verification is required")?;
+        let addr = match stream.get_ref() {
+            MaybeTlsStream::Plain(tcp) => tcp.peer_addr()?,
+            MaybeTlsStream::NativeTls(tls) => tls.get_ref().get_ref().get_ref().peer_addr()?,
+            MaybeTlsStream::Rustls(tls) => tls.get_ref().0.peer_addr()?,
+            _ => return Err(Error::new(ErrorKind::Other, "Unsupported stream type").into()),
+        };
+        Ok(Self {
+            stream,
+            addr,
+            encrypt: None,
+            send_timeout: ms_timeout,
+        })
     }
 
     #[inline]
@@ -439,6 +466,51 @@ mod tests {
     use super::*;
     use crate::config::{keys, Config};
     use tokio::{io::AsyncWriteExt, net::TcpListener};
+
+    #[tokio::test]
+    async fn strict_constructor_accepts_loopback_websocket_without_config() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (tcp, _) = listener.accept().await.unwrap();
+            tokio_tungstenite::accept_async(tcp).await.unwrap()
+        });
+        let stream = WsFramedStream::new_strict(format!("ws://{addr}/"), 3000).await.unwrap();
+        assert!(stream.local_addr().ip().is_loopback());
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn strict_constructor_rejects_untrusted_tls_and_ignores_insecure_cache() {
+        use tokio_rustls::{rustls, TlsAcceptor};
+        // Public synthetic loopback fixture. Never install or trust this certificate.
+        let cert = sodiumoxide::base64::decode("MIIB0DCCAXegAwIBAgIUAPBLWQ5ikslUHNRLhUI3RnAfEJQwCgYIKoZIzj0EAwIwMDEuMCwGA1UEAwwlTmlrb0Rlc2sgcHVibGljIGxvb3BiYWNrIHRlc3QgZml4dHVyZTAeFw0yNjA5MzAwNTAzMzRaFw0zNjA5MjcwNTAzMzRaMDAxLjAsBgNVBAMMJU5pa29EZXNrIHB1YmxpYyBsb29wYmFjayB0ZXN0IGZpeHR1cmUwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAASujnwJqGR8hdrlfLV41Y7TRGRbCyjwMHCwXpFVeHSfzSk7Yor2jGjlJ46Tgl+lvn/eJFRpfl7pMVyrBguKnQDZo28wbTAdBgNVHQ4EFgQUU58mRFEYqmdaWvnjszuh7EGhziswHwYDVR0jBBgwFoAUU58mRFEYqmdaWvnjszuh7EGhziswDwYDVR0TAQH/BAUwAwEB/zAaBgNVHREEEzARhwR/AAABgglsb2NhbGhvc3QwCgYIKoZIzj0EAwIDRwAwRAIgS+rCht8btbxy9xJms9fO5+NvUuvVRHR1nUg9csopVnMCIAUqA2b565FADxrc/g05ywuLL9ESOiiFb35PmVR9dbTN", sodiumoxide::base64::Variant::Original).unwrap();
+        let key = sodiumoxide::base64::decode("MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgmLUVoRwo/nfg6LclAA6H2gC9Tp0nw7qjknzv3n3p66ihRANCAASujnwJqGR8hdrlfLV41Y7TRGRbCyjwMHCwXpFVeHSfzSk7Yor2jGjlJ46Tgl+lvn/eJFRpfl7pMVyrBguKnQDZ", sodiumoxide::base64::Variant::Original).unwrap();
+        let config = rustls::ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+            .with_safe_default_protocol_versions().unwrap()
+            .with_no_client_auth()
+            .with_single_cert(vec![rustls::pki_types::CertificateDer::from(cert)], rustls::pki_types::PrivatePkcs8KeyDer::from(key).into()).unwrap();
+        let acceptor = TlsAcceptor::from(Arc::new(config));
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let url = format!("wss://{addr}/");
+        upsert_tls_cache(&url, TlsType::Plain, true);
+        let server = tokio::spawn(async move {
+            let (tcp, _) = listener.accept().await.unwrap();
+            let mut header = [0; 5];
+            let count = tcp.peek(&mut header).await.unwrap();
+            assert!(count > 0 && header[0] == 0x16, "strict WSS must send TLS despite cached plain mode");
+            assert!(acceptor.accept(tcp).await.is_err(), "self-signed certificate unexpectedly accepted");
+            assert!(timeout(Duration::from_millis(100), listener.accept()).await.is_err(), "strict TLS must not retry insecurely");
+        });
+        let error = match WsFramedStream::new_strict(&url, 3000).await {
+            Ok(_) => panic!("strict TLS accepted an untrusted certificate"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("TLS certificate verification is required"));
+        server.await.unwrap();
+        assert!(matches!(get_cached_tls_type(&url), Some(TlsType::Plain)), "strict constructor must not use or update the upstream TLS cache");
+    }
 
     #[tokio::test(flavor = "current_thread")]
     async fn test_secured_stream_rejects_plaintext_text() {

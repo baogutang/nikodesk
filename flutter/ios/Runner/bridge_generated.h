@@ -490,6 +490,7 @@ void wire_main_get_http_status(int64_t port_, struct wire_uint_8_list *url);
 
 void wire_main_get_option(int64_t port_, struct wire_uint_8_list *key);
 
+
 WireSyncReturn wire_main_get_option_sync(struct wire_uint_8_list *key);
 
 void wire_main_get_error(int64_t port_);

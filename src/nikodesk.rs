@@ -22,6 +22,50 @@ static SETTINGS_WRITING: AtomicBool = AtomicBool::new(false);
 static SETTINGS_SAVE_FAILED: AtomicBool = AtomicBool::new(false);
 static SETTINGS_WRITE_LOCK: Mutex<()> = Mutex::new(());
 
+#[path = "nikodesk/server_settings.rs"]
+pub mod server_settings;
+
+#[path = "nikodesk/server_scope.rs"]
+pub mod server_scope;
+
+#[path = "nikodesk/connection_snapshot.rs"]
+pub mod connection_snapshot;
+
+#[path = "nikodesk/favorites.rs"]
+pub mod favorites;
+#[path = "nikodesk/peer_migration.rs"]
+pub mod peer_migration;
+#[cfg(not(any(target_os="android",target_os="ios")))]
+#[path = "nikodesk/cm_peer.rs"]
+pub(crate) mod cm_peer;
+#[path = "nikodesk/connection_capabilities.rs"]
+pub(crate) mod connection_capabilities;
+#[cfg(any(target_os = "windows", test))]
+#[path = "nikodesk/windows_compatibility.rs"]
+pub(crate) mod windows_compatibility;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[path = "nikodesk/owned_terminal.rs"]
+pub(crate) mod owned_terminal;
+#[path = "nikodesk/capability_state.rs"]
+pub(crate) mod capability_state;
+#[path = "nikodesk/capability_policy.rs"]
+pub(crate) mod capability_policy;
+#[path = "nikodesk/capability_policy_api.rs"]
+pub(crate) mod capability_policy_api;
+#[path = "nikodesk/background/mod.rs"]
+pub mod background;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[path = "nikodesk/terminal_cleanup.rs"]
+pub(crate) mod terminal_cleanup;
+#[path = "nikodesk/tunnel_endpoint.rs"]
+pub(crate) mod tunnel_endpoint;
+#[path = "nikodesk/video_metrics.rs"]
+pub(crate) mod video_metrics;
+#[path = "nikodesk/voice/mod.rs"]
+pub(crate) mod voice;
+#[path = "nikodesk/voice_wire.rs"]
+pub(crate) mod voice_wire;
+
 pub fn initialize() -> ResultType<()> {
     INITIALIZED
         .get_or_init(|| initialize_inner().map_err(|e| e.to_string()))
@@ -36,18 +80,64 @@ pub fn initialize_or_exit() {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
-fn initialize_inner() -> ResultType<()> {
-    bail!("NikoDesk isolation is currently supported only on macOS")
+/// Dedicated worker bootstrap. Callers must already have a kernel-verified,
+/// protected installation/SCM grant; the ordinary initialize stays non-elevated.
+#[cfg(windows)]
+pub(crate) fn initialize_system_desktop_worker(root: std::path::PathBuf) -> ResultType<()> {
+    if !background::is_system_worker() { bail!("Not a granted system desktop worker"); }
+    Config::initialize_trusted_storage_root(root.clone())?;
+    INITIALIZED.get_or_init(|| (|| -> ResultType<()> {
+        *config::APP_NAME.write().unwrap() = "NikoDesk".into();
+        sodiumoxide::init().map_err(|_| anyhow!("Cannot initialize machine cryptography"))?;
+        install_policy();
+        {
+            let mut hard = config::HARD_SETTINGS.write().unwrap();
+            hard.insert("conn-type".into(), "incoming".into());
+        }
+        {
+            let mut forced = config::OVERWRITE_SETTINGS.write().unwrap();
+            for key in ["enable-clipboard", "enable-file-transfer", "enable-audio", "enable-remote-printer", "enable-record-session", "enable-trusted-devices", "allow-remote-config-modification"] {
+                forced.insert(key.into(), "N".into());
+            }
+            forced.insert("approve-mode".into(), "password".into());
+            forced.insert("verification-method".into(), "use-permanent-password".into());
+        }
+        let path = root.join("NikoDesk.toml");
+        let identity = identity_file::read(&path)?;
+        let id = identity.validated_id()?;
+        let loaded = Config::get();
+        if loaded.id != id || Config::get_key_pair() != identity.key_pair {
+            bail!("Machine identity did not match the provisioned file");
+        }
+        if !Config::has_local_permanent_password() { bail!("Machine desktop verifier has not been provisioned"); }
+        validate_server_values(&Config::get_option("custom-rendezvous-server"), &Config::get_option("relay-server"), &Config::get_option("key"))?;
+        if Config::get_option("stop-service") != "N" { bail!("Machine background policy is paused"); }
+        Ok(())
+    })().map_err(|error| error.to_string())).clone().map_err(|error| anyhow!(error))
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "android")))]
 fn initialize_inner() -> ResultType<()> {
+    bail!("NikoDesk isolation is not supported on this platform")
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "android"))]
+fn initialize_inner() -> ResultType<()> {
+    #[cfg(unix)]
     if unsafe { hbb_common::libc::geteuid() } == 0 {
         bail!("NikoDesk must run as the current user, without elevation");
     }
+    #[cfg(windows)]
+    if crate::platform::is_elevated(None)? {
+        bail!("NikoDesk must run as the current user, without elevation");
+    }
+    #[cfg(target_os = "android")]
+    validate_android_directory(&config::APP_DIR.read().unwrap())?;
     *config::APP_NAME.write().unwrap() = "NikoDesk".to_owned();
-    *config::ORG.write().unwrap() = "io.nikodesk".to_owned();
+    #[cfg(target_os = "macos")]
+    {
+        *config::ORG.write().unwrap() = "io.nikodesk".to_owned();
+    }
     sodiumoxide::init().map_err(|_| anyhow!("Cannot initialize identity cryptography"))?;
     install_policy();
     let path = Config::file();
@@ -70,6 +160,8 @@ fn initialize_inner() -> ResultType<()> {
 
 fn install_policy() {
     let mut hard = config::HARD_SETTINGS.write().unwrap();
+    #[cfg(target_os = "android")]
+    hard.insert("conn-type".into(), "outgoing".into());
     for key in [
         "disable-installation",
         "disable-tcp-listen",
@@ -126,6 +218,21 @@ fn install_policy() {
 pub fn validate_remote_id(id: &str) -> ResultType<()> {
     if !(6..=16).contains(&id.len()) || !id.bytes().all(|c| c.is_ascii_digit()) {
         bail!("NikoDesk supports numeric device IDs on the configured private server only");
+    }
+    Ok(())
+}
+
+pub fn validate_active_private_server() -> ResultType<()> {
+    validate_private_server()?;
+    if Config::get_option("stop-service") != "N" {
+        bail!("NikoDesk is paused");
+    }
+    Ok(())
+}
+
+pub fn validate_connection_credentials(password: &str) -> ResultType<()> {
+    if password.trim().is_empty() {
+        bail!("Enter the remote device password before connecting");
     }
     Ok(())
 }
@@ -274,20 +381,22 @@ pub fn set_option(key: String, mut value: String) -> ResultType<()> {
     if key == "stop-service" && value.is_empty() {
         value = "N".into();
     }
-    let mut options = Config::get_options();
-    options.insert(key, value);
-    crate::ipc::set_options(options)?;
+    server_settings::patch(key, value)?;
     crate::ui_interface::refresh_options();
     Ok(())
 }
 
 pub fn settings_json() -> String {
+    let _lock = SETTINGS_WRITE_LOCK.lock().unwrap();
     if SETTINGS_SAVE_FAILED.load(Ordering::SeqCst) || SETTINGS_WRITING.load(Ordering::SeqCst) {
         // The existing void FFI setter is followed by a JSON readback. Invalid
         // JSON makes persistence failure observable rather than reporting success.
         return String::new();
     }
-    serde_json::to_string(&Config::get_options()).unwrap_or_default()
+    let mut options = Config::get_options();
+    let namespace = server_scope::namespace_from_options(&options).unwrap_or_default();
+    options.insert("nikodesk-server-namespace".into(), namespace);
+    serde_json::to_string(&options).unwrap_or_default()
 }
 
 pub fn settings_save_failed() -> bool {
@@ -296,38 +405,38 @@ pub fn settings_save_failed() -> bool {
 
 pub fn stop_after_settings_failure() {
     SETTINGS_SAVE_FAILED.store(true, Ordering::SeqCst);
-    Config::set_option("stop-service".into(), "Y".into());
+    let mut options = Config::get_options();
+    options.insert("stop-service".into(), "Y".into());
+    Config::replace_options_cache_without_store(purified_options(options));
     crate::rendezvous_mediator::RendezvousMediator::restart();
 }
 
-/// Upstream setters log filesystem failures and return (). Confirm the exact
-/// purified options on disk before allowing the private-server guard to reopen.
-pub fn save_options_locally(mut options: HashMap<String, String>) -> ResultType<()> {
-    initialize()?;
-    let _lock = SETTINGS_WRITE_LOCK.lock().unwrap();
-    SETTINGS_WRITING.store(true, Ordering::SeqCst);
-    let result = (|| {
-        prepare_options(&mut options)?;
-        let mut saved_options = options.clone();
-        let forced = config::OVERWRITE_SETTINGS.read().unwrap();
-        let defaults = config::DEFAULT_SETTINGS.read().unwrap();
-        saved_options
-            .retain(|key, value| !forced.contains_key(key) && defaults.get(key) != Some(value));
-        drop(defaults);
-        drop(forced);
-        // Retry the fallible write even if an earlier failed store left the
-        // upstream in-memory value unchanged.
-        write_options_file(&config::Config2::file(), &saved_options)?;
-        Config::set_options(options);
-        verify_options_file(&config::Config2::file(), &config::Config2::get().options)
-    })();
-    if result.is_err() {
-        stop_after_settings_failure();
-    } else {
-        SETTINGS_SAVE_FAILED.store(false, Ordering::SeqCst);
+pub fn save_options_locally(_options: HashMap<String, String>) -> ResultType<()> {
+    server_settings::reject_snapshot_write();
+    bail!("NikoDesk requires a single-option patch or a private-server transaction")
+}
+
+fn purified_options(mut options: HashMap<String, String>) -> HashMap<String, String> {
+    let forced = config::OVERWRITE_SETTINGS.read().unwrap();
+    let defaults = config::DEFAULT_SETTINGS.read().unwrap();
+    options.retain(|key, value| key != "nikodesk-server-namespace"
+        && !forced.contains_key(key) && defaults.get(key) != Some(value));
+    options
+}
+
+fn read_options_file(path: &std::path::Path) -> ResultType<HashMap<String, String>> {
+    #[cfg(unix)]
+    let contents = read_settings_file(path)?;
+    #[cfg(windows)]
+    let contents = identity_file::read_private_file(path, 1024 * 1024)?;
+    #[derive(Deserialize)]
+    struct OptionsFile {
+        #[serde(default)]
+        options: HashMap<String, String>,
     }
-    SETTINGS_WRITING.store(false, Ordering::SeqCst);
-    result
+    let saved: OptionsFile = toml::from_str(&contents)
+        .map_err(|_| anyhow!("NikoDesk settings could not be read back"))?;
+    Ok(saved.options)
 }
 
 #[cfg(unix)]
@@ -389,14 +498,60 @@ fn verify_options_file(
     Ok(())
 }
 
-#[cfg(not(unix))]
-fn write_options_file(_: &std::path::Path, _: &HashMap<String, String>) -> ResultType<()> {
-    bail!("NikoDesk settings isolation is not supported on this platform")
+#[cfg(windows)]
+fn write_options_file(path: &std::path::Path, options: &HashMap<String, String>) -> ResultType<()> {
+    let mut stored: toml::Value = match std::fs::symlink_metadata(path) {
+        Ok(_) => toml::from_str(&identity_file::read_private_file(path, 1024 * 1024)?)
+            .map_err(|_| anyhow!("NikoDesk settings file is damaged; original file preserved"))?,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            toml::Value::Table(Default::default())
+        }
+        Err(err) => return Err(err.into()),
+    };
+    stored.as_table_mut().ok_or_else(|| anyhow!("Invalid NikoDesk settings file"))?
+        .insert("options".into(), toml::Value::try_from(options)?);
+    identity_file::write_private_file(path, toml::to_string(&stored)?.as_bytes())?;
+    verify_options_file(path, options)
 }
 
-#[cfg(not(unix))]
-fn verify_options_file(_: &std::path::Path, _: &HashMap<String, String>) -> ResultType<()> {
-    bail!("NikoDesk settings isolation is not supported on this platform")
+#[cfg(windows)]
+fn verify_options_file(path: &std::path::Path, expected: &HashMap<String, String>) -> ResultType<()> {
+    let saved: toml::Value = toml::from_str(&identity_file::read_private_file(path, 1024 * 1024)?)?;
+    let options: HashMap<String, String> = saved.get("options")
+        .ok_or_else(|| anyhow!("NikoDesk settings did not persist"))?.clone().try_into()?;
+    if options != *expected {
+        bail!("NikoDesk settings did not persist; service remains stopped");
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "android")]
+pub fn initialize_android(app_dir: &str) -> ResultType<()> {
+    validate_android_directory(app_dir)?;
+    let mut configured = config::APP_DIR
+        .write()
+        .map_err(|_| anyhow!("NikoDesk's Android configuration directory lock is poisoned"))?;
+    if !configured.is_empty() && configured.as_str() != app_dir {
+        bail!("NikoDesk's Android configuration directory cannot change while running");
+    }
+    *configured = app_dir.into();
+    drop(configured);
+    initialize()
+}
+
+#[cfg(any(target_os = "android", test))]
+fn validate_android_directory(app_dir: &str) -> ResultType<()> {
+    let components = app_dir.split('/').collect::<Vec<_>>();
+    let package = match components.as_slice() {
+        ["", "data", "user", user, package, "app_flutter"]
+            if user.bytes().all(|c| c.is_ascii_digit()) && user.parse::<u32>().is_ok() => *package,
+        ["", "data", "data", package, "app_flutter"] => *package,
+        _ => bail!("NikoDesk configuration must remain in its private Android app storage"),
+    };
+    if !["io.nikodesk.android", "io.nikodesk.android.dev"].contains(&package) {
+        bail!("NikoDesk requires its own Android application sandbox");
+    }
+    Ok(())
 }
 
 pub fn is_saved_password_option(key: &str) -> bool {
@@ -617,6 +772,10 @@ mod identity_file {
     }
 }
 
+#[cfg(windows)]
+#[path = "nikodesk/windows.rs"]
+mod identity_file;
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
@@ -641,6 +800,40 @@ mod tests {
     impl Drop for Temp {
         fn drop(&mut self) {
             fs::remove_dir_all(&self.0).unwrap();
+        }
+    }
+
+    #[test]
+    fn android_directory_requires_the_nikodesk_private_sandbox() {
+        for directory in [
+            "/data/user/0/io.nikodesk.android/app_flutter",
+            "/data/user/0/io.nikodesk.android.dev/app_flutter",
+            "/data/user/10/io.nikodesk.android/app_flutter",
+            "/data/user/12/io.nikodesk.android.dev/app_flutter",
+            "/data/data/io.nikodesk.android/app_flutter",
+            "/data/data/io.nikodesk.android.dev/app_flutter",
+        ] {
+            assert!(validate_android_directory(directory).is_ok());
+        }
+        for directory in [
+            "", "app_flutter", "/sdcard/Android/data/io.nikodesk.android/files",
+            "/data/user/0/com.carriez.flutter_hbb/app_flutter",
+            "/data/user/0/io.nikodesk.android/app_flutter/../../other",
+            "/data/user/0/com.carriez.flutter_hbb/io.nikodesk.android/app_flutter",
+            "/data/data/com.carriez.flutter_hbb/io.nikodesk.android/app_flutter",
+            "/data/user/0/io.nikodesk.android/app_flutter/extra",
+            "/data/user/0/io.nikodesk.android/app_flutter/",
+            "/data/user/0/io.nikodesk.android/./app_flutter",
+            "/data/user/0/io.nikodesk.android/../app_flutter",
+            "/data/user//io.nikodesk.android/app_flutter",
+            "/data/user/+0/io.nikodesk.android/app_flutter",
+            "/data/user/-1/io.nikodesk.android/app_flutter",
+            "/data/user/name/io.nikodesk.android/app_flutter",
+            "/data/user/4294967296/io.nikodesk.android/app_flutter",
+            "/data/user/0/io.nikodesk.android.extra/app_flutter",
+            "/data/user/0/io.nikodesk.android.dev.extra/app_flutter",
+        ] {
+            assert!(validate_android_directory(directory).is_err());
         }
     }
 
@@ -685,6 +878,15 @@ mod tests {
         ] {
             assert!(validate_server_values("nas.local", "", key).is_err());
         }
+    }
+
+    #[test]
+    fn connection_credentials_reject_blank_values_without_returning_secrets() {
+        for password in ["", " ", "\t\r\n"] {
+            assert!(validate_connection_credentials(password).is_err());
+        }
+        assert!(validate_connection_credentials(" synthetic-secret ").is_ok());
+        assert!(!validate_connection_credentials("").unwrap_err().to_string().contains("synthetic-secret"));
     }
 
     #[test]

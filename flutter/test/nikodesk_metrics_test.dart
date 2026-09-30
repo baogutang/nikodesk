@@ -27,7 +27,7 @@ void main() {
       'chroma': '4:2:0'
     });
     expect(metrics.current('receiveKiBps'), 12.5);
-    expect(metrics.current('submittedFps'), {'0': 30, '2': 0});
+    expect(metrics.current('decodedCallbackFps'), {'0': 30, '2': 0});
     expect(metrics.current('applicationRttMs'), 27);
     expect(metrics.current('targetBitrateKbps'), 1400);
     expect(metrics.current('receivedCodec'), 'VP9');
@@ -72,9 +72,9 @@ void main() {
       () {
     metrics.update({'fps': '{"0":24}'});
     metrics.update({'fps': '{}', 'delay': '20'});
-    expect(metrics.current('submittedFps'), {'0': 24});
+    expect(metrics.current('decodedCallbackFps'), {'0': 24});
     metrics.update({'fps': '{broken'});
-    expect(metrics.current('submittedFps'), {'0': 24});
+    expect(metrics.current('decodedCallbackFps'), {'0': 24});
   });
   test('reconnect and close clear telemetry and authentication samples', () {
     metrics.connection(secure: true, direct: true, transport: 'UDP');

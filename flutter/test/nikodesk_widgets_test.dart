@@ -14,12 +14,14 @@ import 'package:flutter_hbb/nikodesk/ui.dart';
 class _ServerDouble implements ServerGateway {
   ServerSnapshot snapshot;
   int saves = 0;
+  Object? saveError;
   _ServerDouble(this.snapshot);
   @override
   Future<ServerSnapshot> read() async => snapshot;
   @override
   Future<void> save(PrivateServerConfig config) async {
     saves++;
+    if (saveError != null) throw saveError!;
   }
 }
 
@@ -42,7 +44,14 @@ void main() {
               body: MediaQuery(
                   data: MediaQueryData(textScaler: TextScaler.linear(scale)),
                   child: page))));
-      await Future<void>.delayed(const Duration(milliseconds: 150));
+      for (var i = 0; i < 250; i++) {
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        if (find
+            .byType(CircularProgressIndicator, skipOffstage: false)
+            .evaluate()
+            .isEmpty) break;
+      }
     });
     await tester.pumpAndSettle();
   }
@@ -97,9 +106,11 @@ void main() {
               usedPassword = password;
             }));
     expect(find.text('已注册'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('nikodesk-quick-connect')));
+    await tester.pumpAndSettle();
     expect(find.textContaining('设备在线状态：未知'), findsOneWidget);
-    await tester.ensureVisible(
-        find.byKey(const Key('nikodesk-device-connect-123456')));
+    await tester
+        .ensureVisible(find.byKey(const Key('nikodesk-device-connect-123456')));
     await tester.tap(find.byKey(const Key('nikodesk-device-connect-123456')));
     await tester.pumpAndSettle();
     // The card path always demands the remote password in this client.
@@ -166,8 +177,8 @@ void main() {
             onConnect: (_, __, ___, {isFileTransfer = false, password}) async {
               calls++;
             }));
-    await tester.ensureVisible(
-        find.byKey(const Key('nikodesk-device-connect-123456')));
+    await tester
+        .ensureVisible(find.byKey(const Key('nikodesk-device-connect-123456')));
     await tester.tap(find.byKey(const Key('nikodesk-device-connect-123456')));
     await tester.pumpAndSettle();
     // Submit with an empty password field: the policy must refuse.
@@ -249,4 +260,54 @@ void main() {
     expect(find.text('Set up your private server'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
+  testWidgets('device card rechecks pause after password dialog',
+      (tester) async {
+    final gateway = _ServerDouble(ServerSnapshot(
+        PrivateServerConfig(
+            'nas:21116', 'nas:21117', base64Encode(List.filled(32, 1))),
+        1,
+        true));
+    await tester.runAsync(
+        () => store.save(const DeviceEntry(id: '123456', alias: 'Office')));
+    var calls = 0;
+    await loadPage(
+        tester,
+        NikoDevicePage(
+            store: store,
+            gateway: gateway,
+            onConnect: (_, __, ___, {isFileTransfer = false, password}) async {
+              calls++;
+            }));
+    await tester
+        .ensureVisible(find.byKey(const Key('nikodesk-device-connect-123456')));
+    await tester.tap(find.byKey(const Key('nikodesk-device-connect-123456')));
+    await tester.pumpAndSettle();
+    gateway.snapshot = ServerSnapshot(gateway.snapshot.config, 1, false);
+    await tester.enterText(
+        find.byKey(const Key('nikodesk-connect-password')), 'synthetic-secret');
+    await tester.tap(find.byKey(const Key('nikodesk-connect-submit')));
+    await tester.pumpAndSettle();
+    expect(calls, 0);
+    expect(find.textContaining('已暂停'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+  for (final stopped in [true, false]) {
+    testWidgets('server form only claims pause when confirmed ($stopped)',
+        (tester) async {
+      final config = PrivateServerConfig('test.invalid:21116',
+          'test.invalid:21117', base64Encode(List.filled(32, 1)));
+      final gateway = _ServerDouble(ServerSnapshot(config, null, false))
+        ..saveError = PrivateServerSaveException(stoppedVerified: stopped);
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+              body: PrivateServerForm(gateway: gateway, initial: config))));
+      await tester.ensureVisible(find.text('保存并启用私服'));
+      await tester.tap(find.text('保存并启用私服'));
+      await tester.pumpAndSettle();
+      expect(gateway.saves, 1);
+      expect(find.textContaining(stopped ? '已确认连接处于暂停状态' : '停止状态未知'),
+          findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
 }

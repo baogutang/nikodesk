@@ -187,6 +187,9 @@ mod audio_capture_queue;
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 mod cpal_impl {
+    // Only Niko Windows system audio needs the pinned loopback-event fallback.
+    #[cfg(all(feature = "nikodesk", target_os = "windows"))]
+    use nikodesk_cpal as cpal;
     use self::service::{Reset, ServiceSwap};
     use super::audio_capture_error::CaptureErrorHandler;
     use super::*;

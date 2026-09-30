@@ -4,87 +4,95 @@
 
 # NikoDesk
 
-**Your server. Your keys. Your desk.** — a self-hosted, private-by-design remote desktop built on the RustDesk core.
+**Your devices. Your server. Your remote desktop.**
 
-[![Release](https://img.shields.io/github/v/release/baogutang/nikodesk?style=flat-square&color=6C4CF1)](https://github.com/baogutang/nikodesk/releases)
-[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Android-4C7CFF?style=flat-square)](https://github.com/baogutang/nikodesk/releases)
-[![License](https://img.shields.io/badge/license-AGPL--3.0-8E6CFF?style=flat-square)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/baogutang/nikodesk?style=flat-square&color=FFB020)](https://github.com/baogutang/nikodesk/stargazers)
+A private-server remote desktop built on the native RustDesk core.
+
+[![Release](https://img.shields.io/github/v/release/baogutang/nikodesk?style=flat-square&color=CC6D45)](https://github.com/baogutang/nikodesk/releases)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-8A7665?style=flat-square)](LICENCE)
 
 **English** · [简体中文](README_zh.md) · [Website](https://baogutang.github.io/nikodesk/)
 
-<img src="flutter/assets/readme-light.png" width="48%" alt="NikoDesk light theme" /> <img src="flutter/assets/readme-dark.png" width="48%" alt="NikoDesk dark theme" />
+<img src="flutter/assets/readme-light.png" width="48%" alt="Redacted real NikoDesk light-theme workspace" /> <img src="flutter/assets/readme-dark.png" width="48%" alt="Redacted real NikoDesk dark-theme workspace" />
 
-*Light (gradient glass) and dark (night console) themes — both ship in one app.*
+*Real local UI from an earlier build; device IDs, passwords and server details are redacted. Screenshots show appearance, not remote-session or performance acceptance.*
 
 </div>
 
----
+## Current status
 
-## Why NikoDesk
+NikoDesk is under development. **v1.0.0 is an archived test build and does not contain the fixes from the September 30 review.** Build artifacts alone do not establish a working application.
 
-Public remote-desktop services route your screen, keystrokes and files through servers you don't control. NikoDesk flips the model: it only ever talks to **the rendezvous/relay server you configure** (e.g. [rustdesk-server](https://github.com/rustdesk/rustdesk-server) on your own NAS or VPS), and it refuses to fall back to any public server. Session content is end-to-end encrypted between peers; your server only brokers the handshake.
+The latest complete local build is **1.1.0+4 (unpublished, September 30, 2026)**. Its product version is separate from the upstream core/protocol version. Development continues; a local build is neither a public download nor runtime acceptance.
 
-| | NikoDesk | Typical SaaS remote desktop |
+| Platform | v1.0.0 archive | Local 1.1.0+4 validation |
 |---|---|---|
-| Signal path | Your private server only | Vendor cloud |
-| Public-server fallback | **Refuses, by design** | Default |
-| Controller policy | Never connects without the remote password | Passwordless "ask" flows |
-| Update channel | GitHub Releases, SHA256-verified | Vendor auto-update |
-| Self-hosting | Point it at your hbbs/hbbr | N/A |
+| macOS ARM64 | ZIP containing a complete `NikoDesk.app`; local ad-hoc signature, no Developer ID or notarization | Full Rust＋Flutter build, DMG/update ZIP structure and signature integrity verified. This package has not been installed, launched or remote-session tested. |
+| Windows x64 | ZIP containing an EXE, DLLs and `data`; the NikoDesk initialization gate refuses to start | Isolation source, portable build and package checks implemented; full MSVC build, Win10 launch and sessions remain unverified. |
+| Android ARM64 | APK; the NikoDesk initialization gate refuses to start | Full Rust＋Gradle test APK, separate package ID, stable local test certificate and 16KB checks verified. Android 16 launch, upgrade and remote sessions remain unverified. |
 
-## Features
+The old Windows and Android assets are available for inspection in [the v1.0.0 archive](https://github.com/baogutang/nikodesk/releases/tag/v1.0.0), and are not recommended for installation. New artifacts will be linked only after they are published and verified.
 
-- **🔒 Private-server only** — validated ID/relay/key configuration; no public rendezvous fallback, ever.
-- **🗝️ Password-gated controlling** — a session is never dispatched with a device ID alone. The remote password is entered client-side; empty passwords are refused before any handshake.
-- **🖥️ Real remote control** — full RustDesk core: remote control, file transfer, clipboard, multi-display, hardware codecs (VP8/VP9/AV1/H.264/HEVC).
-- **🌗 Dual themes** — a light "soft gradient + glass" skin and a dark "night console" skin, following your system with a manual override.
-- **📱 Device workspace** — device cards with real rendezvous-backed online status, aliases, groups, favorites, and honest "availability unknown" states.
-- **🕓 Session history** — local, capped, integrity-checked history of sessions you initiated (initiation ≠ remote acceptance — we don't overstate).
-- **🔎 Diagnostics & permissions** — private-server registration status, latency/NAT, and guided macOS screen-recording/accessibility grants.
-- **⬆️ Verifiable updates** — check for updates from the app; downloads come from GitHub Releases over HTTPS and are **SHA256-verified before anything is replaced**.
-- **🚫 Hard-disabled by policy** — terminal, port forwarding, camera, remote restart, privacy mode and local-input blocking are compiled out of this product.
+## What NikoDesk adds
 
-## Getting started
+- **Private-server configuration:** your ID server, relay server and server public key. Missing configuration keeps registration stopped; the NikoDesk feature disables upstream default public-rendezvous fallback.
+- **Device workspace:** local aliases, groups, favorites, search and reconnect controls. Availability comes from server queries; unavailable evidence stays unknown.
+- **Password entry before connecting:** the NikoDesk connection entry requires a remote password and does not save it in the device directory. Authentication and encryption are still checked by the peer.
+- **Local history:** the last 200 connection attempts. An entry records initiation, not remote acceptance.
+- **Native sessions:** preserves RustDesk capture, rendering, input, file transfer, clipboard and multi-display paths. Codec availability depends on both peers and the build; hardware acceleration is not guaranteed.
+- **Diagnostics:** source-labelled session samples. Application RTT, successful decode-callback FPS and native submission-call timing are separate observations; they do not establish input-to-screen latency or actual presentation. Unknown measurements stay unknown.
+- **Light and dark themes:** follow the system or choose in the app.
 
-1. Grab the latest [release](https://github.com/baogutang/nikodesk/releases) (`v1.0.0` ships macOS ARM64, Windows x64 and Android ARM64).
-2. **macOS**: drop `NikoDesk.app` into `/Applications`, then grant *Screen Recording* and *Accessibility* in **System Settings → Privacy & Security** (the app guides you), and relaunch once.
-3. Run your own [rustdesk-server](https://github.com/rustdesk/rustdesk-server) (hbbs/hbbr). In NikoDesk → **Settings → Private server**, enter your ID server, relay and the server's public key.
-4. On your controllers (official RustDesk clients work), set the same server, then connect to your NikoDesk device ID **with its password**.
+Terminal, port tunnels, camera and voice requests are off by default. Allowing requests does not grant local approval or establish that a resource is running. The terminal connection/local-approval flow is implemented but real remote acceptance remains pending. The other three vertical flows, full unattended access, privacy screens and virtual displays remain in development. Unfinished capabilities stay unavailable; these boundaries are not a complete security audit.
 
-> Already running stock RustDesk? NikoDesk uses an isolated bundle id, config directory and IPC namespace — the two coexist without touching each other.
+## Getting started on macOS
 
-## Update flow
+1. Review the [release notes and SHA256SUMS](https://github.com/baogutang/nikodesk/releases/tag/v1.0.0). The existing ZIP is a historical build; packaging fixes are not published yet.
+2. Extract and retain the complete `NikoDesk.app`. Do not launch a file from `Contents/MacOS` or separate its frameworks. GitHub Actions downloads may add an outer artifact ZIP around the application archive.
+3. Configure your own [RustDesk Server OSS](https://github.com/rustdesk/rustdesk-server) in **Settings → Private server**: ID server, relay and **server public key**. Keep server private keys on the server.
+4. Configure the other endpoint to use the same servers and public key. Check service reachability, registration, then password authentication in a real session; each proves something different.
+5. When using the Mac as a controlled endpoint, grant Screen Recording for capture and Accessibility for remote input through macOS settings. Review individual session permissions before accepting. A control-only workflow should not require every receiver permission.
 
-Settings → **Software update → Check for updates**. The app queries `api.github.com` (HTTPS, host-allowlisted), compares versions, shows the release notes, downloads the platform bundle, **verifies the published SHA256**, swaps `/Applications/NikoDesk.app` and relaunches. Windows/Android show a download link for the same release.
+NikoDesk uses its own application identity, configuration and IPC namespace on macOS. Preserve an existing RustDesk installation while evaluating it. System security protections should remain enabled; local signing is not notarization.
+
+## Network and updates
+
+Registration and relay use your configured infrastructure. Authenticated peer-to-peer sessions also contact the negotiated peer address. Update checks and downloads contact GitHub, including its API and release-asset hosts. “Private server” does not mean every network packet goes to your NAS.
+
+The revised macOS update flow checks a release checksum, validates and stages the application archive, then reveals it for **manual installation**. It does not automatically replace the installed app. This revision is not part of v1.0.0. Keep the previous app until a new version has been verified. Windows and Android do not have a verified in-app installation path.
+
+SHA256 checks file consistency against a published digest. It does not authenticate the publisher or replace a trusted platform signature.
 
 ## Build from source
 
+The native core must be built before Flutter. For macOS ARM64, first prepare the pinned Rust/Flutter toolchains, Xcode and vcpkg native dependencies described in [the build workflow](.github/workflows/release.yml). Set `VCPKG_ROOT` to that prepared vcpkg directory; use a project-local toolchain rather than changing a global SDK.
+
 ```bash
-git clone https://github.com/baogutang/nikodesk.git
-cd nikodesk/flutter && flutter pub get
-flutter build macos --release   # requires the Rust core; see CI for the full matrix
+git clone --recurse-submodules https://github.com/baogutang/nikodesk.git
+cd nikodesk
+cargo build --locked --lib --release \
+  --features flutter,hwcodec,unix-file-copy-paste,screencapturekit,nikodesk
+cp target/release/liblibrustdesk.dylib target/release/librustdesk.dylib
+cd flutter
+flutter pub get
+FLUTTER_XCODE_ARCHS=arm64 FLUTTER_XCODE_ONLY_ACTIVE_ARCH=YES \
+  flutter build macos --release --dart-define=NIKODESK=true
 ```
 
-The complete, reproducible toolchain (pinned Rust, Flutter 3.24.5, vcpkg native deps) is exercised on every tag by [`.github/workflows/release.yml`](.github/workflows/release.yml).
+The output is `flutter/build/macos/Build/Products/Release/NikoDesk.app`. Packaging and signing are separate steps. The workflow pins Rust 1.88.0, Flutter 3.24.5 and vcpkg dependencies. Public build scripts allow inspection and rebuilding; byte-for-byte reproducibility has not been established. Windows and Android require their own native toolchains and runtime validation.
 
-## Security notes
+## Security and verification limits
 
-- Sessions are end-to-end encrypted; the private server only performs rendezvous and optional relay.
-- Receiver-side permissions are per-session, visible in the confirmation window, and revocable live (keyboard/mouse/clipboard/file/audio).
-- The updater is fail-closed: no SHA256SUMS asset or digest mismatch ⇒ nothing is installed.
-- No telemetry, no account, no third-party network calls. Hosts contacted: your server, `api.github.com`/`github.com` (update checks only).
-- Release builds carry local signatures (no Apple Developer ID/notarization). For wide distribution, sign with your own certificate.
+- Uses upstream encryption and authentication; a server public key is not a remote-control password. Device private keys and server private keys have different owners and must not be copied between them.
+- Session confirmation and permission controls must be tested on the actual controlled platform. Review the requested capabilities rather than granting everything for convenience.
+- macOS artifacts use local ad-hoc signatures, without Apple Developer ID signing or notarization. Windows distribution signing and Android release-signing continuity still need verification.
+- Full cross-device testing, file/clipboard behavior, permission revocation and performance comparisons are separate acceptance work. No unmeasured speed or latency improvement is claimed.
 
-## Documentation
+## Project and license
 
-- [Website](https://baogutang.github.io/nikodesk/) — features, guides and downloads.
-- Upstream's original README is preserved at [`docs/README_RUSTDESK_UPSTREAM.md`](docs/README_RUSTDESK_UPSTREAM.md).
+- [Website](https://baogutang.github.io/nikodesk/) · [Issues](https://github.com/baogutang/nikodesk/issues) · [Release archive](https://github.com/baogutang/nikodesk/releases)
+- [Original upstream README](docs/README_RUSTDESK_UPSTREAM.md)
 
-## Acknowledgments
+NikoDesk is an independent downstream of [RustDesk](https://github.com/rustdesk/rustdesk), based on commit `e9ddbd8f` (1.5.0-pre). Its native remote-control core and upstream copyright notices are preserved. It is not affiliated with or endorsed by RustDesk.
 
-NikoDesk is a product-grade downstream of [RustDesk](https://github.com/rustdesk/rustdesk) (baseline commit `e9ddbd8f`, 1.5.0-pre), which provides the entire remote-control core. Huge thanks to the RustDesk authors and contributors; upstream clipboard security fixes have been backported locally.
-
-## License
-
-[AGPL-3.0](LICENSE) — inheriting RustDesk's license. Derivative works must remain open-source under the same terms.
+[AGPL-3.0](LICENCE). Distributions and modifications must comply with the full license, including its corresponding-source obligations.

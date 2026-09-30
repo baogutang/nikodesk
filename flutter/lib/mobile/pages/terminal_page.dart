@@ -70,9 +70,11 @@ class TerminalPage extends StatefulWidget {
     required this.password,
     required this.isSharedPassword,
     this.forceRelay,
+    this.serverNamespace,
     this.connToken,
   }) : super(key: key);
   final String id;
+  final String? serverNamespace;
   final String? password;
   final bool? forceRelay;
   final bool? isSharedPassword;
@@ -142,6 +144,7 @@ class _TerminalPageState extends State<TerminalPage>
     _ffi = TerminalConnectionManager.getConnection(
       peerId: widget.id,
       password: widget.password,
+      serverNamespace: widget.serverNamespace,
       isSharedPassword: widget.isSharedPassword,
       forceRelay: widget.forceRelay,
       connToken: widget.connToken,
@@ -340,7 +343,7 @@ class _TerminalPageState extends State<TerminalPage>
     _terminalClipboardNoticeController?.close();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
-    TerminalConnectionManager.releaseConnection(widget.id);
+    TerminalConnectionManager.releaseConnection(widget.id, serverNamespace: widget.serverNamespace);
   }
 
   @override

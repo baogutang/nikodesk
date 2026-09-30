@@ -9,6 +9,27 @@ plugins {
 }
 
 def keystoreProperties = new Properties()
+def nikoTestSigning = System.getenv('NIKODESK_TEST_SIGNING') == '1'
+def nikoUnsignedBuild = System.getenv('NIKODESK_UNSIGNED_BUILD') == '1'
+if (nikoTestSigning && nikoUnsignedBuild) {
+    throw new GradleException('Choose persistent signing or an unsigned structure build, never both')
+}
+def nikoTestKeystoreProperties = new Properties()
+if (nikoTestSigning) {
+    def propertiesPath = System.getenv('NIKODESK_TEST_SIGNING_PROPERTIES')
+    if (!propertiesPath || !file(propertiesPath).isFile()) {
+        throw new GradleException('Stable NikoDesk test signing is required: set NIKODESK_TEST_SIGNING_PROPERTIES to a private key.properties file. Ephemeral debug signing is disabled.')
+    }
+    file(propertiesPath).withInputStream { nikoTestKeystoreProperties.load(it) }
+    for (field in ['storeFile', 'storePassword', 'keyAlias', 'keyPassword']) {
+        if (!nikoTestKeystoreProperties[field]) {
+            throw new GradleException('Incomplete NikoDesk test signing properties')
+        }
+    }
+    if (!file(nikoTestKeystoreProperties['storeFile']).isFile()) {
+        throw new GradleException('NikoDesk test keystore is missing; restore the existing key instead of generating a replacement')
+    }
+}
 def keystorePropertiesFile = rootProject.file('key.properties')
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
@@ -36,7 +57,8 @@ if (flutterVersionName == null) {
 String findRustlsPlatformVerifierMavenDir() {
     def dependencyText = providers.exec {
         it.workingDir = new File("../..")
-        commandLine("cargo", "metadata", "--format-version", "1")
+        commandLine("cargo", "metadata", "--locked", "--offline", "--format-version", "1",
+                    "--filter-platform", "aarch64-linux-android")
     }.standardOutput.asText.get()
 
     def dependencyJson = new JsonSlurper().parseText(dependencyText)
@@ -84,6 +106,8 @@ protobuf {
 android {
     namespace "com.carriez.flutter_hbb"
     compileSdkVersion 36
+    buildToolsVersion "36.0.0"
+    ndkVersion "28.2.13676358"
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
 
@@ -106,7 +130,26 @@ android {
         versionName flutterVersionName
     }
 
+    flavorDimensions "client"
+    productFlavors {
+        rustdesk {
+            dimension "client"
+        }
+        nikodesk {
+            dimension "client"
+            applicationId "io.nikodesk.android"
+        }
+    }
+
     signingConfigs {
+      nikodeskTest {
+        if (nikoTestSigning) {
+          keyAlias nikoTestKeystoreProperties['keyAlias']
+          keyPassword nikoTestKeystoreProperties['keyPassword']
+          storeFile file(nikoTestKeystoreProperties['storeFile'])
+          storePassword nikoTestKeystoreProperties['storePassword']
+        }
+      }
       release {
         keyAlias keystoreProperties['keyAlias']
         keyPassword keystoreProperties['keyPassword']
@@ -117,9 +160,11 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig signingConfigs.release
+            // The .dev channel retains one private signing identity across builds.
+            signingConfig nikoUnsignedBuild ? null : (nikoTestSigning ? signingConfigs.nikodeskTest : signingConfigs.release)
+            if (nikoTestSigning || nikoUnsignedBuild) {
+                applicationIdSuffix ".dev"
+            }
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules'
         }
     }

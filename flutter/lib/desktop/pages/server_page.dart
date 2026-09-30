@@ -21,6 +21,8 @@ import '../../common/widgets/chat_page.dart';
 import '../../models/file_model.dart';
 import '../../models/platform_model.dart';
 import '../../models/server_model.dart';
+import '../../nikodesk/theme.dart';
+import '../../nikodesk/cm_capability_panel.dart';
 
 /// Set only by this window's own close control, and only once the user has confirmed. Any other
 /// way the window can go - a session logout closing every window, the window manager, a native
@@ -29,6 +31,9 @@ import '../../models/server_model.dart';
 /// sets it (`ConnectionManagerState`) and the handler that reads it (`_DesktopServerPageState`)
 /// are different widgets.
 bool _cmClosedByOperator = false;
+
+Color _cmAccent(BuildContext context) => bind.mainGetAppNameSync() == 'NikoDesk'
+    ? Theme.of(context).colorScheme.primary : MyTheme.accent;
 
 class DesktopServerPage extends StatefulWidget {
   const DesktopServerPage({Key? key}) : super(key: key);
@@ -204,7 +209,7 @@ class ConnectionManagerState extends State<ConnectionManager>
               showClose: true,
               onWindowCloseButton: handleWindowCloseButton,
               controller: serverModel.tabController,
-              selectedBorderColor: MyTheme.accent,
+              selectedBorderColor: _cmAccent(context),
               maxLabelWidth: 100,
               tail: null, //buildScrollJumper(),
               tabBuilder: (key, icon, label, themeConf) {
@@ -458,7 +463,11 @@ class _CmHeaderState extends State<_CmHeader>
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10.0),
-        gradient: LinearGradient(
+        gradient: bind.mainGetAppNameSync() == 'NikoDesk'
+            ? (Theme.of(context).brightness == Brightness.light
+                ? NikoPalette.primaryGradient
+                : const LinearGradient(colors: [NikoPalette.darkCard, NikoPalette.darkSidebar]))
+            : LinearGradient(
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
           colors: [
@@ -627,13 +636,13 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
   Widget buildPermissionIcon(bool enabled, IconData iconData,
       Function(bool)? onTap, String tooltipText,
       {required bool canModify}) {
-    return Tooltip(
+    final control = Tooltip(
       message: "$tooltipText: ${enabled ? "ON" : "OFF"}",
       waitDuration: Duration.zero,
       child: Container(
         decoration: BoxDecoration(
           color: enabled
-              ? (canModify ? MyTheme.accent : MyTheme.accent.withOpacity(0.6))
+              ? (canModify ? _cmAccent(context) : _cmAccent(context).withOpacity(0.6))
               : Colors.grey[700],
           borderRadius: BorderRadius.circular(10.0),
         ),
@@ -657,6 +666,15 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
         ),
       ),
     );
+    if (bind.mainGetAppNameSync() != 'NikoDesk') return control;
+    return Semantics(
+        label: tooltipText,
+        button: true,
+        toggled: enabled,
+        enabled: canModify && onTap != null,
+        child: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            child: control));
   }
 
   @override
@@ -888,13 +906,15 @@ class _CmControlPanel extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
+        if (bind.mainGetAppNameSync() == 'NikoDesk' && client.isTerminal && model.nikoCapability(client.id) != null)
+          NikoTerminalCapabilityPanel(status: model.nikoCapability(client.id)!),
         Offstage(
           offstage: !client.inVoiceCall,
           child: Row(
             children: [
               Expanded(
                 child: buildButton(context,
-                    color: MyTheme.accent,
+                    color: _cmAccent(context),
                     onClick: null, onTapDown: (details) async {
                   final devicesInfo =
                       await AudioInput.getDevicesInfo(true, true);
@@ -980,7 +1000,7 @@ class _CmControlPanel extends StatelessWidget {
             children: [
               Expanded(
                 child: buildButton(context,
-                    color: MyTheme.accent,
+                    color: _cmAccent(context),
                     onClick: () => handleVoiceCall(true),
                     icon: Icon(
                       Icons.call_rounded,
@@ -1020,7 +1040,7 @@ class _CmControlPanel extends StatelessWidget {
           offstage: !showElevation,
           child: buildButton(
             context,
-            color: MyTheme.accent,
+            color: _cmAccent(context),
             onClick: () {
               handleElevate(context);
               windowManager.minimize();
@@ -1060,7 +1080,7 @@ class _CmControlPanel extends StatelessWidget {
       children: [
         Expanded(
             child: buildButton(context,
-                color: MyTheme.accent,
+                color: _cmAccent(context),
                 onClick: handleClose,
                 text: 'Close',
                 textColor: Colors.white)),
@@ -1106,7 +1126,7 @@ class _CmControlPanel extends StatelessWidget {
                   children: [
                     buildButton(
                       context,
-                      color: MyTheme.accent,
+                      color: _cmAccent(context),
                       onClick: () {
                         handleAccept(context);
                         windowManager.minimize();
@@ -1143,6 +1163,7 @@ class _CmControlPanel extends StatelessWidget {
       String? tooltip,
       GestureTapDownCallback? onTapDown}) {
     assert(!(onClick == null && onTapDown == null));
+    final niko = bind.mainGetAppNameSync() == 'NikoDesk';
     Widget textWidget;
     if (icon != null) {
       textWidget = Text(
@@ -1159,9 +1180,12 @@ class _CmControlPanel extends StatelessWidget {
         ),
       );
     }
+    if (niko && icon != null) textWidget = Flexible(child: textWidget);
     final borderRadius = BorderRadius.circular(10.0);
     final btn = Container(
-      height: 28,
+      height: niko ? null : 28,
+      constraints: niko ? const BoxConstraints(minHeight: 48) : null,
+      padding: niko ? const EdgeInsets.symmetric(vertical: 8) : null,
       decoration: BoxDecoration(
           color: color, borderRadius: borderRadius, border: border),
       child: InkWell(
@@ -1185,13 +1209,14 @@ class _CmControlPanel extends StatelessWidget {
         ),
       ),
     );
-    return (tooltip != null
+    final button = (tooltip != null
             ? Tooltip(
                 message: translate(tooltip),
                 child: btn,
               )
             : btn)
         .marginAll(4);
+    return niko ? Semantics(button: true, enabled: true, child: button) : button;
   }
 
   void handleDisconnect() {
@@ -1410,7 +1435,7 @@ class __FileTransferLogPageState extends State<_FileTransferLogPage> {
                                               barRadius: Radius.circular(15),
                                               percent: item.finishedSize /
                                                   item.totalSize,
-                                              progressColor: MyTheme.accent,
+                                              progressColor: _cmAccent(context),
                                               backgroundColor:
                                                   Theme.of(context).hoverColor,
                                               lineHeight:

@@ -66,6 +66,72 @@ pub extern "C" fn wire_session_add_sync(
 }
 
 #[no_mangle]
+pub extern "C" fn wire_session_add_nikodesk_sync(
+    session_id: *mut wire_uint_8_list,
+    id: *mut wire_uint_8_list,
+    expected_server_namespace: *mut wire_uint_8_list,
+    is_file_transfer: bool,
+    is_view_camera: bool,
+    is_port_forward: bool,
+    is_rdp: bool,
+    is_terminal: bool,
+    switch_uuid: *mut wire_uint_8_list,
+    force_relay: bool,
+    password: *mut wire_uint_8_list,
+    is_shared_password: bool,
+    conn_token: *mut wire_uint_8_list,
+) -> support::WireSyncReturn {
+    wire_session_add_nikodesk_sync_impl(
+        session_id,
+        id,
+        expected_server_namespace,
+        is_file_transfer,
+        is_view_camera,
+        is_port_forward,
+        is_rdp,
+        is_terminal,
+        switch_uuid,
+        force_relay,
+        password,
+        is_shared_password,
+        conn_token,
+    )
+}
+
+#[no_mangle]
+pub extern "C" fn wire_session_add_nikodesk_existed_sync(
+    id: *mut wire_uint_8_list,
+    session_id: *mut wire_uint_8_list,
+    displays: *mut wire_int_32_list,
+    is_view_camera: bool,
+    expected_server_namespace: *mut wire_uint_8_list,
+) -> support::WireSyncReturn {
+    wire_session_add_nikodesk_existed_sync_impl(
+        id,
+        session_id,
+        displays,
+        is_view_camera,
+        expected_server_namespace,
+    )
+}
+
+#[no_mangle]
+pub extern "C" fn wire_peer_get_nikodesk_sessions_count(
+    id: *mut wire_uint_8_list,
+    conn_type: i32,
+    expected_server_namespace: *mut wire_uint_8_list,
+) -> support::WireSyncReturn {
+    wire_peer_get_nikodesk_sessions_count_impl(id, conn_type, expected_server_namespace)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_session_get_server_namespace(
+    session_id: *mut wire_uint_8_list,
+) -> support::WireSyncReturn {
+    wire_session_get_server_namespace_impl(session_id)
+}
+
+#[no_mangle]
 pub extern "C" fn wire_session_start(
     port_: i64,
     session_id: *mut wire_uint_8_list,
@@ -628,6 +694,14 @@ pub extern "C" fn wire_session_get_peer_option(
 }
 
 #[no_mangle]
+pub extern "C" fn wire_session_get_peer_option_sync(
+    session_id: *mut wire_uint_8_list,
+    name: *mut wire_uint_8_list,
+) -> support::WireSyncReturn {
+    wire_session_get_peer_option_sync_impl(session_id, name)
+}
+
+#[no_mangle]
 pub extern "C" fn wire_session_input_os_password(
     port_: i64,
     session_id: *mut wire_uint_8_list,
@@ -928,6 +1002,11 @@ pub extern "C" fn wire_main_get_option(port_: i64, key: *mut wire_uint_8_list) {
 }
 
 #[no_mangle]
+pub extern "C" fn wire_main_niko_save_private_server(port_: i64, config: *mut wire_uint_8_list) {
+    wire_main_niko_save_private_server_impl(port_, config)
+}
+
+#[no_mangle]
 pub extern "C" fn wire_main_get_option_sync(key: *mut wire_uint_8_list) -> support::WireSyncReturn {
     wire_main_get_option_sync_impl(key)
 }
@@ -1021,8 +1100,81 @@ pub extern "C" fn wire_main_get_fav(port_: i64) {
 }
 
 #[no_mangle]
+pub extern "C" fn wire_main_get_nikodesk_capability_policy(
+    port_: i64,
+    expected_server_namespace: *mut wire_uint_8_list,
+) {
+    wire_main_get_nikodesk_capability_policy_impl(port_, expected_server_namespace)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_main_set_nikodesk_capability_policy(
+    port_: i64,
+    expected_server_namespace: *mut wire_uint_8_list,
+    expected_revision: *mut wire_uint_8_list,
+    capability: *mut wire_uint_8_list,
+    allow_requests: bool,
+) {
+    wire_main_set_nikodesk_capability_policy_impl(
+        port_,
+        expected_server_namespace,
+        expected_revision,
+        capability,
+        allow_requests,
+    )
+}
+
+#[no_mangle]
 pub extern "C" fn wire_main_store_fav(port_: i64, favs: *mut wire_StringList) {
     wire_main_store_fav_impl(port_, favs)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_main_get_nikodesk_favorites(
+    port_: i64,
+    expected_server_namespace: *mut wire_uint_8_list,
+) {
+    wire_main_get_nikodesk_favorites_impl(port_, expected_server_namespace)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_main_patch_nikodesk_favorites(
+    port_: i64,
+    expected_server_namespace: *mut wire_uint_8_list,
+    expected_revision: *mut wire_uint_8_list,
+    add: *mut wire_StringList,
+    remove: *mut wire_StringList,
+) {
+    wire_main_patch_nikodesk_favorites_impl(
+        port_,
+        expected_server_namespace,
+        expected_revision,
+        add,
+        remove,
+    )
+}
+
+#[no_mangle]
+pub extern "C" fn wire_main_preview_nikodesk_legacy_peer_preferences(
+    port_: i64,
+    expected_server_namespace: *mut wire_uint_8_list,
+) {
+    wire_main_preview_nikodesk_legacy_peer_preferences_impl(port_, expected_server_namespace)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_main_import_nikodesk_legacy_peer_preferences(
+    port_: i64,
+    expected_server_namespace: *mut wire_uint_8_list,
+    preview_revision: *mut wire_uint_8_list,
+    peer_ids: *mut wire_StringList,
+) {
+    wire_main_import_nikodesk_legacy_peer_preferences_impl(
+        port_,
+        expected_server_namespace,
+        preview_revision,
+        peer_ids,
+    )
 }
 
 #[no_mangle]
@@ -1221,6 +1373,44 @@ pub extern "C" fn wire_main_set_peer_option_sync(
     value: *mut wire_uint_8_list,
 ) -> support::WireSyncReturn {
     wire_main_set_peer_option_sync_impl(id, key, value)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_main_get_nikodesk_peer_option_sync(
+    id: *mut wire_uint_8_list,
+    expected_server_namespace: *mut wire_uint_8_list,
+    key: *mut wire_uint_8_list,
+) -> support::WireSyncReturn {
+    wire_main_get_nikodesk_peer_option_sync_impl(id, expected_server_namespace, key)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_main_set_nikodesk_peer_option_sync(
+    id: *mut wire_uint_8_list,
+    expected_server_namespace: *mut wire_uint_8_list,
+    key: *mut wire_uint_8_list,
+    value: *mut wire_uint_8_list,
+) -> support::WireSyncReturn {
+    wire_main_set_nikodesk_peer_option_sync_impl(id, expected_server_namespace, key, value)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_main_get_nikodesk_peer_flutter_option_sync(
+    id: *mut wire_uint_8_list,
+    expected_server_namespace: *mut wire_uint_8_list,
+    k: *mut wire_uint_8_list,
+) -> support::WireSyncReturn {
+    wire_main_get_nikodesk_peer_flutter_option_sync_impl(id, expected_server_namespace, k)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_main_set_nikodesk_peer_flutter_option_sync(
+    id: *mut wire_uint_8_list,
+    expected_server_namespace: *mut wire_uint_8_list,
+    k: *mut wire_uint_8_list,
+    v: *mut wire_uint_8_list,
+) -> support::WireSyncReturn {
+    wire_main_set_nikodesk_peer_flutter_option_sync_impl(id, expected_server_namespace, k, v)
 }
 
 #[no_mangle]
@@ -2200,6 +2390,16 @@ pub extern "C" fn wire_session_get_common(
     param: *mut wire_uint_8_list,
 ) {
     wire_session_get_common_impl(port_, session_id, key, param)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_cm_nikodesk_capability_decision(port_: i64, json: *mut wire_uint_8_list) {
+    wire_cm_nikodesk_capability_decision_impl(port_, json)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_cm_nikodesk_capability_revoke(port_: i64, json: *mut wire_uint_8_list) {
+    wire_cm_nikodesk_capability_revoke_impl(port_, json)
 }
 
 // Section: allocate functions

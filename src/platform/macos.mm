@@ -302,6 +302,9 @@ extern "C" bool MacSetMode(CGDirectDisplayID display, uint32_t width, uint32_t h
     return ret;
 }
 
+#ifdef NIKODESK_BUILD
+#include "macos_privacy_bridge.h"
+#else
 static CFMachPortRef g_eventTap = NULL;
 static CFRunLoopSourceRef g_runLoopSource = NULL;
 static std::mutex g_privacyModeMutex;
@@ -909,3 +912,4 @@ extern "C" bool MacSetPrivacyMode(bool on) {
         return TurnOffPrivacyModeInternal();
     }
 }
+#endif // NIKODESK_BUILD

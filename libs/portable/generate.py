@@ -6,6 +6,8 @@ import subprocess
 from hashlib import md5
 import brotli
 import datetime
+import re
+from pathlib import Path
 
 # 4GB maximum
 length_count = 4
@@ -78,20 +80,45 @@ def write_blob(md5_table: dict, output_path: str, exe: str):
         f.write(exe.encode(encoding='utf-8'))
     print(f"Metadata has been written to {output_path}")
 
-def write_app_metadata(output_folder: str):
+def product_version(name=None, number=None):
+    pubspec = Path(__file__).resolve().parents[2] / 'flutter/pubspec.yaml'
+    declared = re.search(r'^version:\s*(\d+\.\d+\.\d+)\+(\d+)\s*$', pubspec.read_text(encoding='utf-8'), re.MULTILINE)
+    if not declared:
+        raise ValueError('NikoDesk pubspec must declare the product version and build number')
+    name = name if name is not None else declared.group(1)
+    number = str(number) if number is not None else declared.group(2)
+    if not re.fullmatch(r'\d+\.\d+\.\d+', name) or not re.fullmatch(r'\d+', number):
+        raise ValueError('Invalid NikoDesk product version/build number')
+    parts = [int(part) for part in name.split('.')] + [int(number)]
+    if any(part > 65535 for part in parts) or parts[-1] < 1:
+        raise ValueError('NikoDesk Windows version components must fit 16 bits, with a positive build')
+    return '.'.join(str(part) for part in parts[:3]), str(parts[-1])
+
+
+def write_app_metadata(output_folder: str, version=None, build_number=None):
     output_path = os.path.join(output_folder, "app_metadata.toml")
     with open(output_path, "w") as f:
         f.write(f"timestamp = {int(datetime.datetime.now().timestamp() * 1000)}\n")
+        if version is not None:
+            f.write(f'product_version = "{version}"\nbuild_number = {build_number}\n')
     print(f"App metadata has been written to {output_path}")
 
-def build_portable(output_folder: str, target: str):
+def build_portable(output_folder: str, target: str, nikodesk=False, version=None, build_number=None):
+    if nikodesk:
+        version, build_number = product_version(version, build_number)
     current_dir = os.getcwd()
     try:
         os.chdir(output_folder)
         cmd = ["cargo", "build", "--locked", "--release"]
+        if nikodesk:
+            cmd.extend(["--features", "nikodesk"])
         if target:
             cmd.extend(["--target", target])
-        subprocess.run(cmd, check=True)
+        environment = os.environ.copy()
+        if nikodesk:
+            environment['NIKODESK_PRODUCT_VERSION'] = version
+            environment['NIKODESK_BUILD_NUMBER'] = build_number
+        subprocess.run(cmd, check=True, env=environment)
     finally:
         os.chdir(current_dir)
 
@@ -119,9 +146,17 @@ if __name__ == '__main__':
                       default=False,
                       help="omit the executable from the blob, for a template whose "
                            "executable ships in the package instead")
+    parser.add_option("--nikodesk", dest="nikodesk", action="store_true", default=False,
+                      help="build the isolated NikoDesk user-mode portable wrapper")
+    parser.add_option("--product-version", dest="product_version", help="NikoDesk product version, independent of native protocol")
+    parser.add_option("--build-number", dest="build_number", help="NikoDesk Windows build number")
     (options, args) = parser.parse_args()
     folder = options.folder or './rustdesk'
     output_folder = os.path.abspath(options.output_folder or './')
+    version, build_number = (product_version(options.product_version, options.build_number)
+                             if options.nikodesk else (None, None))
+    if not options.nikodesk and (options.product_version is not None or options.build_number is not None):
+        parser.error('Product version parameters require --nikodesk')
 
     if not options.executable:
         options.executable = 'rustdesk.exe'
@@ -142,6 +177,8 @@ if __name__ == '__main__':
     if not in_source_folder:
         print("The executable must locate in source folder")
         exit(-1)
+    if options.nikodesk and (not os.path.isfile(exe) or os.path.basename(exe).lower() != 'nikodesk.exe'):
+        raise ValueError('NikoDesk packaging requires the existing NikoDesk.exe runner')
     exe = '.' + exe[len(folder_path):]
     print("Executable path: " + exe)
     print("Compression level: " + str(options.level))
@@ -151,5 +188,5 @@ if __name__ == '__main__':
         write_blob(md5_table, os.path.abspath(options.package), exe)
     else:
         write_package_metadata(md5_table, output_folder, exe)
-        write_app_metadata(output_folder)
-        build_portable(output_folder, options.target)
+        write_app_metadata(output_folder, version, build_number)
+        build_portable(output_folder, options.target, options.nikodesk, version, build_number)

@@ -288,49 +288,81 @@ pub fn set_kb_layout_type(kb_layout_type: String) {
 
 #[inline]
 pub fn peer_has_password(id: String) -> bool {
-    !PeerConfig::load(&id).password.is_empty()
+    !get_peer(id).password.is_empty()
 }
 
 #[inline]
 pub fn forget_password(id: String) {
-    let mut c = PeerConfig::load(&id);
-    c.password.clear();
-    c.store(&id);
+    #[cfg(feature = "nikodesk")]
+    {
+        if let Some(key) = crate::nikodesk::server_scope::current_peer_key(&id) {
+            let mut c = key.load();
+            c.password.clear();
+            key.store(&c);
+        }
+        return;
+    }
+    #[cfg(not(feature = "nikodesk"))]
+    {
+        let mut c = PeerConfig::load(&id);
+        c.password.clear();
+        c.store(&id);
+    }
 }
 
 #[inline]
 pub fn get_peer_option(id: String, name: String) -> String {
-    let c = PeerConfig::load(&id);
+    let c = get_peer(id);
     c.options.get(&name).unwrap_or(&"".to_owned()).to_owned()
 }
 
 #[inline]
 #[cfg(feature = "flutter")]
 pub fn get_peer_flutter_option(id: String, name: String) -> String {
-    let c = PeerConfig::load(&id);
+    let c = get_peer(id);
     c.ui_flutter.get(&name).unwrap_or(&"".to_owned()).to_owned()
 }
 
 #[inline]
 #[cfg(feature = "flutter")]
 pub fn set_peer_flutter_option(id: String, name: String, value: String) {
+    #[cfg(feature = "nikodesk")]
+    let Some(storage_key) = crate::nikodesk::server_scope::current_peer_key(&id) else {
+        return;
+    };
+    #[cfg(feature = "nikodesk")]
+    let mut c = storage_key.load();
+    #[cfg(not(feature = "nikodesk"))]
     let mut c = PeerConfig::load(&id);
     if value.is_empty() {
         c.ui_flutter.remove(&name);
     } else {
         c.ui_flutter.insert(name, value);
     }
+    #[cfg(feature = "nikodesk")]
+    storage_key.store(&c);
+    #[cfg(not(feature = "nikodesk"))]
     c.store(&id);
 }
 
 #[inline]
 pub fn set_peer_option(id: String, name: String, value: String) {
+    #[cfg(feature = "nikodesk")]
+    let Some(storage_key) = crate::nikodesk::server_scope::current_peer_key(&id) else {
+        return;
+    };
+    #[cfg(feature = "nikodesk")]
+    let mut c = storage_key.load();
+    #[cfg(not(feature = "nikodesk"))]
     let mut c = PeerConfig::load(&id);
     if value.is_empty() {
         c.options.remove(&name);
     } else {
         c.options.insert(name, value);
     }
+    #[cfg(feature = "nikodesk")]
+    storage_key.store(&c);
+    #[cfg(not(feature = "nikodesk"))]
     c.store(&id);
 }
 
@@ -664,16 +696,27 @@ pub fn set_permanent_password_with_result(password: String) -> bool {
 
 #[inline]
 pub fn get_peer(id: String) -> PeerConfig {
+    #[cfg(feature = "nikodesk")]
+    return crate::nikodesk::server_scope::load_peer(&id);
+    #[cfg(not(feature = "nikodesk"))]
     PeerConfig::load(&id)
 }
 
 #[inline]
 pub fn get_fav() -> Vec<String> {
+    #[cfg(feature = "nikodesk")]
+    return crate::nikodesk::server_scope::current().map_or_else(Vec::new, |scope| scope.favorites());
+    #[cfg(not(feature = "nikodesk"))]
     LocalConfig::get_fav()
 }
 
 #[inline]
 pub fn store_fav(fav: Vec<String>) {
+    #[cfg(feature = "nikodesk")]
+    if let Some(scope) = crate::nikodesk::server_scope::current() {
+        scope.store_favorites(fav);
+    }
+    #[cfg(not(feature = "nikodesk"))]
     LocalConfig::set_fav(fav);
 }
 
@@ -803,6 +846,9 @@ pub fn peer_to_map(id: String, p: PeerConfig) -> HashMap<&'static str, String> {
 
 #[cfg(feature = "flutter")]
 pub fn peer_exists(id: &str) -> bool {
+    #[cfg(feature = "nikodesk")]
+    return crate::nikodesk::server_scope::current_peer_key(id).map_or(false, |key| key.exists());
+    #[cfg(not(feature = "nikodesk"))]
     PeerConfig::exists(id)
 }
 

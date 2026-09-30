@@ -20,6 +20,7 @@ use sodiumoxide::base64;
 use sodiumoxide::crypto::sign;
 
 mod permanent_password;
+mod trusted_root;
 
 pub use permanent_password::{
     compute_permanent_password_h1, decode_permanent_password_h1_from_storage,
@@ -775,6 +776,9 @@ impl Config {
     }
 
     pub fn path<P: AsRef<Path>>(p: P) -> PathBuf {
+        if let Some(path) = trusted_root::resolve(p.as_ref()) {
+            return path;
+        }
         #[cfg(any(target_os = "android", target_os = "ios"))]
         {
             let mut path: PathBuf = APP_DIR.read().unwrap().clone().into();
@@ -797,6 +801,12 @@ impl Config {
             }
             "".into()
         }
+    }
+
+    /// Opt-in for a dedicated privileged worker after OS role/root validation.
+    /// Existing clients never set this and retain their original path selection.
+    pub fn initialize_trusted_storage_root(root: PathBuf) -> crate::ResultType<()> {
+        trusted_root::install(root)
     }
 
     /// Get the log directory path.
@@ -1234,6 +1244,10 @@ impl Config {
         }
         config.options = v;
         config.store();
+    }
+
+    pub fn replace_options_cache_without_store(options: HashMap<String, String>) {
+        CONFIG2.write().unwrap().options = options;
     }
 
     pub fn get_option(k: &str) -> String {

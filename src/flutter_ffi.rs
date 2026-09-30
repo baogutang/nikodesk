@@ -12,8 +12,10 @@ use crate::{
     ui_interface::{self, *},
 };
 use flutter_rust_bridge::{StreamSink, SyncReturn};
+#[cfg(not(feature = "nikodesk"))]
+use hbb_common::config::{PeerConfig, PeerInfoSerde};
 use hbb_common::{
-    config::{self, LocalConfig, PeerConfig, PeerInfoSerde},
+    config::{self, LocalConfig},
     lazy_static, log,
     rendezvous_proto::ConnType,
     ResultType,
@@ -29,8 +31,10 @@ use std::{
         atomic::{AtomicI32, Ordering},
         Arc,
     },
-    time::{Duration, SystemTime},
+    time::Duration,
 };
+#[cfg(not(feature = "nikodesk"))]
+use std::time::SystemTime;
 
 pub type SessionID = uuid::Uuid;
 
@@ -39,8 +43,12 @@ lazy_static::lazy_static! {
 }
 
 fn initialize(app_dir: &str, custom_client_config: &str) {
+    #[cfg(all(feature = "nikodesk", target_os = "android"))]
+    let nikodesk_init = crate::nikodesk::initialize_android(app_dir);
+    #[cfg(all(feature = "nikodesk", not(target_os = "android")))]
+    let nikodesk_init = crate::nikodesk::initialize();
     #[cfg(feature = "nikodesk")]
-    if let Err(err) = crate::nikodesk::initialize() {
+    if let Err(err) = nikodesk_init {
         eprintln!("NikoDesk stopped: {err}");
         std::process::exit(1);
     }
@@ -146,6 +154,9 @@ pub fn session_add_existed_sync(
     displays: Vec<i32>,
     is_view_camera: bool,
 ) -> SyncReturn<String> {
+    #[cfg(feature = "nikodesk")]
+    return SyncReturn("NikoDesk requires a server namespace when attaching a session".to_owned());
+    #[cfg(not(feature = "nikodesk"))]
     if let Err(e) = session_add_existed(id.clone(), session_id, displays, is_view_camera) {
         SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
     } else {
@@ -167,6 +178,10 @@ pub fn session_add_sync(
     is_shared_password: bool,
     conn_token: Option<String>,
 ) -> SyncReturn<String> {
+    #[cfg(feature = "nikodesk")]
+    return SyncReturn("NikoDesk requires a server namespace when creating a session".to_owned());
+    #[cfg(not(feature = "nikodesk"))]
+    {
     let add_res = session_add(
         &session_id,
         &id,
@@ -192,6 +207,84 @@ pub fn session_add_sync(
     } else {
         SyncReturn("".to_owned())
     }
+    }
+}
+
+pub fn session_add_nikodesk_sync(
+    session_id: SessionID, id: String, expected_server_namespace: String,
+    is_file_transfer: bool, is_view_camera: bool, is_port_forward: bool, is_rdp: bool,
+    is_terminal: bool, switch_uuid: String, force_relay: bool, password: String,
+    is_shared_password: bool, conn_token: Option<String>,
+) -> SyncReturn<String> {
+    #[cfg(feature = "nikodesk")]
+    {
+        let result = (|| -> ResultType<()> {
+            crate::nikodesk::connection_snapshot::validate_namespace(&expected_server_namespace)?;
+            crate::nikodesk::validate_remote_id(&id)?;
+            crate::nikodesk::validate_connection_credentials(&password)?;
+            if is_view_camera || is_port_forward || is_rdp || (is_terminal && is_file_transfer) || !switch_uuid.is_empty() {
+                hbb_common::bail!("NikoDesk supports private-server desktop, file and locally approved terminal requests");
+            }
+            let snapshot = crate::nikodesk::connection_snapshot::ConnectionSnapshot::capture(&expected_server_namespace)?;
+            flutter::session_add_with_snapshot(&session_id, &id, is_file_transfer, is_view_camera, is_port_forward,
+                is_rdp, is_terminal, &switch_uuid, force_relay, password, is_shared_password, conn_token, snapshot)?;
+            Ok(())
+        })();
+        return SyncReturn(result.err().map_or_else(String::new, |err| err.to_string()));
+    }
+    #[cfg(not(feature = "nikodesk"))]
+    {
+        let _ = expected_server_namespace;
+        session_add_sync(session_id, id, is_file_transfer, is_view_camera, is_port_forward,
+            is_rdp, is_terminal, switch_uuid, force_relay, password, is_shared_password, conn_token)
+    }
+}
+
+pub fn session_add_nikodesk_existed_sync(id: String, session_id: SessionID, displays: Vec<i32>,
+    is_view_camera: bool, expected_server_namespace: String) -> SyncReturn<String> {
+    #[cfg(feature = "nikodesk")]
+    {
+        if is_view_camera {
+            return SyncReturn("NikoDesk camera sessions are disabled".to_owned());
+        }
+        if sessions::insert_peer_session_id_scoped(&expected_server_namespace, &id, ConnType::DEFAULT_CONN, session_id, displays) {
+            return SyncReturn(String::new());
+        }
+        return SyncReturn("NikoDesk session does not belong to this server namespace".to_owned());
+    }
+    #[cfg(not(feature = "nikodesk"))]
+    {
+        let _ = expected_server_namespace;
+        session_add_existed_sync(id, session_id, displays, is_view_camera)
+    }
+}
+
+pub fn peer_get_nikodesk_sessions_count(id: String, conn_type: i32,
+    expected_server_namespace: String) -> SyncReturn<usize> {
+    #[cfg(feature = "nikodesk")]
+    {
+        let conn_type = if conn_type == ConnType::FILE_TRANSFER as i32 { ConnType::FILE_TRANSFER }
+            else if conn_type == ConnType::DEFAULT_CONN as i32 { ConnType::DEFAULT_CONN }
+            else { return SyncReturn(0); };
+        return SyncReturn(sessions::get_session_count_scoped(&expected_server_namespace, &id, conn_type));
+    }
+    #[cfg(not(feature = "nikodesk"))]
+    {
+        let _ = expected_server_namespace;
+        peer_get_sessions_count(id, conn_type)
+    }
+}
+
+pub fn session_get_server_namespace(session_id: SessionID) -> SyncReturn<String> {
+    #[cfg(feature = "nikodesk")]
+    {
+        let namespace = sessions::get_session_by_session_id(&session_id)
+            .and_then(|session| session.lc.read().ok()?.connection_snapshot())
+            .map_or_else(String::new, |snapshot| snapshot.namespace().to_owned());
+        return SyncReturn(namespace);
+    }
+    #[cfg(not(feature = "nikodesk"))]
+    { let _ = session_id; SyncReturn(String::new()) }
 }
 
 pub fn session_start(
@@ -756,6 +849,10 @@ pub fn session_get_peer_option(session_id: SessionID, name: String) -> String {
     "".to_string()
 }
 
+pub fn session_get_peer_option_sync(session_id: SessionID, name: String) -> SyncReturn<String> {
+    SyncReturn(session_get_peer_option(session_id, name))
+}
+
 pub fn session_input_os_password(session_id: SessionID, value: String) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.input_os_password(value, true);
@@ -868,10 +965,19 @@ pub fn session_read_local_empty_dirs_recursive_sync(
     path: String,
     include_hidden: bool,
 ) -> String {
-    if let Ok(fds) = fs::get_empty_dirs_recursive(&path, include_hidden) {
-        return make_vec_fd_to_json(&fds);
+    #[cfg(feature = "nikodesk")]
+    {
+        return fs::get_empty_dirs_recursive_fallible(&path, include_hidden)
+            .map(|fds| make_vec_fd_to_json(&fds))
+            .unwrap_or_default();
     }
-    "".to_string()
+    #[cfg(not(feature = "nikodesk"))]
+    {
+        if let Ok(fds) = fs::get_empty_dirs_recursive(&path, include_hidden) {
+            return make_vec_fd_to_json(&fds);
+        }
+        "".to_string()
+    }
 }
 
 pub fn session_read_remote_empty_dirs_recursive_sync(
@@ -1017,6 +1123,16 @@ pub fn main_get_option(key: String) -> String {
     get_option(key)
 }
 
+pub fn main_niko_save_private_server(config: String) -> String {
+    #[cfg(feature = "nikodesk")]
+    return crate::nikodesk::server_settings::save(config);
+    #[cfg(not(feature = "nikodesk"))]
+    {
+        let _ = config;
+        r#"{"ok":false,"state":"unsupported","stoppedVerified":false}"#.to_owned()
+    }
+}
+
 pub fn main_get_option_sync(key: String) -> SyncReturn<String> {
     SyncReturn(main_get_option(key))
 }
@@ -1029,6 +1145,7 @@ pub fn main_set_option(key: String, value: String) {
     #[cfg(feature = "nikodesk")]
     {
         if let Err(err) = crate::nikodesk::set_option(key, value) {
+            crate::nikodesk::server_settings::reject_snapshot_write();
             log::error!("NikoDesk option rejected: {err}");
         }
         return;
@@ -1103,6 +1220,13 @@ pub fn main_get_options_sync() -> SyncReturn<String> {
 }
 
 pub fn main_set_options(json: String) {
+    #[cfg(feature = "nikodesk")]
+    {
+        let _ = json;
+        crate::nikodesk::server_settings::reject_snapshot_write();
+        log::error!("NikoDesk bulk settings writes require a verified transaction or a single-option patch");
+        return;
+    }
     #[cfg(not(feature = "nikodesk"))]
     let mut map: HashMap<String, String> = serde_json::from_str(&json).unwrap_or(HashMap::new());
     #[cfg(feature = "nikodesk")]
@@ -1177,19 +1301,19 @@ pub fn main_get_socks() -> Vec<String> {
 
 pub fn main_get_app_name() -> String {
     #[cfg(feature = "nikodesk")]
-    crate::nikodesk::initialize_or_exit();
+    return "NikoDesk".into();
     get_app_name()
 }
 
 pub fn main_get_app_name_sync() -> SyncReturn<String> {
     #[cfg(feature = "nikodesk")]
-    crate::nikodesk::initialize_or_exit();
+    return SyncReturn("NikoDesk".into());
     SyncReturn(get_app_name())
 }
 
 pub fn main_uri_prefix_sync() -> SyncReturn<String> {
     #[cfg(feature = "nikodesk")]
-    crate::nikodesk::initialize_or_exit();
+    return SyncReturn("nikodesk://".into());
     SyncReturn(crate::get_uri_prefix())
 }
 
@@ -1205,8 +1329,50 @@ pub fn main_get_fav() -> Vec<String> {
     get_fav()
 }
 
+pub fn main_get_nikodesk_capability_policy(expected_server_namespace: String) -> String {
+    #[cfg(feature = "nikodesk")]
+    return crate::nikodesk::capability_policy_api::get(&expected_server_namespace);
+    #[cfg(not(feature = "nikodesk"))]
+    { let _ = expected_server_namespace; r#"{"ok":false,"status":"unsupported"}"#.into() }
+}
+
+pub fn main_set_nikodesk_capability_policy(expected_server_namespace: String, expected_revision: String, capability: String, allow_requests: bool) -> String {
+    #[cfg(feature = "nikodesk")]
+    return crate::nikodesk::capability_policy_api::set(&expected_server_namespace, &expected_revision, &capability, allow_requests);
+    #[cfg(not(feature = "nikodesk"))]
+    { let _ = (expected_server_namespace, expected_revision, capability, allow_requests); r#"{"ok":false,"status":"unsupported"}"#.into() }
+}
+
 pub fn main_store_fav(favs: Vec<String>) {
     store_fav(favs)
+}
+
+pub fn main_get_nikodesk_favorites(expected_server_namespace: String) -> String {
+    #[cfg(feature = "nikodesk")]
+    return crate::nikodesk::favorites::get(&expected_server_namespace);
+    #[cfg(not(feature = "nikodesk"))]
+    { let _ = expected_server_namespace; r#"{"ok":false,"status":"unsupported"}"#.into() }
+}
+
+pub fn main_patch_nikodesk_favorites(expected_server_namespace: String, expected_revision: String, add: Vec<String>, remove: Vec<String>) -> String {
+    #[cfg(feature = "nikodesk")]
+    return crate::nikodesk::favorites::patch(&expected_server_namespace, &expected_revision, &add, &remove);
+    #[cfg(not(feature = "nikodesk"))]
+    { let _ = (expected_server_namespace, expected_revision, add, remove); r#"{"ok":false,"status":"unsupported"}"#.into() }
+}
+
+pub fn main_preview_nikodesk_legacy_peer_preferences(expected_server_namespace: String) -> String {
+    #[cfg(feature = "nikodesk")]
+    return crate::nikodesk::peer_migration::preview(&expected_server_namespace);
+    #[cfg(not(feature = "nikodesk"))]
+    { let _ = expected_server_namespace; r#"{"ok":false,"status":"unsupported"}"#.into() }
+}
+
+pub fn main_import_nikodesk_legacy_peer_preferences(expected_server_namespace: String, preview_revision: String, peer_ids: Vec<String>) -> String {
+    #[cfg(feature = "nikodesk")]
+    return crate::nikodesk::peer_migration::import(&expected_server_namespace, &preview_revision, &peer_ids);
+    #[cfg(not(feature = "nikodesk"))]
+    { let _ = (expected_server_namespace, preview_revision, peer_ids); r#"{"ok":false,"status":"unsupported"}"#.into() }
 }
 
 pub fn main_get_peer_sync(id: String) -> SyncReturn<String> {
@@ -1490,6 +1656,92 @@ pub fn main_set_peer_option_sync(id: String, key: String, value: String) -> Sync
     SyncReturn(true)
 }
 
+pub fn main_get_nikodesk_peer_option_sync(
+    id: String,
+    expected_server_namespace: String,
+    key: String,
+) -> SyncReturn<String> {
+    #[cfg(feature = "nikodesk")]
+    {
+        SyncReturn(crate::nikodesk::server_scope::peer_key_in_namespace(&expected_server_namespace, &id)
+            .and_then(|peer| peer.load().options.get(&key).cloned())
+            .unwrap_or_default())
+    }
+    #[cfg(not(feature = "nikodesk"))]
+    {
+        let _ = expected_server_namespace;
+        main_get_peer_option_sync(id, key)
+    }
+}
+
+pub fn main_set_nikodesk_peer_option_sync(
+    id: String,
+    expected_server_namespace: String,
+    key: String,
+    value: String,
+) -> SyncReturn<bool> {
+    #[cfg(feature = "nikodesk")]
+    {
+        if crate::nikodesk::is_saved_password_option(&key) {
+            return SyncReturn(false);
+        }
+        let Some(peer) = crate::nikodesk::server_scope::peer_key_in_namespace(&expected_server_namespace, &id) else {
+            return SyncReturn(false);
+        };
+        let mut config = peer.load();
+        if value.is_empty() { config.options.remove(&key); } else { config.options.insert(key, value); }
+        peer.store(&config);
+        SyncReturn(true)
+    }
+    #[cfg(not(feature = "nikodesk"))]
+    {
+        let _ = expected_server_namespace;
+        main_set_peer_option_sync(id, key, value)
+    }
+}
+
+pub fn main_get_nikodesk_peer_flutter_option_sync(
+    id: String,
+    expected_server_namespace: String,
+    k: String,
+) -> SyncReturn<String> {
+    #[cfg(feature = "nikodesk")]
+    {
+        SyncReturn(crate::nikodesk::server_scope::peer_key_in_namespace(&expected_server_namespace, &id)
+            .and_then(|peer| peer.load().ui_flutter.get(&k).cloned())
+            .unwrap_or_default())
+    }
+    #[cfg(not(feature = "nikodesk"))]
+    {
+        let _ = expected_server_namespace;
+        main_get_peer_flutter_option_sync(id, k)
+    }
+}
+
+pub fn main_set_nikodesk_peer_flutter_option_sync(
+    id: String,
+    expected_server_namespace: String,
+    k: String,
+    v: String,
+) -> SyncReturn<bool> {
+    #[cfg(feature = "nikodesk")]
+    {
+        let Some(peer) = crate::nikodesk::server_scope::peer_key_in_namespace(&expected_server_namespace, &id) else {
+            return SyncReturn(false);
+        };
+        let mut config = peer.load();
+        if v.is_empty() { config.ui_flutter.remove(&k); } else { config.ui_flutter.insert(k, v); }
+        peer.store(&config);
+        SyncReturn(true)
+    }
+    #[cfg(not(feature = "nikodesk"))]
+    {
+        let _ = expected_server_namespace;
+        set_peer_flutter_option(id, k, v);
+        SyncReturn(true)
+    }
+}
+
 pub fn main_set_peer_alias(id: String, alias: String) {
     set_peer_option(id, "alias".to_owned(), alias)
 }
@@ -1500,6 +1752,10 @@ pub fn main_get_new_stored_peers() -> String {
         .unwrap()
         .drain()
         .collect();
+    #[cfg(feature = "nikodesk")]
+    let peers = crate::nikodesk::server_scope::current().map_or_else(Vec::new, |scope| {
+        peers.iter().filter_map(|id| scope.peer_id(id)).collect::<Vec<_>>()
+    });
     serde_json::to_string(&peers).unwrap_or_default()
 }
 
@@ -1515,6 +1771,7 @@ pub fn main_peer_exists(id: String) -> bool {
     peer_exists(&id)
 }
 
+#[cfg(not(feature = "nikodesk"))]
 fn load_recent_peers(
     vec_id_modified_time_path: &Vec<(String, SystemTime, std::path::PathBuf)>,
     to_end: bool,
@@ -1535,6 +1792,34 @@ fn load_recent_peers(
 }
 
 pub fn main_load_recent_peers() {
+    #[cfg(feature = "nikodesk")]
+    {
+        let scope = crate::nikodesk::server_scope::current();
+        let mut data = HashMap::from([
+            ("name", "load_recent_peers".to_owned()),
+            ("nikodesk-load-status", "error".to_owned()),
+            ("nikodesk-server-namespace", scope.as_ref().map_or_else(String::new, |scope| scope.namespace().to_owned())),
+        ]);
+        if let Some(scope) = scope {
+            match scope.try_peers(None) {
+                Ok(peers) => {
+                    let peers = peers.into_iter().map(|(id, _, p)| peer_to_map(id, p)).collect::<Vec<_>>();
+                    if let Ok(peers) = serde_json::to_string(&peers) {
+                        data.insert("peers", peers);
+                        data.insert("nikodesk-load-status", "ready".to_owned());
+                    }
+                }
+                Err(error) if error.to_string() == "invalid_peer_config" => {
+                    data.insert("nikodesk-load-status", "invalid_data".to_owned());
+                }
+                Err(_) => {}
+            }
+        }
+        let _ = flutter::push_global_event(flutter::APP_TYPE_MAIN, serde_json::to_string(&data).unwrap_or_default());
+        return;
+    }
+    #[cfg(not(feature = "nikodesk"))]
+    {
     let push_to_flutter = |peers, ids| {
         let mut data = HashMap::from([("name", "load_recent_peers".to_owned()), ("peers", peers)]);
         if let Some(ids) = ids {
@@ -1585,6 +1870,7 @@ pub fn main_load_recent_peers() {
     } else {
         push_to_flutter("".to_owned(), None)
     }
+    }
 }
 
 pub fn main_load_recent_peers_for_ab(filter: String) -> String {
@@ -1594,6 +1880,14 @@ pub fn main_load_recent_peers_for_ab(filter: String) -> String {
     } else {
         Some(id_filters)
     };
+    #[cfg(feature = "nikodesk")]
+    {
+        let peers = crate::nikodesk::server_scope::current().map_or_else(Vec::new, |scope| scope.peers(id_filters))
+            .into_iter().map(|(id, _, p)| peer_to_map(id, p)).collect::<Vec<_>>();
+        return serde_json::to_string(&peers).unwrap_or_default();
+    }
+    #[cfg(not(feature = "nikodesk"))]
+    {
     if !config::APP_DIR.read().unwrap().is_empty() {
         let peers: Vec<HashMap<&str, String>> = PeerConfig::peers(id_filters)
             .drain(..)
@@ -1602,9 +1896,33 @@ pub fn main_load_recent_peers_for_ab(filter: String) -> String {
         return serde_json::ser::to_string(&peers).unwrap_or("".to_owned());
     }
     "".to_string()
+    }
 }
 
 pub fn main_load_fav_peers() {
+    #[cfg(feature = "nikodesk")]
+    {
+        let scope = crate::nikodesk::server_scope::current();
+        let mut data = HashMap::from([
+            ("name", "load_fav_peers".to_owned()),
+            ("nikodesk-load-status", "error".to_owned()),
+            ("nikodesk-server-namespace", scope.as_ref().map_or_else(String::new, |scope| scope.namespace().to_owned())),
+        ]);
+        if let Some(scope) = scope {
+            if let Ok(peers) = scope.try_favorites().and_then(|ids| scope.try_peers(Some(&ids))) {
+                let peers = peers.into_iter()
+                    .map(|(id, _, p)| peer_to_map(id, p)).collect::<Vec<_>>();
+                if let Ok(peers) = serde_json::to_string(&peers) {
+                    data.insert("peers", peers);
+                    data.insert("nikodesk-load-status", "ready".to_owned());
+                }
+            }
+        }
+        let _ = flutter::push_global_event(flutter::APP_TYPE_MAIN, serde_json::to_string(&data).unwrap_or_default());
+        return;
+    }
+    #[cfg(not(feature = "nikodesk"))]
+    {
     let push_to_flutter = |peers| {
         let data = HashMap::from([("name", "load_fav_peers".to_owned()), ("peers", peers)]);
         let _res = flutter::push_global_event(
@@ -1643,6 +1961,7 @@ pub fn main_load_fav_peers() {
         push_to_flutter(serde_json::ser::to_string(&peers).unwrap_or("".to_owned()));
     } else {
         push_to_flutter("".to_owned());
+    }
     }
 }
 
@@ -1826,6 +2145,7 @@ pub fn cm_close_voice_call(id: i32) {
 }
 
 pub fn set_voice_call_input_device(_is_cm: bool, _device: String) {
+    if cfg!(feature = "nikodesk") { return; }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if _is_cm {
         let _ = crate::ipc::set_config("voice-call-input", _device);
@@ -1905,6 +2225,9 @@ pub fn main_device_name(name: String) {
 }
 
 pub fn main_remove_peer(id: String) {
+    #[cfg(feature = "nikodesk")]
+    crate::nikodesk::server_scope::remove_peer(&id);
+    #[cfg(not(feature = "nikodesk"))]
     PeerConfig::remove(&id);
 }
 
@@ -3034,6 +3357,8 @@ pub mod server_side {
         home_dir: JString,
         custom_client_config: JString,
     ) {
+        #[cfg(feature = "nikodesk")]
+        return;
         log::debug!("startServer from jvm");
         let mut env = env;
         if let Ok(app_dir) = env.get_string(&app_dir) {
@@ -3053,6 +3378,8 @@ pub mod server_side {
 
     #[no_mangle]
     pub unsafe extern "system" fn Java_ffi_FFI_startService(_env: JNIEnv, _class: JClass) {
+        #[cfg(feature = "nikodesk")]
+        return;
         log::debug!("startService from jvm");
         config::Config::set_option("stop-service".into(), "".into());
         crate::rendezvous_mediator::reset_needs_deploy_notification();
@@ -3132,4 +3459,19 @@ pub mod server_side {
     ) -> jboolean {
         jboolean::from(crate::server::is_clipboard_service_ok())
     }
+}
+
+/// Enqueue a typed local CM decision. Resource progress arrives separately as an event.
+pub fn cm_nikodesk_capability_decision(json: String) -> String {
+    #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
+    {return crate::ui_cm_interface::nikodesk_capability_decision(json,false);}
+    #[cfg(not(all(feature="nikodesk",not(any(target_os="android",target_os="ios")))))]
+    {let _=json;"{\"ok\":false,\"status\":\"unsupported\"}".into()}
+}
+/// Revoke only the explicitly identified authenticated connection's terminal grant.
+pub fn cm_nikodesk_capability_revoke(json: String) -> String {
+    #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
+    {return crate::ui_cm_interface::nikodesk_capability_decision(json,true);}
+    #[cfg(not(all(feature="nikodesk",not(any(target_os="android",target_os="ios")))))]
+    {let _=json;"{\"ok\":false,\"status\":\"unsupported\"}".into()}
 }

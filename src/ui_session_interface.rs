@@ -59,6 +59,10 @@ const CHANGE_RESOLUTION_VALID_TIMEOUT_SECS: u64 = 15;
 
 #[derive(Clone, Default)]
 pub struct Session<T: InvokeUiSession> {
+    #[cfg(feature = "nikodesk")]
+    pub video_metrics_enabled: Arc<std::sync::atomic::AtomicBool>,
+    #[cfg(feature = "nikodesk")]
+    pub video_metrics_revision: Arc<std::sync::atomic::AtomicU64>,
     pub password: String,
     pub args: Vec<String>,
     pub lc: Arc<RwLock<LoginConfigHandler>>,
@@ -391,6 +395,12 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn toggle_option(&self, name: String) {
         let msg = self.lc.write().unwrap().toggle_option(name.clone());
+        #[cfg(feature = "nikodesk")]
+        if name == "show-quality-monitor" {
+            self.video_metrics_enabled.store(false, Ordering::Release);
+            if self.video_metrics_revision.fetch_update(Ordering::AcqRel, Ordering::Acquire, |value| value.checked_add(1)).is_err() { return; }
+            self.video_metrics_enabled.store(self.get_toggle_option(name.clone()), Ordering::Release);
+        }
         #[cfg(all(target_os = "windows", not(feature = "flutter")))]
         if name == keys::OPTION_ENABLE_FILE_COPY_PASTE {
             self.send(Data::ToggleClipboardFile);
@@ -633,6 +643,8 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn get_option(&self, k: String) -> String {
+        #[cfg(feature = "nikodesk")]
+        if k == "nikodesk-video-metrics-binding" { return self.video_metrics_binding().unwrap_or_default(); }
         if k.eq("remote_dir") {
             return self.lc.read().unwrap().get_remote_dir();
         }
@@ -1611,6 +1623,8 @@ impl<T: InvokeUiSession> Session<T> {
 
     #[inline]
     pub fn request_voice_call(&self) {
+        // Niko voice requests must use a connection-owned capability grant.
+        if cfg!(feature = "nikodesk") { return; }
         #[cfg(target_os = "linux")]
         std::thread::spawn(crate::ipc::start_pa);
         self.send(Data::NewVoiceCall);
@@ -1618,6 +1632,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     #[inline]
     pub fn close_voice_call(&self) {
+        if cfg!(feature = "nikodesk") { return; }
         self.send(Data::CloseVoiceCall);
     }
 
@@ -1711,6 +1726,14 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn close_success(&self);
     fn update_quality_status(&self, qs: QualityStatus);
     fn set_connection_type(&self, is_secured: bool, direct: bool, stream_type: &str);
+    #[cfg(feature = "nikodesk")]
+    fn set_connection_type_with_video_epoch(&self, is_secured: bool, direct: bool, stream_type: &str, _namespace: &str, _epoch: u64, _revision: u64) {
+        self.set_connection_type(is_secured, direct, stream_type);
+    }
+    #[cfg(feature = "nikodesk")]
+    fn bind_video_metrics(&self, _metrics: std::sync::Weak<crate::nikodesk::video_metrics::SessionTelemetry>) {}
+    #[cfg(feature = "nikodesk")]
+    fn video_metrics_binding(&self) -> Option<String> { None }
     fn set_fingerprint(&self, fingerprint: String);
     fn job_error(&self, id: i32, err: String, file_num: i32);
     fn job_done(&self, id: i32, file_num: i32);
@@ -1966,7 +1989,13 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
     *handler.sender.write().unwrap() = Some(sender.clone());
+    #[cfg(feature = "nikodesk")]
+    let token = String::new();
+    #[cfg(not(feature = "nikodesk"))]
     let token = LocalConfig::get_option("access_token");
+    #[cfg(feature = "nikodesk")]
+    let key = String::new(); // Client::start takes the key from the captured snapshot.
+    #[cfg(not(feature = "nikodesk"))]
     let key = crate::get_key(false).await;
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if handler.is_port_forward() {

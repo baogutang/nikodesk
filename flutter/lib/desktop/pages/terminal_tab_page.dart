@@ -1,3 +1,5 @@
+import '../../nikodesk/window_scope.dart';
+import '../../nikodesk/terminal_session_access.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -64,6 +66,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
       TerminalClipboardNoticeCoordinator<_TerminalClipboardSource>();
 
   _TerminalTabPageState(Map<String, dynamic> params) {
+    if (const bool.fromEnvironment('NIKODESK')) NikoWindowScope.initialize(params);
     Get.put(DesktopTabController(tabType: DesktopTabType.terminal));
     tabController.onSelected = (id) {
       WindowController.fromWindowId(windowId())
@@ -114,6 +117,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
         terminalId: terminalId,
         tabKey: tabKey,
         password: password,
+        serverNamespace: NikoWindowScope.current,
         isSharedPassword: isSharedPassword,
         tabController: tabController,
         forceRelay: forceRelay,
@@ -385,10 +389,11 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
     if (parsed == null) return;
     final (peerId, terminalId) = parsed;
 
-    final ffi = TerminalConnectionManager.getExistingConnection(peerId);
+    final ffi = TerminalConnectionManager.getExistingConnection(peerId,
+        serverNamespace: const bool.fromEnvironment('NIKODESK') ? NikoWindowScope.current : null);
     if (ffi == null) return;
 
-    final isPersistent = bind.sessionGetToggleOptionSync(
+    final isPersistent = !const bool.fromEnvironment('NIKODESK') && bind.sessionGetToggleOptionSync(
       sessionId: ffi.sessionId,
       arg: kOptionTerminalPersistent,
     );
@@ -441,6 +446,10 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
   Widget _tabMenuBuilder(String peerId, CancelFunc cancelFunc) {
     final List<MenuEntryBase<String>> menu = [];
     const EdgeInsets padding = EdgeInsets.only(left: 8.0, right: 5.0);
+    final namespace = NikoWindowScope.current;
+    FFI? optionOwner() => const bool.fromEnvironment('NIKODESK')
+        ? nikoTerminalOptionOwner(peerId: peerId, serverNamespace: namespace)
+        : Get.find<FFI>(tag: 'terminal_$peerId');
 
     // New tab menu item
     menu.add(MenuEntryButton<String>(
@@ -459,18 +468,21 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
 
     menu.add(MenuEntryDivider());
 
-    menu.add(MenuEntrySwitch<String>(
+    if (!const bool.fromEnvironment('NIKODESK')) {
+      menu.add(MenuEntrySwitch<String>(
       switchType: SwitchType.scheckbox,
       text: translate('Keep terminal sessions on disconnect'),
       getter: () async {
-        final ffi = Get.find<FFI>(tag: 'terminal_$peerId');
+        final ffi = optionOwner();
+        if (ffi == null) return false;
         return bind.sessionGetToggleOptionSync(
           sessionId: ffi.sessionId,
           arg: kOptionTerminalPersistent,
         );
       },
       setter: (bool v) async {
-        final ffi = Get.find<FFI>(tag: 'terminal_$peerId');
+        final ffi = optionOwner();
+        if (ffi == null) return;
         await bind.sessionToggleOption(
           sessionId: ffi.sessionId,
           value: kOptionTerminalPersistent,
@@ -478,6 +490,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
       },
       padding: padding,
     ));
+    }
 
     return mod_menu.PopupMenu<String>(
       items: menu
@@ -502,10 +515,19 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
     HardwareKeyboard.instance.addHandler(_handleKeyEvent);
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
+      if (call.method == nikoWindowScopeMethod) return NikoWindowScope.current;
+      if (const bool.fromEnvironment('NIKODESK')) {
+        debugPrint('NikoDesk window event: ${call.method} from $fromWindowId');
+      } else {
       print(
           "[Remote Terminal] call ${call.method} with args ${call.arguments} from window $fromWindowId");
+      }
       if (call.method == kWindowEventNewTerminal) {
         final args = jsonDecode(call.arguments);
+      if (const bool.fromEnvironment('NIKODESK') &&
+          nikoWindowNamespace(args) != NikoWindowScope.current) {
+        throw StateError('The private server identity does not match this window');
+      }
         final id = args['id'];
         windowOnTop(windowId());
         // Allow multiple terminals for the same connection

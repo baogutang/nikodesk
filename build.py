@@ -63,6 +63,22 @@ def get_version():
     return ''
 
 
+def get_nikodesk_windows_version(build_name=None, build_number=None):
+    """Product resource versions are independent of the native protocol version."""
+    pubspec = Path(REPO_ROOT, 'flutter', 'pubspec.yaml').read_text(encoding='utf-8')
+    declared = re.search(r'^version:\s*(\d+\.\d+\.\d+)\+(\d+)\s*$', pubspec, re.MULTILINE)
+    if not declared:
+        raise ValueError('NikoDesk requires a numeric product version/build in flutter/pubspec.yaml')
+    name = build_name if build_name is not None else declared.group(1)
+    number = str(build_number) if build_number is not None else declared.group(2)
+    if not re.fullmatch(r'\d+\.\d+\.\d+', name) or not re.fullmatch(r'\d+', number):
+        raise ValueError('Invalid NikoDesk Windows product version/build number')
+    components = [int(part) for part in name.split('.')] + [int(number)]
+    if any(part > 65535 for part in components) or components[-1] < 1:
+        raise ValueError('Windows version components must fit 16 bits, with a positive build number')
+    return '.'.join(str(part) for part in components[:3]), str(components[-1])
+
+
 def parse_rc_features(feature):
     available_features = {}
     apply_features = {}
@@ -123,6 +139,8 @@ def make_parser():
         action='store_true',
         help='Enable the nikodesk product feature (private-server-only '
              'client policy and UI)', default=False)
+    parser.add_argument('--build-name', help='NikoDesk Windows product version; defaults to Flutter pubspec')
+    parser.add_argument('--build-number', help='NikoDesk Windows numeric build; defaults to Flutter pubspec')
     parser.add_argument(
         '--hwcodec',
         action='store_true',
@@ -951,6 +969,15 @@ def build_flutter_dmg(version, features):
     # so the universal-by-default ARCHS_STANDARD doesn't try to link a missing slice.
     # FLUTTER_XCODE_* env vars are forwarded to xcodebuild as build settings.
     mac_arch = 'arm64' if platform.machine().lower() in ('arm64', 'aarch64') else 'x86_64'
+    if 'nikodesk' in features.split(','):
+        subprocess.run(['flutter', 'build', 'macos', '--release', '--dart-define=NIKODESK=true'], check=True,
+                       env={**os.environ, 'FLUTTER_XCODE_ARCHS': mac_arch, 'FLUTTER_XCODE_ONLY_ACTIVE_ARCH': 'YES'})
+        subprocess.run([sys.executable, '../.github/scripts/prepare-macos-camera.py',
+                        './build/macos/Build/Products/Release/NikoDesk.app'], check=True)
+        subprocess.run([sys.executable, '../.github/scripts/build-macos-privacy-watchdog.py',
+                        './build/macos/Build/Products/Release/NikoDesk.app', '--architecture', mac_arch], check=True)
+        os.chdir('..')
+        return
     system2(
         f'FLUTTER_XCODE_ARCHS={mac_arch} FLUTTER_XCODE_ONLY_ACTIVE_ARCH=YES flutter build macos --release')
     system2('cp -rf ../target/release/service ./build/macos/Build/Products/Release/RustDesk.app/Contents/MacOS/')
@@ -973,24 +1000,56 @@ def build_flutter_arch_manjaro(version, features):
     system2('HBB=`pwd`/.. FLUTTER=1 makepkg -f')
 
 
-def build_flutter_windows(version, features, skip_portable_pack):
+def build_flutter_windows(version, features, skip_portable_pack, build_number=None):
     if not skip_cargo:
         system2(f'cargo build --locked --features {features} --lib --release')
         if not os.path.exists("target/release/librustdesk.dll"):
             print("cargo build failed, please check rust source code.")
             exit(-1)
     os.chdir('flutter')
-    system2('flutter build windows --release')
+    if 'nikodesk' in features.split(','):
+        system2(f'flutter build windows --release --dart-define=NIKODESK=true --build-name {version} --build-number {build_number}')
+    else:
+        system2('flutter build windows --release')
     os.chdir('..')
     shutil.copy2('target/release/deps/dylib_virtual_display.dll',
                  flutter_build_dir_2)
+    if 'nikodesk' in features.split(','):
+        shutil.copy2('LICENCE', Path(flutter_build_dir_2, 'NikoDesk-LICENCE.txt'))
+        cpal_notices = Path(flutter_build_dir_2, 'data', 'NikoDesk', 'licenses', 'cpal')
+        cpal_notices.mkdir(parents=True, exist_ok=True)
+        for notice in ('LICENSE', 'NIKODESK-PROVENANCE.md', 'NIKODESK-PROVENANCE.json'):
+            shutil.copy2(Path('libs', 'nikodesk_cpal', notice), cpal_notices / notice)
+        revision = os.environ.get('NIKODESK_SOURCE_REVISION')
+        dirty = os.environ.get('NIKODESK_SOURCE_DIRTY')
+        if revision is None:
+            result = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True)
+            revision = result.stdout.strip() if result.returncode == 0 else 'unknown'
+            result = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True)
+            dirty = str(bool(result.stdout.strip())) if result.returncode == 0 else 'unknown'
+        Path(flutter_build_dir_2, 'NikoDesk-source.txt').write_text(
+            f'Product {version}+{build_number}; upstream native/protocol {get_version()}\n'
+            f'Source {revision}; dirty={dirty}\n', encoding='utf-8')
     if skip_portable_pack:
         return
     os.chdir('libs/portable')
-    system2('pip3 install -r requirements.txt')
-    system2(
-        f'python3 ./generate.py -f ../../{flutter_build_dir_2} -o . -e ../../{flutter_build_dir_2}/rustdesk.exe')
+    if 'nikodesk' in features.split(','):
+        subprocess.run([sys.executable, '-m', 'pip', 'install', '-r', 'requirements.txt'], check=True)
+        subprocess.run([
+            sys.executable, './generate.py', '-f', f'../../{flutter_build_dir_2}',
+            '-o', '.', '-e', f'../../{flutter_build_dir_2}/NikoDesk.exe', '--nikodesk',
+            '--product-version', version, '--build-number', build_number,
+        ], check=True)
+    else:
+        system2('pip3 install -r requirements.txt')
+        system2(
+            f'python3 ./generate.py -f ../../{flutter_build_dir_2} -o . -e ../../{flutter_build_dir_2}/rustdesk.exe')
     os.chdir('../..')
+    if 'nikodesk' in features.split(','):
+        output = f'NikoDesk-windows-{win_arch}.exe'
+        os.replace('./target/release/rustdesk-portable-packer.exe', output)
+        print(f'output location: {os.path.abspath(output)} (portable; no installation)')
+        return
     if os.path.exists('./rustdesk_portable.exe'):
         os.replace('./target/release/rustdesk-portable-packer.exe',
                    './rustdesk_portable.exe')
@@ -1022,11 +1081,27 @@ def main():
         print(feats)
         return
 
+    product_build_number = None
+    if windows and args.nikodesk:
+        if not args.flutter:
+            parser.error('NikoDesk Windows packaging requires the real Flutter runner')
+        try:
+            product_version, product_build_number = get_nikodesk_windows_version(args.build_name, args.build_number)
+        except ValueError as error:
+            parser.error(str(error))
+        os.environ['NIKODESK_PRODUCT_VERSION'] = product_version
+        os.environ['NIKODESK_BUILD_NUMBER'] = product_build_number
+    elif args.build_name is not None or args.build_number is not None:
+        parser.error('--build-name/--build-number apply only to --flutter --nikodesk Windows builds')
+
     if os.path.exists(exe_path):
         os.unlink(exe_path)
     if os.path.isfile('/usr/bin/pacman'):
         system2('git checkout src/ui/common.tis')
     version = get_version()
+    if windows and args.nikodesk:
+        print(f'NikoDesk product {product_version}+{product_build_number}; upstream native/protocol {version}')
+        version = product_version
     features = ','.join(get_features(args))
     flutter = args.flutter
     if not flutter:
@@ -1048,7 +1123,7 @@ def main():
         os.chdir('../../..')
 
         if flutter:
-            build_flutter_windows(version, features, args.skip_portable_pack)
+            build_flutter_windows(version, features, args.skip_portable_pack, product_build_number)
             return
         system2('cargo build --locked --release --features ' + features)
         # system2('upx.exe target/release/rustdesk.exe')

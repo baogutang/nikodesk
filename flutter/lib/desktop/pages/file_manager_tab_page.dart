@@ -1,3 +1,4 @@
+import '../../nikodesk/window_scope.dart';
 import 'dart:convert';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -30,6 +31,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
   static const IconData unselectedIcon = Icons.file_copy_outlined;
 
   _FileManagerTabPageState(Map<String, dynamic> params) {
+    if (const bool.fromEnvironment('NIKODESK')) NikoWindowScope.initialize(params);
     Get.put(DesktopTabController(tabType: DesktopTabType.fileTransfer));
     tabController.onSelected = (id) {
       WindowController.fromWindowId(windowId())
@@ -54,6 +56,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
           key: ValueKey(params['id']),
           id: params['id'],
           password: params['password'],
+          serverNamespace: NikoWindowScope.current,
           isSharedPassword: params['isSharedPassword'],
           tabController: tabController,
           forceRelay: params['forceRelay'],
@@ -66,11 +69,20 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
     super.initState();
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
+      if (call.method == nikoWindowScopeMethod) return NikoWindowScope.current;
+      if (const bool.fromEnvironment('NIKODESK')) {
+        debugPrint('NikoDesk window event: ${call.method} from $fromWindowId');
+      } else {
       debugPrint(
           "[FileTransfer] call ${call.method} with args ${call.arguments} from window $fromWindowId to ${windowId()}");
+      }
       // for simplify, just replace connectionId
       if (call.method == kWindowEventNewFileTransfer) {
         final args = jsonDecode(call.arguments);
+      if (const bool.fromEnvironment('NIKODESK') &&
+          nikoWindowNamespace(args) != NikoWindowScope.current) {
+        throw StateError('The private server identity does not match this window');
+      }
         final id = args['id'];
         windowOnTop(windowId());
         tabController.add(TabInfo(
@@ -91,6 +103,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
               key: ValueKey(id),
               id: id,
               password: args['password'],
+          serverNamespace: NikoWindowScope.current,
               isSharedPassword: args['isSharedPassword'],
               tabController: tabController,
               forceRelay: args['forceRelay'],
@@ -101,6 +114,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
       } else if (call.method == kWindowActionRebuild) {
         reloadCurrentWindow();
       }
+      return null;
     });
     Future.delayed(Duration.zero, () {
       restoreWindowPosition(WindowType.FileTransfer, windowId: windowId());

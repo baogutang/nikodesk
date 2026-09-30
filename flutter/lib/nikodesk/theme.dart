@@ -1,7 +1,6 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 
@@ -15,11 +14,14 @@ class NikoPalette {
   static const success = Color(0xFF22A06B);
   static const warning = Color(0xFFE8930C);
   static const danger = Color(0xFFE5484D);
+  static const lightSuccessText = Color(0xFF176B46);
+  static const lightWarningText = Color(0xFF8D5900);
+  static const lightOfflineText = Color(0xFF586477);
 
   // light (D)
   static const lightSeed = Color(0xFF6C4CF1);
   static const lightText = Color(0xFF241B3E);
-  static const lightMuted = Color(0xFF7A6FA6);
+  static const lightMuted = Color(0xFF706493);
   static const lightCard = Color(0xB8FFFFFF); // 72% white
   static const lightCardBorder = Color(0xD9FFFFFF); // 85% white
   static const lightField = Color(0xE6FFFFFF); // 90% white
@@ -28,7 +30,7 @@ class NikoPalette {
   static const primaryGradient = LinearGradient(
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
-      colors: [Color(0xFF8E6CFF), Color(0xFF4C7CFF)]);
+      colors: [Color(0xFF8159F2), Color(0xFF366BEF)]);
 
   // dark (B)
   static const darkSeed = Color(0xFF5B8CFF);
@@ -133,46 +135,47 @@ class NikoPrimaryButton extends StatelessWidget {
     final radius = BorderRadius.circular(NikoShapes.control);
     final disabled = onPressed == null;
     final fg = light ? Colors.white : NikoPalette.darkOnPrimary;
-    final body = Container(
-      padding: compact
-          ? const EdgeInsets.symmetric(horizontal: 18, vertical: 9)
-          : padding,
-      decoration: BoxDecoration(
-        borderRadius: radius,
-        gradient: light ? NikoPalette.primaryGradient : null,
-        color: light ? null : NikoPalette.darkSeed,
-        boxShadow: disabled
-            ? null
-            : (light
-                ? const [
-                    BoxShadow(
-                        color: Color(0x4D6C4CF1),
-                        blurRadius: 16,
-                        offset: Offset(0, 6))
-                  ]
-                : const [
-                    BoxShadow(
-                        color: Color(0x735B8CFF),
-                        blurRadius: 18,
-                        offset: Offset(0, 4))
-                  ]),
-      ),
-      child: DefaultTextStyle(
-        style: TextStyle(
-            color: disabled ? fg.withOpacity(.55) : fg,
-            fontWeight: FontWeight.w700,
-            fontSize: compact ? 13 : 14),
-        child: child,
-      ),
-    );
-    return Opacity(
-        opacity: disabled ? .55 : 1,
-        child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-                borderRadius: radius,
-                onTap: onPressed,
-                child: body)));
+    return Semantics(
+        button: true,
+        enabled: !disabled,
+        child: Opacity(
+            opacity: disabled ? .55 : 1,
+            child: Material(
+                color: Colors.transparent,
+                child: Ink(
+                    decoration: BoxDecoration(
+                      borderRadius: radius,
+                      gradient: light ? NikoPalette.primaryGradient : null,
+                      color: light ? null : NikoPalette.darkSeed,
+                      boxShadow: disabled
+                          ? null
+                          : (light
+                              ? const [BoxShadow(color: Color(0x4D6C4CF1),
+                                  blurRadius: 16, offset: Offset(0, 6))]
+                              : const [BoxShadow(color: Color(0x735B8CFF),
+                                  blurRadius: 18, offset: Offset(0, 4))]),
+                    ),
+                    child: InkWell(
+                        borderRadius: radius,
+                        onTap: onPressed,
+                        canRequestFocus: !disabled,
+                        focusColor: Colors.black.withOpacity(.12),
+                        hoverColor: Colors.black.withOpacity(.06),
+                        child: ConstrainedBox(
+                            constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+                            child: Padding(
+                                padding: compact
+                                    ? const EdgeInsets.symmetric(horizontal: 18, vertical: 9)
+                                    : padding,
+                                child: Center(
+                                    widthFactor: 1,
+                                    heightFactor: 1,
+                                    child: DefaultTextStyle(
+                                        style: TextStyle(color: fg, fontWeight: FontWeight.w700,
+                                            fontSize: compact ? 13 : 14),
+                                        child: IconTheme.merge(
+                                            data: IconThemeData(color: fg),
+                                            child: child))))))))));
   }
 }
 
@@ -210,9 +213,20 @@ ThemeData nikoTheme(Brightness brightness) {
     // window) fetch these extensions with non-null assertions; a theme
     // without them renders as a grey window in release builds.
     extensions: <ThemeExtension<dynamic>>[
-      light ? ColorThemeExtension.light : ColorThemeExtension.dark,
-      light ? TabbarTheme.light : TabbarTheme.dark,
+      (light ? ColorThemeExtension.light : ColorThemeExtension.dark).copyWith(
+          border: line, border2: muted, border3: line, divider: line,
+          highlight: light ? const Color(0xFFEEEAFF) : const Color(0xFF232936),
+          drag_indicator: light ? NikoPalette.lightSeed : NikoPalette.darkSeed,
+          shadow: light ? NikoPalette.lightShadow : Colors.black),
+      (light ? TabbarTheme.light : TabbarTheme.dark).copyWith(
+          selectedTabIconColor: light ? NikoPalette.lightSeed : NikoPalette.darkSeed,
+          selectedTextColor: text, unSelectedTextColor: muted,
+          selectedIconColor: text, unSelectedIconColor: muted,
+          dividerColor: line,
+          selectedTabBackgroundColor: field,
+          hoverColor: light ? const Color(0xFFEEEAFF) : const Color(0xFF232936)),
     ],
+    primaryColor: light ? NikoPalette.lightSeed : NikoPalette.darkSeed,
     scaffoldBackgroundColor:
         light ? const Color(0xFFF3EFFF) : NikoPalette.darkScaffold,
     dividerColor: line,
@@ -234,6 +248,8 @@ ThemeData nikoTheme(Brightness brightness) {
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
+        minimumSize: const Size(48, 48),
+        tapTargetSize: MaterialTapTargetSize.padded,
         backgroundColor: light ? NikoPalette.lightSeed : NikoPalette.darkSeed,
         foregroundColor: light ? Colors.white : NikoPalette.darkOnPrimary,
         shape: RoundedRectangleBorder(
@@ -245,6 +261,8 @@ ThemeData nikoTheme(Brightness brightness) {
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
+        minimumSize: const Size(48, 48),
+        tapTargetSize: MaterialTapTargetSize.padded,
         foregroundColor: light ? NikoPalette.lightSeed : NikoPalette.darkSeed,
         side: BorderSide(color: line),
         shape: RoundedRectangleBorder(
@@ -254,11 +272,17 @@ ThemeData nikoTheme(Brightness brightness) {
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
+        minimumSize: const Size(48, 48),
+        tapTargetSize: MaterialTapTargetSize.padded,
         foregroundColor: light ? NikoPalette.lightSeed : NikoPalette.darkSeed,
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(NikoShapes.control)),
       ),
     ),
+    iconButtonTheme: IconButtonThemeData(style: IconButton.styleFrom(
+        minimumSize: const Size(48, 48),
+        tapTargetSize: MaterialTapTargetSize.padded,
+        visualDensity: VisualDensity.standard)),
     chipTheme: base.chipTheme.copyWith(
       backgroundColor: field,
       side: BorderSide(color: line),

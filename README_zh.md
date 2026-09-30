@@ -1,90 +1,98 @@
 <div align="center">
 
-<img src="flutter/assets/readme-logo.png" width="360" alt="NikoDesk logo" />
+<img src="flutter/assets/readme-logo.png" width="360" alt="NikoDesk 徽标" />
 
 # NikoDesk
 
-**你的服务器，你的密钥，你的桌面。** —— 基于 RustDesk 内核、私有优先的自托管远程桌面。
+**你的设备，你的服务器，你的远程桌面。**
 
-[![Release](https://img.shields.io/github/v/release/baogutang/nikodesk?style=flat-square&color=6C4CF1)](https://github.com/baogutang/nikodesk/releases)
-[![Platforms](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-macOS%20%7C%20Windows%20%7C%20Android-4C7CFF?style=flat-square)](https://github.com/baogutang/nikodesk/releases)
-[![License](https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF%E8%AF%81-AGPL--3.0-8E6CFF?style=flat-square)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/baogutang/nikodesk?style=flat-square&color=FFB020)](https://github.com/baogutang/nikodesk/stargazers)
+基于 RustDesk 原生内核、使用自建服务的远程桌面。
 
-[English](README.md) · **简体中文** · [官网](https://baogutang.github.io/nikodesk/)
+[![Release](https://img.shields.io/github/v/release/baogutang/nikodesk?style=flat-square&color=CC6D45)](https://github.com/baogutang/nikodesk/releases)
+[![License](https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF%E8%AF%81-AGPL--3.0-8A7665?style=flat-square)](LICENCE)
 
-<img src="flutter/assets/readme-light.png" width="48%" alt="NikoDesk 明亮主题" /> <img src="flutter/assets/readme-dark.png" width="48%" alt="NikoDesk 暗黑主题" />
+[English](README.md) · **简体中文** · [官网](https://baogutang.github.io/nikodesk/zh/)
 
-*明亮（渐变毛玻璃）与暗黑（暗夜控制台）双主题，一个应用全都有。*
+<img src="flutter/assets/readme-light.png" width="48%" alt="已遮盖连接信息的 NikoDesk 真实明亮主题工作区" /> <img src="flutter/assets/readme-dark.png" width="48%" alt="已遮盖连接信息的 NikoDesk 真实暗黑主题工作区" />
+
+*历史构建的本地真实界面；设备 ID、密码与服务器信息已遮盖。截图展示外观，不代表远控或性能验收通过。*
 
 </div>
 
----
+## 当前状态
 
-## 为什么选择 NikoDesk
+NikoDesk 正在开发。**v1.0.0 是历史测试构建，不包含 9 月 30 日审查中的修复。** 有构建产物，不等于应用已经能运行。
 
-公有远程桌面服务把你的屏幕、键鼠和文件都经过你无法控制的服务器。NikoDesk 反转了这个模型：它**只连接你自己配置的 ID/中继服务器**（比如部署在你自己 NAS 或 VPS 上的 [rustdesk-server](https://github.com/rustdesk/rustdesk-server)），并且**拒绝回退任何公共服务器**。会话内容点对点端到端加密，你的服务器只负责撮合握手。
+最近一次本地完整构建为 **1.1.0+4（未发布，2026-09-30）**，产品版本与上游内核/协议版本独立。源码还在继续改进；本地构建不是可下载的公开版本，也不是运行验收。
 
-| | NikoDesk | 常见 SaaS 远控 |
+| 平台 | v1.0.0 归档 | 本地 1.1.0+4 验证状态 |
 |---|---|---|
-| 信令路径 | 仅你的私服 | 厂商云 |
-| 公共服务器回退 | **设计上拒绝** | 默认开启 |
-| 控制端策略 | 无密码绝不发起连接 | 免密"请求"流程 |
-| 更新渠道 | GitHub Releases + SHA256 校验 | 厂商自动更新 |
-| 自托管 | 填上你的 hbbs/hbbr 即可 | 不支持 |
+| macOS ARM64 | ZIP 内是完整 `NikoDesk.app`；本地 ad-hoc 签名，无 Developer ID 签名与公证 | Rust＋Flutter 完整构建、DMG/更新 ZIP 结构与签名完整性检查通过；新包未安装、启动或远控验收。 |
+| Windows x64 | ZIP 内有 EXE、DLL 与 `data`；NikoDesk 初始化门禁会拒绝启动 | 隔离源码、便携构建与验包流程已实现；完整 MSVC 构建、Win10 启动与会话仍待验证。 |
+| Android ARM64 | APK；NikoDesk 初始化门禁会拒绝启动 | Rust＋Gradle 完整测试 APK、独立包名、稳定本地测试签名及 16KB 检查通过；Android 16 真机启动、升级、远控仍待验证。 |
 
-## 功能特性
+Windows 与 Android 的旧产物保留在 [v1.0.0 归档](https://github.com/baogutang/nikodesk/releases/tag/v1.0.0) 中供检查，暂不建议安装。新产物发布并验证后再提供下载入口。
 
-- **🔒 仅私服** —— ID 服务器/中继/公钥三要素校验；永远不回退公共协调服务。
-- **🗝️ 控制端密码门控** —— 只输设备 ID 绝不发起连接；远端密码必须在控制端输入，空密码在任何握手前直接拒绝。
-- **🖥️ 真实远控能力** —— 完整 RustDesk 内核：远程控制、文件传输、剪贴板、多显示器、硬件编解码（VP8/VP9/AV1/H.264/HEVC）。
-- **🌗 双主题** —— 明亮"柔和渐变+毛玻璃"与暗黑"暗夜控制台"两套皮肤，默认跟随系统、可手动切换。
-- **📱 设备工作台** —— 设备卡片、真实私服在线状态、别名/分组/收藏，以及诚实的"在线未知"状态。
-- **🕓 会话记录** —— 本地、上限 200 条、损坏可恢复的发起历史（发起≠远端已接受，我们不说大话）。
-- **🔎 诊断与权限** —— 私服注册状态、延迟/NAT、macOS 屏幕录制/辅助功能引导授权。
-- **⬆️ 可验证更新** —— 应用内检查更新；从 GitHub Releases 经 HTTPS 下载，**替换任何文件前先校验 SHA256**。
-- **🚫 策略性禁用** —— 终端、端口转发、摄像头、远程重启、隐私模式、屏蔽本机输入在本产品中已从核心裁掉。
+## NikoDesk 增加了什么
 
-## 快速开始
+- **私服配置**：填写 ID 服务器、中继和服务器公钥。未配置时保持停止；NikoDesk 构建特性禁用上游默认公共注册服务回退。
+- **设备工作区**：本地别名、分组、收藏、搜索与再次连接。设备可用状态来自服务器查询，缺少有效结果时显示未知。
+- **连接前输入密码**：NikoDesk 的连接入口要求远端密码，不将密码写入设备目录；对端仍逐次验证认证与加密。
+- **本地历史**：保留最近 200 次连接发起记录；有记录不代表对端已接受。
+- **原生会话**：保留 RustDesk 的采集、渲染、输入、文件传输、剪贴板与多屏路径。编码器是否可用取决于构建和两端能力，不能保证硬件加速。
+- **诊断**：展示注明来源的会话样本。应用层 RTT、成功解码回调帧率、原生提交调用时长分别表达；它们不证明输入到画面延迟或实际呈现。未知数据保持未知。
+- **明暗主题**：可跟随系统或在应用中选择。
 
-1. 下载最新 [Release](https://github.com/baogutang/nikodesk/releases)（`v1.0.0` 提供 macOS ARM64、Windows x64、Android ARM64）。
-2. **macOS**：把 `NikoDesk.app` 放入 `/Applications`，在 **系统设置 → 隐私与安全性** 授予 *屏幕录制* 和 *辅助功能*（应用内有引导），重启一次应用。
-3. 自行部署 [rustdesk-server](https://github.com/rustdesk/rustdesk-server)（hbbs/hbbr）。在 NikoDesk **设置 → 私有服务器** 里填入 ID 服务器、中继和服务器公钥。
-4. 控制端（官方 RustDesk 客户端即可）配置同样的服务器，然后**带上密码**连接你的 NikoDesk 设备 ID。
+终端、端口隧道、摄像头和语音默认关闭；允许提出请求不等于本机批准或资源已运行。终端的连接与本机批准流程已有实现，其真实远程验收仍待完成；另外三项垂直流程、完整无人值守、隐私屏和虚拟屏仍在开发。未完成的能力保持不可用，不代表已通过全面安全审计。
 
-> 已装官方 RustDesk？NikoDesk 使用独立的 Bundle ID、配置目录和 IPC 命名空间，两者互不干扰、可共存。
+## macOS 快速开始
 
-## 更新流程
+1. 阅读 [版本说明与 SHA256SUMS](https://github.com/baogutang/nikodesk/releases/tag/v1.0.0)。当前 ZIP 是历史构建，打包修复尚未发布。
+2. 解压并保留完整 `NikoDesk.app`。不要从 `Contents/MacOS` 单独运行可执行文件，也不要拆开 Frameworks。GitHub Actions 下载的 artifact ZIP 还可能包着一层应用归档。
+3. 在 **设置 → 私有服务器** 中填写自己的 [RustDesk Server OSS](https://github.com/rustdesk/rustdesk-server)：ID 服务器、中继与**服务器公钥**。服务器私钥只保留在服务端。
+4. 另一端使用相同服务器与公钥。分别确认服务可达、本机注册，再通过真实会话验证密码认证；三者证明的是不同事情。
+5. Mac 作为被控端时，通过 macOS 系统设置授予用于采集的屏幕录制权限、用于远端输入的辅助功能权限。接受会话前审核每项权限；仅做控制端时不应要求打开全部被控权限。
 
-设置 → **软件更新 → 检查更新**。应用仅访问 `api.github.com`（HTTPS、域名白名单），比对版本、展示更新说明、下载对应平台产物，**校验发布方公布的 SHA256** 后替换 `/Applications/NikoDesk.app` 并重启。Windows/Android 提供同版本下载链接。
+macOS 使用独立应用身份、配置目录与 IPC。评估时保留现有 RustDesk 安装。请保持系统安全防护；本地签名不等于公证。
+
+## 网络与升级
+
+注册与中继使用你配置的服务。认证后的点对点会话还会访问协商得到的对端地址，更新检查与下载会访问 GitHub 的 API 和产物域名。“私服模式”不等于所有网络请求都只到 NAS。
+
+修订后的 macOS 更新流程会核对发布摘要、校验并暂存应用归档，再打开文件位置供你**手动安装**，不会自动覆盖已安装应用。v1.0.0 不包含此修复。确认新版本可用前保留旧应用。Windows 与 Android 尚无已验证的应用内安装流程。
+
+SHA256 用于对照发布摘要检查文件一致性，不证明发布者身份，也不能替代可信的平台签名。
 
 ## 从源码构建
 
+必须先构建原生内核，再构建 Flutter。macOS ARM64 需要按 [构建工作流](.github/workflows/release.yml) 准备固定的 Rust、Flutter、Xcode 与 vcpkg 原生依赖，并将 `VCPKG_ROOT` 指向准备好的目录。建议使用项目专用工具链，不修改全局 SDK。
+
 ```bash
-git clone https://github.com/baogutang/nikodesk.git
-cd nikodesk/flutter && flutter pub get
-flutter build macos --release   # 需要 Rust 内核；完整工具链见 CI
+git clone --recurse-submodules https://github.com/baogutang/nikodesk.git
+cd nikodesk
+cargo build --locked --lib --release \
+  --features flutter,hwcodec,unix-file-copy-paste,screencapturekit,nikodesk
+cp target/release/liblibrustdesk.dylib target/release/librustdesk.dylib
+cd flutter
+flutter pub get
+FLUTTER_XCODE_ARCHS=arm64 FLUTTER_XCODE_ONLY_ACTIVE_ARCH=YES \
+  flutter build macos --release --dart-define=NIKODESK=true
 ```
 
-完整可复现工具链（锁定 Rust、Flutter 3.24.5、vcpkg 原生依赖）由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 在每个 tag 上全量执行。
+产物位于 `flutter/build/macos/Build/Products/Release/NikoDesk.app`，打包与签名另行执行。工作流固定 Rust 1.88.0、Flutter 3.24.5 和 vcpkg 依赖。公开脚本支持审查与自行构建，但尚未证明产物逐字节可复现。Windows、Android 需要各自原生工具链与运行验证。
 
-## 安全说明
+## 安全与验证边界
 
-- 会话端到端加密；私服只做撮合与可选中继。
-- 被控端权限逐会话生效、确认窗可见、可实时撤销（键鼠/剪贴板/文件/音频）。
-- 更新器失败即关闭：没有 SHA256SUMS 或摘要不匹配 ⇒ 什么都不安装。
-- 无遥测、无账号、无第三方网络调用。可联网的只有：你的服务器、`api.github.com`/`github.com`（仅更新检查）。
-- 发布版为本地签名（无 Apple Developer ID/公证）。如需大范围分发请自行签名。
+- 沿用上游加密与认证。服务器公钥不是远控密码；设备私钥与服务器私钥分别属于客户端、服务端，不能相互复制。
+- 会话确认与权限开关需要在真实被控平台验证。按实际需求审核能力，不为方便一次授予全部权限。
+- macOS 产物为本地 ad-hoc 签名，无 Apple Developer ID 签名或公证。Windows 发行签名与 Android 发行签名连续性仍需验证。
+- 跨设备远控、文件与剪贴板、撤权以及性能对比都是独立验收项。未测量的速度和延迟提升不作承诺。
 
-## 文档
+## 项目与许可
 
-- [官网](https://baogutang.github.io/nikodesk/) —— 功能、指南与下载。
-- 上游原始 README 保留于 [`docs/README_RUSTDESK_UPSTREAM.md`](docs/README_RUSTDESK_UPSTREAM.md)。
+- [官网](https://baogutang.github.io/nikodesk/zh/) · [问题反馈](https://github.com/baogutang/nikodesk/issues) · [发布归档](https://github.com/baogutang/nikodesk/releases)
+- [保留的上游 README](docs/README_RUSTDESK_UPSTREAM.md)
 
-## 致谢
+NikoDesk 是基于 [RustDesk](https://github.com/rustdesk/rustdesk) 提交 `e9ddbd8f`（1.5.0-pre）的独立下游，保留其原生远控内核与上游版权声明。本项目与 RustDesk 官方无从属或背书关系。
 
-NikoDesk 是 [RustDesk](https://github.com/rustdesk/rustdesk)（基线提交 `e9ddbd8f`，1.5.0-pre）的产品级下游，远控内核完全来自上游。感谢 RustDesk 的作者与贡献者；本地已回移上游剪贴板安全修复。
-
-## 许可证
-
-[AGPL-3.0](LICENSE) —— 承继 RustDesk 许可证。衍生作品必须以相同条款保持开源。
+[AGPL-3.0](LICENCE)。分发与修改须遵循完整许可条款，包括对应源码提供义务。

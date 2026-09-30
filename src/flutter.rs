@@ -232,6 +232,8 @@ enum RenderType {
 
 #[derive(Clone)]
 pub struct FlutterHandler {
+    #[cfg(feature = "nikodesk")]
+    native_video_binding: Arc<RwLock<NativeVideoBinding>>,
     // ui session id -> display handler data
     session_handlers: Arc<RwLock<HashMap<SessionID, SessionHandler>>>,
     display_rgbas: Arc<RwLock<HashMap<usize, RgbaData>>>,
@@ -242,6 +244,8 @@ pub struct FlutterHandler {
 impl Default for FlutterHandler {
     fn default() -> Self {
         Self {
+            #[cfg(feature = "nikodesk")]
+            native_video_binding: Default::default(),
             session_handlers: Default::default(),
             display_rgbas: Default::default(),
             peer_info: Default::default(),
@@ -250,6 +254,13 @@ impl Default for FlutterHandler {
             ),
         }
     }
+}
+
+#[cfg(feature = "nikodesk")]
+#[derive(Default)]
+struct NativeVideoBinding {
+    metrics: std::sync::Weak<crate::nikodesk::video_metrics::SessionTelemetry>,
+    connection: Option<(bool, bool, String)>,
 }
 
 #[derive(Default, Clone)]
@@ -465,9 +476,13 @@ impl VideoRenderer {
             write_lock.get_mut(&display)
         };
         let Some(info) = opt_info else {
+            #[cfg(feature = "nikodesk")]
+            crate::nikodesk::video_metrics::count(crate::nikodesk::video_metrics::Counter::NoTarget);
             return false;
         };
         if info.texture_rgba_ptr == usize::default() {
+            #[cfg(feature = "nikodesk")]
+            crate::nikodesk::video_metrics::count(crate::nikodesk::video_metrics::Counter::NoPointer);
             return false;
         }
 
@@ -482,10 +497,14 @@ impl VideoRenderer {
             // Peer info's handling is async and may be late than video frame's handling
             // Allow peer info not set, but not allow wrong width/height for correct local cursor position
             if info.size != (0, 0) {
+                #[cfg(feature = "nikodesk")]
+                crate::nikodesk::video_metrics::count(crate::nikodesk::video_metrics::Counter::SizeMismatch);
                 return false;
             }
         }
         if let Some(func) = &self.on_rgba_func {
+            #[cfg(feature = "nikodesk")]
+            let submit_timer = crate::nikodesk::video_metrics::measure(crate::nikodesk::video_metrics::Stage::NativeSubmit);
             unsafe {
                 func(
                     info.texture_rgba_ptr as _,
@@ -496,6 +515,13 @@ impl VideoRenderer {
                     rgba.align() as _,
                 )
             };
+            #[cfg(feature = "nikodesk")]
+            drop(submit_timer);
+            #[cfg(feature = "nikodesk")]
+            crate::nikodesk::video_metrics::count(crate::nikodesk::video_metrics::Counter::NativeCalls);
+        } else {
+            #[cfg(feature = "nikodesk")]
+            crate::nikodesk::video_metrics::count(crate::nikodesk::video_metrics::Counter::MissingPlugin);
         }
         if info.notify_render_type != Some(RenderType::PixelBuffer) {
             info.notify_render_type = Some(RenderType::PixelBuffer);
@@ -514,13 +540,26 @@ impl VideoRenderer {
             write_lock.get_mut(&display)
         };
         let Some(info) = opt_info else {
+            #[cfg(feature = "nikodesk")]
+            crate::nikodesk::video_metrics::count(crate::nikodesk::video_metrics::Counter::NoTarget);
             return false;
         };
         if info.gpu_output_ptr == usize::default() {
+            #[cfg(feature = "nikodesk")]
+            crate::nikodesk::video_metrics::count(crate::nikodesk::video_metrics::Counter::NoPointer);
             return false;
         }
         if let Some(func) = &self.on_texture_func {
+            #[cfg(feature = "nikodesk")]
+            let submit_timer = crate::nikodesk::video_metrics::measure(crate::nikodesk::video_metrics::Stage::NativeSubmit);
             unsafe { func(info.gpu_output_ptr as _, texture) };
+            #[cfg(feature = "nikodesk")]
+            drop(submit_timer);
+            #[cfg(feature = "nikodesk")]
+            crate::nikodesk::video_metrics::count(crate::nikodesk::video_metrics::Counter::NativeCalls);
+        } else {
+            #[cfg(feature = "nikodesk")]
+            crate::nikodesk::video_metrics::count(crate::nikodesk::video_metrics::Counter::MissingPlugin);
         }
         if info.notify_render_type != Some(RenderType::Texture) {
             info.notify_render_type = Some(RenderType::Texture);
@@ -547,6 +586,38 @@ impl SessionHandler {
 }
 
 impl FlutterHandler {
+    #[cfg(feature = "nikodesk")]
+    fn try_update_native_quality(&self, status: &QualityStatus) -> bool {
+        let Some(snapshot) = status.native_video.as_ref().filter(|snapshot| snapshot.is_current()) else { return false; };
+        let Ok(native) = serde_json::to_string(snapshot) else { return false; };
+        if !snapshot.is_current() { return false; }
+        self.push_event("update_quality_status", &[
+            ("speed", &status.speed.clone().unwrap_or_default()),
+            ("fps", &serde_json::to_string(&status.fps).unwrap_or_default()),
+            ("delay", &status.delay.map(|value| value.to_string()).unwrap_or_default()),
+            ("target_bitrate", &status.target_bitrate.map(|value| value.to_string()).unwrap_or_default()),
+            ("codec_format", &status.codec_format.as_ref().map(|value| value.to_string()).unwrap_or_default()),
+            ("chroma", &status.chroma.clone().unwrap_or_default()),
+            ("niko_video_metrics", &native),
+        ], &[]);
+        true
+    }
+
+    #[cfg(feature = "nikodesk")]
+    fn replay_video_epoch(&self, session_id: &SessionID) {
+        let binding = self.native_video_binding.read().unwrap();
+        let Some(metrics) = binding.metrics.upgrade().filter(|metrics| metrics.is_active()) else { return; };
+        let Some((secure, direct, transport)) = binding.connection.clone() else { return; };
+        drop(binding);
+        if !metrics.is_active() { return; }
+        self.push_event_to("connection_ready", &[
+            ("secure", &secure.to_string()), ("direct", &direct.to_string()),
+            ("stream_type", &transport), ("niko_video_namespace", &metrics.namespace().to_owned()),
+            ("niko_video_epoch", &metrics.epoch().to_string()),
+            ("niko_video_revision", &metrics.revision().to_string()),
+            ("niko_video_existing", &"true".to_owned()),
+        ], &[session_id]);
+    }
     /// Push an event to all the event queues.
     /// An event is stored as json in the event queues.
     ///
@@ -696,6 +767,8 @@ impl InvokeUiSession for FlutterHandler {
 
     fn update_quality_status(&self, status: QualityStatus) {
         const NULL: String = String::new();
+        #[cfg(feature = "nikodesk")]
+        if self.try_update_native_quality(&status) { return; }
         self.push_event(
             "update_quality_status",
             &[
@@ -729,6 +802,30 @@ impl InvokeUiSession for FlutterHandler {
             ],
             &[],
         );
+    }
+
+    #[cfg(feature = "nikodesk")]
+    fn set_connection_type_with_video_epoch(&self, is_secured: bool, direct: bool, stream_type: &str, namespace: &str, epoch: u64, revision: u64) {
+        let mut binding = self.native_video_binding.write().unwrap();
+        let Some(metrics) = binding.metrics.upgrade().filter(|metrics| metrics.is_active() && metrics.epoch() == epoch && metrics.namespace() == namespace) else { return; };
+        binding.connection = Some((is_secured, direct, stream_type.to_owned()));
+        drop(binding);
+        if !metrics.is_active() { return; }
+        self.push_event("connection_ready", &[
+            ("secure", &is_secured.to_string()), ("direct", &direct.to_string()),
+            ("stream_type", &stream_type.to_string()), ("niko_video_namespace", &namespace.to_owned()),
+            ("niko_video_epoch", &epoch.to_string()), ("niko_video_revision", &revision.to_string()),
+        ], &[]);
+    }
+
+    #[cfg(feature = "nikodesk")]
+    fn bind_video_metrics(&self, metrics: std::sync::Weak<crate::nikodesk::video_metrics::SessionTelemetry>) {
+        *self.native_video_binding.write().unwrap() = NativeVideoBinding { metrics, connection: None };
+    }
+
+    #[cfg(feature = "nikodesk")]
+    fn video_metrics_binding(&self) -> Option<String> {
+        self.native_video_binding.read().unwrap().metrics.upgrade()?.binding()
     }
 
     fn set_fingerprint(&self, fingerprint: String) {
@@ -1180,6 +1277,8 @@ impl FlutterHandler {
         let mut rgba_write_lock = self.display_rgbas.write().unwrap();
         if let Some(rgba_data) = rgba_write_lock.get_mut(&display) {
             if rgba_data.valid {
+                #[cfg(feature = "nikodesk")]
+                crate::nikodesk::video_metrics::count(crate::nikodesk::video_metrics::Counter::SoftBusy);
                 return;
             } else {
                 rgba_data.valid = true;
@@ -1220,6 +1319,8 @@ impl FlutterHandler {
         // 1. "display 1" will not send the event.
         // 2. "displays 0&1" will not send the event. Because it uses texutre render for now.
         if !is_sent {
+            #[cfg(feature = "nikodesk")]
+            crate::nikodesk::video_metrics::count(crate::nikodesk::video_metrics::Counter::SoftNoConsumer);
             if let Some(rgba_data) = self.display_rgbas.write().unwrap().get_mut(&display) {
                 rgba_data.valid = false;
             }
@@ -1284,6 +1385,19 @@ pub fn session_add(
     is_shared_password: bool,
     conn_token: Option<String>,
 ) -> ResultType<FlutterSession> {
+    session_add_with_snapshot(session_id, id, is_file_transfer, is_view_camera, is_port_forward, is_rdp,
+        is_terminal, switch_uuid, force_relay, password, is_shared_password, conn_token,
+        #[cfg(feature = "nikodesk")]
+        crate::nikodesk::connection_snapshot::ConnectionSnapshot::capture_current()?)
+}
+
+pub(crate) fn session_add_with_snapshot(
+    session_id: &SessionID, id: &str, is_file_transfer: bool, is_view_camera: bool, is_port_forward: bool,
+    is_rdp: bool, is_terminal: bool, switch_uuid: &str, force_relay: bool, password: String,
+    is_shared_password: bool, conn_token: Option<String>,
+    #[cfg(feature = "nikodesk")]
+    snapshot: Arc<crate::nikodesk::connection_snapshot::ConnectionSnapshot>,
+) -> ResultType<FlutterSession> {
     let conn_type = if is_file_transfer {
         ConnType::FILE_TRANSFER
     } else if is_view_camera {
@@ -1335,6 +1449,7 @@ pub fn session_add(
         Some(switch_uuid.to_string())
     };
 
+    #[cfg(not(feature = "nikodesk"))]
     session.lc.write().unwrap().initialize(
         id.to_owned(),
         conn_type,
@@ -1344,9 +1459,12 @@ pub fn session_add(
         shared_password,
         conn_token,
     );
+    #[cfg(feature = "nikodesk")]
+    session.lc.write().unwrap().initialize_with_snapshot(id.to_owned(), conn_type, switch_uuid, force_relay,
+        get_adapter_luid(), shared_password, conn_token, snapshot)?;
 
     let session = Arc::new(session.clone());
-    sessions::insert_session(session_id.to_owned(), conn_type, session.clone());
+    sessions::insert_session(session_id.to_owned(), conn_type, session.clone())?;
 
     Ok(session)
 }
@@ -1397,6 +1515,9 @@ pub fn session_start_(
                 let round = session.connection_round_state.lock().unwrap().new_round();
                 io_loop(session, round);
             });
+        } else {
+            #[cfg(feature = "nikodesk")]
+            session.replay_video_epoch(session_id);
         }
         Ok(())
     } else {
@@ -2018,13 +2139,35 @@ pub mod sessions {
 
     use super::*;
 
+    #[cfg(feature = "nikodesk")]
+    type RegistryKey = crate::nikodesk::connection_snapshot::RegistryKey;
+    #[cfg(not(feature = "nikodesk"))]
+    type RegistryKey = (String, ConnType);
+
+    fn registry_peer_id(key: &RegistryKey) -> &str {
+        #[cfg(feature = "nikodesk")]
+        return &key.peer_id;
+        #[cfg(not(feature = "nikodesk"))]
+        &key.0
+    }
+
+    fn registry_conn_type(key: &RegistryKey) -> ConnType {
+        #[cfg(feature = "nikodesk")]
+        return key.conn_type;
+        #[cfg(not(feature = "nikodesk"))]
+        key.1
+    }
+
     lazy_static::lazy_static! {
         // peer -> peer session, peer session -> ui sessions
-        static ref SESSIONS: RwLock<HashMap<(String, ConnType), FlutterSession>> = Default::default();
+        static ref SESSIONS: RwLock<HashMap<RegistryKey, FlutterSession>> = Default::default();
     }
 
     #[inline]
     pub fn get_session_count(peer_id: String, conn_type: ConnType) -> usize {
+        #[cfg(feature = "nikodesk")]
+        { let _ = (peer_id, conn_type); return 0; }
+        #[cfg(not(feature = "nikodesk"))]
         SESSIONS
             .read()
             .unwrap()
@@ -2033,21 +2176,28 @@ pub mod sessions {
             .unwrap_or(0)
     }
 
+    #[cfg(feature = "nikodesk")]
+    pub fn get_session_count_scoped(namespace: &str, peer_id: &str, conn_type: ConnType) -> usize {
+        let Ok(key) = RegistryKey::new(namespace, peer_id, conn_type) else { return 0; };
+        SESSIONS.read().unwrap().get(&key)
+            .map(|s| s.session_handlers.read().unwrap().len()).unwrap_or(0)
+    }
+
     #[inline]
     pub fn get_peer_id_by_session_id(id: &SessionID, conn_type: ConnType) -> Option<String> {
         SESSIONS
             .read()
             .unwrap()
             .iter()
-            .find_map(|((peer_id, t), s)| {
-                if *t == conn_type
+            .find_map(|(key, s)| {
+                if registry_conn_type(key) == conn_type
                     && s.ui_handler
                         .session_handlers
                         .read()
                         .unwrap()
                         .contains_key(id)
                 {
-                    Some(peer_id.clone())
+                    Some(registry_peer_id(key).to_owned())
                 } else {
                     None
                 }
@@ -2072,6 +2222,9 @@ pub mod sessions {
 
     #[inline]
     pub fn get_session_by_peer_id(peer_id: String, conn_type: ConnType) -> Option<FlutterSession> {
+        #[cfg(feature = "nikodesk")]
+        { let _ = (peer_id, conn_type); return None; }
+        #[cfg(not(feature = "nikodesk"))]
         SESSIONS.read().unwrap().get(&(peer_id, conn_type)).cloned()
     }
 
@@ -2246,19 +2399,33 @@ pub mod sessions {
     }
 
     #[inline]
-    pub fn insert_session(session_id: SessionID, conn_type: ConnType, session: FlutterSession) {
-        SESSIONS
-            .write()
-            .unwrap()
-            .entry((session.get_id(), conn_type))
+    pub fn insert_session(session_id: SessionID, conn_type: ConnType, session: FlutterSession) -> ResultType<()> {
+        #[cfg(feature = "nikodesk")]
+        let key = {
+            let peer_id = session.get_id();
+            let handler = session.lc.read().map_err(|_| hbb_common::anyhow::anyhow!("NikoDesk session lock is unavailable"))?;
+            let snapshot = handler.connection_snapshot().ok_or_else(|| hbb_common::anyhow::anyhow!("NikoDesk session has no captured server identity"))?;
+            snapshot.registry_key(&peer_id, conn_type)?
+        };
+        #[cfg(not(feature = "nikodesk"))]
+        let key = (session.get_id(), conn_type);
+        let mut sessions = SESSIONS.write().unwrap();
+        #[cfg(feature = "nikodesk")]
+        key.check_uuid_binding(sessions.iter().filter_map(|(existing, session)| {
+            session.session_handlers.read().unwrap().contains_key(&session_id).then_some(existing)
+        }), false)?;
+        sessions
+            .entry(key)
             .or_insert(session)
             .ui_handler
             .session_handlers
             .write()
             .unwrap()
             .insert(session_id, Default::default());
+        drop(sessions);
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         update_session_count_to_server();
+        Ok(())
     }
 
     #[inline]
@@ -2274,7 +2441,31 @@ pub mod sessions {
         session_id: SessionID,
         displays: Vec<i32>,
     ) -> bool {
-        if let Some(s) = SESSIONS.read().unwrap().get(&(peer_id, conn_type)) {
+        #[cfg(feature = "nikodesk")]
+        { let _ = (peer_id, conn_type, session_id, displays); return false; }
+        #[cfg(not(feature = "nikodesk"))]
+        insert_peer_session_id_for_key((peer_id, conn_type), session_id, displays)
+    }
+
+    #[cfg(feature = "nikodesk")]
+    pub fn insert_peer_session_id_scoped(namespace: &str, peer_id: &str, conn_type: ConnType,
+        session_id: SessionID, displays: Vec<i32>) -> bool {
+        let Ok(key) = RegistryKey::new(namespace, peer_id, conn_type) else { return false; };
+        insert_peer_session_id_for_key(key, session_id, displays)
+    }
+
+    fn insert_peer_session_id_for_key(key: RegistryKey, session_id: SessionID, displays: Vec<i32>) -> bool {
+        #[cfg(feature = "nikodesk")]
+        let sessions = SESSIONS.write().unwrap();
+        #[cfg(feature = "nikodesk")]
+        if key.check_uuid_binding(sessions.iter().filter_map(|(existing, session)| {
+            session.session_handlers.read().unwrap().contains_key(&session_id).then_some(existing)
+        }), true).is_err() {
+            return false;
+        }
+        #[cfg(not(feature = "nikodesk"))]
+        let sessions = SESSIONS.read().unwrap();
+        if let Some(s) = sessions.get(&key) {
             let mut h = SessionHandler::default();
             h.displays = displays.iter().map(|x| *x as usize).collect::<_>();
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -2309,16 +2500,16 @@ pub mod sessions {
     #[inline]
     #[cfg(not(target_os = "ios"))]
     pub fn has_sessions_running(conn_type: ConnType) -> bool {
-        SESSIONS.read().unwrap().iter().any(|((_, r#type), s)| {
-            *r#type == conn_type && s.session_handlers.read().unwrap().len() != 0
+        SESSIONS.read().unwrap().iter().any(|(key, s)| {
+            registry_conn_type(key) == conn_type && s.session_handlers.read().unwrap().len() != 0
         })
     }
 
     #[inline]
     #[cfg(not(target_os = "ios"))]
     pub fn has_connected_sessions_running(conn_type: ConnType) -> bool {
-        SESSIONS.read().unwrap().iter().any(|((_, r#type), s)| {
-            *r#type == conn_type
+        SESSIONS.read().unwrap().iter().any(|(key, s)| {
+            registry_conn_type(key) == conn_type
                 && s.session_handlers.read().unwrap().len() != 0
                 && s.connection_round_state.lock().unwrap().is_connected()
         })
@@ -2356,6 +2547,9 @@ pub(super) mod async_tasks {
         let (tx_onlines, rx_onlines) = sync_channel::<Vec<String>>(1);
         TX_QUERY_ONLINES.lock().unwrap().replace(tx_onlines);
 
+        #[cfg(feature = "nikodesk")]
+        return crate::nikodesk::server_settings::run_flutter_tasks(rx_onlines).await;
+
         loop {
             match rx_onlines.recv() {
                 Ok(ids) => {
@@ -2389,5 +2583,83 @@ pub(super) mod async_tasks {
             super::APP_TYPE_MAIN,
             serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
         );
+    }
+}
+
+#[cfg(all(test, feature = "nikodesk"))]
+mod native_video_telemetry_tests {
+    use super::*;
+    use crate::nikodesk::video_metrics::{install_thread, SessionTelemetry};
+
+    fn handler() -> FlutterHandler {
+        FlutterHandler {
+            session_handlers: Default::default(), display_rgbas: Default::default(),
+            peer_info: Arc::new(RwLock::new(PeerInfo::new())),
+            use_texture_render: Arc::new(AtomicBool::new(false)),
+            native_video_binding: Default::default(),
+        }
+    }
+    fn metrics() -> Arc<SessionTelemetry> {
+        Arc::new(SessionTelemetry::new("a".repeat(64), Arc::new(AtomicBool::new(true)), Arc::new(std::sync::atomic::AtomicU64::new(0))))
+    }
+
+    #[test]
+    fn weak_binding_replacement_and_owner_close_are_authoritative() {
+        let handler = handler();
+        let old = metrics();
+        handler.bind_video_metrics(Arc::downgrade(&old));
+        handler.set_connection_type_with_video_epoch(true, true, "TCP", old.namespace(), old.epoch(), old.revision());
+        assert!(handler.native_video_binding.read().unwrap().connection.is_some());
+        let current = metrics();
+        handler.bind_video_metrics(Arc::downgrade(&current));
+        handler.set_connection_type_with_video_epoch(true, false, "Relay", old.namespace(), old.epoch(), old.revision());
+        assert!(handler.native_video_binding.read().unwrap().connection.is_none());
+        let binding: serde_json::Value = serde_json::from_str(&handler.video_metrics_binding().unwrap()).unwrap();
+        assert_eq!(binding["epoch"], current.epoch().to_string());
+        old.stop();
+        assert!(handler.video_metrics_binding().is_some());
+        current.stop();
+        assert!(handler.video_metrics_binding().is_none());
+        drop(current);
+        assert!(handler.video_metrics_binding().is_none());
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[test]
+    fn real_renderer_skip_branches_do_not_count_type_notification_as_submission() {
+        let metrics = metrics();
+        let _thread = install_thread(metrics.display(0));
+        let renderer = VideoRenderer {
+            is_support_multi_ui_session: true,
+            map_display_sessions: Default::default(),
+            on_rgba_func: None,
+            #[cfg(feature = "vram")]
+            on_texture_func: None,
+        };
+        let rgba = scrap::ImageRgb::new(scrap::ImageFormat::ARGB, 1);
+        assert!(!renderer.on_rgba(0, &rgba));
+        renderer.map_display_sessions.write().unwrap().insert(0, DisplaySessionInfo {
+            texture_rgba_ptr: 0, size: (0, 0), notify_render_type: None,
+            #[cfg(feature = "vram")]
+            gpu_output_ptr: 0,
+        });
+        assert!(!renderer.on_rgba(0, &rgba));
+        {
+            let mut displays = renderer.map_display_sessions.write().unwrap();
+            let info = displays.get_mut(&0).unwrap();
+            info.texture_rgba_ptr = 1;
+            info.size = (2, 2);
+        }
+        assert!(!renderer.on_rgba(0, &rgba));
+        renderer.map_display_sessions.write().unwrap().get_mut(&0).unwrap().size = (0, 0);
+        assert!(renderer.on_rgba(0, &rgba));
+        let snapshot = serde_json::to_value(metrics.snapshot(1000).unwrap()).unwrap();
+        let row = &snapshot["displays"][0];
+        assert_eq!(row["noTarget"], 1);
+        assert_eq!(row["noPointer"], 1);
+        assert_eq!(row["sizeMismatch"], 1);
+        assert_eq!(row["missingPlugin"], 1);
+        assert_eq!(row["nativeCalls"], 0);
+        assert_eq!(row["nativeSubmit"]["samples"], 0);
     }
 }

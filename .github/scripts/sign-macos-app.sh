@@ -29,6 +29,11 @@ if [[ -f "$service_path" ]]; then
   codesign "${sign_args[@]}" "$service_path"
 fi
 
+watchdog_path="$app_path/Contents/Helpers/NikoDeskPrivacyWatchdog"
+if [[ -f "$watchdog_path" ]]; then
+  codesign "${sign_args[@]}" --identifier io.nikodesk.privacy-watchdog "$watchdog_path"
+fi
+
 codesign "${sign_args[@]}" --generate-entitlement-der \
   --entitlements "$entitlements" "$app_path"
 codesign --verify --deep --strict --verbose=2 "$app_path"
@@ -39,4 +44,13 @@ audio_input=$(plutil -extract 'com\.apple\.security\.device\.audio-input' raw - 
 if [[ "$audio_input" != "true" ]]; then
   echo "Missing com.apple.security.device.audio-input entitlement" >&2
   exit 1
+fi
+bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app_path/Contents/Info.plist")
+if [[ "$bundle_id" == "io.nikodesk.macos" ]] && \
+  /usr/libexec/PlistBuddy -c 'Print :NSCameraUsageDescription' "$app_path/Contents/Info.plist" >/dev/null 2>&1; then
+  camera=$(plutil -extract 'com\.apple\.security\.device\.camera' raw - <<<"$actual_entitlements")
+  if [[ "$camera" != "true" ]]; then
+    echo "Missing com.apple.security.device.camera entitlement" >&2
+    exit 1
+  fi
 fi

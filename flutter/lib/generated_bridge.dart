@@ -59,6 +59,47 @@ abstract class Rustdesk {
 
   FlutterRustBridgeTaskConstMeta get kSessionAddSyncConstMeta;
 
+  String sessionAddNikodeskSync(
+      {required UuidValue sessionId,
+      required String id,
+      required String expectedServerNamespace,
+      required bool isFileTransfer,
+      required bool isViewCamera,
+      required bool isPortForward,
+      required bool isRdp,
+      required bool isTerminal,
+      required String switchUuid,
+      required bool forceRelay,
+      required String password,
+      required bool isSharedPassword,
+      String? connToken,
+      dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kSessionAddNikodeskSyncConstMeta;
+
+  String sessionAddNikodeskExistedSync(
+      {required String id,
+      required UuidValue sessionId,
+      required Int32List displays,
+      required bool isViewCamera,
+      required String expectedServerNamespace,
+      dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kSessionAddNikodeskExistedSyncConstMeta;
+
+  int peerGetNikodeskSessionsCount(
+      {required String id,
+      required int connType,
+      required String expectedServerNamespace,
+      dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kPeerGetNikodeskSessionsCountConstMeta;
+
+  String sessionGetServerNamespace(
+      {required UuidValue sessionId, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kSessionGetServerNamespaceConstMeta;
+
   Stream<EventToUI> sessionStart(
       {required UuidValue sessionId, required String id, dynamic hint});
 
@@ -435,6 +476,11 @@ abstract class Rustdesk {
 
   FlutterRustBridgeTaskConstMeta get kSessionGetPeerOptionConstMeta;
 
+  String sessionGetPeerOptionSync(
+      {required UuidValue sessionId, required String name, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kSessionGetPeerOptionSyncConstMeta;
+
   Future<void> sessionInputOsPassword(
       {required UuidValue sessionId, required String value, dynamic hint});
 
@@ -645,6 +691,11 @@ abstract class Rustdesk {
 
   FlutterRustBridgeTaskConstMeta get kMainGetOptionConstMeta;
 
+  Future<String> mainNikoSavePrivateServer(
+      {required String config, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kMainNikoSavePrivateServerConstMeta;
+
   String mainGetOptionSync({required String key, dynamic hint});
 
   FlutterRustBridgeTaskConstMeta get kMainGetOptionSyncConstMeta;
@@ -715,9 +766,52 @@ abstract class Rustdesk {
 
   FlutterRustBridgeTaskConstMeta get kMainGetFavConstMeta;
 
+  Future<String> mainGetNikodeskCapabilityPolicy(
+      {required String expectedServerNamespace, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kMainGetNikodeskCapabilityPolicyConstMeta;
+
+  Future<String> mainSetNikodeskCapabilityPolicy(
+      {required String expectedServerNamespace,
+      required String expectedRevision,
+      required String capability,
+      required bool allowRequests,
+      dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kMainSetNikodeskCapabilityPolicyConstMeta;
+
   Future<void> mainStoreFav({required List<String> favs, dynamic hint});
 
   FlutterRustBridgeTaskConstMeta get kMainStoreFavConstMeta;
+
+  Future<String> mainGetNikodeskFavorites(
+      {required String expectedServerNamespace, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kMainGetNikodeskFavoritesConstMeta;
+
+  Future<String> mainPatchNikodeskFavorites(
+      {required String expectedServerNamespace,
+      required String expectedRevision,
+      required List<String> add,
+      required List<String> remove,
+      dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kMainPatchNikodeskFavoritesConstMeta;
+
+  Future<String> mainPreviewNikodeskLegacyPeerPreferences(
+      {required String expectedServerNamespace, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta
+      get kMainPreviewNikodeskLegacyPeerPreferencesConstMeta;
+
+  Future<String> mainImportNikodeskLegacyPeerPreferences(
+      {required String expectedServerNamespace,
+      required String previewRevision,
+      required List<String> peerIds,
+      dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta
+      get kMainImportNikodeskLegacyPeerPreferencesConstMeta;
 
   String mainGetPeerSync({required String id, dynamic hint});
 
@@ -883,6 +977,42 @@ abstract class Rustdesk {
       dynamic hint});
 
   FlutterRustBridgeTaskConstMeta get kMainSetPeerOptionSyncConstMeta;
+
+  String mainGetNikodeskPeerOptionSync(
+      {required String id,
+      required String expectedServerNamespace,
+      required String key,
+      dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kMainGetNikodeskPeerOptionSyncConstMeta;
+
+  bool mainSetNikodeskPeerOptionSync(
+      {required String id,
+      required String expectedServerNamespace,
+      required String key,
+      required String value,
+      dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kMainSetNikodeskPeerOptionSyncConstMeta;
+
+  String mainGetNikodeskPeerFlutterOptionSync(
+      {required String id,
+      required String expectedServerNamespace,
+      required String k,
+      dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta
+      get kMainGetNikodeskPeerFlutterOptionSyncConstMeta;
+
+  bool mainSetNikodeskPeerFlutterOptionSync(
+      {required String id,
+      required String expectedServerNamespace,
+      required String k,
+      required String v,
+      dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta
+      get kMainSetNikodeskPeerFlutterOptionSyncConstMeta;
 
   Future<void> mainSetPeerAlias(
       {required String id, required String alias, dynamic hint});
@@ -1672,6 +1802,18 @@ abstract class Rustdesk {
       dynamic hint});
 
   FlutterRustBridgeTaskConstMeta get kSessionGetCommonConstMeta;
+
+  /// Enqueue a typed local CM decision. Resource progress arrives separately as an event.
+  Future<String> cmNikodeskCapabilityDecision(
+      {required String json, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kCmNikodeskCapabilityDecisionConstMeta;
+
+  /// Revoke only the explicitly identified authenticated connection's terminal grant.
+  Future<String> cmNikodeskCapabilityRevoke(
+      {required String json, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kCmNikodeskCapabilityRevokeConstMeta;
 }
 
 class CursorShape {
@@ -1888,6 +2030,160 @@ class RustdeskImpl implements Rustdesk {
           "isSharedPassword",
           "connToken"
         ],
+      );
+
+  String sessionAddNikodeskSync(
+      {required UuidValue sessionId,
+      required String id,
+      required String expectedServerNamespace,
+      required bool isFileTransfer,
+      required bool isViewCamera,
+      required bool isPortForward,
+      required bool isRdp,
+      required bool isTerminal,
+      required String switchUuid,
+      required bool forceRelay,
+      required String password,
+      required bool isSharedPassword,
+      String? connToken,
+      dynamic hint}) {
+    var arg0 = _platform.api2wire_Uuid(sessionId);
+    var arg1 = _platform.api2wire_String(id);
+    var arg2 = _platform.api2wire_String(expectedServerNamespace);
+    var arg3 = isFileTransfer;
+    var arg4 = isViewCamera;
+    var arg5 = isPortForward;
+    var arg6 = isRdp;
+    var arg7 = isTerminal;
+    var arg8 = _platform.api2wire_String(switchUuid);
+    var arg9 = forceRelay;
+    var arg10 = _platform.api2wire_String(password);
+    var arg11 = isSharedPassword;
+    var arg12 = _platform.api2wire_opt_String(connToken);
+    return _platform.executeSync(FlutterRustBridgeSyncTask(
+      callFfi: () => _platform.inner.wire_session_add_nikodesk_sync(arg0, arg1,
+          arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12),
+      parseSuccessData: _wire2api_String,
+      constMeta: kSessionAddNikodeskSyncConstMeta,
+      argValues: [
+        sessionId,
+        id,
+        expectedServerNamespace,
+        isFileTransfer,
+        isViewCamera,
+        isPortForward,
+        isRdp,
+        isTerminal,
+        switchUuid,
+        forceRelay,
+        password,
+        isSharedPassword,
+        connToken
+      ],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kSessionAddNikodeskSyncConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "session_add_nikodesk_sync",
+        argNames: [
+          "sessionId",
+          "id",
+          "expectedServerNamespace",
+          "isFileTransfer",
+          "isViewCamera",
+          "isPortForward",
+          "isRdp",
+          "isTerminal",
+          "switchUuid",
+          "forceRelay",
+          "password",
+          "isSharedPassword",
+          "connToken"
+        ],
+      );
+
+  String sessionAddNikodeskExistedSync(
+      {required String id,
+      required UuidValue sessionId,
+      required Int32List displays,
+      required bool isViewCamera,
+      required String expectedServerNamespace,
+      dynamic hint}) {
+    var arg0 = _platform.api2wire_String(id);
+    var arg1 = _platform.api2wire_Uuid(sessionId);
+    var arg2 = _platform.api2wire_int_32_list(displays);
+    var arg3 = isViewCamera;
+    var arg4 = _platform.api2wire_String(expectedServerNamespace);
+    return _platform.executeSync(FlutterRustBridgeSyncTask(
+      callFfi: () => _platform.inner
+          .wire_session_add_nikodesk_existed_sync(arg0, arg1, arg2, arg3, arg4),
+      parseSuccessData: _wire2api_String,
+      constMeta: kSessionAddNikodeskExistedSyncConstMeta,
+      argValues: [
+        id,
+        sessionId,
+        displays,
+        isViewCamera,
+        expectedServerNamespace
+      ],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kSessionAddNikodeskExistedSyncConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "session_add_nikodesk_existed_sync",
+        argNames: [
+          "id",
+          "sessionId",
+          "displays",
+          "isViewCamera",
+          "expectedServerNamespace"
+        ],
+      );
+
+  int peerGetNikodeskSessionsCount(
+      {required String id,
+      required int connType,
+      required String expectedServerNamespace,
+      dynamic hint}) {
+    var arg0 = _platform.api2wire_String(id);
+    var arg1 = api2wire_i32(connType);
+    var arg2 = _platform.api2wire_String(expectedServerNamespace);
+    return _platform.executeSync(FlutterRustBridgeSyncTask(
+      callFfi: () => _platform.inner
+          .wire_peer_get_nikodesk_sessions_count(arg0, arg1, arg2),
+      parseSuccessData: _wire2api_usize,
+      constMeta: kPeerGetNikodeskSessionsCountConstMeta,
+      argValues: [id, connType, expectedServerNamespace],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kPeerGetNikodeskSessionsCountConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "peer_get_nikodesk_sessions_count",
+        argNames: ["id", "connType", "expectedServerNamespace"],
+      );
+
+  String sessionGetServerNamespace(
+      {required UuidValue sessionId, dynamic hint}) {
+    var arg0 = _platform.api2wire_Uuid(sessionId);
+    return _platform.executeSync(FlutterRustBridgeSyncTask(
+      callFfi: () => _platform.inner.wire_session_get_server_namespace(arg0),
+      parseSuccessData: _wire2api_String,
+      constMeta: kSessionGetServerNamespaceConstMeta,
+      argValues: [sessionId],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kSessionGetServerNamespaceConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "session_get_server_namespace",
+        argNames: ["sessionId"],
       );
 
   Stream<EventToUI> sessionStart(
@@ -3268,6 +3564,26 @@ class RustdeskImpl implements Rustdesk {
         argNames: ["sessionId", "name"],
       );
 
+  String sessionGetPeerOptionSync(
+      {required UuidValue sessionId, required String name, dynamic hint}) {
+    var arg0 = _platform.api2wire_Uuid(sessionId);
+    var arg1 = _platform.api2wire_String(name);
+    return _platform.executeSync(FlutterRustBridgeSyncTask(
+      callFfi: () =>
+          _platform.inner.wire_session_get_peer_option_sync(arg0, arg1),
+      parseSuccessData: _wire2api_String,
+      constMeta: kSessionGetPeerOptionSyncConstMeta,
+      argValues: [sessionId, name],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kSessionGetPeerOptionSyncConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "session_get_peer_option_sync",
+        argNames: ["sessionId", "name"],
+      );
+
   Future<void> sessionInputOsPassword(
       {required UuidValue sessionId, required String value, dynamic hint}) {
     var arg0 = _platform.api2wire_Uuid(sessionId);
@@ -3973,6 +4289,25 @@ class RustdeskImpl implements Rustdesk {
         argNames: ["key"],
       );
 
+  Future<String> mainNikoSavePrivateServer(
+      {required String config, dynamic hint}) {
+    var arg0 = _platform.api2wire_String(config);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_main_niko_save_private_server(port_, arg0),
+      parseSuccessData: _wire2api_String,
+      constMeta: kMainNikoSavePrivateServerConstMeta,
+      argValues: [config],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kMainNikoSavePrivateServerConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "main_niko_save_private_server",
+        argNames: ["config"],
+      );
+
   String mainGetOptionSync({required String key, dynamic hint}) {
     var arg0 = _platform.api2wire_String(key);
     return _platform.executeSync(FlutterRustBridgeSyncTask(
@@ -4247,6 +4582,64 @@ class RustdeskImpl implements Rustdesk {
         argNames: [],
       );
 
+  Future<String> mainGetNikodeskCapabilityPolicy(
+      {required String expectedServerNamespace, dynamic hint}) {
+    var arg0 = _platform.api2wire_String(expectedServerNamespace);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_main_get_nikodesk_capability_policy(port_, arg0),
+      parseSuccessData: _wire2api_String,
+      constMeta: kMainGetNikodeskCapabilityPolicyConstMeta,
+      argValues: [expectedServerNamespace],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta
+      get kMainGetNikodeskCapabilityPolicyConstMeta =>
+          const FlutterRustBridgeTaskConstMeta(
+            debugName: "main_get_nikodesk_capability_policy",
+            argNames: ["expectedServerNamespace"],
+          );
+
+  Future<String> mainSetNikodeskCapabilityPolicy(
+      {required String expectedServerNamespace,
+      required String expectedRevision,
+      required String capability,
+      required bool allowRequests,
+      dynamic hint}) {
+    var arg0 = _platform.api2wire_String(expectedServerNamespace);
+    var arg1 = _platform.api2wire_String(expectedRevision);
+    var arg2 = _platform.api2wire_String(capability);
+    var arg3 = allowRequests;
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) => _platform.inner
+          .wire_main_set_nikodesk_capability_policy(
+              port_, arg0, arg1, arg2, arg3),
+      parseSuccessData: _wire2api_String,
+      constMeta: kMainSetNikodeskCapabilityPolicyConstMeta,
+      argValues: [
+        expectedServerNamespace,
+        expectedRevision,
+        capability,
+        allowRequests
+      ],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta
+      get kMainSetNikodeskCapabilityPolicyConstMeta =>
+          const FlutterRustBridgeTaskConstMeta(
+            debugName: "main_set_nikodesk_capability_policy",
+            argNames: [
+              "expectedServerNamespace",
+              "expectedRevision",
+              "capability",
+              "allowRequests"
+            ],
+          );
+
   Future<void> mainStoreFav({required List<String> favs, dynamic hint}) {
     var arg0 = _platform.api2wire_StringList(favs);
     return _platform.executeNormal(FlutterRustBridgeTask(
@@ -4263,6 +4656,102 @@ class RustdeskImpl implements Rustdesk {
         debugName: "main_store_fav",
         argNames: ["favs"],
       );
+
+  Future<String> mainGetNikodeskFavorites(
+      {required String expectedServerNamespace, dynamic hint}) {
+    var arg0 = _platform.api2wire_String(expectedServerNamespace);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_main_get_nikodesk_favorites(port_, arg0),
+      parseSuccessData: _wire2api_String,
+      constMeta: kMainGetNikodeskFavoritesConstMeta,
+      argValues: [expectedServerNamespace],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kMainGetNikodeskFavoritesConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "main_get_nikodesk_favorites",
+        argNames: ["expectedServerNamespace"],
+      );
+
+  Future<String> mainPatchNikodeskFavorites(
+      {required String expectedServerNamespace,
+      required String expectedRevision,
+      required List<String> add,
+      required List<String> remove,
+      dynamic hint}) {
+    var arg0 = _platform.api2wire_String(expectedServerNamespace);
+    var arg1 = _platform.api2wire_String(expectedRevision);
+    var arg2 = _platform.api2wire_StringList(add);
+    var arg3 = _platform.api2wire_StringList(remove);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) => _platform.inner
+          .wire_main_patch_nikodesk_favorites(port_, arg0, arg1, arg2, arg3),
+      parseSuccessData: _wire2api_String,
+      constMeta: kMainPatchNikodeskFavoritesConstMeta,
+      argValues: [expectedServerNamespace, expectedRevision, add, remove],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kMainPatchNikodeskFavoritesConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "main_patch_nikodesk_favorites",
+        argNames: [
+          "expectedServerNamespace",
+          "expectedRevision",
+          "add",
+          "remove"
+        ],
+      );
+
+  Future<String> mainPreviewNikodeskLegacyPeerPreferences(
+      {required String expectedServerNamespace, dynamic hint}) {
+    var arg0 = _platform.api2wire_String(expectedServerNamespace);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) => _platform.inner
+          .wire_main_preview_nikodesk_legacy_peer_preferences(port_, arg0),
+      parseSuccessData: _wire2api_String,
+      constMeta: kMainPreviewNikodeskLegacyPeerPreferencesConstMeta,
+      argValues: [expectedServerNamespace],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta
+      get kMainPreviewNikodeskLegacyPeerPreferencesConstMeta =>
+          const FlutterRustBridgeTaskConstMeta(
+            debugName: "main_preview_nikodesk_legacy_peer_preferences",
+            argNames: ["expectedServerNamespace"],
+          );
+
+  Future<String> mainImportNikodeskLegacyPeerPreferences(
+      {required String expectedServerNamespace,
+      required String previewRevision,
+      required List<String> peerIds,
+      dynamic hint}) {
+    var arg0 = _platform.api2wire_String(expectedServerNamespace);
+    var arg1 = _platform.api2wire_String(previewRevision);
+    var arg2 = _platform.api2wire_StringList(peerIds);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) => _platform.inner
+          .wire_main_import_nikodesk_legacy_peer_preferences(
+              port_, arg0, arg1, arg2),
+      parseSuccessData: _wire2api_String,
+      constMeta: kMainImportNikodeskLegacyPeerPreferencesConstMeta,
+      argValues: [expectedServerNamespace, previewRevision, peerIds],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta
+      get kMainImportNikodeskLegacyPeerPreferencesConstMeta =>
+          const FlutterRustBridgeTaskConstMeta(
+            debugName: "main_import_nikodesk_legacy_peer_preferences",
+            argNames: ["expectedServerNamespace", "previewRevision", "peerIds"],
+          );
 
   String mainGetPeerSync({required String id, dynamic hint}) {
     var arg0 = _platform.api2wire_String(id);
@@ -4794,6 +5283,109 @@ class RustdeskImpl implements Rustdesk {
         debugName: "main_set_peer_option_sync",
         argNames: ["id", "key", "value"],
       );
+
+  String mainGetNikodeskPeerOptionSync(
+      {required String id,
+      required String expectedServerNamespace,
+      required String key,
+      dynamic hint}) {
+    var arg0 = _platform.api2wire_String(id);
+    var arg1 = _platform.api2wire_String(expectedServerNamespace);
+    var arg2 = _platform.api2wire_String(key);
+    return _platform.executeSync(FlutterRustBridgeSyncTask(
+      callFfi: () => _platform.inner
+          .wire_main_get_nikodesk_peer_option_sync(arg0, arg1, arg2),
+      parseSuccessData: _wire2api_String,
+      constMeta: kMainGetNikodeskPeerOptionSyncConstMeta,
+      argValues: [id, expectedServerNamespace, key],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kMainGetNikodeskPeerOptionSyncConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "main_get_nikodesk_peer_option_sync",
+        argNames: ["id", "expectedServerNamespace", "key"],
+      );
+
+  bool mainSetNikodeskPeerOptionSync(
+      {required String id,
+      required String expectedServerNamespace,
+      required String key,
+      required String value,
+      dynamic hint}) {
+    var arg0 = _platform.api2wire_String(id);
+    var arg1 = _platform.api2wire_String(expectedServerNamespace);
+    var arg2 = _platform.api2wire_String(key);
+    var arg3 = _platform.api2wire_String(value);
+    return _platform.executeSync(FlutterRustBridgeSyncTask(
+      callFfi: () => _platform.inner
+          .wire_main_set_nikodesk_peer_option_sync(arg0, arg1, arg2, arg3),
+      parseSuccessData: _wire2api_bool,
+      constMeta: kMainSetNikodeskPeerOptionSyncConstMeta,
+      argValues: [id, expectedServerNamespace, key, value],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kMainSetNikodeskPeerOptionSyncConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "main_set_nikodesk_peer_option_sync",
+        argNames: ["id", "expectedServerNamespace", "key", "value"],
+      );
+
+  String mainGetNikodeskPeerFlutterOptionSync(
+      {required String id,
+      required String expectedServerNamespace,
+      required String k,
+      dynamic hint}) {
+    var arg0 = _platform.api2wire_String(id);
+    var arg1 = _platform.api2wire_String(expectedServerNamespace);
+    var arg2 = _platform.api2wire_String(k);
+    return _platform.executeSync(FlutterRustBridgeSyncTask(
+      callFfi: () => _platform.inner
+          .wire_main_get_nikodesk_peer_flutter_option_sync(arg0, arg1, arg2),
+      parseSuccessData: _wire2api_String,
+      constMeta: kMainGetNikodeskPeerFlutterOptionSyncConstMeta,
+      argValues: [id, expectedServerNamespace, k],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta
+      get kMainGetNikodeskPeerFlutterOptionSyncConstMeta =>
+          const FlutterRustBridgeTaskConstMeta(
+            debugName: "main_get_nikodesk_peer_flutter_option_sync",
+            argNames: ["id", "expectedServerNamespace", "k"],
+          );
+
+  bool mainSetNikodeskPeerFlutterOptionSync(
+      {required String id,
+      required String expectedServerNamespace,
+      required String k,
+      required String v,
+      dynamic hint}) {
+    var arg0 = _platform.api2wire_String(id);
+    var arg1 = _platform.api2wire_String(expectedServerNamespace);
+    var arg2 = _platform.api2wire_String(k);
+    var arg3 = _platform.api2wire_String(v);
+    return _platform.executeSync(FlutterRustBridgeSyncTask(
+      callFfi: () => _platform.inner
+          .wire_main_set_nikodesk_peer_flutter_option_sync(
+              arg0, arg1, arg2, arg3),
+      parseSuccessData: _wire2api_bool,
+      constMeta: kMainSetNikodeskPeerFlutterOptionSyncConstMeta,
+      argValues: [id, expectedServerNamespace, k, v],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta
+      get kMainSetNikodeskPeerFlutterOptionSyncConstMeta =>
+          const FlutterRustBridgeTaskConstMeta(
+            debugName: "main_set_nikodesk_peer_flutter_option_sync",
+            argNames: ["id", "expectedServerNamespace", "k", "v"],
+          );
 
   Future<void> mainSetPeerAlias(
       {required String id, required String alias, dynamic hint}) {
@@ -7767,6 +8359,44 @@ class RustdeskImpl implements Rustdesk {
         argNames: ["sessionId", "key", "param"],
       );
 
+  Future<String> cmNikodeskCapabilityDecision(
+      {required String json, dynamic hint}) {
+    var arg0 = _platform.api2wire_String(json);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_cm_nikodesk_capability_decision(port_, arg0),
+      parseSuccessData: _wire2api_String,
+      constMeta: kCmNikodeskCapabilityDecisionConstMeta,
+      argValues: [json],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kCmNikodeskCapabilityDecisionConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "cm_nikodesk_capability_decision",
+        argNames: ["json"],
+      );
+
+  Future<String> cmNikodeskCapabilityRevoke(
+      {required String json, dynamic hint}) {
+    var arg0 = _platform.api2wire_String(json);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_cm_nikodesk_capability_revoke(port_, arg0),
+      parseSuccessData: _wire2api_String,
+      constMeta: kCmNikodeskCapabilityRevokeConstMeta,
+      argValues: [json],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kCmNikodeskCapabilityRevokeConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "cm_nikodesk_capability_revoke",
+        argNames: ["json"],
+      );
+
   void dispose() {
     _platform.dispose();
   }
@@ -8226,6 +8856,144 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
           ffi.Pointer<wire_uint_8_list>,
           bool,
           ffi.Pointer<wire_uint_8_list>)>();
+
+  WireSyncReturn wire_session_add_nikodesk_sync(
+    ffi.Pointer<wire_uint_8_list> session_id,
+    ffi.Pointer<wire_uint_8_list> id,
+    ffi.Pointer<wire_uint_8_list> expected_server_namespace,
+    bool is_file_transfer,
+    bool is_view_camera,
+    bool is_port_forward,
+    bool is_rdp,
+    bool is_terminal,
+    ffi.Pointer<wire_uint_8_list> switch_uuid,
+    bool force_relay,
+    ffi.Pointer<wire_uint_8_list> password,
+    bool is_shared_password,
+    ffi.Pointer<wire_uint_8_list> conn_token,
+  ) {
+    return _wire_session_add_nikodesk_sync(
+      session_id,
+      id,
+      expected_server_namespace,
+      is_file_transfer,
+      is_view_camera,
+      is_port_forward,
+      is_rdp,
+      is_terminal,
+      switch_uuid,
+      force_relay,
+      password,
+      is_shared_password,
+      conn_token,
+    );
+  }
+
+  late final _wire_session_add_nikodesk_syncPtr = _lookup<
+          ffi.NativeFunction<
+              WireSyncReturn Function(
+                  ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_uint_8_list>,
+                  ffi.Bool,
+                  ffi.Bool,
+                  ffi.Bool,
+                  ffi.Bool,
+                  ffi.Bool,
+                  ffi.Pointer<wire_uint_8_list>,
+                  ffi.Bool,
+                  ffi.Pointer<wire_uint_8_list>,
+                  ffi.Bool,
+                  ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_session_add_nikodesk_sync');
+  late final _wire_session_add_nikodesk_sync =
+      _wire_session_add_nikodesk_syncPtr.asFunction<
+          WireSyncReturn Function(
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>,
+              bool,
+              bool,
+              bool,
+              bool,
+              bool,
+              ffi.Pointer<wire_uint_8_list>,
+              bool,
+              ffi.Pointer<wire_uint_8_list>,
+              bool,
+              ffi.Pointer<wire_uint_8_list>)>();
+
+  WireSyncReturn wire_session_add_nikodesk_existed_sync(
+    ffi.Pointer<wire_uint_8_list> id,
+    ffi.Pointer<wire_uint_8_list> session_id,
+    ffi.Pointer<wire_int_32_list> displays,
+    bool is_view_camera,
+    ffi.Pointer<wire_uint_8_list> expected_server_namespace,
+  ) {
+    return _wire_session_add_nikodesk_existed_sync(
+      id,
+      session_id,
+      displays,
+      is_view_camera,
+      expected_server_namespace,
+    );
+  }
+
+  late final _wire_session_add_nikodesk_existed_syncPtr = _lookup<
+          ffi.NativeFunction<
+              WireSyncReturn Function(
+                  ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_int_32_list>,
+                  ffi.Bool,
+                  ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_session_add_nikodesk_existed_sync');
+  late final _wire_session_add_nikodesk_existed_sync =
+      _wire_session_add_nikodesk_existed_syncPtr.asFunction<
+          WireSyncReturn Function(
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_int_32_list>,
+              bool,
+              ffi.Pointer<wire_uint_8_list>)>();
+
+  WireSyncReturn wire_peer_get_nikodesk_sessions_count(
+    ffi.Pointer<wire_uint_8_list> id,
+    int conn_type,
+    ffi.Pointer<wire_uint_8_list> expected_server_namespace,
+  ) {
+    return _wire_peer_get_nikodesk_sessions_count(
+      id,
+      conn_type,
+      expected_server_namespace,
+    );
+  }
+
+  late final _wire_peer_get_nikodesk_sessions_countPtr = _lookup<
+          ffi.NativeFunction<
+              WireSyncReturn Function(ffi.Pointer<wire_uint_8_list>, ffi.Int32,
+                  ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_peer_get_nikodesk_sessions_count');
+  late final _wire_peer_get_nikodesk_sessions_count =
+      _wire_peer_get_nikodesk_sessions_countPtr.asFunction<
+          WireSyncReturn Function(ffi.Pointer<wire_uint_8_list>, int,
+              ffi.Pointer<wire_uint_8_list>)>();
+
+  WireSyncReturn wire_session_get_server_namespace(
+    ffi.Pointer<wire_uint_8_list> session_id,
+  ) {
+    return _wire_session_get_server_namespace(
+      session_id,
+    );
+  }
+
+  late final _wire_session_get_server_namespacePtr = _lookup<
+          ffi.NativeFunction<
+              WireSyncReturn Function(ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_session_get_server_namespace');
+  late final _wire_session_get_server_namespace =
+      _wire_session_get_server_namespacePtr
+          .asFunction<WireSyncReturn Function(ffi.Pointer<wire_uint_8_list>)>();
 
   void wire_session_start(
     int port_,
@@ -9569,6 +10337,26 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
           void Function(int, ffi.Pointer<wire_uint_8_list>,
               ffi.Pointer<wire_uint_8_list>)>();
 
+  WireSyncReturn wire_session_get_peer_option_sync(
+    ffi.Pointer<wire_uint_8_list> session_id,
+    ffi.Pointer<wire_uint_8_list> name,
+  ) {
+    return _wire_session_get_peer_option_sync(
+      session_id,
+      name,
+    );
+  }
+
+  late final _wire_session_get_peer_option_syncPtr = _lookup<
+          ffi.NativeFunction<
+              WireSyncReturn Function(ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_session_get_peer_option_sync');
+  late final _wire_session_get_peer_option_sync =
+      _wire_session_get_peer_option_syncPtr.asFunction<
+          WireSyncReturn Function(
+              ffi.Pointer<wire_uint_8_list>, ffi.Pointer<wire_uint_8_list>)>();
+
   void wire_session_input_os_password(
     int port_,
     ffi.Pointer<wire_uint_8_list> session_id,
@@ -10277,6 +11065,24 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
   late final _wire_main_get_option = _wire_main_get_optionPtr
       .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>)>();
 
+  void wire_main_niko_save_private_server(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> config,
+  ) {
+    return _wire_main_niko_save_private_server(
+      port_,
+      config,
+    );
+  }
+
+  late final _wire_main_niko_save_private_serverPtr = _lookup<
+          ffi.NativeFunction<
+              ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_main_niko_save_private_server');
+  late final _wire_main_niko_save_private_server =
+      _wire_main_niko_save_private_serverPtr
+          .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>)>();
+
   WireSyncReturn wire_main_get_option_sync(
     ffi.Pointer<wire_uint_8_list> key,
   ) {
@@ -10516,6 +11322,57 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
   late final _wire_main_get_fav =
       _wire_main_get_favPtr.asFunction<void Function(int)>();
 
+  void wire_main_get_nikodesk_capability_policy(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> expected_server_namespace,
+  ) {
+    return _wire_main_get_nikodesk_capability_policy(
+      port_,
+      expected_server_namespace,
+    );
+  }
+
+  late final _wire_main_get_nikodesk_capability_policyPtr = _lookup<
+          ffi.NativeFunction<
+              ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_main_get_nikodesk_capability_policy');
+  late final _wire_main_get_nikodesk_capability_policy =
+      _wire_main_get_nikodesk_capability_policyPtr
+          .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>)>();
+
+  void wire_main_set_nikodesk_capability_policy(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> expected_server_namespace,
+    ffi.Pointer<wire_uint_8_list> expected_revision,
+    ffi.Pointer<wire_uint_8_list> capability,
+    bool allow_requests,
+  ) {
+    return _wire_main_set_nikodesk_capability_policy(
+      port_,
+      expected_server_namespace,
+      expected_revision,
+      capability,
+      allow_requests,
+    );
+  }
+
+  late final _wire_main_set_nikodesk_capability_policyPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(
+              ffi.Int64,
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Bool)>>('wire_main_set_nikodesk_capability_policy');
+  late final _wire_main_set_nikodesk_capability_policy =
+      _wire_main_set_nikodesk_capability_policyPtr.asFunction<
+          void Function(
+              int,
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>,
+              bool)>();
+
   void wire_main_store_fav(
     int port_,
     ffi.Pointer<wire_StringList> favs,
@@ -10532,6 +11389,103 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
               ffi.Int64, ffi.Pointer<wire_StringList>)>>('wire_main_store_fav');
   late final _wire_main_store_fav = _wire_main_store_favPtr
       .asFunction<void Function(int, ffi.Pointer<wire_StringList>)>();
+
+  void wire_main_get_nikodesk_favorites(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> expected_server_namespace,
+  ) {
+    return _wire_main_get_nikodesk_favorites(
+      port_,
+      expected_server_namespace,
+    );
+  }
+
+  late final _wire_main_get_nikodesk_favoritesPtr = _lookup<
+          ffi.NativeFunction<
+              ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_main_get_nikodesk_favorites');
+  late final _wire_main_get_nikodesk_favorites =
+      _wire_main_get_nikodesk_favoritesPtr
+          .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>)>();
+
+  void wire_main_patch_nikodesk_favorites(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> expected_server_namespace,
+    ffi.Pointer<wire_uint_8_list> expected_revision,
+    ffi.Pointer<wire_StringList> add,
+    ffi.Pointer<wire_StringList> remove,
+  ) {
+    return _wire_main_patch_nikodesk_favorites(
+      port_,
+      expected_server_namespace,
+      expected_revision,
+      add,
+      remove,
+    );
+  }
+
+  late final _wire_main_patch_nikodesk_favoritesPtr = _lookup<
+          ffi.NativeFunction<
+              ffi.Void Function(
+                  ffi.Int64,
+                  ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_StringList>,
+                  ffi.Pointer<wire_StringList>)>>(
+      'wire_main_patch_nikodesk_favorites');
+  late final _wire_main_patch_nikodesk_favorites =
+      _wire_main_patch_nikodesk_favoritesPtr.asFunction<
+          void Function(
+              int,
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_StringList>,
+              ffi.Pointer<wire_StringList>)>();
+
+  void wire_main_preview_nikodesk_legacy_peer_preferences(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> expected_server_namespace,
+  ) {
+    return _wire_main_preview_nikodesk_legacy_peer_preferences(
+      port_,
+      expected_server_namespace,
+    );
+  }
+
+  late final _wire_main_preview_nikodesk_legacy_peer_preferencesPtr = _lookup<
+          ffi.NativeFunction<
+              ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_main_preview_nikodesk_legacy_peer_preferences');
+  late final _wire_main_preview_nikodesk_legacy_peer_preferences =
+      _wire_main_preview_nikodesk_legacy_peer_preferencesPtr
+          .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>)>();
+
+  void wire_main_import_nikodesk_legacy_peer_preferences(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> expected_server_namespace,
+    ffi.Pointer<wire_uint_8_list> preview_revision,
+    ffi.Pointer<wire_StringList> peer_ids,
+  ) {
+    return _wire_main_import_nikodesk_legacy_peer_preferences(
+      port_,
+      expected_server_namespace,
+      preview_revision,
+      peer_ids,
+    );
+  }
+
+  late final _wire_main_import_nikodesk_legacy_peer_preferencesPtr = _lookup<
+          ffi.NativeFunction<
+              ffi.Void Function(
+                  ffi.Int64,
+                  ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_StringList>)>>(
+      'wire_main_import_nikodesk_legacy_peer_preferences');
+  late final _wire_main_import_nikodesk_legacy_peer_preferences =
+      _wire_main_import_nikodesk_legacy_peer_preferencesPtr.asFunction<
+          void Function(int, ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>, ffi.Pointer<wire_StringList>)>();
 
   WireSyncReturn wire_main_get_peer_sync(
     ffi.Pointer<wire_uint_8_list> id,
@@ -11033,6 +11987,114 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
       _wire_main_set_peer_option_syncPtr.asFunction<
           WireSyncReturn Function(ffi.Pointer<wire_uint_8_list>,
               ffi.Pointer<wire_uint_8_list>, ffi.Pointer<wire_uint_8_list>)>();
+
+  WireSyncReturn wire_main_get_nikodesk_peer_option_sync(
+    ffi.Pointer<wire_uint_8_list> id,
+    ffi.Pointer<wire_uint_8_list> expected_server_namespace,
+    ffi.Pointer<wire_uint_8_list> key,
+  ) {
+    return _wire_main_get_nikodesk_peer_option_sync(
+      id,
+      expected_server_namespace,
+      key,
+    );
+  }
+
+  late final _wire_main_get_nikodesk_peer_option_syncPtr = _lookup<
+          ffi.NativeFunction<
+              WireSyncReturn Function(
+                  ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_main_get_nikodesk_peer_option_sync');
+  late final _wire_main_get_nikodesk_peer_option_sync =
+      _wire_main_get_nikodesk_peer_option_syncPtr.asFunction<
+          WireSyncReturn Function(ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>, ffi.Pointer<wire_uint_8_list>)>();
+
+  WireSyncReturn wire_main_set_nikodesk_peer_option_sync(
+    ffi.Pointer<wire_uint_8_list> id,
+    ffi.Pointer<wire_uint_8_list> expected_server_namespace,
+    ffi.Pointer<wire_uint_8_list> key,
+    ffi.Pointer<wire_uint_8_list> value,
+  ) {
+    return _wire_main_set_nikodesk_peer_option_sync(
+      id,
+      expected_server_namespace,
+      key,
+      value,
+    );
+  }
+
+  late final _wire_main_set_nikodesk_peer_option_syncPtr = _lookup<
+          ffi.NativeFunction<
+              WireSyncReturn Function(
+                  ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_main_set_nikodesk_peer_option_sync');
+  late final _wire_main_set_nikodesk_peer_option_sync =
+      _wire_main_set_nikodesk_peer_option_syncPtr.asFunction<
+          WireSyncReturn Function(
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>)>();
+
+  WireSyncReturn wire_main_get_nikodesk_peer_flutter_option_sync(
+    ffi.Pointer<wire_uint_8_list> id,
+    ffi.Pointer<wire_uint_8_list> expected_server_namespace,
+    ffi.Pointer<wire_uint_8_list> k,
+  ) {
+    return _wire_main_get_nikodesk_peer_flutter_option_sync(
+      id,
+      expected_server_namespace,
+      k,
+    );
+  }
+
+  late final _wire_main_get_nikodesk_peer_flutter_option_syncPtr = _lookup<
+          ffi.NativeFunction<
+              WireSyncReturn Function(
+                  ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_main_get_nikodesk_peer_flutter_option_sync');
+  late final _wire_main_get_nikodesk_peer_flutter_option_sync =
+      _wire_main_get_nikodesk_peer_flutter_option_syncPtr.asFunction<
+          WireSyncReturn Function(ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>, ffi.Pointer<wire_uint_8_list>)>();
+
+  WireSyncReturn wire_main_set_nikodesk_peer_flutter_option_sync(
+    ffi.Pointer<wire_uint_8_list> id,
+    ffi.Pointer<wire_uint_8_list> expected_server_namespace,
+    ffi.Pointer<wire_uint_8_list> k,
+    ffi.Pointer<wire_uint_8_list> v,
+  ) {
+    return _wire_main_set_nikodesk_peer_flutter_option_sync(
+      id,
+      expected_server_namespace,
+      k,
+      v,
+    );
+  }
+
+  late final _wire_main_set_nikodesk_peer_flutter_option_syncPtr = _lookup<
+          ffi.NativeFunction<
+              WireSyncReturn Function(
+                  ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_main_set_nikodesk_peer_flutter_option_sync');
+  late final _wire_main_set_nikodesk_peer_flutter_option_sync =
+      _wire_main_set_nikodesk_peer_flutter_option_syncPtr.asFunction<
+          WireSyncReturn Function(
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>)>();
 
   void wire_main_set_peer_alias(
     int port_,
@@ -13610,6 +14672,42 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
   late final _wire_session_get_common = _wire_session_get_commonPtr.asFunction<
       void Function(int, ffi.Pointer<wire_uint_8_list>,
           ffi.Pointer<wire_uint_8_list>, ffi.Pointer<wire_uint_8_list>)>();
+
+  void wire_cm_nikodesk_capability_decision(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> json,
+  ) {
+    return _wire_cm_nikodesk_capability_decision(
+      port_,
+      json,
+    );
+  }
+
+  late final _wire_cm_nikodesk_capability_decisionPtr = _lookup<
+          ffi.NativeFunction<
+              ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_cm_nikodesk_capability_decision');
+  late final _wire_cm_nikodesk_capability_decision =
+      _wire_cm_nikodesk_capability_decisionPtr
+          .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>)>();
+
+  void wire_cm_nikodesk_capability_revoke(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> json,
+  ) {
+    return _wire_cm_nikodesk_capability_revoke(
+      port_,
+      json,
+    );
+  }
+
+  late final _wire_cm_nikodesk_capability_revokePtr = _lookup<
+          ffi.NativeFunction<
+              ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_cm_nikodesk_capability_revoke');
+  late final _wire_cm_nikodesk_capability_revoke =
+      _wire_cm_nikodesk_capability_revokePtr
+          .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>)>();
 
   ffi.Pointer<wire_StringList> new_StringList_0(
     int len,

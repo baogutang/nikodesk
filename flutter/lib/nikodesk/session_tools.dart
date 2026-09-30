@@ -98,10 +98,18 @@ class _PictureModesState extends State<_PictureModes> {
       final fps =
           await bind.sessionGetOption(sessionId: session, arg: 'custom-fps');
       final current = await bind.sessionGetImageQuality(sessionId: session);
+      final viewStyle = await bind.sessionGetViewStyle(sessionId: session);
+      final codec = await bind.sessionGetOption(
+          sessionId: session, arg: 'codec-preference');
       if (mounted) {
         setState(() {
-          _mode = PictureMode.values.firstWhere((mode) => mode.name == saved,
-              orElse: () => PictureMode.smooth);
+          _mode = PictureRequest.observedMode(saved,
+              quality: current,
+              percent: quality?.isNotEmpty == true ? quality!.first : null,
+              fps: int.tryParse(fps ?? ''),
+              viewStyle: viewStyle,
+              codecPreference: codec,
+              supportsFps: _supportsFps);
           if (quality != null && quality.isNotEmpty) {
             _quality = quality.first.toDouble().clamp(10, 100);
           }
@@ -330,16 +338,32 @@ class _NikoDiagnosticsState extends State<NikoDiagnostics> {
     switch (name) {
       case 'receiveKiBps':
         return nikoText('接收速率', 'Receive throughput');
-      case 'submittedFps':
-        return nikoText('视频线程提交帧率', 'Video thread submitted FPS');
+      case 'decodedCallbackFps':
+        return nikoText('解码回调帧率', 'Decoded callback FPS');
       case 'applicationRttMs':
         return nikoText('应用层往返', 'Application round trip');
       case 'targetBitrateKbps':
         return nikoText('目标码率快照', 'Target bitrate snapshot');
       case 'receivedCodec':
         return nikoText('实际收到的编码格式', 'Received codec');
-      default:
+      case 'decodedChroma':
         return nikoText('解码色度格式', 'Decoded chroma');
+      case 'decoderBackend':
+        return nikoText('解码实例', 'Decoder backend');
+      case 'hardwareDecoder':
+        return nikoText('硬件解码实例', 'Hardware decoder');
+      case 'decodeConvertMeanMs':
+        return nikoText('解码与转换调用均值', 'Mean decode + convert call');
+      case 'nativeSubmitMeanMs':
+        return nikoText('原生提交调用均值', 'Mean native submit call');
+      case 'deltaQueuePeak':
+        return nikoText('非关键帧队列峰值', 'Delta queue peak');
+      case 'deltaOverflow':
+        return nikoText('非关键帧队列溢出次数', 'Delta queue overflows');
+      case 'renderSkips':
+        return nikoText('显示路径跳过次数', 'Render path skips');
+      default:
+        return name;
     }
   }
 
@@ -348,16 +372,32 @@ class _NikoDiagnosticsState extends State<NikoDiagnostics> {
     switch (name) {
       case 'receiveKiBps':
         return '约 1 秒窗口，包含全部接收消息，不等同于视频码率。上游 kB/s 实际按 1024 计算。';
-      case 'submittedFps':
-        return '每台显示器提交的视频帧率，不是屏幕实际呈现 FPS；静态桌面低帧率不自动表示卡顿。';
+      case 'decodedCallbackFps':
+        return '每台显示器进入解码回调的帧率，不能证明渲染器接收或屏幕实际呈现；静态桌面低帧率不自动表示卡顿。';
       case 'applicationRttMs':
         return '应用探测往返时间，不是网络 Ping、单向延迟或输入到画面延迟。';
       case 'targetBitrateKbps':
         return '编码器目标值快照，不是实测吞吐。';
       case 'receivedCodec':
-        return '真实接收编码格式；硬编解实现和回退原因尚未接入。';
-      default:
+        return '真实接收编码格式；不能据此判断硬件编码或解码。';
+      case 'decodedChroma':
         return '真实解码色度格式；4:4:4 不等于无损。';
+      case 'decoderBackend':
+        return '按显示器记录实际成功输出帧的解码实例；格式或偏好设置不是实现证明，未收到真实输出时为未知。';
+      case 'hardwareDecoder':
+        return '来自实际输出帧的解码实例；平台未报告时为未知，不能据此判断被控端是否硬件编码。';
+      case 'decodeConvertMeanMs':
+        return '最多每秒 8 次的解码与转换调用耗时采样，包含失败调用；不等于纯解码、采集、呈现或端到端延迟。';
+      case 'nativeSubmitMeanMs':
+        return '原生提交函数的调用耗时采样；该接口没有接收或呈现确认，不能证明屏幕已显示。';
+      case 'deltaQueuePeak':
+        return '当前采样窗口内非关键帧队列的观测峰值；不包含关键帧或整个视频管线。';
+      case 'deltaOverflow':
+        return '当前采样窗口内非关键帧队列的实际溢出计数；不等于网络丢包或全部丢帧。';
+      case 'renderSkips':
+        return '显示路径中被明确记录的跳过次数；详细原因随脱敏诊断导出，不等于全部丢帧。';
+      default:
+        return SessionMetrics.specs[name]?.limitation ?? '';
     }
   }
 
@@ -368,18 +408,48 @@ class _NikoDiagnosticsState extends State<NikoDiagnostics> {
           ? nikoText('已失效', 'Stale')
           : nikoText('未知', 'Unknown');
     }
-    if (value is Map<String, int>) {
+    if (value is Map<String, Object?>) {
       return value.entries
           .map((e) =>
-              '${nikoText('显示器', 'Display')} ${int.parse(e.key) + 1}: ${e.value}')
+              '${nikoText('显示器', 'Display')} ${(int.tryParse(e.key) ?? -1) + 1}: ${_formatValue(e.value)}')
           .join(' · ');
     }
-    if (value is double) {
+    return _formatValue(value);
+  }
+
+  String _formatValue(Object? value) {
+    if (value == null) return nikoText('未知', 'Unknown');
+    if (value is bool) {
+      return value ? nikoText('是', 'Yes') : nikoText('否', 'No');
+    }
+    if (value is num) {
       return value == value.roundToDouble()
           ? value.toInt().toString()
           : value.toStringAsFixed(2);
     }
     return value.toString();
+  }
+
+  String _unit(String name) {
+    switch (name) {
+      case 'decodedCallbackFps':
+        return 'fps';
+      case 'decodeConvertMeanMs':
+      case 'nativeSubmitMeanMs':
+        return 'ms';
+      case 'deltaQueuePeak':
+        return nikoText('项', 'entries');
+      case 'deltaOverflow':
+      case 'renderSkips':
+        return nikoText('次 / 采样窗口', 'events / window');
+      case 'receivedCodec':
+      case 'decodedChroma':
+      case 'decoderBackend':
+      case 'hardwareDecoder':
+        return '';
+      default:
+        return SessionMetrics.specs[name]?.unit ?? '';
+    }
   }
 
   @override
@@ -431,33 +501,37 @@ class _NikoDiagnosticsState extends State<NikoDiagnostics> {
               Text(
                   '${nikoText('当前画布缩放', 'Current canvas scale')}: ${widget.ffi.canvasModel.scale.toStringAsFixed(2)}×'),
               const SizedBox(height: 12),
-              ...SessionMetrics.specs.entries.map((entry) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: NikoCard(
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Wrap(spacing: 12, runSpacing: 4, children: [
-                            Text(_name(entry.key),
-                                style: Theme.of(context).textTheme.titleSmall),
-                            Text(
-                                '${_value(entry.key)}${entry.value.unit == 'codec' || entry.value.unit == 'chroma' ? '' : ' ${entry.value.unit}'}',
-                                style: Theme.of(context).textTheme.titleMedium)
-                          ]),
-                          const SizedBox(height: 6),
-                          Text(_limit(entry.key),
-                              style: Theme.of(context).textTheme.bodySmall),
-                          const SizedBox(height: 4),
-                          Text(
-                              '${nikoText('采样', 'Sampled')}: ${metrics.sample(entry.key)?.sampledAt.toLocal().toIso8601String() ?? unknown}',
-                              style: Theme.of(context).textTheme.bodySmall),
-                          Text(entry.value.source,
-                              style: Theme.of(context).textTheme.bodySmall),
-                        ]),
-                  ))),
+              ...SessionMetrics.specs.entries
+                  .where((entry) => entry.key != 'nativeVideo')
+                  .map((entry) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: NikoCard(
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Wrap(spacing: 12, runSpacing: 4, children: [
+                                Text(_name(entry.key),
+                                    style:
+                                        Theme.of(context).textTheme.titleSmall),
+                                Text(
+                                    '${_value(entry.key)}${_unit(entry.key).isEmpty ? '' : ' ${_unit(entry.key)}'}',
+                                    style:
+                                        Theme.of(context).textTheme.titleMedium)
+                              ]),
+                              const SizedBox(height: 6),
+                              Text(_limit(entry.key),
+                                  style: Theme.of(context).textTheme.bodySmall),
+                              const SizedBox(height: 4),
+                              Text(
+                                  '${nikoText('采样', 'Sampled')}: ${metrics.sample(entry.key)?.sampledAt.toLocal().toIso8601String() ?? unknown}',
+                                  style: Theme.of(context).textTheme.bodySmall),
+                              Text(entry.value.source,
+                                  style: Theme.of(context).textTheme.bodySmall),
+                            ]),
+                      ))),
               Text(nikoText(
-                  '未接入：硬编 / 硬解与回退原因、采集 / 编码 / 解码 / 呈现耗时、队列 / 丢帧、输入到画面延迟。未进行性能 A/B 验证。',
-                  'Unavailable: hardware encode/decode and fallback reasons; capture/encode/decode/presentation timing; queues/drops; input-to-photon latency. No performance A/B verification has been performed.')),
+                  '未知：硬件编码与回退原因、采集 / 编码 / 纯解码 / 屏幕呈现耗时、输入到画面延迟和全部丢帧。原生统计须开启性能面板且绑定当前连接后才有样本；未进行性能 A/B 验证。',
+                  'Unknown: hardware encoding and fallback reasons; capture/encode/pure-decode/presentation timing; input-to-photon latency and total dropped frames. Native samples require the performance panel and a verified current connection. No performance A/B verification has been performed.')),
               const SizedBox(height: 16),
               if (_feedback != null)
                 Padding(

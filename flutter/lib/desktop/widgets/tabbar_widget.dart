@@ -20,6 +20,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import '../../utils/multi_window_manager.dart';
+import '../../nikodesk/window_scope.dart';
 
 const double _kTabBarHeight = kDesktopRemoteTabBarHeight;
 const double _kIconSize = 18;
@@ -280,7 +281,11 @@ class DesktopTab extends StatefulWidget {
   }) : super(key: key);
 
   static RxString tablabelGetter(String peerId) {
-    final alias = bind.mainGetPeerOptionSync(id: peerId, key: 'alias');
+    final namespace = NikoWindowScope.current;
+    final alias = const bool.fromEnvironment('NIKODESK')
+        ? namespace == null ? '' : bind.mainGetNikodeskPeerOptionSync(
+            id: peerId, expectedServerNamespace: namespace, key: 'alias')
+        : bind.mainGetPeerOptionSync(id: peerId, key: 'alias');
     return RxString(getDesktopTabLabel(peerId, alias));
   }
 
@@ -329,8 +334,7 @@ class _DesktopTabState extends State<DesktopTab>
   _DesktopTabState() : super();
 
   static RxString tablabelGetter(String peerId) {
-    final alias = bind.mainGetPeerOptionSync(id: peerId, key: 'alias');
-    return RxString(getDesktopTabLabel(peerId, alias));
+    return DesktopTab.tablabelGetter(peerId);
   }
 
   @override

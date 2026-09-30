@@ -149,6 +149,9 @@ pub struct Client {
     pub from_switch: bool,
     pub in_voice_call: bool,
     pub incoming_voice_call: bool,
+    #[cfg(feature="nikodesk")]
+    #[serde(skip_serializing_if="Option::is_none")]
+    pub niko_capability: Option<crate::nikodesk::connection_capabilities::Status>,
     #[serde(skip)]
     #[cfg(not(any(target_os = "ios")))]
     tx: UnboundedSender<Data>,
@@ -261,6 +264,8 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             tx,
             in_voice_call: false,
             incoming_voice_call: false,
+            #[cfg(feature="nikodesk")]
+            niko_capability: None,
         };
         CLIENTS
             .write()
@@ -581,6 +586,22 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 Data::ClickTime(ms) => {
                                     CLICK_TIME.store(ms, Ordering::SeqCst);
                                 }
+                                #[cfg(feature="nikodesk")]
+                                Data::NikoCapabilityStatus(status) => {
+                                    if status.identity.connection_id==self.conn_id && status.identity.valid() {
+                                        if let Ok(mut clients)=CLIENTS.write() {
+                                            if let Some(client)=clients.get_mut(&self.conn_id) {
+                                                if client.peer_id!=status.identity.peer_id || !client.is_terminal {continue;}
+                                                client.niko_capability=Some(status.clone());
+                                            }
+                                        }
+                                        #[cfg(feature="flutter")]
+                                        if let Ok(json)=serde_json::to_string(&status) {
+                                            let event=serde_json::json!({"name":"nikodesk_capability_status","payload":json}).to_string();
+                                            let _=crate::flutter::push_global_event(crate::flutter::APP_TYPE_CM,event);
+                                        }
+                                    }
+                                }
                                 Data::ChatMessage { text } => {
                                     self.cm.new_message(self.conn_id, text);
                                 }
@@ -813,6 +834,11 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
     }
 
     async fn ipc_task(stream: Connection, cm: ConnectionManager<T>) {
+        #[cfg(feature="nikodesk")]
+        let stream=match spawn_blocking(move || -> ResultType<_> {stream.verify_nikodesk_cm_peer(true)?;Ok(stream)}).await {
+            Ok(Ok(stream))=>stream,
+            _=>{log::warn!("Rejected NikoDesk CM peer: kernel identity or application image unavailable");return;}
+        };
         log::debug!("ipc task begin");
         let (tx, rx) = mpsc::unbounded_channel::<Data>();
         let mut task_runner = Self {
@@ -1007,6 +1033,11 @@ async fn handle_fs(
         };
         if let Some((path, id, file_num, allow_empty)) = checked {
             if !crate::common::is_peer_path_allowed(path, allow_empty) {
+                #[cfg(feature = "nikodesk")]
+                if matches!(&fs, ipc::FS::ReadEmptyDirs { .. }) {
+                    send_raw(fs::new_error(-1, "NIKODESK_EMPTY_DIRECTORY_READ_FAILED", -1), tx);
+                    return;
+                }
                 log::warn!("Reject file operation outside the app workspace: {}", path);
                 if id >= 0 {
                     send_raw(fs::new_error(id, "Permission denied", file_num), tx);
@@ -1579,6 +1610,21 @@ async fn read_empty_dirs(dir: &str, include_hidden: bool, tx: &UnboundedSender<D
     let path = dir.to_owned();
     let path_clone = dir.to_owned();
 
+    #[cfg(feature = "nikodesk")]
+    {
+        let result = match spawn_blocking(move || {
+            fs::get_empty_dirs_recursive_fallible(&path, include_hidden)
+        })
+        .await
+        {
+            Ok(result) => result,
+            Err(_) => Err(hbb_common::anyhow::anyhow!("empty-directory worker failed")),
+        };
+        send_raw(niko_empty_directory_response(path_clone, result), tx);
+        return;
+    }
+
+    #[cfg(not(feature = "nikodesk"))]
     if let Ok(Ok(fds)) =
         spawn_blocking(move || fs::get_empty_dirs_recursive(&path, include_hidden)).await
     {
@@ -1591,6 +1637,27 @@ async fn read_empty_dirs(dir: &str, include_hidden: bool, tx: &UnboundedSender<D
         });
         msg_out.set_file_response(file_response);
         send_raw(msg_out, tx);
+    }
+}
+
+#[cfg(all(feature = "nikodesk", not(target_os = "ios")))]
+fn niko_empty_directory_response(
+    path: String,
+    result: ResultType<Vec<FileDirectory>>,
+) -> Message {
+    match result {
+        Ok(empty_dirs) => {
+            let mut msg = Message::new();
+            let mut response = FileResponse::new();
+            response.set_empty_dirs(ReadEmptyDirsResponse {
+                path,
+                empty_dirs,
+                ..Default::default()
+            });
+            msg.set_file_response(response);
+            msg
+        }
+        Err(_) => fs::new_error(-1, "NIKODESK_EMPTY_DIRECTORY_READ_FAILED", -1),
     }
 }
 
@@ -1715,14 +1782,16 @@ fn cm_inner_send(id: i32, data: Data) {
 }
 
 pub fn can_elevate() -> bool {
-    #[cfg(windows)]
+    #[cfg(feature = "nikodesk")]
+    return false;
+    #[cfg(all(windows, not(feature = "nikodesk")))]
     return !crate::platform::is_installed();
-    #[cfg(not(windows))]
+    #[cfg(all(not(windows), not(feature = "nikodesk")))]
     return false;
 }
 
 pub fn elevate_portable(_id: i32) {
-    #[cfg(windows)]
+    #[cfg(all(windows, not(feature = "nikodesk")))]
     {
         let lock = CLIENTS.read().unwrap();
         if let Some(s) = lock.get(&_id) {
@@ -1733,9 +1802,18 @@ pub fn elevate_portable(_id: i32) {
     }
 }
 
+#[cfg(all(test, feature = "nikodesk"))]
+#[test]
+fn nikodesk_portable_elevation_is_not_available() {
+    assert!(!can_elevate());
+    // There is no installed-service fallback or CM request for this product.
+    elevate_portable(i32::MAX);
+}
+
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn handle_incoming_voice_call(id: i32, accept: bool) {
+    if cfg!(feature = "nikodesk") { return; }
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         // Not handled in iOS yet.
         #[cfg(not(any(target_os = "ios")))]
@@ -1746,6 +1824,7 @@ pub fn handle_incoming_voice_call(id: i32, accept: bool) {
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn close_voice_call(id: i32) {
+    if cfg!(feature = "nikodesk") { return; }
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         // Not handled in iOS yet.
         #[cfg(not(any(target_os = "ios")))]
@@ -1782,6 +1861,45 @@ mod tests {
     use base::message_proto::{FileDirectory, Message};
     use hbb_common::tokio::{runtime::Runtime, sync::mpsc::unbounded_channel};
     use std::fs;
+
+    #[test]
+    #[cfg(all(feature = "nikodesk", not(target_os = "ios")))]
+    fn nikodesk_empty_directory_error_uses_existing_bounded_wire_response() {
+        let private_path = "/isolated-fixture/private-source";
+        let msg = super::niko_empty_directory_response(private_path.to_owned(),
+            Err(hbb_common::anyhow::anyhow!("private-source failed")));
+        let bytes = msg.write_to_bytes().unwrap();
+        assert!(!bytes.windows(private_path.len()).any(|part| part == private_path.as_bytes()));
+        match msg.union {
+            Some(message::Union::FileResponse(response)) => match response.union {
+                Some(file_response::Union::Error(error)) => {
+                    assert_eq!(error.id, -1);
+                    assert_eq!(error.file_num, -1);
+                    assert_eq!(error.error, "NIKODESK_EMPTY_DIRECTORY_READ_FAILED");
+                }
+                _ => panic!("expected existing file error"),
+            },
+            _ => panic!("expected file response"),
+        }
+    }
+
+    #[test]
+    #[cfg(all(feature = "nikodesk", not(target_os = "ios")))]
+    fn nikodesk_empty_directory_success_keeps_existing_path_and_entries() {
+        let msg = super::niko_empty_directory_response("/isolated-fixture/source".to_owned(),
+            Ok(vec![FileDirectory { path: "/isolated-fixture/source/empty".to_owned(), ..Default::default() }]));
+        match msg.union {
+            Some(message::Union::FileResponse(response)) => match response.union {
+                Some(file_response::Union::EmptyDirs(result)) => {
+                    assert_eq!(result.path, "/isolated-fixture/source");
+                    assert_eq!(result.empty_dirs.len(), 1);
+                    assert_eq!(result.empty_dirs[0].path, "/isolated-fixture/source/empty");
+                }
+                _ => panic!("expected empty-directory response"),
+            },
+            _ => panic!("expected file response"),
+        }
+    }
 
     #[test]
     #[cfg(not(any(target_os = "ios")))]
@@ -1890,4 +2008,25 @@ mod tests {
 
         let _ = fs::remove_dir_all(&base_dir);
     }
+}
+
+#[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
+pub(crate) fn nikodesk_capability_decision(json:String,revoke:bool)->String {
+    use crate::nikodesk::connection_capabilities::{self,Decision,Identity};
+    let result=(||->ResultType<()> {
+        let (identity,data)=if revoke {
+            let identity:Identity=connection_capabilities::parse(&json)?;
+            (identity.clone(),Data::NikoCapabilityRevoke(identity))
+        } else {
+            let decision:Decision=connection_capabilities::parse(&json)?;
+            (decision.identity.clone(),Data::NikoCapabilityDecision(decision))
+        };
+        if !identity.valid() {bail!("invalid_capability_identity");}
+        let clients=CLIENTS.read().map_err(|_|hbb_common::anyhow::anyhow!("cm_registry_unavailable"))?;
+        let client=clients.get(&identity.connection_id).ok_or_else(||hbb_common::anyhow::anyhow!("cm_connection_missing"))?;
+        if client.disconnected || !client.is_terminal || client.peer_id!=identity.peer_id {bail!("cm_connection_scope_mismatch");}
+        client.tx.send(data).map_err(|_|hbb_common::anyhow::anyhow!("cm_connection_channel_closed"))?;Ok(())
+    })();
+    match result {Ok(())=>serde_json::json!({"ok":true,"status":"queued"}).to_string(),
+        Err(error)=>serde_json::json!({"ok":false,"status":"error","error":error.to_string()}).to_string()}
 }

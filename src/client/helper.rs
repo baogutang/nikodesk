@@ -5,6 +5,8 @@ use std::collections::HashMap;
 
 #[derive(Debug, Default)]
 pub struct QualityStatus {
+    #[cfg(feature = "nikodesk")]
+    pub native_video: Option<crate::nikodesk::video_metrics::VideoSnapshot>,
     pub speed: Option<String>,
     pub fps: HashMap<usize, i32>,
     pub delay: Option<i32>,

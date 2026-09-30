@@ -40,6 +40,11 @@ import 'desktop/pages/view_camera_page.dart' as desktop_view_camera;
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'models/model.dart';
 import 'models/platform_model.dart';
+import 'nikodesk/link_handler.dart';
+import 'nikodesk/server_gateway.dart';
+import 'nikodesk/server_scope.dart';
+import 'nikodesk/mobile_file_owner.dart';
+import 'nikodesk/window_scope.dart';
 
 import 'package:flutter_hbb/native/win32.dart'
     if (dart.library.html) 'package:flutter_hbb/web/win32.dart';
@@ -1673,6 +1678,23 @@ bool mainGetPeerBoolOptionSync(String id, String key) {
   return option2bool(key, bind.mainGetPeerOptionSync(id: id, key: key));
 }
 
+bool sessionGetPeerBoolOptionSync(SessionID sessionId, String id, String key) {
+  return const bool.fromEnvironment('NIKODESK')
+      ? option2bool(key, bind.sessionGetPeerOptionSync(
+          sessionId: sessionId, name: key))
+      : mainGetPeerBoolOptionSync(id, key);
+}
+
+Future<void> sessionSetPeerOption(SessionID sessionId, String id,
+    String key, String value) async {
+  if (const bool.fromEnvironment('NIKODESK')) {
+    await bind.sessionPeerOption(
+        sessionId: sessionId, name: key, value: value);
+  } else {
+    await bind.mainSetPeerOption(id: id, key: key, value: value);
+  }
+}
+
 // Don't use `option2bool()` and `bool2option()` to convert the session option.
 // Use `sessionGetToggleOption()` and `sessionToggleOption()` instead.
 // Because all session options use `Y` and `<Empty>` as values.
@@ -1900,10 +1922,19 @@ Future _saveSessionWindowPosition(WindowType windowType, int windowId,
     bool isMaximized, bool isFullscreen, LastWindowPosition pos) async {
   final remoteList = await DesktopMultiWindow.invokeMethod(
       windowId, kWindowEventGetRemoteList, null);
+  final namespace = const bool.fromEnvironment('NIKODESK')
+      ? await nikoReadWindowNamespace(windowId,
+          (id) => DesktopMultiWindow.invokeMethod(id, nikoWindowScopeMethod, null))
+      : null;
+  if (const bool.fromEnvironment('NIKODESK') && namespace == null) return;
   getPeerPos(String peerId) {
     if (isMaximized || isFullscreen) {
-      final peerPos = bind.mainGetPeerFlutterOptionSync(
-          id: peerId, k: windowFramePrefix + windowType.name);
+      final peerPos = const bool.fromEnvironment('NIKODESK')
+          ? bind.mainGetNikodeskPeerFlutterOptionSync(
+              id: peerId, expectedServerNamespace: namespace!,
+              k: windowFramePrefix + windowType.name)
+          : bind.mainGetPeerFlutterOptionSync(
+              id: peerId, k: windowFramePrefix + windowType.name);
       var lpos = LastWindowPosition.loadFromString(peerPos);
       return LastWindowPosition(
               lpos?.width ?? pos.offsetWidth,
@@ -1920,10 +1951,15 @@ Future _saveSessionWindowPosition(WindowType windowType, int windowId,
 
   if (remoteList != null) {
     for (final peerId in remoteList.split(',')) {
-      bind.mainSetPeerFlutterOptionSync(
-          id: peerId,
-          k: windowFramePrefix + windowType.name,
-          v: getPeerPos(peerId));
+      if (const bool.fromEnvironment('NIKODESK')) {
+        bind.mainSetNikodeskPeerFlutterOptionSync(
+            id: peerId, expectedServerNamespace: namespace!,
+            k: windowFramePrefix + windowType.name, v: getPeerPos(peerId));
+      } else {
+        bind.mainSetPeerFlutterOptionSync(
+            id: peerId, k: windowFramePrefix + windowType.name,
+            v: getPeerPos(peerId));
+      }
     }
   }
 }
@@ -2043,8 +2079,17 @@ Future<bool> restoreWindowPosition(WindowType type,
   if ((type == WindowType.RemoteDesktop || type == WindowType.ViewCamera) &&
       windowId != null &&
       peerId != null) {
-    final peerPos = bind.mainGetPeerFlutterOptionSync(
-        id: peerId, k: windowFramePrefix + type.name);
+    String peerPos;
+    if (const bool.fromEnvironment('NIKODESK')) {
+      final namespace = await nikoReadWindowNamespace(windowId,
+          (id) => DesktopMultiWindow.invokeMethod(id, nikoWindowScopeMethod, null));
+      peerPos = namespace == null ? '' : bind.mainGetNikodeskPeerFlutterOptionSync(
+          id: peerId, expectedServerNamespace: namespace,
+          k: windowFramePrefix + type.name);
+    } else {
+      peerPos = bind.mainGetPeerFlutterOptionSync(
+          id: peerId, k: windowFramePrefix + type.name);
+    }
     if (peerPos.isNotEmpty) {
       pos = peerPos;
     }
@@ -2196,7 +2241,11 @@ Future<bool> initUniLinks() async {
   // check cold boot
   try {
     final initialLink = await getInitialLink();
-    print("initialLink: $initialLink");
+    if (bind.mainGetAppNameSync() == 'NikoDesk') {
+      debugPrint('NikoDesk checked its initial application link');
+    } else {
+      print("initialLink: $initialLink");
+    }
     if (initialLink == null || initialLink.isEmpty) {
       return false;
     }
@@ -2207,7 +2256,11 @@ Future<bool> initUniLinks() async {
       return handleUriLink(uriString: initialLink);
     }
   } catch (err) {
-    debugPrintStack(label: "$err");
+    if (bind.mainGetAppNameSync() == 'NikoDesk') {
+      debugPrint('NikoDesk could not read its initial application link');
+    } else {
+      debugPrintStack(label: "$err");
+    }
     return false;
   }
 }
@@ -2238,7 +2291,11 @@ StreamSubscription? listenUniLinks({handleByFlutter = true}) {
       print("uni listen error: uri is empty.");
     }
   }, onError: (err) {
-    print("uni links error: $err");
+    if (bind.mainGetAppNameSync() == 'NikoDesk') {
+      debugPrint('NikoDesk application-link stream failed');
+    } else {
+      print("uni links error: $err");
+    }
   });
   return sub;
 }
@@ -2258,6 +2315,16 @@ setEnvTerminalAdmin() {
 
 // uri link handler
 bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
+  if (bind.mainGetAppNameSync() == 'NikoDesk') {
+    final request = NikoLinkRequest.parse(uri: uri, uriString: uriString, args: cmdArgs);
+    if (request != null) {
+      NikoLinkInbox.receive(request);
+    } else if (uri != null || (uriString != null && uriString.isNotEmpty)) {
+      NikoLinkInbox.receive(const NikoLinkRequest('', 'invalid', null, false));
+    }
+    // Keep home visible for the credential prompt, cancellation or an error.
+    return false;
+  }
   List<String>? args;
   if (cmdArgs != null && cmdArgs.isNotEmpty) {
     args = cmdArgs;
@@ -2534,35 +2601,41 @@ connectMainDesktop(String id,
     required bool isRDP,
     bool? forceRelay,
     String? password,
+    String? serverNamespace,
     String? connToken,
     bool? isSharedPassword}) async {
   if (isFileTransfer) {
     await rustDeskWinManager.newFileTransfer(id,
         password: password,
+        serverNamespace: serverNamespace,
         isSharedPassword: isSharedPassword,
         connToken: connToken,
         forceRelay: forceRelay);
   } else if (isViewCamera) {
     await rustDeskWinManager.newViewCamera(id,
         password: password,
+        serverNamespace: serverNamespace,
         isSharedPassword: isSharedPassword,
         connToken: connToken,
         forceRelay: forceRelay);
   } else if (isTcpTunneling || isRDP) {
     await rustDeskWinManager.newPortForward(id, isRDP,
         password: password,
+        serverNamespace: serverNamespace,
         isSharedPassword: isSharedPassword,
         connToken: connToken,
         forceRelay: forceRelay);
   } else if (isTerminal) {
     await rustDeskWinManager.newTerminal(id,
         password: password,
+        serverNamespace: serverNamespace,
         isSharedPassword: isSharedPassword,
         connToken: connToken,
         forceRelay: forceRelay);
   } else {
     await rustDeskWinManager.newRemoteDesktop(id,
         password: password,
+        serverNamespace: serverNamespace,
         isSharedPassword: isSharedPassword,
         forceRelay: forceRelay);
   }
@@ -2581,9 +2654,25 @@ connect(BuildContext context, String id,
     bool isRDP = false,
     bool forceRelay = false,
     String? password,
+    String? serverNamespace,
     String? connToken,
     bool? isSharedPassword}) async {
   if (id == '') return;
+  if (const bool.fromEnvironment('NIKODESK')) {
+    final snapshot = await NativeServerGateway().read();
+    final expected = serverNamespace == null
+        ? snapshot.namespace : NikoServerScope.validate(serverNamespace);
+    if (!snapshot.enabled || !snapshot.config.isValid || expected == null ||
+        expected != snapshot.namespace) {
+      throw StateError('Private server identity changed or connections are paused');
+    }
+    serverNamespace = expected;
+    if (isMobile && !isTerminal && (NikoMobileFileOwner.hasActiveSession ||
+        (!gFFI.closed && gFFI.serverNamespace != null))) {
+      throw StateError('Close the current mobile session before opening another');
+    }
+  }
+
   if (!isDesktop || desktopType == DesktopType.main) {
     try {
       if (Get.isRegistered<IDTextEditingController>()) {
@@ -2613,12 +2702,14 @@ connect(BuildContext context, String id,
         isTcpTunneling: isTcpTunneling,
         isRDP: isRDP,
         password: password,
+        serverNamespace: serverNamespace,
         isSharedPassword: isSharedPassword,
         forceRelay: forceRelay,
       );
     } else {
       await rustDeskWinManager.call(WindowType.Main, kWindowConnect, {
         'id': id,
+        'serverNamespace': serverNamespace,
         'isFileTransfer': isFileTransfer,
         'isViewCamera': isViewCamera,
         'isTerminal': isTerminal,
@@ -2640,6 +2731,7 @@ connect(BuildContext context, String id,
                 desktop_file_manager.FileManagerPage(
                     id: id,
                     password: password,
+                    serverNamespace: serverNamespace,
                     isSharedPassword: isSharedPassword),
           ),
         );
@@ -2650,6 +2742,7 @@ connect(BuildContext context, String id,
             builder: (BuildContext context) => FileManagerPage(
                 id: id,
                 password: password,
+                serverNamespace: serverNamespace,
                 isSharedPassword: isSharedPassword,
                 forceRelay: forceRelay),
           ),
@@ -2666,6 +2759,7 @@ connect(BuildContext context, String id,
               id: id,
               toolbarState: ToolbarState(),
               password: password,
+              serverNamespace: serverNamespace,
               isSharedPassword: isSharedPassword,
             ),
           ),
@@ -2677,6 +2771,7 @@ connect(BuildContext context, String id,
             builder: (BuildContext context) => ViewCameraPage(
                 id: id,
                 password: password,
+                serverNamespace: serverNamespace,
                 isSharedPassword: isSharedPassword,
                 forceRelay: forceRelay),
           ),
@@ -2689,6 +2784,7 @@ connect(BuildContext context, String id,
           builder: (BuildContext context) => TerminalPage(
             id: id,
             password: password,
+            serverNamespace: serverNamespace,
             isSharedPassword: isSharedPassword,
             forceRelay: forceRelay,
           ),
@@ -2704,6 +2800,7 @@ connect(BuildContext context, String id,
               id: id,
               toolbarState: ToolbarState(),
               password: password,
+              serverNamespace: serverNamespace,
               isSharedPassword: isSharedPassword,
             ),
           ),
@@ -2715,6 +2812,7 @@ connect(BuildContext context, String id,
             builder: (BuildContext context) => RemotePage(
                 id: id,
                 password: password,
+                serverNamespace: serverNamespace,
                 isSharedPassword: isSharedPassword,
                 forceRelay: forceRelay),
           ),
@@ -3303,6 +3401,7 @@ Widget buildErrorBanner(BuildContext context,
 
 String getDesktopTabLabel(String peerId, String alias) {
   String label = alias.isEmpty ? peerId : alias;
+  if (const bool.fromEnvironment('NIKODESK')) return label;
   try {
     String peer = bind.mainGetPeerSync(id: peerId);
     Map<String, dynamic> config = jsonDecode(peer);
@@ -3427,6 +3526,8 @@ openMonitorInNewTabOrWindow(int i, String peerId, PeerInfo pi,
   final args = {
     'window_id': stateGlobal.windowId,
     'peer_id': peerId,
+    if (const bool.fromEnvironment('NIKODESK'))
+      'serverNamespace': NikoWindowScope.current,
     'display': i,
     'display_count': pi.displays.length,
     'window_type': (kWindowType ?? WindowType.RemoteDesktop).index,
@@ -3603,6 +3704,10 @@ Future<bool> setServerConfig(
     controllers[1].text = config.relayServer;
     controllers[2].text = config.apiServer;
     controllers[3].text = config.key;
+  }
+  if (bind.mainGetAppNameSync() == 'NikoDesk') {
+    return saveImportedPrivateServer(config.idServer, config.relayServer,
+        config.key, config.apiServer);
   }
   // id
   if (config.idServer.isNotEmpty && errMsgs != null) {

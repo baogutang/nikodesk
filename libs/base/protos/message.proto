@@ -101,6 +101,8 @@ message Features {
   bool privacy_mode = 1;
   bool terminal = 2;
   bool port_forward_mux = 3;
+  // Protocol support only. Never a permission or an active voice-call grant.
+  bool nikodesk_voice_v1 = 4;
 }
 
 message CodecAbility {
@@ -714,13 +716,22 @@ message PublicKey {
 
 message SignedId { bytes id = 1; }
 
+// Connection-local, negotiated voice media identity. Ordinary system audio has
+// no binding. This metadata never authenticates or authorizes a resource.
+message NikoVoiceBinding {
+  bytes call_nonce = 1;
+  uint64 call_epoch = 2;
+}
+
 message AudioFormat {
   uint32 sample_rate = 1;
   uint32 channels = 2;
+  NikoVoiceBinding nikodesk_voice = 3;
 }
 
 message AudioFrame { 
   bytes data = 1; 
+  NikoVoiceBinding nikodesk_voice = 2;
 }
 
 // Notify peer to show message box.
@@ -874,12 +885,14 @@ message VoiceCallRequest {
   int64 req_timestamp = 1;
   // Indicates whether the request is a connect action or a disconnect action.
   bool is_connect = 2;
+  NikoVoiceBinding nikodesk_voice = 3;
 }
 
 message VoiceCallResponse {
   bool accepted = 1;
   int64 req_timestamp = 2; // Should copy from [VoiceCallRequest::req_timestamp].
   int64 ack_timestamp = 3;
+  NikoVoiceBinding nikodesk_voice = 4;
 }
 
 message ScreenshotRequest {

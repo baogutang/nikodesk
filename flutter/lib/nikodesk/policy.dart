@@ -118,6 +118,35 @@ class PictureRequest {
   /// FPS only applies to the upstream custom-quality path.
   bool get requestsCustomFps => imageQuality == 'custom' && fps != null;
 
+  static PictureMode observedMode(String? saved,
+      {required String? quality,
+      required int? percent,
+      required int? fps,
+      required String? viewStyle,
+      required String? codecPreference,
+      required bool supportsFps}) {
+    PictureMode? mode;
+    for (final candidate in PictureMode.values) {
+      if (candidate.name == saved) mode = candidate;
+    }
+    if (mode == null ||
+        mode == PictureMode.custom ||
+        codecPreference == null ||
+        (codecPreference != null &&
+            codecPreference.isNotEmpty &&
+            codecPreference != 'auto')) {
+      return PictureMode.custom;
+    }
+    final request = PictureRequest.forMode(mode);
+    if (quality != request.imageQuality ||
+        (request.originalScale && viewStyle != 'original') ||
+        (request.bitratePercent != null && percent != request.bitratePercent) ||
+        (request.requestsCustomFps && supportsFps && fps != request.fps)) {
+      return PictureMode.custom;
+    }
+    return mode;
+  }
+
   static bool supportsCustomFps(String peerVersion) {
     final match = RegExp(r'^(\d+)\.(\d+)\.(\d+)').firstMatch(peerVersion);
     if (match == null) return false;

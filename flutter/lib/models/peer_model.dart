@@ -2,11 +2,15 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'platform_model.dart';
+import '../nikodesk/peer_event_scope.dart';
+import '../nikodesk/server_scope.dart';
 // ignore: depend_on_referenced_packages
 import 'package:collection/collection.dart';
 
 class Peer {
   final String id;
+  // Origin of local Niko peer metadata, never restored from cloud/cache JSON.
+  final String? serverNamespace;
   String hash; // personal ab hash password
   String password; // shared ab password
   String username; // pc username
@@ -30,8 +34,9 @@ class Peer {
     return id;
   }
 
-  Peer.fromJson(Map<String, dynamic> json)
-      : id = json['id'] ?? '',
+  Peer.fromJson(Map<String, dynamic> json, {String? serverNamespace})
+      : serverNamespace = NikoServerScope.validate(serverNamespace),
+        id = json['id'] ?? '',
         hash = json['hash'] ?? '',
         password = json['password'] ?? '',
         username = json['username'] ?? '',
@@ -109,6 +114,7 @@ class Peer {
     required this.device_group_name,
     required this.note,
     this.sameServer,
+    this.serverNamespace,
   });
 
   Peer.loading()
@@ -130,6 +136,7 @@ class Peer {
         );
   bool equal(Peer other) {
     return id == other.id &&
+        serverNamespace == other.serverNamespace &&
         hash == other.hash &&
         password == other.password &&
         username == other.username &&
@@ -161,7 +168,8 @@ class Peer {
         loginName: other.loginName,
         device_group_name: other.device_group_name,
         note: other.note,
-        sameServer: other.sameServer);
+        sameServer: other.sameServer,
+        serverNamespace: other.serverNamespace);
     peer.online = other.online;
     return peer;
   }
@@ -183,12 +191,24 @@ class Peers extends ChangeNotifier {
   final GetInitPeers? getInitPeers;
   UpdateEvent event = UpdateEvent.load;
   static const _cbQueryOnlines = 'callback_query_onlines';
+  bool nikoHasLoaded = false;
+  NikoPeerLoadFailure? nikoLoadFailure;
+  String? _nikoNamespace;
+  bool _nikoDisposed = false;
+  bool get nikoScopedLocal =>
+      const bool.fromEnvironment('NIKODESK') &&
+      getInitPeers == null &&
+      (loadEvent == 'load_recent_peers' || loadEvent == 'load_fav_peers');
 
   Peers(
       {required this.name,
       required this.getInitPeers,
       required this.loadEvent}) {
     peers = getInitPeers?.call() ?? [];
+    if (nikoScopedLocal) {
+      _nikoNamespace = NikoServerScope.current;
+      NikoServerScope.changes.addListener(_nikoScopeChanged);
+    }
     platformFFI.registerEventHandler(_cbQueryOnlines, name, (evt) async {
       _updateOnlineState(evt);
     });
@@ -199,9 +219,35 @@ class Peers extends ChangeNotifier {
 
   @override
   void dispose() {
+    _nikoDisposed = true;
+    if (nikoScopedLocal) {
+      NikoServerScope.changes.removeListener(_nikoScopeChanged);
+    }
     platformFFI.unregisterEventHandler(_cbQueryOnlines, name);
     platformFFI.unregisterEventHandler(loadEvent, name);
     super.dispose();
+  }
+
+  void _nikoScopeChanged() {
+    final next = NikoServerScope.current;
+    if (next == _nikoNamespace) return;
+    _nikoNamespace = next;
+    peers = [];
+    restPeerIds = [];
+    nikoHasLoaded = false;
+    nikoLoadFailure = null;
+    event = UpdateEvent.load;
+    notifyListeners();
+  }
+
+  void reportNikoLoadFailure(String? expectedNamespace) {
+    if (_nikoDisposed ||
+        !nikoScopedLocal ||
+        expectedNamespace == null ||
+        expectedNamespace != NikoServerScope.current) return;
+    nikoLoadFailure = NikoPeerLoadFailure.readFailed;
+    event = UpdateEvent.load;
+    notifyListeners();
   }
 
   Peer getByIndex(int index) {
@@ -217,6 +263,29 @@ class Peers extends ChangeNotifier {
   }
 
   void _updateOnlineState(Map<String, dynamic> evt) {
+    if (nikoScopedLocal) {
+      if (_nikoDisposed) return;
+      final scoped = nikoScopedOnlineEvent(evt, NikoServerScope.current);
+      if (scoped == null || scoped.namespace != _nikoNamespace) return;
+      var changed = false;
+      for (final peer in peers) {
+        if (peer.serverNamespace != scoped.namespace) continue;
+        final bool? next = scoped.onlines.contains(peer.id)
+            ? true
+            : scoped.offlines.contains(peer.id)
+                ? false
+                : null;
+        if (next != null && next != peer.online) {
+          peer.online = next;
+          changed = true;
+        }
+      }
+      if (changed) {
+        event = UpdateEvent.online;
+        notifyListeners();
+      }
+      return;
+    }
     int changedCount = 0;
     evt['onlines'].split(',').forEach((online) {
       for (var i = 0; i < peers.length; i++) {
@@ -247,8 +316,24 @@ class Peers extends ChangeNotifier {
   }
 
   void _updatePeers(Map<String, dynamic> evt) {
+    if (nikoScopedLocal && _nikoDisposed) return;
     final onlineStates = _getOnlineStates();
-    if (getInitPeers != null) {
+    if (nikoScopedLocal) {
+      final result = nikoClassifyPeerEvent(evt, NikoServerScope.current);
+      if (result == null) return;
+      if (result.failure != null) {
+        nikoLoadFailure = result.failure;
+        event = UpdateEvent.load;
+        notifyListeners();
+        return;
+      }
+      final scoped = result.ready!;
+      peers = scoped.peers
+          .map((peer) => Peer.fromJson(peer, serverNamespace: scoped.namespace))
+          .toList();
+      nikoHasLoaded = true;
+      nikoLoadFailure = null;
+    } else if (getInitPeers != null) {
       peers = getInitPeers?.call() ?? [];
     } else {
       peers = _decodePeers(evt['peers']);

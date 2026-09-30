@@ -45,12 +45,14 @@ class RemotePage extends StatefulWidget {
     this.tabController,
     this.switchUuid,
     this.forceRelay,
+    this.serverNamespace,
     this.isSharedPassword,
   }) : super(key: key) {
     initSharedStates(id);
   }
 
   final String id;
+  final String? serverNamespace;
   final SessionID? sessionId;
   final int? tabWindowId;
   final int? display;
@@ -167,6 +169,7 @@ class _RemotePageState extends State<RemotePage>
     _ffi.start(
       widget.id,
       password: widget.password,
+      serverNamespace: widget.serverNamespace,
       isSharedPassword: widget.isSharedPassword,
       switchUuid: widget.switchUuid,
       forceRelay: widget.forceRelay,

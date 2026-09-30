@@ -2823,7 +2823,10 @@ class _ChatMenuState extends State<_ChatMenu> {
           ffi: widget.ffi,
           color: _ToolbarTheme.blueColor,
           hoverColor: _ToolbarTheme.hoverBlueColor,
-          menuChildrenGetter: (_) => [textChat(), voiceCall()]);
+          menuChildrenGetter: (_) => [
+            textChat(),
+            if (const bool.fromEnvironment('NIKODESK') == false) voiceCall(),
+          ]);
     }
   }
 

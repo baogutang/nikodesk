@@ -2,6 +2,9 @@
 use super::rdp_input::client::{RdpInputKeyboard, RdpInputMouse};
 use super::*;
 use crate::input::*;
+#[cfg(all(feature = "nikodesk", target_os = "windows"))]
+#[path = "nikodesk_windows_input.rs"]
+pub(crate) mod nikodesk_windows_input;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::whiteboard;
 use base::message_proto::{
@@ -925,6 +928,104 @@ pub(crate) fn nikodesk_release_mouse(button: i32) {
     en.reset_flag();
     en.set_ignore_flags(false);
     en.mouse_up(button);
+}
+
+#[cfg(all(feature = "nikodesk", target_os = "windows"))]
+pub(crate) fn nikodesk_windows_dispatch_key(event: &KeyEvent) {
+    if !matches!(event.mode.enum_value(), Ok(KeyboardMode::Map | KeyboardMode::Translate)) {
+        if let Some(key_event::Union::ControlKey(key)) = event.union {
+            match key.enum_value() {
+                Ok(ControlKey::CtrlAltDel) => {
+                    // The legacy SAS path starts a privileged helper or changes
+                    // system policy. It belongs to explicit service setup.
+                    log::trace!("NikoDesk legacy SAS input is disabled");
+                    return;
+                }
+                Ok(ControlKey::LockScreen) => {
+                    if event.down {
+                        // Do not delegate to upstream's detached action thread:
+                        // the session's permission lock must order this action.
+                        crate::platform::lock_screen();
+                    }
+                    return;
+                }
+                _ => {}
+            }
+        }
+    }
+    handle_key_(event);
+}
+
+#[cfg(all(feature = "nikodesk", target_os = "windows"))]
+pub(crate) fn nikodesk_windows_dispatch_pointer(event: &PointerDeviceEvent, conn: i32) {
+    if !active_mouse_(conn) || EXITING.load(Ordering::SeqCst) {
+        return;
+    }
+    if let Some(TouchEvent(touch)) = &event.union {
+        if let Some(ScaleUpdate(update)) = &touch.union {
+            if update.scale == 0 {
+                return;
+            }
+            crate::platform::windows::try_change_desktop();
+            let mut en = ENIGO.lock().unwrap();
+            // A cancelled gesture has no later "scale end" packet. Balance the
+            // temporary modifier inside this dispatch, retaining existing Ctrl.
+            let temporary = !en.get_key_state(Key::Control) && !en.get_key_state(Key::RightControl);
+            if temporary && en.key_down(Key::Control).is_err() {
+                log::trace!("NikoDesk could not inject the scale modifier");
+                return;
+            }
+            en.mouse_scroll_y(update.scale);
+            if temporary {
+                en.key_up(Key::Control);
+            }
+        }
+    }
+}
+
+#[cfg(all(feature = "nikodesk", target_os = "windows"))]
+pub(crate) fn nikodesk_windows_release_key(event: &KeyEvent, hotkey: bool) {
+    crate::platform::windows::try_change_desktop();
+    match event.mode.enum_value() {
+        Ok(KeyboardMode::Map) => sim_rdev_rawkey_position(event.chr() as _, false),
+        Ok(KeyboardMode::Translate) => {
+            match event.union {
+                Some(key_event::Union::Chr(code)) => translate_process_code(code, false),
+                Some(key_event::Union::Win2winHotkey(code)) => simulate_win2win_hotkey(code, false),
+                _ => {}
+            }
+        }
+        _ => {
+            let mut en = ENIGO.lock().unwrap();
+            // Cleanup must not reapply modifier/lock-state reconciliation from
+            // an old event, which can press or release unrelated remote keys.
+            match &event.union {
+                Some(key_event::Union::ControlKey(key)) => {
+                    record_pressed_key(KeysDown::EnigoKey(key.value() as u64), false);
+                    process_control_key(&mut en, key, false);
+                }
+                Some(key_event::Union::Chr(chr)) => {
+                    record_pressed_key(KeysDown::EnigoKey(*chr as u64 + KEY_CHAR_START), false);
+                    process_chr(&mut en, *chr, false, hotkey);
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+#[cfg(all(feature = "nikodesk", target_os = "windows"))]
+pub(crate) fn nikodesk_windows_release_mouse(button: i32) {
+    let button = match button {
+        MOUSE_BUTTON_LEFT => MouseButton::Left,
+        MOUSE_BUTTON_RIGHT => MouseButton::Right,
+        MOUSE_BUTTON_WHEEL => MouseButton::Middle,
+        MOUSE_BUTTON_BACK => MouseButton::Back,
+        MOUSE_BUTTON_FORWARD => MouseButton::Forward,
+        _ => return,
+    };
+    crate::platform::windows::try_change_desktop();
+    ENIGO.lock().unwrap().mouse_up(button);
 }
 
 #[inline]

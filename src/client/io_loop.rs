@@ -72,6 +72,8 @@ use std::{
 };
 
 pub struct Remote<T: InvokeUiSession> {
+    #[cfg(feature = "nikodesk")]
+    video_metrics: Arc<crate::nikodesk::video_metrics::SessionTelemetry>,
     handler: Session<T>,
     audio_sender: MediaSender,
     receiver: mpsc::UnboundedReceiver<Data>,
@@ -127,7 +129,15 @@ impl<T: InvokeUiSession> Remote<T> {
         receiver: mpsc::UnboundedReceiver<Data>,
         sender: mpsc::UnboundedSender<Data>,
     ) -> Self {
+        #[cfg(feature = "nikodesk")]
+        let video_metrics = Arc::new(crate::nikodesk::video_metrics::SessionTelemetry::new(
+            handler.lc.read().unwrap().connection_snapshot().map(|snapshot| snapshot.namespace().to_owned()).unwrap_or_default(),
+            handler.video_metrics_enabled.clone(), handler.video_metrics_revision.clone()));
+        #[cfg(feature = "nikodesk")]
+        handler.bind_video_metrics(Arc::downgrade(&video_metrics));
         Self {
+            #[cfg(feature = "nikodesk")]
+            video_metrics,
             handler,
             audio_sender: crate::client::start_audio_thread(),
             receiver,
@@ -158,6 +168,8 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     pub async fn io_loop(&mut self, key: &str, token: &str, round: u32) {
+        #[cfg(feature = "nikodesk")]
+        self.handler.video_metrics_enabled.store(self.handler.video_metrics_revision.load(Ordering::Acquire) != u64::MAX && self.handler.get_toggle_option("show-quality-monitor".to_owned()), Ordering::Release);
         #[cfg(target_os = "windows")]
         let _file_clip_context_holder = {
             // `is_port_forward()` will not reach here, but we still check it for clarity.
@@ -215,8 +227,11 @@ impl<T: InvokeUiSession> Remote<T> {
                 } else {
                     stream_type
                 };
+                #[cfg(not(feature = "nikodesk"))]
                 self.handler
                     .set_connection_type(is_secured, direct, stream_type); // flutter -> connection_ready
+                #[cfg(feature = "nikodesk")]
+                self.handler.set_connection_type_with_video_epoch(is_secured, direct, stream_type, self.video_metrics.namespace(), self.video_metrics.epoch(), self.video_metrics.revision());
                 if !is_secured
                     && !crate::common::is_direct_ip_access(&self.handler.get_id())
                     && !client::confirm_insecure_connection(&self.handler, &mut self.receiver).await
@@ -396,6 +411,10 @@ impl<T: InvokeUiSession> Remote<T> {
                                 Some(self.video_format.clone())
                             };
                             self.handler.update_quality_status(QualityStatus {
+                                #[cfg(feature = "nikodesk")]
+                                native_video: if !self.handler.video_metrics_enabled.load(Ordering::Acquire) || self.handler.connection_round_state.lock().unwrap().is_round_gt(round) { None } else {
+                                    self.video_metrics.snapshot(elapsed as u64)
+                                },
                                 speed: Some(speed),
                                 fps,
                                 chroma,
@@ -431,6 +450,8 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     fn handle_disconnected(&self, round: u32) {
+        #[cfg(feature = "nikodesk")]
+        self.video_metrics.stop();
         // set_disconnected_ok is used to check if new connection round is started.
         let _set_disconnected_ok = self
             .handler
@@ -552,6 +573,7 @@ impl<T: InvokeUiSession> Remote<T> {
 
     // Start a voice call recorder, records audio and send to remote
     fn start_voice_call(&mut self) -> Option<std::sync::mpsc::Sender<()>> {
+        if cfg!(feature = "nikodesk") { return None; }
         if self.handler.is_file_transfer()
             || self.handler.is_port_forward()
             || self.handler.is_terminal()
@@ -1186,6 +1208,10 @@ impl<T: InvokeUiSession> Remote<T> {
                 self.elevation_requested = true;
             }
             Data::NewVoiceCall => {
+                if cfg!(feature = "nikodesk") {
+                    self.voice_call_request_timestamp = None;
+                    return true;
+                }
                 let msg = new_voice_call_request(true);
                 // Save the voice call request timestamp for the further validation.
                 self.voice_call_request_timestamp = Some(
@@ -1196,6 +1222,10 @@ impl<T: InvokeUiSession> Remote<T> {
                 self.handler.on_voice_call_waiting();
             }
             Data::CloseVoiceCall => {
+                if cfg!(feature = "nikodesk") {
+                    self.voice_call_request_timestamp = None;
+                    return true;
+                }
                 self.stop_voice_call();
                 let msg = new_voice_call_request(false);
                 self.handler
@@ -1551,7 +1581,13 @@ impl<T: InvokeUiSession> Remote<T> {
                             .ok();
                     } else {
                         let video_queue = thread.video_queue.read().unwrap();
-                        if video_queue.force_push(vf).is_some() {
+                        let overflow = video_queue.force_push(vf).is_some();
+                        #[cfg(feature = "nikodesk")]
+                        if let Some(metrics) = thread.video_metrics.as_ref() {
+                            metrics.queue_depth(video_queue.len());
+                            if overflow { metrics.count(crate::nikodesk::video_metrics::Counter::DeltaOverflow); }
+                        }
+                        if overflow {
                             drop(video_queue);
                             self.handler.refresh_video(display as _);
                         } else {
@@ -2305,6 +2341,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         .msgbox(&msgbox.msgtype, &msgbox.title, &msgbox.text, &link);
                 }
                 Some(message::Union::VoiceCallRequest(request)) => {
+                    if cfg!(feature = "nikodesk") { return true; }
                     if request.is_connect {
                         // TODO: maybe we will do a voice call from the peer in the future.
                     } else {
@@ -2316,6 +2353,10 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
                 Some(message::Union::VoiceCallResponse(response)) => {
+                    if cfg!(feature = "nikodesk") {
+                        self.voice_call_request_timestamp = None;
+                        return true;
+                    }
                     let ts = std::mem::replace(&mut self.voice_call_request_timestamp, None);
                     if let Some(ts) = ts {
                         if response.req_timestamp != ts.get() {
@@ -2659,6 +2700,8 @@ impl<T: InvokeUiSession> Remote<T> {
         let frame_count = Arc::new(RwLock::new(0));
         let discard_queue = Arc::new(RwLock::new(false));
         let video_thread = VideoThread {
+            #[cfg(feature = "nikodesk")]
+            video_metrics: self.video_metrics.display(display),
             video_queue: video_queue.clone(),
             video_sender,
             decode_fps: decode_fps.clone(),
@@ -2675,6 +2718,8 @@ impl<T: InvokeUiSession> Remote<T> {
             decode_fps,
             self.chroma.clone(),
             discard_queue,
+            #[cfg(feature = "nikodesk")]
+            self.video_metrics.display(display),
             move |display: usize,
                   data: &mut scrap::ImageRgb,
                   _texture: *mut c_void,
@@ -2908,7 +2953,14 @@ struct FpsControl {
     inactive_counter: usize,
 }
 
+#[cfg(feature = "nikodesk")]
+impl<T: InvokeUiSession> Drop for Remote<T> {
+    fn drop(&mut self) { self.video_metrics.stop(); }
+}
+
 struct VideoThread {
+    #[cfg(feature = "nikodesk")]
+    video_metrics: Option<Arc<crate::nikodesk::video_metrics::DisplayTelemetry>>,
     video_queue: Arc<RwLock<ArrayQueue<VideoFrame>>>,
     video_sender: MediaSender,
     decode_fps: Arc<RwLock<Option<usize>>>,

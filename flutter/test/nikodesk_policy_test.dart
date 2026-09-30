@@ -107,4 +107,42 @@ void main() {
       expect(PictureRequest.supportsCustomFps(version), isTrue);
     }
   });
+
+  test('a saved preset is selected only while current core parameters match',
+      () {
+    PictureMode observed(
+            {String? saved = 'office',
+            String? quality = 'best',
+            int? percent = 30,
+            int? fps = 15,
+            String? view = 'original',
+            String? codec = 'auto',
+            bool supportsFps = true}) =>
+        PictureRequest.observedMode(saved,
+            quality: quality,
+            percent: percent,
+            fps: fps,
+            viewStyle: view,
+            codecPreference: codec,
+            supportsFps: supportsFps);
+    expect(observed(), PictureMode.office);
+    expect(observed(quality: 'balanced'), PictureMode.custom);
+    expect(observed(view: 'adaptive'), PictureMode.custom);
+    expect(observed(codec: 'vp9'), PictureMode.custom);
+    expect(observed(codec: null), PictureMode.custom);
+    expect(observed(saved: null), PictureMode.custom);
+    expect(observed(saved: 'constrained', quality: 'custom'),
+        PictureMode.constrained);
+    expect(observed(saved: 'constrained', quality: 'custom', percent: 50),
+        PictureMode.custom);
+    expect(observed(saved: 'constrained', quality: 'custom', fps: 30),
+        PictureMode.custom);
+    expect(
+        observed(
+            saved: 'constrained',
+            quality: 'custom',
+            fps: null,
+            supportsFps: false),
+        PictureMode.constrained);
+  });
 }

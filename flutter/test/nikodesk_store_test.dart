@@ -114,4 +114,46 @@ void main() {
     await store.recordSuccess('127.0.0.1', DateTime.utc(2026));
     expect((await store.load()).devices.single.id, '234567');
   });
+
+  test('stale favorite patch preserves an alias changed by another store',
+      () async {
+    await store.save(const DeviceEntry(id: '123456', alias: 'Old'));
+    final stale = (await store.load()).devices.single;
+    await DeviceStore(directory).save(stale.copyWith(alias: 'New'));
+    await store.save(stale.copyWith(favorite: true));
+    final current = (await store.load()).devices.single;
+    expect(current.alias, 'New');
+    expect(current.favorite, isTrue);
+  });
+
+  test('concurrent field patches preserve changes and success timestamps',
+      () async {
+    await store.save(const DeviceEntry(id: '123456'));
+    final stale = (await store.load()).devices.single;
+    final at = DateTime.utc(2026, 9, 30);
+    await Future.wait([
+      DeviceStore(directory).save(stale.copyWith(alias: 'Office')),
+      DeviceStore(directory).save(stale.copyWith(group: 'Work')),
+      DeviceStore(directory).save(stale.copyWith(forceRelay: true)),
+      DeviceStore(directory).recordSuccess('123456', at),
+    ]);
+    final current = (await store.load()).devices.single;
+    expect(current.alias, 'Office');
+    expect(current.group, 'Work');
+    expect(current.forceRelay, isTrue);
+    expect(current.lastConnectedAt, at);
+  });
+
+  test('favorite toggles use the latest stored value under the lock', () async {
+    await store.save(const DeviceEntry(id: '123456', alias: 'Office'));
+    await Future.wait([
+      DeviceStore(directory).toggleFavorite('123456'),
+      DeviceStore(directory).toggleFavorite('123456'),
+    ]);
+    final current = (await store.load()).devices.single;
+    expect(current.favorite, isFalse);
+    expect(current.alias, 'Office');
+    await expectLater(store.toggleFavorite('234567'), throwsStateError);
+    expect((await store.load()).devices.length, 1);
+  });
 }

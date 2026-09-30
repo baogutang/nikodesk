@@ -1,3 +1,5 @@
+#[cfg(feature = "nikodesk")]
+pub(crate) use crate::nikodesk::owned_terminal::OwnedTerminalService;
 use super::*;
 use hbb_common::{
     anyhow::{anyhow, Context, Result},
@@ -106,7 +108,7 @@ pub fn generate_service_id() -> String {
     format!("ts_{}", uuid::Uuid::new_v4())
 }
 
-fn get_default_shell() -> String {
+pub(crate) fn get_default_shell() -> String {
     #[cfg(target_os = "windows")]
     {
         // Use shared implementation from terminal_helper
@@ -619,12 +621,12 @@ fn find_utf8_split_point(buf: &[u8]) -> usize {
 // would need a separate design covering remote encoding detection, Flutter
 // decoding, replay truncation, and input transcoding.
 #[derive(Default)]
-struct Utf8ChunkAccumulator {
+pub(crate) struct Utf8ChunkAccumulator {
     remainder: Vec<u8>,
 }
 
 impl Utf8ChunkAccumulator {
-    fn push_chunk(&mut self, mut data: Vec<u8>) -> Option<Vec<u8>> {
+    pub(crate) fn push_chunk(&mut self, mut data: Vec<u8>) -> Option<Vec<u8>> {
         if data.is_empty() {
             return None;
         }
@@ -656,7 +658,7 @@ impl Utf8ChunkAccumulator {
         }
     }
 
-    fn finish(&mut self) -> Option<Vec<u8>> {
+    pub(crate) fn finish(&mut self) -> Option<Vec<u8>> {
         if self.remainder.is_empty() {
             None
         } else {
@@ -727,6 +729,10 @@ pub struct TerminalSession {
     // Thread handles
     reader_thread: Option<thread::JoinHandle<()>>,
     writer_thread: Option<thread::JoinHandle<()>>,
+    #[cfg(feature = "nikodesk")]
+    niko_reader_panicked: bool,
+    #[cfg(feature = "nikodesk")]
+    niko_writer_panicked: bool,
     output_buffer: OutputBuffer,
     title: String,
     pid: u32,
@@ -756,6 +762,10 @@ impl TerminalSession {
             exiting: Arc::new(AtomicBool::new(false)),
             reader_thread: None,
             writer_thread: None,
+            #[cfg(feature = "nikodesk")]
+            niko_reader_panicked: false,
+            #[cfg(feature = "nikodesk")]
+            niko_writer_panicked: false,
             output_buffer: OutputBuffer::new(),
             title: format!("Terminal {}", terminal_id),
             pid: 0,
@@ -777,6 +787,13 @@ impl TerminalSession {
     // This helper function is to ensure that the threads are joined before the child process is dropped.
     // Though this is not strictly necessary on macOS.
     fn stop(&mut self) {
+        #[cfg(feature = "nikodesk")]
+        {
+            self.stop_nikodesk();
+            return;
+        }
+        #[cfg(not(feature = "nikodesk"))]
+        {
         self.state = SessionState::Closed;
         self.exiting.store(true, Ordering::SeqCst);
 
@@ -869,6 +886,57 @@ impl TerminalSession {
             // Kill the process
             let _ = child.kill();
             add_to_reaper(child);
+        }
+        }
+    }
+
+    #[cfg(feature = "nikodesk")]
+    fn stop_nikodesk(&mut self) {
+        use crate::nikodesk::terminal_cleanup::{self, Resources};
+        self.state = SessionState::Closed;
+        self.exiting.store(true, Ordering::SeqCst);
+        // Never enqueue a newline or wait for room in the input queue.
+        self.input_tx.take();
+        self.output_rx = None;
+        #[cfg(target_os = "windows")]
+        let helper_confirmed = {
+            if self.is_helper_mode {
+                if let Some(handle) = self.helper_process_handle.as_ref() {
+                    let raw = handle.as_raw();
+                    unsafe {
+                        if WinWaitForSingleObject(raw, 0) != WIN_WAIT_OBJECT_0 {
+                            let _ = WinTerminateProcess(raw, 0);
+                        }
+                        if WinWaitForSingleObject(raw, 100) == WIN_WAIT_OBJECT_0 {
+                            if let Some(handle) = self.helper_process_handle.take() {
+                                let _ = WinCloseHandle(handle.as_raw());
+                            }
+                            true
+                        } else { false }
+                    }
+                } else { true }
+            } else { true }
+        };
+        #[cfg(not(target_os = "windows"))]
+        let helper_confirmed = true;
+        let mut resources = Resources {
+            input: None,
+            pair: self.pty_pair.take(),
+            child: self.child.take(),
+            reader: self.reader_thread.take(),
+            writer: self.writer_thread.take(),
+            reader_panicked: self.niko_reader_panicked,
+            writer_panicked: self.niko_writer_panicked,
+        };
+        let report = terminal_cleanup::stop(&mut resources, &self.exiting,
+            Duration::from_millis(300));
+        self.child = resources.child;
+        self.reader_thread = resources.reader;
+        self.writer_thread = resources.writer;
+        self.niko_reader_panicked = resources.reader_panicked;
+        self.niko_writer_panicked = resources.writer_panicked;
+        if !helper_confirmed || !report.confirmed() {
+            log::warn!("NikoDesk terminal resource cleanup is unconfirmed");
         }
     }
 }
@@ -1238,9 +1306,13 @@ impl TerminalServiceProxy {
 
         // Spawn writer thread
         let terminal_id = open.terminal_id;
+        #[cfg(feature = "nikodesk")]
+        let writer_exiting = session.exiting.clone();
         let writer_thread = thread::spawn(move || {
             let mut writer = writer;
             while let Ok(data) = input_rx.recv() {
+                #[cfg(feature = "nikodesk")]
+                if writer_exiting.load(Ordering::SeqCst) { break; }
                 if let Err(e) = writer.write_all(&data) {
                     log::error!("Terminal {} write error: {}", terminal_id, e);
                     break;
@@ -1468,8 +1540,12 @@ impl TerminalServiceProxy {
 
         // Spawn writer thread: reads from channel, writes to input pipe
         let terminal_id = open.terminal_id;
+        #[cfg(feature = "nikodesk")]
+        let writer_exiting = session.exiting.clone();
         let writer_thread = thread::spawn(move || {
             while let Ok(data) = input_rx.recv() {
+                #[cfg(feature = "nikodesk")]
+                if writer_exiting.load(Ordering::SeqCst) { break; }
                 if let Err(e) = input_pipe.write_all(&data) {
                     log::error!("Terminal {} pipe write error: {}", terminal_id, e);
                     break;

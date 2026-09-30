@@ -11,6 +11,9 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/nikodesk/connect_dialog.dart';
+import 'package:flutter_hbb/nikodesk/server_scope.dart';
+import 'package:flutter_hbb/nikodesk/ui.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -212,10 +215,9 @@ void showWaylandKeyboardInputWarningDialog(
       var rememberPersisted = true;
       if (remember) {
         try {
-          await bind.mainSetPeerOption(
-              id: id,
-              key: kPeerOptionAllowWaylandKeyboard,
-              value: bool2option(kPeerOptionAllowWaylandKeyboard, true));
+          await sessionSetPeerOption(ffi.sessionId, id,
+              kPeerOptionAllowWaylandKeyboard,
+              bool2option(kPeerOptionAllowWaylandKeyboard, true));
         } catch (e) {
           rememberPersisted = false;
           debugPrint('Failed to persist Wayland keyboard input consent: $e');
@@ -388,7 +390,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
           }
 
           final allowWaylandKeyboard =
-              mainGetPeerBoolOptionSync(id, kPeerOptionAllowWaylandKeyboard);
+              sessionGetPeerBoolOptionSync(sessionId, id, kPeerOptionAllowWaylandKeyboard);
           if (shouldShowWaylandKeyboardPrompt(
             connectionId: sessionId.toString(),
             isWaylandPeer: isWaylandPeer,
@@ -408,7 +410,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
   }
   if (isDefaultConn &&
       isWaylandPeer &&
-      (mainGetPeerBoolOptionSync(id, kPeerOptionAllowWaylandKeyboard) ||
+      (sessionGetPeerBoolOptionSync(sessionId, id, kPeerOptionAllowWaylandKeyboard) ||
           isWaylandKeyboardPromptSuppressedForConnection(
               sessionId.toString()))) {
     v.add(TTextMenu(
@@ -416,10 +418,9 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
         onPressed: () async {
           var persistedCleared = false;
           try {
-            await bind.mainSetPeerOption(
-                id: id,
-                key: kPeerOptionAllowWaylandKeyboard,
-                value: bool2option(kPeerOptionAllowWaylandKeyboard, false));
+            await sessionSetPeerOption(sessionId, id,
+                kPeerOptionAllowWaylandKeyboard,
+                bool2option(kPeerOptionAllowWaylandKeyboard, false));
             persistedCleared = true;
           } catch (e) {
             debugPrint(
@@ -448,7 +449,33 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
       {bool isFileTransfer = false,
       bool isViewCamera = false,
       bool isTcpTunneling = false,
-      bool isTerminal = false}) {
+      bool isTerminal = false}) async {
+    if (const bool.fromEnvironment('NIKODESK')) {
+      final namespace = ffi.serverNamespace;
+      if (NikoServerScope.validate(namespace) == null) {
+        nikoNotice(context, nikoText('无法确认本会话所属私服，请重新连接。',
+            'The session server identity is unavailable. Connect again.'));
+        return;
+      }
+      final password = await nikoAskConnectPassword(context, id, '',
+          fileTransfer: isFileTransfer);
+      if (password == null || password.trim().isEmpty || !context.mounted) return;
+      try {
+        await connect(context, id,
+            serverNamespace: namespace,
+            password: password,
+            isFileTransfer: isFileTransfer,
+            isViewCamera: isViewCamera,
+            isTerminal: isTerminal,
+            isTcpTunneling: isTcpTunneling);
+      } catch (_) {
+        if (context.mounted) {
+          nikoNotice(context, nikoText('无法连接。请确认私服未变化且已启用此能力。',
+              'Could not connect. Check the server identity and enable this capability.'));
+        }
+      }
+      return;
+    }
     final connToken = bind.sessionGetConnToken(sessionId: ffi.sessionId);
     connect(context, id,
         isFileTransfer: isFileTransfer,
@@ -471,7 +498,9 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     );
     v.add(
       TTextMenu(
-          child: Text('${translate('Terminal')} (beta)'),
+          child: Text(const bool.fromEnvironment('NIKODESK')
+              ? nikoText('请求终端访问', 'Request terminal access')
+              : '${translate('Terminal')} (beta)'),
           onPressed: () => connectWithToken(isTerminal: true)),
     );
     v.add(

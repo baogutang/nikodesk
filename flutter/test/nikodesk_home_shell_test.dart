@@ -31,25 +31,33 @@ void main() {
   });
   tearDown(() async => directory.delete(recursive: true));
 
-  Future<void> loadShell(WidgetTester tester, NikoHomeShell shell) async {
+  Future<void> loadShell(WidgetTester tester, NikoHomeShell shell, {Size size = const Size(1100, 800), double scale = 1}) async {
+    await tester.binding.setSurfaceSize(size);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.runAsync(() async {
-      await tester.pumpWidget(MaterialApp(home: Scaffold(body: shell)));
-      // Give every page's initial file I/O a real event-loop window before
-      // fake-async takes over; otherwise a loading spinner never settles.
-      await Future<void>.delayed(const Duration(milliseconds: 450));
+      await tester.pumpWidget(MaterialApp(builder: (context, child) => MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)), child: child!), home: Scaffold(body: shell)));
+      for (var i = 0; i < 250; i++) {
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        if (find
+            .byType(CircularProgressIndicator, skipOffstage: false)
+            .evaluate()
+            .isEmpty) break;
+      }
     });
     await tester.pumpAndSettle();
   }
 
   NikoHomeShell shell(_ServerDouble gateway,
           {Future<void> Function(BuildContext, String, bool,
-              {bool isFileTransfer, String? password})? onConnect}) =>
+                  {bool isFileTransfer, String? password})?
+              onConnect}) =>
       NikoHomeShell(
           store: store,
           gateway: gateway,
           sessionLog: sessionLog,
           onConnect: onConnect,
-          deviceIdProvider: () => '1486608495',
+          deviceIdProvider: () => '1000000001',
           temporaryPasswordProvider: () async => '12345678',
           screenRecordingProbe: () => true,
           accessibilityProbe: () => true);
@@ -57,13 +65,13 @@ void main() {
   testWidgets('shell shows local identity, permissions and server state',
       (tester) async {
     final gateway = _ServerDouble(ServerSnapshot(
-        PrivateServerConfig('desk.baogutang.cn',
-            'desk.baogutang.cn:21117', base64Encode(List.filled(32, 1))),
+        PrivateServerConfig('private.example', 'private.example:21117',
+            base64Encode(List.filled(32, 1))),
         1,
         true));
     await loadShell(tester, shell(gateway));
     expect(find.text('NikoDesk'), findsOneWidget);
-    expect(find.text('1486608495'), findsOneWidget);
+    expect(find.text('1000000001'), findsOneWidget);
     expect(find.text('设置永久密码'), findsOneWidget);
     expect(find.text('已就绪'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
@@ -124,13 +132,12 @@ void main() {
         true));
     await loadShell(
         tester,
-        shell(gateway,
-            onConnect: (_, id, relay,
-                {isFileTransfer = false, password}) async {
-      requested = id;
-      file = isFileTransfer;
-      usedPassword = password;
-    }));
+        shell(gateway, onConnect: (_, id, relay,
+            {isFileTransfer = false, password}) async {
+          requested = id;
+          file = isFileTransfer;
+          usedPassword = password;
+        }));
     await tester.tap(find.text('会话'));
     await tester.pumpAndSettle();
     expect(find.text('Office'), findsOneWidget);
@@ -146,4 +153,67 @@ void main() {
     expect(usedPassword, 'secret123');
     await tester.pumpWidget(const SizedBox());
   });
+  testWidgets('server card opens settings and history refreshes when selected',
+      (tester) async {
+    final gateway = _ServerDouble(
+        const ServerSnapshot(PrivateServerConfig('', '', ''), null, false));
+    await loadShell(tester, shell(gateway));
+    await tester.tap(find.text('私有服务器'));
+    await tester.pumpAndSettle();
+    expect(find.text('配置服务器'), findsOneWidget);
+    await tester.runAsync(() async {
+      await tester.tap(find.text('会话'));
+      await tester.pump();
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('还没有连接记录'), findsOneWidget);
+    await tester.tap(find.text('设备'));
+    await tester.pump();
+    await tester.runAsync(() => sessionLog.record(SessionLogEntry(
+        id: '234567',
+        alias: 'Newly initiated',
+        startedAt: DateTime.utc(2026, 9, 30))));
+    await tester.runAsync(() async {
+      await tester.tap(find.text('会话'));
+      await tester.pump();
+      for (var i = 0; i < 20; i++) {
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('Newly initiated'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+  testWidgets('settings language change updates the shell immediately',
+      (tester) async {
+    final gateway = _ServerDouble(
+        const ServerSnapshot(PrivateServerConfig('', '', ''), null, false));
+    await loadShell(tester, shell(gateway));
+    await tester.tap(find.text('设置'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('English'));
+    await tester.tap(find.text('English'));
+    await tester.pumpAndSettle();
+    expect(find.text('Devices'), findsOneWidget);
+    expect(find.text('Sessions'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+  testWidgets('narrow desktop navigation remains reachable at 200% text', (tester) async {
+    final gateway = _ServerDouble(ServerSnapshot(
+        PrivateServerConfig('private.example', 'private.example:21117', base64Encode(List.filled(32, 1))), 1, true));
+    await tester.runAsync(() => store.save(const DeviceEntry(id: '123456', alias: 'Office')));
+    await loadShell(tester, shell(gateway), size: const Size(800, 600), scale: 2);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byTooltip('打开导航'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('会话').first);
+    await tester.tap(find.text('会话').first);
+    await tester.pumpAndSettle();
+    expect(find.text('还没有连接记录'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
 }

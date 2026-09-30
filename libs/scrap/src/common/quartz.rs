@@ -56,7 +56,7 @@ impl crate::TraitCapturer for Capturer {
                         crate::would_block_if_equal(&mut self.saved_raw_data, frame.inner())?;
                         frame.surface_to_bgra(self.height());
                         Ok(Frame::PixelBuffer(PixelBuffer {
-                            frame,
+                            frame: frame.into(),
                             data: PhantomData,
                             width: self.width(),
                             height: self.height(),
@@ -75,15 +75,41 @@ impl crate::TraitCapturer for Capturer {
 }
 
 pub struct PixelBuffer<'a> {
-    frame: quartz::Frame,
+    frame: PixelStorage,
     data: PhantomData<&'a [u8]>,
     width: usize,
     height: usize,
 }
 
+#[cfg(not(feature = "nikodesk"))]
+type PixelStorage = quartz::Frame;
+#[cfg(feature = "nikodesk")]
+enum PixelStorage {
+    Screen(quartz::Frame),
+    Camera(super::camera::macos_camera::OwnedFrame),
+}
+#[cfg(feature = "nikodesk")]
+impl From<quartz::Frame> for PixelStorage {
+    fn from(frame: quartz::Frame) -> Self { Self::Screen(frame) }
+}
+#[cfg(feature = "nikodesk")]
+impl PixelStorage {
+    fn data(&self) -> &[u8] { match self { Self::Screen(frame) => &*frame, Self::Camera(frame) => frame.data() } }
+    fn stride(&self) -> usize { match self { Self::Screen(frame) => frame.stride(), Self::Camera(frame) => frame.stride() } }
+}
+#[cfg(feature = "nikodesk")]
+impl PixelBuffer<'_> {
+    pub(crate) fn from_camera(frame: super::camera::macos_camera::OwnedFrame) -> Self {
+        Self { width: frame.width(), height: frame.height(), frame: PixelStorage::Camera(frame), data: PhantomData }
+    }
+}
+
 impl<'a> crate::TraitPixelBuffer for PixelBuffer<'a> {
     fn data(&self) -> &[u8] {
-        &*self.frame
+        #[cfg(feature = "nikodesk")]
+        { self.frame.data() }
+        #[cfg(not(feature = "nikodesk"))]
+        { &*self.frame }
     }
 
     fn width(&self) -> usize {

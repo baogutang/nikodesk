@@ -12,6 +12,19 @@ fn build_windows() {
 fn build_mac() {
     let file = "src/platform/macos.mm";
     let mut b = cc::Build::new();
+    if std::env::var_os("CARGO_FEATURE_NIKODESK").is_some() {
+        b.define("NIKODESK_BUILD", None);
+        for file in [
+            "src/platform/macos_privacy_gamma.h",
+            "src/platform/macos_privacy_watchdog_protocol.h",
+            "src/platform/macos_privacy_watchdog_state.h",
+            "src/platform/macos_privacy_watchdog_client.h",
+            "src/platform/macos_privacy_watchdog_spawn.h",
+            "src/platform/macos_privacy_watchdog.cpp",
+        ] {
+            println!("cargo:rerun-if-changed={}", file);
+        }
+    }
     if let Ok(os_version::OsVersion::MacOS(v)) = os_version::detect() {
         let v = v.version;
         if v.contains("10.14") {
@@ -19,7 +32,21 @@ fn build_mac() {
         }
     }
     b.flag("-std=c++17").file(file).compile("macos");
+    if std::env::var_os("CARGO_FEATURE_NIKODESK").is_some() {
+        cc::Build::new()
+            .file("src/nikodesk/voice/macos_permission.mm")
+            .flag("-fobjc-arc")
+            .flag("-fblocks")
+            .compile("nikodesk_voice_permission");
+        println!("cargo:rustc-link-lib=framework=AVFoundation");
+        println!("cargo:rustc-link-lib=framework=Foundation");
+        println!("cargo:rustc-link-lib=framework=CoreAudio");
+        println!("cargo:rerun-if-changed=src/nikodesk/voice/macos_permission.mm");
+        println!("cargo:rerun-if-changed=src/nikodesk/voice/macos_permission.h");
+    }
     println!("cargo:rerun-if-changed={}", file);
+    println!("cargo:rerun-if-changed=src/platform/macos_privacy_transaction.h");
+    println!("cargo:rerun-if-changed=src/platform/macos_privacy_bridge.h");
 }
 
 #[cfg(all(windows, feature = "inline"))]
@@ -93,6 +120,14 @@ fn main() {
     #[cfg(windows)]
     build_windows();
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+    if target_os == "windows"
+        && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc")
+        && std::env::var_os("CARGO_FEATURE_NIKODESK").is_some()
+    {
+        // Restrict pre-main imports as well as runtime loads for this privileged
+        // binary. Windows 10 RS1+ and the real MSVC payload need separate checks.
+        println!("cargo:rustc-link-arg-bin=nikodesk-host=/DEPENDENTLOADFLAG:0xA00");
+    }
     if target_os == "macos" {
         #[cfg(target_os = "macos")]
         build_mac();

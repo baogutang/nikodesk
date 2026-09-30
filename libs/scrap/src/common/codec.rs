@@ -627,6 +627,24 @@ impl Decoder {
         self.valid
     }
 
+    #[cfg(feature = "nikodesk")]
+    pub fn niko_backend(&self) -> (&'static str, Option<bool>) {
+        if self.vp8.is_some() { return ("vpx-vp8", Some(false)); }
+        if self.vp9.is_some() { return ("vpx-vp9", Some(false)); }
+        if self.av1.is_some() { return ("aom-av1", Some(false)); }
+        #[cfg(feature = "vram")]
+        if self.h264_vram.is_some() || self.h265_vram.is_some() { return ("vram", Some(true)); }
+        #[cfg(feature = "hwcodec")]
+        if let Some(decoder) = self.h264_ram.as_ref().or(self.h265_ram.as_ref()) {
+            let hardware = decoder.info.hwdevice != hwcodec::ffmpeg::AVHWDeviceType::AV_HWDEVICE_TYPE_NONE;
+            if !hardware && decoder.info.name != "h264" && decoder.info.name != "hevc" { return ("unknown", None); }
+            return (if hardware { "ffmpeg-hw-device" } else { "ffmpeg-software" }, Some(hardware));
+        }
+        #[cfg(feature = "mediacodec")]
+        if self.h264_media_codec.is_some() || self.h265_media_codec.is_some() { return ("mediacodec", None); }
+        ("unknown", None)
+    }
+
     // rgb [in/out] fmt and stride must be set in ImageRgb
     pub fn handle_video_frame(
         &mut self,

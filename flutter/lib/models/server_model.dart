@@ -11,6 +11,7 @@ import 'package:get/get.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../common.dart';
+import '../nikodesk/cm_capabilities.dart';
 import '../common/formatter/id_formatter.dart';
 import '../desktop/pages/server_page.dart' as desktop;
 import '../desktop/widgets/tabbar_widget.dart';
@@ -47,6 +48,21 @@ class ServerModel with ChangeNotifier {
   final tabController = DesktopTabController(tabType: DesktopTabType.cm);
 
   final List<Client> _clients = [];
+  final Map<int, NikoCapabilityStatus> _nikoCapabilities = {};
+  NikoCapabilityStatus? nikoCapability(int id) => _nikoCapabilities[id];
+
+  void handleNikoCapability(Map<String, dynamic> event) {
+    if (bind.mainGetAppNameSync() != 'NikoDesk') return;
+    final payload = event['payload'];
+    if (payload is! String) return;
+    final status = NikoCapabilityStatus.parse(payload);
+    if (status == null) return;
+    final clients = _clients.where((client) => client.id == status.identity.connectionId &&
+        client.peerId == status.identity.peerId && client.isTerminal && !client.disconnected);
+    if (clients.isEmpty) return;
+    _nikoCapabilities[status.identity.connectionId] = status;
+    notifyListeners();
+  }
 
   Timer? cmHiddenTimer;
 
@@ -503,6 +519,7 @@ class ServerModel with ChangeNotifier {
     for (var clientJson in clientsJson) {
       try {
         final client = Client.fromJson(clientJson);
+        if (client.nikoCapability != null) _nikoCapabilities[client.id] = client.nikoCapability!;
         _clients.add(client);
         _addTab(client);
       } catch (e) {
@@ -525,6 +542,7 @@ class ServerModel with ChangeNotifier {
   void addConnection(Map<String, dynamic> evt) {
     try {
       final client = Client.fromJson(jsonDecode(evt["client"]));
+      if (client.nikoCapability != null) _nikoCapabilities[client.id] = client.nikoCapability!;
       if (client.authorized) {
         parent.target?.dialogManager.dismissByTag(getLoginDialogTag(client.id));
         final index = _clients.indexWhere((c) => c.id == client.id);
@@ -694,6 +712,8 @@ class ServerModel with ChangeNotifier {
   }
 
   void onClientRemove(Map<String, dynamic> evt) {
+    final capabilityId = int.tryParse(evt['id']?.toString() ?? '');
+    if (capabilityId != null) _nikoCapabilities.remove(capabilityId);
     try {
       final id = int.parse(evt['id'] as String);
       final close = (evt['close'] as String) == 'true';
@@ -818,6 +838,7 @@ class Client {
   bool fromSwitch = false;
   bool inVoiceCall = false;
   bool incomingVoiceCall = false;
+  NikoCapabilityStatus? nikoCapability;
 
   RxInt unreadChatMessageCount = 0.obs;
 
@@ -847,6 +868,10 @@ class Client {
     fromSwitch = json['from_switch'];
     inVoiceCall = json['in_voice_call'];
     incomingVoiceCall = json['incoming_voice_call'];
+    if (const bool.fromEnvironment('NIKODESK') && json['niko_capability'] is Map) {
+      final capability = NikoCapabilityStatus.parse(jsonEncode(json['niko_capability']));
+      if (capability?.identity.connectionId == id && capability?.identity.peerId == peerId && isTerminal) nikoCapability = capability;
+    }
   }
 
   Map<String, dynamic> toJson() {

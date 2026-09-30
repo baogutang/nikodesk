@@ -1,3 +1,5 @@
+import 'package:flutter_hbb/nikodesk/server_scope.dart';
+import 'package:flutter_hbb/nikodesk/ui.dart' show nikoText;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -243,6 +245,10 @@ class FfiModel with ChangeNotifier {
       }
     }
 
+    if (const bool.fromEnvironment('NIKODESK') &&
+        parent.target?.connType == ConnType.fileTransfer) {
+      parent.target?.fileModel.jobController.jobTable.refresh();
+    }
     debugPrint('updatePermission: $_permissions');
     notifyListeners();
   }
@@ -355,10 +361,9 @@ class FfiModel with ChangeNotifier {
         handlePlatformAdditions(evt, sessionId, peerId);
       } else if (name == 'connection_ready') {
         if (bind.mainGetAppNameSync() == 'NikoDesk') {
+          if (parent.target?.closed != false ||
+              !parent.target!.qualityMonitorModel.nikoMetrics.connectionFromNative(evt, parent.target!.serverNamespace)) return;
           _nikoMetricsActive = true;
-          parent.target?.qualityMonitorModel.nikoMetrics.connection(
-              secure: evt['secure'] == 'true', direct: evt['direct'] == 'true',
-              transport: evt['stream_type'] ?? '');
         }
         setConnectionType(peerId, evt['secure'] == 'true',
             evt['direct'] == 'true', evt['stream_type'] ?? '');
@@ -407,6 +412,8 @@ class FfiModel with ChangeNotifier {
         parent.target?.fileModel.jobController.updateFolderFiles(evt);
       } else if (name == 'add_connection') {
         parent.target?.serverModel.addConnection(evt);
+      } else if (name == 'nikodesk_capability_status') {
+        parent.target?.serverModel.handleNikoCapability(evt);
       } else if (name == 'on_client_remove') {
         parent.target?.serverModel.onClientRemove(evt);
       } else if (name == 'update_quality_status') {
@@ -823,13 +830,18 @@ class FfiModel with ChangeNotifier {
     }
   }
 
+  int _peerSessionsCount(String peerId) => const bool.fromEnvironment('NIKODESK')
+      ? bind.peerGetNikodeskSessionsCount(id: peerId,
+          connType: parent.target!.connType.index,
+          expectedServerNamespace: parent.target!.serverNamespace ?? '')
+      : bind.peerGetSessionsCount(id: peerId, connType: parent.target!.connType.index);
+
   handleSwitchDisplay(
       Map<String, dynamic> evt, SessionID sessionId, String peerId) {
     final display = int.parse(evt['display']);
 
     if (_pi.currentDisplay != kAllDisplayValue) {
-      if (bind.peerGetSessionsCount(
-              id: peerId, connType: parent.target!.connType.index) >
+      if (_peerSessionsCount(peerId) >
           1) {
         if (display != _pi.currentDisplay) {
           return;
@@ -903,6 +915,11 @@ class FfiModel with ChangeNotifier {
     final title = evt['title'];
     final text = evt['text'];
     final link = evt['link'];
+    if (const bool.fromEnvironment('NIKODESK') &&
+        (title == 'Connection Error' || title == 'Connection Failed' ||
+          title == 'Disconnected' || type == 'restarting-show' || type == 'restarting')) {
+      parent.target?.fileModel.nikoConnectionLost();
+    }
     if (_nikoMetricsActive &&
         (title == 'Connection Error' || title == 'Connection Failed' ||
           title == 'Disconnected' || type == 'restarting-show')) {
@@ -1131,6 +1148,7 @@ class FfiModel with ChangeNotifier {
 
   void reconnect(OverlayDialogManager dialogManager, SessionID sessionId,
       bool forceRelay) {
+    if (const bool.fromEnvironment('NIKODESK')) parent.target?.fileModel.nikoConnectionLost();
     if (_nikoMetricsActive) parent.target?.qualityMonitorModel.nikoMetrics.clear();
     // Disable relative mouse mode before reconnecting to ensure cursor is released.
     parent.target?.inputModel.setRelativeMouseMode(false);
@@ -1393,8 +1411,7 @@ class FfiModel with ChangeNotifier {
       _pi.primaryDisplay = currentDisplay;
     }
 
-    if (bind.peerGetSessionsCount(
-            id: peerId, connType: parent.target!.connType.index) <=
+    if (_peerSessionsCount(peerId) <=
         1) {
       _pi.currentDisplay = currentDisplay;
     }
@@ -3901,8 +3918,11 @@ class CursorModel with ChangeNotifier {
 
   trySetRemoteWindowCoords() {
     Future.delayed(Duration.zero, () async {
-      _windowRect =
-          await InputModel.fillRemoteCoordsAndGetCurFrame(_remoteWindowCoords);
+      _windowRect = const bool.fromEnvironment('NIKODESK')
+          ? await InputModel.fillRemoteCoordsAndGetCurFrame(_remoteWindowCoords,
+              peerId: parent.target?.id,
+              serverNamespace: parent.target?.serverNamespace)
+          : await InputModel.fillRemoteCoordsAndGetCurFrame(_remoteWindowCoords);
     });
   }
 
@@ -3952,9 +3972,10 @@ class QualityMonitorModel with ChangeNotifier {
       _show = show;
       notifyListeners();
     }
+    nikoMetrics.nativeVisibility(show);
   }
 
-  updateQualityStatus(Map<String, dynamic> evt) {
+  updateQualityStatus(Map<String, dynamic> evt) async {
     final niko = parent.target?.ffiModel._nikoMetricsActive == true;
     if (niko) nikoMetrics.update(evt);
     try {
@@ -4001,6 +4022,17 @@ class QualityMonitorModel with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       //
+    }
+    final owner = parent.target;
+    final native = evt['niko_video_metrics'];
+    if (niko && _show && owner != null && !owner.closed && native is String && native.isNotEmpty) {
+      final namespace = owner.serverNamespace;
+      final sessionId = owner.sessionId;
+      final applied = await nikoMetrics.readNative(native,
+          () => bind.sessionGetOption(sessionId: sessionId, arg: 'nikodesk-video-metrics-binding'), namespace,
+          isCurrent: () => parent.target == owner && !owner.closed &&
+              owner.serverNamespace == namespace && owner.ffiModel._nikoMetricsActive && _show);
+      if (applied || (parent.target == owner && !owner.closed && _show)) notifyListeners();
     }
   }
 }
@@ -4056,6 +4088,8 @@ enum ConnType {
 
 /// Flutter state manager and data communication with the Rust core.
 class FFI {
+  String? _serverNamespace;
+  String? get serverNamespace => _serverNamespace;
   var id = '';
   var version = '';
   var connType = ConnType.defaultConn;
@@ -4092,34 +4126,35 @@ class FFI {
   // Getter for terminal models
   Map<int, TerminalModel> get terminalModels => _terminalModels;
 
-  FFI(SessionID? sId) {
-    sessionId = sId ?? (isDesktop ? Uuid().v4obj() : _constSessionId);
+  FFI(SessionID? sId, {FFI? globalOwner}) {
+    sessionId = sId ?? ((isDesktop || const bool.fromEnvironment('NIKODESK'))
+        ? Uuid().v4obj() : _constSessionId);
     imageModel = ImageModel(WeakReference(this));
     ffiModel = FfiModel(WeakReference(this));
     cursorModel = CursorModel(WeakReference(this));
     canvasModel = CanvasModel(WeakReference(this));
-    serverModel = ServerModel(WeakReference(this));
+    serverModel = globalOwner?.serverModel ?? ServerModel(WeakReference(this));
     chatModel = ChatModel(WeakReference(this));
     fileModel = FileModel(WeakReference(this));
-    userModel = UserModel(WeakReference(this));
-    peerTabModel = PeerTabModel(WeakReference(this));
-    abModel = AbModel(WeakReference(this));
-    groupModel = GroupModel(WeakReference(this));
+    userModel = globalOwner?.userModel ?? UserModel(WeakReference(this));
+    peerTabModel = globalOwner?.peerTabModel ?? PeerTabModel(WeakReference(this));
+    abModel = globalOwner?.abModel ?? AbModel(WeakReference(this));
+    groupModel = globalOwner?.groupModel ?? GroupModel(WeakReference(this));
     qualityMonitorModel = QualityMonitorModel(WeakReference(this));
     recordingModel = RecordingModel(WeakReference(this));
     inputModel = InputModel(WeakReference(this));
     elevationModel = ElevationModel(WeakReference(this));
     cmFileModel = CmFileModel(WeakReference(this));
     textureModel = TextureModel(WeakReference(this));
-    recentPeersModel = Peers(
+    recentPeersModel = globalOwner?.recentPeersModel ?? Peers(
         name: PeersModelName.recent,
         loadEvent: LoadEvent.recent,
         getInitPeers: null);
-    favoritePeersModel = Peers(
+    favoritePeersModel = globalOwner?.favoritePeersModel ?? Peers(
         name: PeersModelName.favorite,
         loadEvent: LoadEvent.favorite,
         getInitPeers: null);
-    lanPeersModel = Peers(
+    lanPeersModel = globalOwner?.lanPeersModel ?? Peers(
         name: PeersModelName.lan, loadEvent: LoadEvent.lan, getInitPeers: null);
   }
 
@@ -4134,6 +4169,19 @@ class FFI {
   }
 
   /// Start with the given [id]. Only transfer file if [isFileTransfer], only view camera if [isViewCamera], only port forward if [isPortForward].
+  void _nikoStartFailure() {
+    closed = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      scheduleMicrotask(() {
+        if (!closed) return;
+        ffiModel.showMsgBox(sessionId, 'error', 'Connection Error',
+            nikoText('私服身份已变化或会话未能创建。请关闭此窗口，在当前私服下重新连接。',
+                'The private server identity changed or the session could not be created. Close this window and connect again on the current server.'),
+            '', false, dialogManager);
+      });
+    });
+  }
+
   void start(
     String id, {
     bool isFileTransfer = false,
@@ -4143,6 +4191,7 @@ class FFI {
     bool isTerminal = false,
     String? switchUuid,
     String? password,
+    String? serverNamespace,
     bool? isSharedPassword,
     String? connToken,
     bool? forceRelay,
@@ -4150,6 +4199,15 @@ class FFI {
     int? display,
     List<int>? displays,
   }) {
+    if (const bool.fromEnvironment('NIKODESK')) {
+      final namespace = NikoServerScope.validate(serverNamespace);
+      if (namespace == null ||
+          (!closed && _serverNamespace != null && _serverNamespace != namespace)) {
+        _nikoStartFailure();
+        return;
+      }
+      _serverNamespace = namespace;
+    }
     closed = false;
     if (isMobile) mobileReset();
     assert(
@@ -4181,7 +4239,21 @@ class FFI {
     // Else this session is a new one.
     if (isNewPeer) {
       // ignore: unused_local_variable
-      final addRes = bind.sessionAddSync(
+      final addRes = const bool.fromEnvironment('NIKODESK') ? bind.sessionAddNikodeskSync(
+        sessionId: sessionId,
+        id: id,
+        expectedServerNamespace: _serverNamespace!,
+        isFileTransfer: isFileTransfer,
+        isViewCamera: isViewCamera,
+        isPortForward: isPortForward,
+        isRdp: isRdp,
+        isTerminal: isTerminal,
+        switchUuid: switchUuid ?? '',
+        forceRelay: forceRelay ?? false,
+        password: password ?? '',
+        isSharedPassword: isSharedPassword ?? false,
+        connToken: connToken,
+      ) : bind.sessionAddSync(
         sessionId: sessionId,
         id: id,
         isFileTransfer: isFileTransfer,
@@ -4195,18 +4267,31 @@ class FFI {
         isSharedPassword: isSharedPassword ?? false,
         connToken: connToken,
       );
+      if (const bool.fromEnvironment('NIKODESK') && addRes.isNotEmpty) {
+        _nikoStartFailure();
+        return;
+      }
     } else if (display != null) {
       if (displays == null) {
         debugPrint(
             'Unreachable, failed to add existed session to $id, the displays is null while display is $display');
         return;
       }
-      final addRes = bind.sessionAddExistedSync(
+      final addRes = const bool.fromEnvironment('NIKODESK') ? bind.sessionAddNikodeskExistedSync(
+          id: id,
+          expectedServerNamespace: _serverNamespace!,
+          sessionId: sessionId,
+          displays: Int32List.fromList(displays),
+          isViewCamera: isViewCamera) : bind.sessionAddExistedSync(
           id: id,
           sessionId: sessionId,
           displays: Int32List.fromList(displays),
           isViewCamera: isViewCamera);
       if (addRes != '') {
+        if (const bool.fromEnvironment('NIKODESK')) {
+          _nikoStartFailure();
+          return;
+        }
         debugPrint(
             'Unreachable, failed to add existed session to $id, $addRes');
         return;

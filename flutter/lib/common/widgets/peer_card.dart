@@ -12,6 +12,8 @@ import '../../common.dart';
 import '../../common/formatter/id_formatter.dart';
 import '../../models/peer_model.dart';
 import '../../models/platform_model.dart';
+import '../../nikodesk/favorite_actions.dart';
+import '../../nikodesk/favorite_actions_native.dart';
 import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 import '../../desktop/widgets/popup_menu.dart';
 import 'dart:math' as math;
@@ -808,6 +810,13 @@ abstract class BasePeerCard extends StatelessWidget {
               bind.mainLoadRecentPeers();
               break;
             case PeerTabIndex.fav:
+              if (const bool.fromEnvironment('NIKODESK')) {
+                final saved = await nikoChangeNativeFavorites(
+                    [NikoFavoritePeerRef(id, peer.serverNamespace)], favorite: false);
+                if (!saved) return;
+                bind.mainLoadFavPeers();
+                break;
+              }
               final favs = (await bind.mainGetFav()).toList();
               if (favs.remove(id)) {
                 await bind.mainStoreFav(favs: favs);
@@ -882,6 +891,13 @@ abstract class BasePeerCard extends StatelessWidget {
       ),
       proc: () {
         () async {
+          if (const bool.fromEnvironment('NIKODESK')) {
+            if (await nikoChangeNativeFavorites(
+                [NikoFavoritePeerRef(id, peer.serverNamespace)], favorite: true)) {
+              showToast(translate('Successful'));
+            }
+            return;
+          }
           final favs = (await bind.mainGetFav()).toList();
           if (!favs.contains(id)) {
             favs.add(id);
@@ -917,6 +933,14 @@ abstract class BasePeerCard extends StatelessWidget {
       ),
       proc: () {
         () async {
+          if (const bool.fromEnvironment('NIKODESK')) {
+            if (await nikoChangeNativeFavorites(
+                [NikoFavoritePeerRef(id, peer.serverNamespace)], favorite: false)) {
+              await reloadFunc();
+              showToast(translate('Successful'));
+            }
+            return;
+          }
           final favs = (await bind.mainGetFav()).toList();
           if (favs.remove(id)) {
             await bind.mainStoreFav(favs: favs);
@@ -977,7 +1001,9 @@ class RecentPeerCard extends BasePeerCard {
       menuItems.add(_terminalRunAsAdminAction(context));
     }
 
-    final List favs = (await bind.mainGetFav()).toList();
+    final List? favs = const bool.fromEnvironment('NIKODESK')
+        ? await nikoReadNativeFavorites(NikoFavoritePeerRef(peer.id, peer.serverNamespace))
+        : (await bind.mainGetFav()).toList();
 
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context));
@@ -1000,9 +1026,9 @@ class RecentPeerCard extends BasePeerCard {
       menuItems.add(_unrememberPasswordAction(peer.id));
     }
 
-    if (!favs.contains(peer.id)) {
+    if (favs != null && !favs.contains(peer.id)) {
       menuItems.add(_addFavAction(peer.id));
-    } else {
+    } else if (favs != null) {
       menuItems.add(_rmFavAction(peer.id, () async {}));
     }
 
@@ -1102,7 +1128,9 @@ class DiscoveredPeerCard extends BasePeerCard {
       menuItems.add(_terminalRunAsAdminAction(context));
     }
 
-    final List favs = (await bind.mainGetFav()).toList();
+    final List? favs = const bool.fromEnvironment('NIKODESK')
+        ? await nikoReadNativeFavorites(NikoFavoritePeerRef(peer.id, peer.serverNamespace))
+        : (await bind.mainGetFav()).toList();
 
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context));
@@ -1119,9 +1147,9 @@ class DiscoveredPeerCard extends BasePeerCard {
       menuItems.add(_createShortCutAction(peer.id));
     }
 
-    if (!favs.contains(peer.id)) {
+    if (favs != null && !favs.contains(peer.id)) {
       menuItems.add(_addFavAction(peer.id));
-    } else {
+    } else if (favs != null) {
       menuItems.add(_rmFavAction(peer.id, () async {}));
     }
 

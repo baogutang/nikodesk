@@ -683,6 +683,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("view_camera_unsupported_tip", "您的远程端不支持查看摄像头。"),
         ("Terminal", "终端"),
         ("Enable terminal", "启用终端"),
+        ("Terminal is unsupported on this Windows system. ConPTY requires Windows 10 version 1809 or later. Screen control remains available.", "此 Windows 系统缺少终端接口，需 Windows 10 1809 或更新版本。仍可使用屏幕控制。"),
+        ("Terminal support could not be verified on this Windows system. Screen control remains available.", "未能确认此 Windows 系统的终端接口，仍可使用屏幕控制。"),
         ("New tab", "新建选项卡"),
         ("Keep terminal sessions on disconnect", "断开连接时保持终端会话"),
         ("Terminal (Run as administrator)", "终端（以管理员身份运行）"),

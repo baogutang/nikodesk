@@ -1035,3 +1035,16 @@ mod tests {
         assert_eq!(parsed_uid, console_uid);
     }
 }
+
+#[cfg(all(feature="nikodesk",any(target_os="macos",target_os="linux")))]
+impl<T> ConnectionTmpl<T> where T: AsyncRead+AsyncWrite+std::marker::Unpin+std::os::unix::io::AsRawFd {
+    pub(crate) fn verify_nikodesk_cm_peer(&self,_server_side:bool)->ResultType<()> {
+        crate::nikodesk::cm_peer::verify_unix(self.peer_uid(),self.peer_pid())
+    }
+}
+#[cfg(all(feature="nikodesk",windows))]
+impl<T> ConnectionTmpl<T> where T:hbb_common::tokio::io::AsyncRead+hbb_common::tokio::io::AsyncWrite+std::marker::Unpin+std::os::windows::io::AsRawHandle {
+    pub(crate) fn verify_nikodesk_cm_peer(&self,server_side:bool)->ResultType<()> {
+        crate::nikodesk::cm_peer::verify_windows(HANDLE(self.inner.get_ref().as_raw_handle()),server_side)
+    }
+}

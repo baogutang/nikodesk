@@ -467,7 +467,12 @@ impl UI {
 
     fn get_recent_sessions(&mut self) -> Value {
         // to-do: limit number of recent sessions, and remove old peer file
-        let peers: Vec<Value> = PeerConfig::peers(None)
+        #[cfg(feature = "nikodesk")]
+        let mut recent = crate::nikodesk::server_scope::current()
+            .map_or_else(Vec::new, |scope| scope.peers(None));
+        #[cfg(not(feature = "nikodesk"))]
+        let mut recent = PeerConfig::peers(None);
+        let peers: Vec<Value> = recent
             .drain(..)
             .map(|p| Self::get_peer_value(p.0, p.2))
             .collect();
@@ -479,6 +484,9 @@ impl UI {
     }
 
     fn remove_peer(&mut self, id: String) {
+        #[cfg(feature = "nikodesk")]
+        crate::nikodesk::server_scope::remove_peer(&id);
+        #[cfg(not(feature = "nikodesk"))]
         PeerConfig::remove(&id);
     }
 

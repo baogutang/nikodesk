@@ -1,3 +1,7 @@
+#[cfg(all(feature = "nikodesk", target_os = "macos"))]
+use crate::nikodesk_input;
+#[cfg(all(feature = "nikodesk", target_os = "windows"))]
+use super::input_service::nikodesk_windows_input as nikodesk_input;
 #[cfg(target_os = "windows")]
 use super::login_failure_check::try_acquire_os_credential_login_gate;
 use super::login_failure_check::{
@@ -254,8 +258,8 @@ struct InputMouse {
 }
 
 enum MessageInput {
-    #[cfg(all(feature = "nikodesk", target_os = "macos"))]
-    Niko(u64, crate::nikodesk_input::Input),
+    #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
+    Niko(u64, nikodesk_input::Input),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Mouse(InputMouse),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -407,8 +411,8 @@ pub struct Connection {
     audio_sender: Option<MediaSender>,
     // audio by the remote peer/client
     tx_input: std_mpsc::Sender<MessageInput>,
-    #[cfg(all(feature = "nikodesk", target_os = "macos"))]
-    niko_input: crate::nikodesk_input::Session,
+    #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
+    niko_input: nikodesk_input::Session,
     // handle input messages
     video_ack_required: bool,
     server_audit_conn: String,
@@ -466,6 +470,8 @@ pub struct Connection {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     terminal_user_token: Option<TerminalUserToken>,
     terminal_generic_service: Option<Box<GenericService>>,
+    #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
+    niko_terminal: crate::nikodesk::connection_capabilities::TerminalFlow,
 }
 
 impl ConnInner {
@@ -565,13 +571,16 @@ impl Connection {
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let tx_cloned = tx.clone();
+        let require_2fa = crate::auth_2fa::get_2fa(None);
         let mut conn = Self {
             inner: ConnInner {
                 id,
                 tx: Some(tx),
                 tx_video: Some(tx_video),
             },
-            require_2fa: crate::auth_2fa::get_2fa(None),
+            #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
+            niko_terminal: crate::nikodesk::connection_capabilities::TerminalFlow::new(require_2fa.is_some()),
+            require_2fa,
             awaiting_2fa: false,
             // Defer display enumeration until login succeeds. Monitor login replaces this
             // with the primary index returned with the refreshed display snapshot.
@@ -617,8 +626,8 @@ impl Connection {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             show_my_cursor: false,
             tx_input,
-            #[cfg(all(feature = "nikodesk", target_os = "macos"))]
-            niko_input: crate::nikodesk_input::Session::new(false),
+            #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
+            niko_input: nikodesk_input::Session::new(false),
             video_ack_required: false,
             server_audit_conn: "".to_owned(),
             server_audit_file: "".to_owned(),
@@ -711,12 +720,12 @@ impl Connection {
         // `on_message` picks the type-specific timeout then.
         conn.stream.set_send_timeout(SEND_TIMEOUT_VIDEO);
 
-        #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+        #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
         {
             let niko_input = conn.niko_input.clone();
             std::thread::spawn(move || Self::handle_input(_rx_input, tx_cloned, niko_input));
         }
-        #[cfg(all(not(any(target_os = "android", target_os = "ios")), not(all(feature = "nikodesk", target_os = "macos"))))]
+        #[cfg(all(not(any(target_os = "android", target_os = "ios")), not(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))))]
         std::thread::spawn(move || Self::handle_input(_rx_input, tx_cloned));
         let mut second_timer = crate::rustdesk_interval(time::interval(Duration::from_secs(1)));
 
@@ -742,6 +751,8 @@ impl Connection {
             (_tx_clip, rx_clip) = mpsc::unbounded_channel::<i32>();
         }
 
+        #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
+        let mut niko_terminal_timer=time::interval(Duration::from_millis(30));
         loop {
             tokio::select! {
                 // biased; // video has higher priority // causing test_delay_timer failed while transferring big file
@@ -761,7 +772,10 @@ impl Connection {
                     match data {
                         ipc::Data::Authorize => {
                             conn.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::Click);
+                            #[cfg(not(feature = "nikodesk"))]
                             conn.require_2fa.take();
+                            #[cfg(feature = "nikodesk")]
+                            if !conn.terminal { conn.require_2fa.take(); }
                             if !conn.send_logon_response_and_keep_alive().await {
                                 break;
                             }
@@ -769,6 +783,10 @@ impl Connection {
                                 break;
                             }
                         }
+                        #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
+                        ipc::Data::NikoCapabilityDecision(decision) => { conn.decide_nikodesk_terminal(decision).await; }
+                        #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
+                        ipc::Data::NikoCapabilityRevoke(identity) => { conn.revoke_nikodesk_terminal(Some(&identity),"Revoked locally").await; }
                         ipc::Data::Close => {
                             conn.chat_unanswered = false; // seen
                             conn.file_transferred = false; //seen
@@ -810,7 +828,7 @@ impl Connection {
                             log::info!("Change permission {} -> {}", name, enabled);
                             if &name == "keyboard" {
                                 conn.keyboard = enabled;
-                                #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+                                #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
                                 conn.niko_input.set_enabled(conn.peer_keyboard_enabled());
                                 conn.send_permission(Permission::Keyboard, enabled).await;
                                 if let Some(s) = conn.server.upgrade() {
@@ -1179,6 +1197,14 @@ impl Connection {
                         _ => {}
                     }
                 }
+                _ = async {
+                    #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
+                    if conn.terminal {niko_terminal_timer.tick().await;return;}
+                    std::future::pending::<()>().await;
+                } => {
+                    #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
+                    conn.poll_nikodesk_terminal().await;
+                }
                 _ = second_timer.tick() => {
                     #[cfg(windows)]
                     conn.portable_check();
@@ -1264,8 +1290,8 @@ impl Connection {
     fn handle_input(
         receiver: std_mpsc::Receiver<MessageInput>,
         tx: Sender,
-        #[cfg(all(feature = "nikodesk", target_os = "macos"))]
-        niko_input: crate::nikodesk_input::Session,
+        #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
+        niko_input: nikodesk_input::Session,
     ) {
         let mut block_input_mode = false;
         #[cfg(any(target_os = "windows", target_os = "macos"))]
@@ -1278,7 +1304,7 @@ impl Connection {
         loop {
             match receiver.recv_timeout(std::time::Duration::from_millis(500)) {
                 Ok(v) => match v {
-                    #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+                    #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
                     MessageInput::Niko(generation, input) => niko_input.dispatch(generation, input),
                     MessageInput::Mouse(mouse_input) => {
                         handle_mouse(
@@ -1874,7 +1900,9 @@ impl Connection {
         if self.authorized {
             return true;
         }
-        if self.require_2fa.is_some() && !self.is_recent_session(true) && !self.from_switch {
+        if self.require_2fa.is_some()
+            && (!self.is_recent_session(true) || cfg!(feature="nikodesk") && self.terminal)
+            && (!self.from_switch || cfg!(feature="nikodesk") && self.terminal) {
             self.require_2fa.as_ref().map(|totp| {
                 let bot = crate::auth_2fa::TelegramBot::get();
                 let bot = match bot {
@@ -1915,6 +1943,8 @@ impl Connection {
         // narrows it again for its own framing (`port_forward_mux::cap_packet_size`), so that
         // call has to come after this one, not before.
         self.stream.set_max_packet_length(usize::MAX);
+        #[cfg(feature="nikodesk")]
+        if self.terminal { self.stream.set_max_packet_length(MAX_UNAUTHORIZED_MESSAGE); }
         if !self.connect_port_forward_if_needed().await {
             return false;
         }
@@ -2391,6 +2421,8 @@ impl Connection {
             privacy_mode: self.privacy_mode,
             from_switch: self.from_switch,
         });
+        #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
+        if authorized { if let Some(adapter)=self.niko_terminal.adapter.as_ref() {self.send_to_cm(Data::NikoCapabilityStatus(adapter.status("Waiting for local terminal approval")));} }
     }
 
     #[inline]
@@ -2453,12 +2485,12 @@ impl Connection {
         simulate: bool,
         show_cursor: bool,
     ) {
-        #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+        #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
         {
             self.niko_input.set_enabled(self.peer_keyboard_enabled());
             if let Some(generation) = self.niko_input.ticket() {
                 self.tx_input.send(MessageInput::Niko(generation,
-                    crate::nikodesk_input::Input::Mouse(msg, conn_id, username, argb, simulate, show_cursor))).ok();
+                    nikodesk_input::Input::Mouse(msg, conn_id, username, argb, simulate, show_cursor))).ok();
             }
             return;
         }
@@ -2477,12 +2509,12 @@ impl Connection {
     #[inline]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn input_pointer(&self, msg: PointerDeviceEvent, conn_id: i32) {
-        #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+        #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
         {
             self.niko_input.set_enabled(self.peer_keyboard_enabled());
             if let Some(generation) = self.niko_input.ticket() {
                 self.tx_input.send(MessageInput::Niko(generation,
-                    crate::nikodesk_input::Input::Pointer(msg, conn_id))).ok();
+                    nikodesk_input::Input::Pointer(msg, conn_id))).ok();
             }
             return;
         }
@@ -2494,12 +2526,12 @@ impl Connection {
     #[inline]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn input_key(&self, msg: KeyEvent, press: bool) {
-        #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+        #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
         {
             self.niko_input.set_enabled(self.peer_keyboard_enabled());
             if let Some(generation) = self.niko_input.ticket() {
                 self.tx_input.send(MessageInput::Niko(generation,
-                    crate::nikodesk_input::Input::Key(msg, press))).ok();
+                    nikodesk_input::Input::Key(msg, press))).ok();
             }
             return;
         }
@@ -2655,6 +2687,8 @@ impl Connection {
     }
 
     fn is_recent_session(&mut self, tfa: bool) -> bool {
+        #[cfg(feature = "nikodesk")]
+        if crate::nikodesk::background::is_system_worker() { return false; }
         SESSIONS
             .lock()
             .unwrap()
@@ -2684,6 +2718,9 @@ impl Connection {
 
     #[inline]
     pub fn is_permission_enabled_locally(enable_prefix_option: &str) -> bool {
+        #[cfg(feature = "nikodesk")]
+        if crate::nikodesk::background::is_system_worker()
+            && enable_prefix_option != keys::OPTION_ENABLE_KEYBOARD { return false; }
         #[cfg(feature = "nikodesk")]
         if matches!(enable_prefix_option,
             keys::OPTION_ENABLE_TERMINAL | keys::OPTION_ENABLE_TUNNEL |
@@ -2839,7 +2876,7 @@ impl Connection {
     async fn check_login_scope(&mut self, lr: &LoginRequest) -> bool {
         #[cfg(feature = "nikodesk")]
         if !crate::nikodesk_security::allows_login(lr) {
-            self.send_login_error("NikoDesk supports remote desktop and file transfer only").await;
+            self.send_login_error("NikoDesk does not permit this connection scope").await;
             return false;
         }
         let requested = Self::login_scope_digest(lr);
@@ -2869,7 +2906,8 @@ impl Connection {
         if let Some(o) = lr.option.as_ref() {
             self.options_in_login = Some(o.clone());
         }
-        if self.require_2fa.is_some() && !lr.hwid.is_empty() && Self::enable_trusted_devices() {
+        if self.require_2fa.is_some() && !lr.hwid.is_empty() && Self::enable_trusted_devices()
+            && !(cfg!(feature="nikodesk") && matches!(lr.union.as_ref(),Some(login_request::Union::Terminal(_)))) {
             let devices = Config::get_trusted_devices();
             if let Some(device) = devices.iter().find(|d| d.hwid == lr.hwid) {
                 if !device.outdate()
@@ -2906,6 +2944,8 @@ impl Connection {
             });
             #[cfg(all(windows, feature = "flutter"))]
             std::thread::spawn(move || {
+                #[cfg(feature = "nikodesk")]
+                if crate::nikodesk::background::is_system_worker() { return; }
                 if crate::is_server() && !crate::check_process("--tray", false) {
                     crate::platform::run_as_user(vec!["--tray"]).ok();
                 }
@@ -2981,7 +3021,16 @@ impl Connection {
                     self.view_camera = true;
                 }
                 Some(login_request::Union::Terminal(terminal)) => {
-                    if !Self::permission(keys::OPTION_ENABLE_TERMINAL, &self.control_permissions) {
+                    #[cfg(feature="nikodesk")]
+                    {
+                        #[cfg(not(any(target_os="android",target_os="ios")))]
+                        if let Err(error)=self.prepare_nikodesk_terminal_request().await {
+                            self.send_login_error(&error.to_string()).await;return false;
+                        }
+                        #[cfg(any(target_os="android",target_os="ios"))]
+                        { self.send_login_error("Terminal requests are unsupported on this platform").await;return false; }
+                    }
+                    if !cfg!(feature="nikodesk") && !Self::permission(keys::OPTION_ENABLE_TERMINAL, &self.control_permissions) {
                         self.send_login_error("No permission of terminal").await;
                         sleep(1.).await;
                         return false;
@@ -3141,6 +3190,8 @@ impl Connection {
             if let Some(totp) = self.require_2fa.as_ref() {
                 if let Ok(res) = totp.check_current(&tfa.code) {
                     if res {
+                        #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
+                        self.niko_terminal.record_verified_totp();
                         self.update_failure(failure, true, 1);
                         self.require_2fa.take();
                         self.set_conn_audit_two_factor(ConnAuditTwoFactor::Totp);
@@ -4256,6 +4307,12 @@ impl Connection {
         if !self.terminal || self.terminal_user_token.is_some() {
             return None;
         }
+        #[cfg(feature="nikodesk")]
+        {
+            if self.niko_terminal.context.is_none() { self.send_login_error("Terminal request has no local identity scope").await;return Some(false); }
+            self.terminal_user_token=Some(TerminalUserToken::SelfUser);
+            return None;
+        }
 
         #[derive(Copy, Clone)]
         enum TerminalAuthorizationMode {
@@ -4898,6 +4955,10 @@ impl Connection {
     }
 
     pub async fn handle_voice_call(&mut self, accepted: bool) {
+        if cfg!(feature = "nikodesk") {
+            self.voice_call_request_timestamp = None;
+            return;
+        }
         if let Some(ts) = self.voice_call_request_timestamp.take() {
             let msg = new_voice_call_response(ts.get(), accepted);
             if accepted {
@@ -4926,6 +4987,11 @@ impl Connection {
     }
 
     pub async fn close_voice_call(&mut self) {
+        if cfg!(feature = "nikodesk") {
+            self.voice_call_request_timestamp = None;
+            self.voice_calling = false;
+            return;
+        }
         crate::audio_service::set_voice_call_input_device(None, true);
         // Notify the connection manager that the voice call has been closed.
         self.send_to_cm(Data::CloseVoiceCall("".to_owned()));
@@ -5068,7 +5134,7 @@ impl Connection {
         if let Ok(q) = o.disable_keyboard.enum_value() {
             if q != BoolOption::NotSet {
                 self.disable_keyboard = q == BoolOption::Yes;
-                #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+                #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
                 self.niko_input.set_enabled(self.peer_keyboard_enabled());
                 if let Some(s) = self.server.upgrade() {
                     s.write().unwrap().subscribe(
@@ -5324,7 +5390,9 @@ impl Connection {
             return;
         }
         self.closed = true;
-        #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+        #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
+        self.revoke_nikodesk_terminal(None,"Connection closed").await;
+        #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
         self.niko_input.close();
         // If voice A,B -> C, and A,B has voice call
         // B disconnects, C will reset the voice call input.
@@ -5335,6 +5403,7 @@ impl Connection {
         //
         // We can add a (Vec<conn_id>, input device) to avoid this.
         // But it's not necessary now and we have to consider two audio services(client, server).
+        #[cfg(not(feature = "nikodesk"))]
         crate::audio_service::set_voice_call_input_device(None, true);
         log::info!("#{} Connection closed: {}", self.inner.id(), reason);
         if lock
@@ -5713,7 +5782,7 @@ impl Connection {
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn release_pressed_modifiers(&mut self) {
-        #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+        #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
         {
             self.niko_input.close();
             self.pressed_modifiers.clear();
@@ -6288,14 +6357,56 @@ impl Connection {
         self.send(msg_out).await;
     }
 
+    #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
+    async fn prepare_nikodesk_terminal_request(&mut self)->ResultType<()> { self.niko_terminal.prepare().await }
+
+    #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
+    async fn start_nikodesk_terminal_request(&mut self) {
+        match self.niko_terminal.authenticated(self.inner.id(),self.lr.my_id.clone(),self.stream.is_secured(),self.authorized).await {
+            Ok(status)=>self.send_to_cm(Data::NikoCapabilityStatus(status)),
+            Err(error)=> { let mut response=Message::new();response.set_terminal_response(crate::nikodesk::owned_terminal::error(&error.to_string()));self.send(response).await; }
+        }
+    }
+    #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
+    async fn decide_nikodesk_terminal(&mut self,decision:crate::nikodesk::connection_capabilities::Decision) {
+        match self.niko_terminal.decision(decision).await {
+            Ok((status,responses))=>{self.send_to_cm(Data::NikoCapabilityStatus(status));for response in responses {let mut msg=Message::new();msg.set_terminal_response(response);self.send(msg).await;}},
+            Err(_)=>{if let Some(adapter)=self.niko_terminal.adapter.as_ref() {self.send_to_cm(Data::NikoCapabilityStatus(adapter.status("Local decision rejected: stale, expired or unavailable")));}},
+        }
+    }
+    #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
+    async fn revoke_nikodesk_terminal(&mut self,identity:Option<&crate::nikodesk::connection_capabilities::Identity>,reason:&str) {
+        if let Ok(status)=self.niko_terminal.revoke(identity,reason).await {self.send_to_cm(Data::NikoCapabilityStatus(status));}
+    }
+    #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
+    async fn poll_nikodesk_terminal(&mut self) {
+        match self.niko_terminal.poll().await {
+            Ok((status,responses))=>{if let Some(status)=status{self.send_to_cm(Data::NikoCapabilityStatus(status));}for response in responses {let mut msg=Message::new();msg.set_terminal_response(response);self.send(msg).await;}},
+            Err(_)=>self.revoke_nikodesk_terminal(None,"Terminal poll failed").await,
+        }
+    }
+    #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
+    async fn handle_nikodesk_terminal_action(&mut self,action:TerminalAction)->ResultType<()> {
+        let lifecycle=matches!(action.union.as_ref(),Some(terminal_action::Union::Open(_)|terminal_action::Union::Close(_)));
+        let response=match self.niko_terminal.action(action).await {Ok(response)=>response,Err(error)=>Some(crate::nikodesk::owned_terminal::error(&error.to_string()))};
+        let failed=response.as_ref().map_or(false,|response|response.has_error());
+        if let Some(response)=response {let mut msg=Message::new();msg.set_terminal_response(response);self.send(msg).await;}
+        if lifecycle || failed {if let Some(adapter)=self.niko_terminal.adapter.as_ref() {self.send_to_cm(Data::NikoCapabilityStatus(adapter.status("Terminal resource status")));}}
+        Ok(())
+    }
+
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     async fn update_terminal_persistence(&mut self, persistent: bool) {
+        #[cfg(feature="nikodesk")]
+        { let _=persistent;return; }
         self.terminal_persistent = persistent;
         terminal_service::set_persistent(&self.terminal_service_id, persistent).ok();
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     async fn init_terminal_service(&mut self) {
+        #[cfg(feature="nikodesk")]
+        { self.start_nikodesk_terminal_request().await;return; }
         debug_assert!(self.terminal_user_token.is_some());
         let Some(user_token) = self.terminal_user_token.clone() else {
             // unreachable, but keep it for safety
@@ -6316,6 +6427,8 @@ impl Connection {
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     async fn handle_terminal_action(&mut self, action: TerminalAction) -> ResultType<()> {
+        #[cfg(feature="nikodesk")]
+        { return self.handle_nikodesk_terminal_action(action).await; }
         debug_assert!(self.terminal_user_token.is_some());
         let Some(user_token) = self.terminal_user_token.clone() else {
             // unreacheable, but keep it for safety
@@ -6405,6 +6518,11 @@ async fn start_ipc(
     mut rx_to_cm: mpsc::UnboundedReceiver<ipc::Data>,
     tx_from_cm: mpsc::UnboundedSender<ipc::Data>,
 ) -> ResultType<()> {
+    #[cfg(all(feature = "nikodesk", windows))]
+    if crate::nikodesk::background::is_system_worker() {
+        let _=tx_from_cm;
+        return crate::nikodesk::background::connection_status(rx_to_cm).await;
+    }
     use hbb_common::anyhow::anyhow;
 
     loop {
@@ -6466,6 +6584,12 @@ async fn start_ipc(
     }
 
     let mut stream = stream.ok_or(anyhow!("none stream"))?;
+    #[cfg(feature="nikodesk")]
+    {
+        stream=tokio::task::spawn_blocking(move || -> ResultType<_> {
+            stream.verify_nikodesk_cm_peer(false)?;Ok(stream)
+        }).await??;
+    }
     loop {
         tokio::select! {
             res = stream.next() => {

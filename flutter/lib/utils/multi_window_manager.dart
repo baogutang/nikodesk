@@ -8,6 +8,10 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/input_model.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/nikodesk/window_scope.dart';
+import 'package:flutter_hbb/nikodesk/session_window_dispatch.dart';
+import 'package:flutter_hbb/nikodesk/remote_window_scope.dart';
 
 /// must keep the order
 // ignore: constant_identifier_names
@@ -73,6 +77,8 @@ class RustDeskMultiWindowManager {
       'id': peerId,
       'tab_window_id': windowId,
       'session_id': sessionId,
+      if (const bool.fromEnvironment('NIKODESK'))
+        'serverNamespace': bind.sessionGetServerNamespace(sessionId: SessionID(sessionId)),
     };
     if (windowType == WindowType.RemoteDesktop) {
       await _newSession(
@@ -98,11 +104,14 @@ class RustDeskMultiWindowManager {
   // This function must be called in the main window thread.
   // Because the _remoteDesktopWindows is managed in that thread.
   openMonitorSession(int windowId, String peerId, int display, int displayCount,
-      Rect? screenRect, int windowType) async {
+      Rect? screenRect, int windowType, {String? serverNamespace}) async {
     final isCamera = windowType == WindowType.ViewCamera.index;
     final windowIDs = isCamera ? _viewCameraWindows : _remoteDesktopWindows;
     if (windowIDs.length > 1) {
       for (final windowId in windowIDs) {
+        if (const bool.fromEnvironment('NIKODESK') &&
+            !(await nikoMatchingWindows([windowId], serverNamespace,
+                (id) => DesktopMultiWindow.invokeMethod(id, nikoWindowScopeMethod, null))).contains(windowId)) continue;
         if (await DesktopMultiWindow.invokeMethod(
             windowId,
             kWindowEventActiveDisplaySession,
@@ -120,6 +129,7 @@ class RustDeskMultiWindowManager {
         : [display];
     var params = {
       'type': windowType,
+      'serverNamespace': serverNamespace,
       'id': peerId,
       'tab_window_id': windowId,
       'display': display,
@@ -188,6 +198,33 @@ class RustDeskMultiWindowManager {
     String msg, {
     Rect? screenRect,
   }) async {
+    if (const bool.fromEnvironment('NIKODESK')) {
+      final namespace = nikoWindowNamespace(jsonDecode(msg));
+      if (namespace == null) throw StateError('Private server identity is required');
+      final matching = await nikoMatchingWindows(windows, namespace,
+          (id) => DesktopMultiWindow.invokeMethod(id, nikoWindowScopeMethod, null));
+      if (openInTabs && matching.isNotEmpty) {
+        final windowId = matching.first;
+        final result = await DesktopMultiWindow.invokeMethod(windowId, methodName, msg);
+        return MultiWindowCallResult(windowId, result);
+      }
+      if (!openInTabs) {
+        for (final windowId in matching) {
+          if (!_inactiveWindows.contains(windowId)) continue;
+          if (screenRect == null) {
+            await restoreWindowPosition(type, windowId: windowId, peerId: remoteId);
+          }
+          await DesktopMultiWindow.invokeMethod(windowId, methodName, msg);
+          if (methodName != kWindowEventNewRemoteDesktop) {
+            WindowController.fromWindowId(windowId).show();
+          }
+          registerActiveWindow(windowId);
+          return MultiWindowCallResult(windowId, null);
+        }
+      }
+      final windowId = await newSessionWindow(type, remoteId, msg, windows, screenRect != null);
+      return MultiWindowCallResult(windowId, null);
+    }
     if (openInTabs) {
       if (windows.isEmpty) {
         final windowId = await newSessionWindow(
@@ -225,6 +262,7 @@ class RustDeskMultiWindowManager {
     String remoteId,
     List<int> windows, {
     String? password,
+    String? serverNamespace,
     bool? forceRelay,
     String? switchUuid,
     bool? isRDP,
@@ -249,17 +287,32 @@ class RustDeskMultiWindowManager {
     if (connToken != null) {
       params['connToken'] = connToken;
     }
-    final msg = jsonEncode(params);
+    final msg = const bool.fromEnvironment('NIKODESK')
+        ? nikoSessionWindowMessage(params, serverNamespace)
+        : jsonEncode(params);
 
     // separate window for file transfer is not supported
     bool openInTabs = type != WindowType.RemoteDesktop ||
         mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs);
 
     if (windows.length > 1 || !openInTabs) {
-      for (final windowId in windows) {
-        if (await DesktopMultiWindow.invokeMethod(
-            windowId, kWindowEventActiveSession, remoteId)) {
-          return MultiWindowCallResult(windowId, null);
+      if (const bool.fromEnvironment('NIKODESK')) {
+        final activeWindow = await nikoActivatePeerWindow(
+            windows,
+            serverNamespace,
+            (id) => DesktopMultiWindow.invokeMethod(
+                id, nikoWindowScopeMethod, null),
+            (id) => DesktopMultiWindow.invokeMethod(
+                id, kWindowEventActiveSession, remoteId));
+        if (activeWindow != null) {
+          return MultiWindowCallResult(activeWindow, null);
+        }
+      } else {
+        for (final windowId in windows) {
+          if (await DesktopMultiWindow.invokeMethod(
+              windowId, kWindowEventActiveSession, remoteId)) {
+            return MultiWindowCallResult(windowId, null);
+          }
         }
       }
     }
@@ -270,6 +323,7 @@ class RustDeskMultiWindowManager {
   Future<MultiWindowCallResult> newRemoteDesktop(
     String remoteId, {
     String? password,
+    String? serverNamespace,
     bool? isSharedPassword,
     String? switchUuid,
     bool? forceRelay,
@@ -280,6 +334,7 @@ class RustDeskMultiWindowManager {
       remoteId,
       _remoteDesktopWindows,
       password: password,
+      serverNamespace: serverNamespace,
       forceRelay: forceRelay,
       switchUuid: switchUuid,
       isSharedPassword: isSharedPassword,
@@ -289,6 +344,7 @@ class RustDeskMultiWindowManager {
   Future<MultiWindowCallResult> newFileTransfer(
     String remoteId, {
     String? password,
+    String? serverNamespace,
     bool? isSharedPassword,
     bool? forceRelay,
     String? connToken,
@@ -299,6 +355,7 @@ class RustDeskMultiWindowManager {
       remoteId,
       _fileTransferWindows,
       password: password,
+      serverNamespace: serverNamespace,
       forceRelay: forceRelay,
       isSharedPassword: isSharedPassword,
       connToken: connToken,
@@ -308,6 +365,7 @@ class RustDeskMultiWindowManager {
   Future<MultiWindowCallResult> newViewCamera(
     String remoteId, {
     String? password,
+    String? serverNamespace,
     bool? isSharedPassword,
     String? switchUuid,
     bool? forceRelay,
@@ -319,6 +377,7 @@ class RustDeskMultiWindowManager {
       remoteId,
       _viewCameraWindows,
       password: password,
+      serverNamespace: serverNamespace,
       forceRelay: forceRelay,
       switchUuid: switchUuid,
       isSharedPassword: isSharedPassword,
@@ -330,6 +389,7 @@ class RustDeskMultiWindowManager {
     String remoteId,
     bool isRDP, {
     String? password,
+    String? serverNamespace,
     bool? isSharedPassword,
     bool? forceRelay,
     String? connToken,
@@ -340,6 +400,7 @@ class RustDeskMultiWindowManager {
       remoteId,
       _portForwardWindows,
       password: password,
+      serverNamespace: serverNamespace,
       forceRelay: forceRelay,
       isRDP: isRDP,
       isSharedPassword: isSharedPassword,
@@ -350,10 +411,34 @@ class RustDeskMultiWindowManager {
   Future<MultiWindowCallResult> newTerminal(
     String remoteId, {
     String? password,
+    String? serverNamespace,
     bool? isSharedPassword,
     bool? forceRelay,
     String? connToken,
   }) async {
+    if (const bool.fromEnvironment('NIKODESK')) {
+      final msg = nikoSessionWindowMessage({
+        'type': WindowType.Terminal.index,
+        'id': remoteId,
+        'password': password,
+        'forceRelay': forceRelay,
+        'isSharedPassword': isSharedPassword,
+        'connToken': connToken,
+      }, serverNamespace);
+      final activeWindow = await nikoActivatePeerWindow(
+          _terminalWindows.reversed,
+          serverNamespace,
+          (id) => DesktopMultiWindow.invokeMethod(
+              id, nikoWindowScopeMethod, null),
+          (id) => DesktopMultiWindow.invokeMethod(
+              id, kWindowEventActiveSession, remoteId));
+      if (activeWindow != null) {
+        return MultiWindowCallResult(activeWindow, null);
+      }
+      final windowId = await newSessionWindow(
+          WindowType.Terminal, remoteId, msg, _terminalWindows, false);
+      return MultiWindowCallResult(windowId, null);
+    }
     // Iterate through terminal windows in reverse order to prioritize
     // the most recently added or used windows, as they are more likely
     // to have an active session.
@@ -546,7 +631,23 @@ class RustDeskMultiWindowManager {
 
   // This function is called from the main window.
   // It will query the active remote windows to get their coords.
-  Future<List<String>> getOtherRemoteWindowCoords(int wId) async {
+  Future<List<String>> getOtherRemoteWindowCoords(int wId,
+      {String? peerId, String? serverNamespace, int? fromWindowId}) async {
+    if (const bool.fromEnvironment('NIKODESK')) {
+      return nikoCollectRemoteWindowCoordinates(
+        request: {
+          'windowId': wId,
+          'peerId': peerId,
+          'serverNamespace': serverNamespace,
+        },
+        fromWindowId: fromWindowId ?? -1,
+        windows: _remoteDesktopWindows.where(_activeWindows.contains),
+        readIdentity: (id) => DesktopMultiWindow.invokeMethod(
+            id, nikoRemoteWindowIdentityMethod, null),
+        readCoordinates: (id, request) => DesktopMultiWindow.invokeMethod(
+            id, kWindowEventRemoteWindowCoords, request),
+      );
+    }
     List<String> coords = [];
     for (final windowId in _remoteDesktopWindows) {
       if (windowId != wId) {
@@ -565,7 +666,34 @@ class RustDeskMultiWindowManager {
   // This function is called from one remote window.
   // Only the main window knows `_remoteDesktopWindows` and `_activeWindows`.
   // So we need to call the main window to get the other remote windows' coords.
-  Future<List<RemoteWindowCoords>> getOtherRemoteWindowCoordsFromMain() async {
+  Future<List<RemoteWindowCoords>> getOtherRemoteWindowCoordsFromMain(
+      {String? peerId, String? serverNamespace}) async {
+    if (const bool.fromEnvironment('NIKODESK')) {
+      final origin = NikoRemoteWindowIdentity.parse({
+        'windowId': kWindowId,
+        'peerId': peerId,
+        'serverNamespace': serverNamespace,
+      });
+      if (origin == null) return [];
+      try {
+        final response = await DesktopMultiWindow.invokeMethod(kMainWindowId,
+                kWindowEventRemoteWindowCoords, jsonEncode(origin.toJson()))
+            .timeout(const Duration(seconds: 3));
+        final replies = nikoMatchingRemoteCoordinateReplies(
+            response, peerId, serverNamespace, origin.windowId);
+        final coordinates = <RemoteWindowCoords>[];
+        for (final reply in replies) {
+          try {
+            coordinates.add(RemoteWindowCoords.fromJson(reply));
+          } catch (_) {
+            // A malformed geometry reply must not replace verified coordinates.
+          }
+        }
+        return coordinates;
+      } catch (_) {
+        return [];
+      }
+    }
     List<RemoteWindowCoords> coords = [];
     // Call the main window to get the coords of other remote windows.
     String res = await DesktopMultiWindow.invokeMethod(

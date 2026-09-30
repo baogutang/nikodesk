@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
@@ -21,12 +22,22 @@ class NikoDevicePage extends StatefulWidget {
   final Future<void> Function(BuildContext, String, bool,
       {bool isFileTransfer, String? password})? onConnect;
   final VoidCallback? onOpenSettings;
+  final VoidCallback? onLanguageChanged;
+  final SessionLogStore? sessionLog;
+  final bool controllerOnly;
+  final bool? native;
+  final bool active;
   const NikoDevicePage(
       {super.key,
       this.store,
       this.gateway,
       this.onConnect,
-      this.onOpenSettings});
+      this.onOpenSettings,
+      this.onLanguageChanged,
+      this.sessionLog,
+      this.controllerOnly = false,
+      this.native,
+      this.active = true});
   @override
   State<NikoDevicePage> createState() => _NikoDevicePageState();
 }
@@ -47,11 +58,15 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
   bool _connecting = false;
   bool _fileTransfer = false;
   bool _forceRelay = false;
+  bool _legacyAvailable = false;
+  bool _quickExpanded = false;
   final Map<String, bool> _online = {};
   Timer? _timer;
   Timer? _onlineTimer;
 
-  bool get _native => widget.gateway == null;
+  bool get _native =>
+      widget.native ??
+      (widget.gateway == null || widget.gateway is NativeServerGateway);
   static const _onlineEvent = 'callback_query_onlines';
   static const _onlineHandler = 'nikodesk-device-page';
 
@@ -68,6 +83,8 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
       platformFFI.registerEventHandler(_onlineEvent, _onlineHandler,
           (evt) async {
         if (!mounted) return;
+        if (_store.serverNamespace == null ||
+            evt['nikodesk-server-namespace'] != _store.serverNamespace) return;
         setState(() {
           for (final id in (evt['onlines'] as String? ?? '').split(',')) {
             if (id.isNotEmpty) _online[id] = true;
@@ -94,11 +111,19 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
   Future<void> _setLanguage(bool english) async {
     if (!mounted) return;
     setState(() => NikoLanguage.english = english);
+    widget.onLanguageChanged?.call();
     if (!_native) return;
     final language = english ? 'en' : 'zh-cn';
     await bind.mainSetLocalOption(key: 'lang', value: language);
     await bind.mainChangeLanguage(lang: language);
-    await reloadAllWindows();
+    if (isDesktop) await reloadAllWindows();
+  }
+
+  @override
+  void didUpdateWidget(covariant NikoDevicePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.active) _password.clear();
+    if (widget.active && !oldWidget.active) _refresh();
   }
 
   @override
@@ -122,12 +147,19 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
     try {
       final server = await _gateway.read();
       final directory = await _store.load();
+      final legacyAvailable = _native &&
+          _store.serverNamespace != null &&
+          (await File('${DeviceStore.privateDirectory.path}/devices.json')
+                  .exists() ||
+              await File('${DeviceStore.privateDirectory.path}/sessions.json')
+                  .exists());
       if (mounted) {
         setState(() {
           _server = server;
           _devices = directory.devices;
           _loading = false;
           _error = null;
+          _legacyAvailable = legacyAvailable;
           if (directory.recovered) {
             _notice = nikoText('设备目录损坏，已保留损坏文件并恢复可用备份（无备份时为空目录）。',
                 'The damaged device file was preserved. A valid backup was restored, or an empty directory was created.');
@@ -146,6 +178,8 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
       if (mounted) {
         setState(() {
           _loading = false;
+          _server = null;
+          _online.clear();
           _error = nikoText('无法读取私服配置或设备目录。请检查本地文件权限后重试。',
               'Cannot read server settings or the device directory. Check local file permissions and retry.');
         });
@@ -168,43 +202,20 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
       {required String password,
       required bool fileTransfer,
       required bool forceRelay}) async {
-    if (password.isEmpty) {
-      nikoNotice(
-          context,
-          nikoText('安全策略：必须输入远端密码才能发起连接。',
-              'Policy: the remote password is required before connecting.'));
-      return;
-    }
-    if (!_canConnect) return;
+    if (_connecting) return;
+    final log = widget.sessionLog ?? SessionLogStore.instance;
     setState(() => _connecting = true);
-    try {
-      // Re-read native settings immediately before dispatching to the real session path.
-      final current = await _gateway.read();
-      if (!current.config.isValid || !current.enabled) {
-        if (mounted) setState(() => _server = current);
-        return;
-      }
-      if (!mounted) return;
-      if (widget.onConnect != null) {
-        await widget.onConnect!(context, id, forceRelay,
-            isFileTransfer: fileTransfer, password: password);
-      } else {
-        await connect(context, id,
-            forceRelay: forceRelay,
-            isFileTransfer: fileTransfer,
-            password: password);
-      }
-      await _recordSession(id, fileTransfer, forceRelay);
-    } catch (_) {
-      if (mounted) {
-        nikoNotice(
-            context,
-            nikoText('无法发起连接。检查私服配置及远端 ID 后重试。',
-                'Could not start the session. Check server settings and the device ID, then retry.'));
-      }
-    } finally {
-      if (mounted) setState(() => _connecting = false);
-    }
+    final dispatched = await nikoDispatchConnection(context,
+        id: id,
+        password: password,
+        fileTransfer: fileTransfer,
+        forceRelay: forceRelay,
+        gateway: _gateway,
+        onConnect: widget.onConnect,
+        expectedServerNamespace: _store.serverNamespace);
+    if (mounted) _password.clear();
+    if (dispatched) await _recordSession(id, fileTransfer, forceRelay, log);
+    if (mounted) setState(() => _connecting = false);
   }
 
   Future<void> _connectHero() async {
@@ -227,26 +238,27 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
   Future<void> _connectWithDialog(DeviceEntry device,
       {bool fileTransfer = false}) async {
     if (!_canConnect) {
-      nikoNotice(
-          context,
+      nikoNotice(context,
           nikoText('私服未就绪，无法发起连接。', 'The private server is not ready.'));
       return;
     }
-    await nikoConnectWithPassword(context,
-        id: device.id,
-        alias: device.alias,
+    final password = await nikoAskConnectPassword(
+        context, device.id, device.alias,
+        fileTransfer: fileTransfer);
+    if (password == null || !mounted) return;
+    await _dispatch(device.id,
+        password: password,
         fileTransfer: fileTransfer,
-        forceRelay: device.forceRelay,
-        onConnect: _native ? null : widget.onConnect,
-        onDispatched: () => _recordSession(device.id, fileTransfer, device.forceRelay));
+        forceRelay: device.forceRelay);
   }
 
-  Future<void> _recordSession(String id, bool fileTransfer, bool forceRelay) async {
+  Future<void> _recordSession(String id, bool fileTransfer, bool forceRelay,
+      SessionLogStore log) async {
     // Locally record what this client initiated. This says nothing about
     // remote-side acceptance, which every session verifies on its own.
-    if (!_native) return;
+    if (!_native && widget.sessionLog == null) return;
     try {
-      await SessionLogStore.instance.record(SessionLogEntry(
+      await log.record(SessionLogEntry(
           id: id,
           alias: _devices
               .firstWhere((d) => d.id == id, orElse: () => DeviceEntry(id: id))
@@ -262,7 +274,7 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
   Future<void> _edit([DeviceEntry? device]) async {
     final result = await showDialog<DeviceEntry>(
         context: context, builder: (_) => _DeviceDialog(device: device));
-    if (result == null) return;
+    if (result == null || !mounted) return;
     try {
       await _store.save(result);
       await _refresh();
@@ -276,6 +288,53 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
     }
   }
 
+  Future<void> _importUnscoped() async {
+    final target = _store;
+    final log = widget.sessionLog ?? SessionLogStore.instance;
+    final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+              title:
+                  Text(nikoText('关联旧的本地数据', 'Associate previous local data')),
+              content: Text(nikoText(
+                  '旧设备和发起记录没有私服身份。请确认其中的设备属于当前私服，再导入。已有同 ID 设备优先保留；原文件不会删除。旧画面偏好不会自动导入。',
+                  'Previous devices and initiation records have no server identity. Confirm that they belong to the current server before importing. Existing devices take precedence and source files are kept. Previous display preferences are not imported automatically.')),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(dialog, false),
+                    child: Text(nikoText('取消', 'Cancel'))),
+                NikoPrimaryButton(
+                    compact: true,
+                    onPressed: () => Navigator.pop(dialog, true),
+                    child:
+                        Text(nikoText('导入到当前私服', 'Import to current server'))),
+              ],
+            ));
+    if (confirmed != true || !mounted) return;
+    try {
+      final current = await _gateway.read();
+      if (!mounted ||
+          current.namespace == null ||
+          current.namespace != target.serverNamespace) {
+        throw StateError('Server identity changed before import');
+      }
+      final devices = await target.importUnscoped(DeviceStore.privateDirectory);
+      final sessions = await log.importUnscoped(DeviceStore.privateDirectory);
+      if (!mounted) return;
+      setState(() => _notice = nikoText(
+          '已导入 $devices 个设备、$sessions 条发起记录。原文件已保留。',
+          'Imported $devices devices and $sessions initiation records. Source files were kept.'));
+      await _refresh();
+    } catch (_) {
+      if (mounted) {
+        nikoNotice(
+            context,
+            nikoText('导入未完成。已导入的数据会保留，请核对私服身份和原文件后重试。',
+                'Import did not finish. Imported data is kept. Check the server identity and source files, then retry.'));
+      }
+    }
+  }
+
   Future<void> _configure() async {
     final saved = await showNikoServerSettings(context, _gateway,
         _server?.config ?? const PrivateServerConfig('', '', ''));
@@ -284,7 +343,7 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
 
   Future<void> _favorite(DeviceEntry device) async {
     try {
-      await _store.save(device.copyWith(favorite: !device.favorite));
+      await _store.toggleFavorite(device.id);
       await _refresh();
     } catch (_) {
       if (mounted) {
@@ -325,6 +384,12 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
   }
 
   String _registration() {
+    if (_server == null) return nikoText('状态未知', 'Status unknown');
+    if (widget.controllerOnly) {
+      return _server?.enabled == true
+          ? nikoText('控制端配置已启用', 'Controller configuration enabled')
+          : nikoText('控制端配置已暂停', 'Controller configuration paused');
+    }
     if (_server?.enabled != true) {
       return nikoText('注册服务已停止', 'Registration stopped');
     }
@@ -361,121 +426,183 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
     });
     return FocusTraversalGroup(
         child: LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
-          padding: EdgeInsets.all(
-              constraints.maxWidth < 520 ? 16 : NikoTokens.pagePadding),
-          child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-            Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+            builder: (context, constraints) => SingleChildScrollView(
+                  padding: EdgeInsets.all(
+                      constraints.maxWidth < 520 ? 16 : NikoTokens.pagePadding),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text(nikoText('我的设备', 'My devices'),
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineMedium
-                                ?.copyWith(fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 6),
-                        Text(
-                            nikoText('自己的服务器，熟悉的工作空间。',
-                                'Your server. Your workspace.'),
-                            style: TextStyle(color: _muted(context))),
+                        Wrap(
+                            alignment: WrapAlignment.spaceBetween,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: [
+                              Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(nikoText('我的设备', 'My devices'),
+                                        style: (constraints.maxWidth < 520
+                                            ? Theme.of(context).textTheme.titleLarge
+                                            : Theme.of(context).textTheme.headlineMedium)
+                                            ?.copyWith(fontWeight: FontWeight.w700)),
+                                    if (constraints.maxWidth >= 520 || _devices.isEmpty) ...[
+                                    const SizedBox(height: 6),
+                                    Text(
+                                        nikoText('自己的服务器，熟悉的工作空间。',
+                                            'Your server. Your workspace.'),
+                                        style:
+                                            TextStyle(color: _muted(context))),
+                                    ],
+                                  ]),
+                              Wrap(
+                                  spacing: 8,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    IconButton(
+                                        tooltip: nikoText('设置', 'Settings'),
+                                        onPressed: widget.onOpenSettings,
+                                        icon: Icon(Icons.tune_rounded,
+                                            color: _muted(context))),
+                                    NikoPrimaryButton(
+                                        compact: true,
+                                        onPressed: _error != null
+                                            ? null
+                                            : () => _edit(),
+                                        child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(Icons.add, size: 17),
+                                              const SizedBox(width: 5),
+                                              Flexible(child: Text(constraints.maxWidth < 520
+                                                  ? nikoText('添加', 'Add') : nikoText('添加设备', 'Add device'))),
+                                            ])),
+                                  ]),
+                            ]),
+                        const SizedBox(height: 22),
+                        if (_devices.isEmpty || _server?.config.isValid != true)
+                          _hero(context, constraints)
+                        else
+                          NikoGlassCard(
+                              padding: EdgeInsets.zero,
+                              child: ExpansionTile(
+                                  key: const Key('nikodesk-quick-connect'),
+                                  title: Text(nikoText('快速连接', 'Quick connect'), key: const Key('nikodesk-quick-connect-toggle')),
+                                  subtitle: Text(_registration()),
+                                  maintainState: true,
+                                  onExpansionChanged: (expanded) {
+                                    setState(() => _quickExpanded = expanded);
+                                    if (!expanded) _password.clear();
+                                  },
+                                  children: [ExcludeFocus(
+                                      excluding: !_quickExpanded,
+                                      child: _hero(context, constraints))])),
+                        if (_legacyAvailable)
+                          Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton.icon(
+                                  onPressed: _importUnscoped,
+                                  icon: const Icon(Icons.folder_open_rounded),
+                                  label: Text(nikoText('关联旧的本地数据',
+                                      'Associate previous local data')))),
+                        if (_notice != null)
+                          Padding(
+                              padding: const EdgeInsets.only(top: 14),
+                              child: Text(_notice!,
+                                  style: TextStyle(color: _muted(context)))),
+                        if (_error != null)
+                          Padding(
+                              padding: const EdgeInsets.only(top: 14),
+                              child: NikoGlassCard(
+                                  child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                    Text(_error!,
+                                        style: TextStyle(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .error)),
+                                    TextButton(
+                                        onPressed: _refresh,
+                                        child: Text(nikoText('重试', 'Retry'))),
+                                  ]))),
+                        const SizedBox(height: 20),
+                        Row(children: [
+                          Expanded(
+                              child: TextField(
+                                  key: const Key('nikodesk-search'),
+                                  controller: _search,
+                                  onChanged: (_) => setState(() {}),
+                                  decoration: nikoInput(
+                                          nikoText('搜索设备', 'Search devices'),
+                                          hint: nikoText('别名、设备 ID 或分组',
+                                              'Alias, device ID or group'))
+                                      .copyWith(
+                                          prefixIcon: Icon(Icons.search,
+                                              size: 19,
+                                              color: _muted(context))))),
+                        ]),
+                        const SizedBox(height: 10),
+                        Wrap(spacing: 8, runSpacing: 8, children: [
+                          for (final filter in ['all', 'favorites', 'recent'])
+                            ChoiceChip(
+                                showCheckmark: false,
+                                tooltip: filter == 'recent' ? nikoText('最近成功连接', 'Recent successful sessions') : filter == 'favorites' ? nikoText('收藏', 'Favorites') : nikoText('全部', 'All'),
+                                label: constraints.maxWidth < 360 && filter != 'all'
+                                    ? Icon(filter == 'favorites' ? Icons.star_outline_rounded : Icons.history_rounded,
+                                        size: 18, semanticLabel: filter == 'favorites' ? nikoText('收藏', 'Favorites') : nikoText('最近成功连接', 'Recent successful sessions'))
+                                    : ConstrainedBox(
+                                    constraints: BoxConstraints(maxWidth: constraints.maxWidth - 80),
+                                    child: Text(filter == 'all'
+                                    ? nikoText('全部', 'All')
+                                    : filter == 'favorites'
+                                        ? nikoText('收藏', 'Favorites')
+                                        : nikoText('最近', 'Recent'))),
+                                selected: _filter == filter,
+                                onSelected: (_) =>
+                                    setState(() => _filter = filter)),
+                        ]),
+                        const SizedBox(height: 18),
+                        if (_loading)
+                          const Padding(
+                              padding: EdgeInsets.all(32),
+                              child: Center(child: CircularProgressIndicator()))
+                        else if (filtered.isEmpty)
+                          _empty(context)
+                        else
+                          _grid(context, constraints, filtered),
+                        const SizedBox(height: 16),
+                        Center(
+                            child: TextButton(
+                                onPressed: () =>
+                                    _setLanguage(!NikoLanguage.english),
+                                child: Text(
+                                    NikoLanguage.english ? '中文' : 'English',
+                                    style: TextStyle(color: _muted(context))))),
                       ]),
-                  Wrap(
-                      spacing: 8,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        IconButton(
-                            tooltip: nikoText('设置', 'Settings'),
-                            onPressed: widget.onOpenSettings,
-                            icon: Icon(Icons.tune_rounded,
-                                color: _muted(context))),
-                        NikoPrimaryButton(
-                            compact: true,
-                            onPressed: _error != null ? null : () => _edit(),
-                            child: Row(mainAxisSize: MainAxisSize.min, children: [
-                              const Icon(Icons.add, size: 17),
-                              const SizedBox(width: 5),
-                              Text(nikoText('添加设备', 'Add device')),
-                            ])),
-                      ]),
-                ]),
-            const SizedBox(height: 22),
-            _hero(context, constraints),
-            if (_notice != null)
-              Padding(
-                  padding: const EdgeInsets.only(top: 14),
-                  child: Text(_notice!,
-                      style: TextStyle(color: _muted(context)))),
-            if (_error != null)
-              Padding(
-                  padding: const EdgeInsets.only(top: 14),
-                  child: NikoGlassCard(
-                      child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                        Text(_error!,
-                            style: TextStyle(
-                                color: Theme.of(context).colorScheme.error)),
-                        TextButton(
-                            onPressed: _refresh,
-                            child: Text(nikoText('重试', 'Retry'))),
-                      ]))),
-            const SizedBox(height: 20),
-            Row(children: [
-              Expanded(
-                  child: TextField(
-                      key: const Key('nikodesk-search'),
-                      controller: _search,
-                      onChanged: (_) => setState(() {}),
-                      decoration: nikoInput(
-                              nikoText('搜索设备', 'Search devices'),
-                              hint: nikoText('别名、设备 ID 或分组',
-                                  'Alias, device ID or group'))
-                          .copyWith(
-                              prefixIcon: Icon(Icons.search,
-                                  size: 19,
-                                  color: _muted(context))))),
-            ]),
-            const SizedBox(height: 10),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              for (final filter in ['all', 'favorites', 'recent'])
-                ChoiceChip(
-                    label: Text(filter == 'all'
-                        ? nikoText('全部', 'All')
-                        : filter == 'favorites'
-                            ? nikoText('收藏', 'Favorites')
-                            : nikoText('最近成功连接', 'Recent successful sessions')),
-                    selected: _filter == filter,
-                    onSelected: (_) => setState(() => _filter = filter)),
-            ]),
-            const SizedBox(height: 18),
-            if (_loading)
-              const Padding(
-                  padding: EdgeInsets.all(32),
-                  child: Center(child: CircularProgressIndicator()))
-            else if (filtered.isEmpty)
-              _empty(context)
-            else
-              _grid(context, constraints, filtered),
-            const SizedBox(height: 16),
-            Center(
-                child: TextButton(
-                    onPressed: () => _setLanguage(!NikoLanguage.english),
-                    child: Text(NikoLanguage.english ? '中文' : 'English',
-                        style: TextStyle(color: _muted(context))))),
-          ]),
-        )));
+                )));
   }
 
   Widget _hero(BuildContext context, BoxConstraints constraints) {
     final configured = _server?.config.isValid == true;
+    final idField = TextField(
+        key: const Key('nikodesk-hero-id'),
+        controller: _temporary,
+        enabled: _canConnect,
+        style: nikoIdStyle(context, fontSize: 15),
+        keyboardType: TextInputType.number,
+        decoration: nikoInput(nikoText('远端设备 ID', 'Remote device ID')));
+    final passwordField = TextField(
+        key: const Key('nikodesk-hero-password'),
+        controller: _password,
+        enabled: _canConnect,
+        obscureText: true,
+        autocorrect: false,
+        enableSuggestions: false,
+        enableIMEPersonalizedLearning: false,
+        decoration: nikoInput(nikoText('远端密码', 'Remote password')),
+        onSubmitted: _canConnect ? (_) => _connectHero() : null);
     final connectCard = NikoGlassCard(
         padding: const EdgeInsets.all(20),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -485,21 +612,27 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
               spacing: 12,
               runSpacing: 10,
               children: [
-                Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(nikoText('连接远程设备', 'Connect to a device'),
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 3),
-                      Text(
-                          nikoText('输入对方设备 ID，经你的私服建立加密会话。',
-                              'Enter the remote device ID; sessions go through your private server.'),
-                          style: TextStyle(
-                              fontSize: 12.5, color: _muted(context))),
-                    ]),
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(nikoText('连接远程设备', 'Connect to a device'),
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 3),
+                  Text(
+                      nikoText('输入对方 ID 和密码，由你的私服协调连接。',
+                          'Enter the remote ID and password. Your private server coordinates the connection.'),
+                      style: TextStyle(fontSize: 12.5, color: _muted(context))),
+                ]),
+                if (constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1) < 600)
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    for (final files in [false, true])
+                      ChoiceChip(
+                          label: Text(files ? nikoText('文件传输', 'Files') : nikoText('远程控制', 'Control')),
+                          selected: _fileTransfer == files,
+                          onSelected: !_canConnect ? null : (_) => setState(() => _fileTransfer = files)),
+                  ])
+                else
                 SegmentedButton<int>(
                     segments: [
                       ButtonSegment(
@@ -512,7 +645,9 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
                           icon: const Icon(Icons.folder_rounded, size: 16),
                           label: Text(nikoText('文件传输', 'Files'))),
                     ],
-                    selected: {_fileTransfer ? 1 : 0},
+                    selected: {
+                      _fileTransfer ? 1 : 0
+                    },
                     onSelectionChanged: !_canConnect
                         ? null
                         : (selection) => setState(
@@ -522,111 +657,102 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
           const SizedBox(height: 14),
           ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 680),
-              child: Row(children: [
-                Expanded(
-                    flex: 3,
-                    child: TextField(
-                        key: const Key('nikodesk-hero-id'),
-                        controller: _temporary,
-                        enabled: _canConnect,
-                        style: nikoIdStyle(context, fontSize: 15),
-                        keyboardType: TextInputType.number,
-                        decoration:
-                            nikoInput(nikoText('远端设备 ID', 'Remote device ID')))),
-                const SizedBox(width: 10),
-                Expanded(
-                    flex: 2,
-                    child: TextField(
-                        key: const Key('nikodesk-hero-password'),
-                        controller: _password,
-                        enabled: _canConnect,
-                        obscureText: true,
-                        decoration: nikoInput(nikoText('远端密码', 'Remote password')),
-                        onSubmitted: _canConnect
-                            ? (_) => _connectHero()
-                            : null)),
-              ])),
+              child: constraints.maxWidth < 520
+                  ? Column(children: [
+                      idField,
+                      const SizedBox(height: 12),
+                      passwordField,
+                    ])
+                  : Row(children: [
+                      Expanded(flex: 3, child: idField),
+                      const SizedBox(width: 10),
+                      Expanded(flex: 2, child: passwordField),
+                    ])),
           const SizedBox(height: 12),
-          Wrap(spacing: 14, runSpacing: 10, crossAxisAlignment: WrapCrossAlignment.center, children: [
-            Row(mainAxisSize: MainAxisSize.min, children: [
-              Switch(
-                  value: _forceRelay,
-                  onChanged: !_canConnect
-                      ? null
-                      : (value) => setState(() => _forceRelay = value)),
-              const SizedBox(width: 4),
-              Text(nikoText('强制私服中继', 'Force private relay'),
-                  style: TextStyle(fontSize: 12.5, color: _muted(context))),
-            ]),
-            NikoPrimaryButton(
-                key: const Key('nikodesk-hero-connect'),
-                onPressed: _canConnect ? _connectHero : null,
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(_fileTransfer ? Icons.folder_rounded : Icons.bolt_rounded,
-                      size: 17),
-                  const SizedBox(width: 6),
-                  Text(nikoText('连接', _fileTransfer ? 'Transfer' : 'Connect')),
+          Wrap(
+              spacing: 14,
+              runSpacing: 10,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                MergeSemantics(child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Switch(
+                      value: _forceRelay,
+                      onChanged: !_canConnect
+                          ? null
+                          : (value) => setState(() => _forceRelay = value)),
+                  const SizedBox(width: 4),
+                  Flexible(
+                      child: Text(nikoText('强制私服中继', 'Force private relay'),
+                          style: TextStyle(
+                              fontSize: 12.5, color: _muted(context)))),
                 ])),
-          ]),
+                NikoPrimaryButton(
+                    key: const Key('nikodesk-hero-connect'),
+                    onPressed: _canConnect ? _connectHero : null,
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(
+                          _fileTransfer
+                              ? Icons.folder_rounded
+                              : Icons.bolt_rounded,
+                          size: 17),
+                      const SizedBox(width: 6),
+                      Flexible(child: Text(nikoText(
+                          '连接', _fileTransfer ? 'Transfer' : 'Connect'))),
+                    ])),
+              ]),
         ]));
     final statusCard = NikoGlassCard(
         padding: const EdgeInsets.all(20),
-        child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: configured
-                            ? NikoPalette.success
-                            : NikoPalette.warning)),
-                const SizedBox(width: 8),
-                Expanded(
-                    child: Text(
-                        configured
-                            ? nikoText('私服配置完整', 'Private server configured')
-                            : nikoText('先连接自己的服务器',
-                                'Set up your private server'),
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700))),
-              ]),
-              const SizedBox(height: 10),
-              Text(configured ? _registration() : nikoText('需要 ID 服务器、中继地址与公钥。未配置时无法连接。',
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: configured
+                        ? NikoPalette.success
+                        : NikoPalette.warning)),
+            const SizedBox(width: 8),
+            Expanded(
+                child: Text(
+                    configured
+                        ? nikoText('私服配置完整', 'Private server configured')
+                        : nikoText('先连接自己的服务器', 'Set up your private server'),
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700))),
+          ]),
+          const SizedBox(height: 10),
+          Text(configured
+              ? _registration()
+              : nikoText('需要 ID 服务器、中继地址与公钥。未配置时无法连接。',
                   'Enter your ID server, relay and public key. Connections are disabled until configured.')),
-              const SizedBox(height: 6),
-              Text(
-                  _online.isEmpty
-                      ? nikoText('设备在线状态：未知 · 建立会话后再验证认证与加密',
-                          'Device availability: unknown · Authentication and encryption are checked per session')
-                      : nikoText('设备在线状态来自私服 · 认证与加密逐会话验证',
-                          'Availability comes from your server · Auth and encryption are checked per session'),
-                  style: TextStyle(fontSize: 12, color: _muted(context))),
-              const SizedBox(height: 12),
-              OutlinedButton(
-                  onPressed: _configure,
-                  child: Text(nikoText('配置服务器', 'Configure server'))),
-            ]));
+          const SizedBox(height: 6),
+          Text(
+              _online.isEmpty
+                  ? nikoText('设备在线状态：未知 · 建立会话后再验证认证与加密',
+                      'Device availability: unknown · Authentication and encryption are checked per session')
+                  : nikoText('设备在线状态来自私服 · 认证与加密逐会话验证',
+                      'Availability comes from your server · Auth and encryption are checked per session'),
+              style: TextStyle(fontSize: 12, color: _muted(context))),
+          const SizedBox(height: 12),
+          OutlinedButton(
+              onPressed: _configure,
+              child: Text(nikoText('配置服务器', 'Configure server'))),
+        ]));
     return constraints.maxWidth < 860
         ? Column(children: [
             connectCard,
             const SizedBox(height: 14),
             statusCard,
           ])
-        // IntrinsicHeight keeps both cards the same height at wide sizes;
-        // plain stretch leaves the shorter status card's border ragged.
-        : IntrinsicHeight(
-            child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(flex: 5, child: connectCard),
-              const SizedBox(width: 14),
-              Expanded(flex: 3, child: statusCard),
-            ]));
+        : Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(flex: 5, child: connectCard),
+            const SizedBox(width: 14),
+            Expanded(flex: 3, child: statusCard),
+          ]);
   }
 
   Widget _empty(BuildContext context) => NikoGlassCard(
@@ -636,8 +762,8 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-                gradient: LinearGradient(colors:
-                    NikoPalette.deviceAvatarGradient('nikodesk-empty')),
+                gradient: LinearGradient(
+                    colors: NikoPalette.deviceAvatarGradient('nikodesk-empty')),
                 borderRadius: BorderRadius.circular(NikoShapes.avatar)),
             child: const Icon(Icons.devices_rounded,
                 color: Colors.white, size: 28)),
@@ -655,149 +781,118 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
             _devices.isEmpty
                 ? nikoText('添加设备 ID，设置容易记住的别名。不会保存控制密码。',
                     'Add a device ID and a memorable alias. No control passwords are stored.')
-                : nikoText('试试其他关键词或筛选条件。',
-                    'Try another search or filter.'),
+                : nikoText('试试其他关键词或筛选条件。', 'Try another search or filter.'),
             textAlign: TextAlign.center,
             style: TextStyle(color: _muted(context), fontSize: 12.5)),
       ]));
 
-  Widget _grid(
-      BuildContext context, BoxConstraints constraints, List<DeviceEntry> devices) {
-    final columns =
-        ((constraints.maxWidth - 40) / 320).clamp(1, 4).toInt();
-    final cardWidth = (constraints.maxWidth - 40 - 14 * (columns - 1)) / columns;
-    return Wrap(
-        spacing: 14,
-        runSpacing: 14,
-        children: [
-          for (final device in devices)
-            SizedBox(
-                width: cardWidth,
-                child: NikoGlassCard(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(children: [
-                            Container(
-                                width: 42,
-                                height: 42,
-                                decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                        colors: NikoPalette
-                                            .deviceAvatarGradient(device.id)),
-                                    borderRadius: BorderRadius.circular(
-                                        NikoShapes.avatar)),
-                                child: const Icon(Icons.desktop_mac_rounded,
-                                    color: Colors.white, size: 21)),
-                            const SizedBox(width: 12),
-                            Expanded(
-                                child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                  Text(device.title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleSmall
-                                          ?.copyWith(
-                                              fontWeight: FontWeight.w700)),
-                                  const SizedBox(height: 2),
-                                  Text(device.id,
-                                      style: nikoIdStyle(context,
-                                          fontSize: 12.5,
-                                          color: _muted(context))),
-                                ])),
-                            _StarButton(
-                                favorite: device.favorite,
-                                color: Theme.of(context).colorScheme.primary,
-                                onTap: () => _favorite(device)),
-                          ]),
-                          const SizedBox(height: 12),
-                          Row(children: [
-                            if (device.group.isNotEmpty)
-                              Flexible(
-                                  fit: FlexFit.loose,
-                                  child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color:
-                                            _muted(context).withOpacity(.1),
-                                        borderRadius:
-                                            BorderRadius.circular(6),
-                                      ),
-                                      child: Text(device.group,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                              fontSize: 10.5,
-                                              fontWeight: FontWeight.w600,
-                                              color: _muted(context))))),
-                            const SizedBox(width: 8),
-                            _OnlineDot(
-                                state: _online[device.id],
-                                dense: true),
-                            const Spacer(),
-                            Flexible(
-                                child: Text(
-                                    device.lastConnectedAt == null
-                                        ? nikoText('尚无成功连接',
-                                            'No successful session yet')
-                                        : '${nikoText('上次连接', 'Last session')}: ${_date(device.lastConnectedAt!)}',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                        fontSize: 10.5,
-                                        color: _muted(context)))),
-                          ]),
-                          const SizedBox(height: 12),
-                          Row(children: [
-                            NikoPrimaryButton(
-                                key: Key('nikodesk-device-connect-${device.id}'),
+  Widget _grid(BuildContext context, BoxConstraints constraints,
+      List<DeviceEntry> devices) {
+    final available = constraints.maxWidth -
+        2 * (constraints.maxWidth < 520 ? 16 : NikoTokens.pagePadding);
+    final scale = MediaQuery.textScalerOf(context).scale(1);
+    final columns = (available / (320 * scale.clamp(1, 1.5))).clamp(1, 4).toInt();
+    final cardWidth = (available - 14 * (columns - 1)) / columns;
+    return Wrap(spacing: 14, runSpacing: 14, children: [
+      for (final device in devices)
+        SizedBox(
+            width: cardWidth,
+            child: NikoGlassCard(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: NikoPalette.deviceAvatarGradient(
+                                        device.id)),
+                                borderRadius:
+                                    BorderRadius.circular(NikoShapes.avatar)),
+                            child: const Icon(Icons.desktop_mac_rounded,
+                                color: Colors.white, size: 21)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                              Text(device.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleSmall
+                                      ?.copyWith(fontWeight: FontWeight.w700)),
+                              const SizedBox(height: 2),
+                              Text(device.id,
+                                  style: nikoIdStyle(context,
+                                      fontSize: 12.5, color: _muted(context))),
+                            ])),
+                        _StarButton(
+                            favorite: device.favorite,
+                            color: Theme.of(context).colorScheme.primary,
+                            onTap: () => _favorite(device)),
+                      ]),
+                      const SizedBox(height: 12),
+                      Wrap(spacing: 8, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                        if (device.group.isNotEmpty)
+                          Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                  color: _muted(context).withOpacity(.1),
+                                  borderRadius: BorderRadius.circular(6)),
+                              child: Text(device.group, maxLines: 1, overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: _muted(context)))),
+                        _OnlineDot(state: _online[device.id], dense: true),
+                        if (device.lastConnectedAt != null)
+                          Text('${nikoText('上次连接', 'Last session')}: ${_date(device.lastConnectedAt!)}',
+                              style: TextStyle(fontSize: 10.5, color: _muted(context))),
+                      ]),
+                      const SizedBox(height: 12),
+                      Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                        NikoPrimaryButton(
+                                key:
+                                    Key('nikodesk-device-connect-${device.id}'),
                                 compact: true,
                                 onPressed: _canConnect
                                     ? () => _connectWithDialog(device)
                                     : null,
                                 child: Text(nikoText('连接', 'Connect'))),
-                            const SizedBox(width: 8),
-                            _IconAction(
-                                tooltip: nikoText('文件传输', 'File transfer'),
-                                icon: Icons.folder_outlined,
-                                onTap: _canConnect
-                                    ? () => _connectWithDialog(
-                                        device,
-                                        fileTransfer: true)
-                                    : null),
-                            _IconAction(
-                                tooltip: nikoText('编辑', 'Edit'),
-                                icon: Icons.edit_outlined,
-                                onTap: () => _edit(device)),
-                            const Spacer(),
-                            PopupMenuButton<String>(
-                                tooltip: nikoText('更多', 'More'),
-                                color: nikoIsLight(context)
-                                    ? Colors.white
-                                    : NikoPalette.darkCard,
-                                onSelected: (value) =>
-                                    value == 'edit' ? _edit(device) : _remove(device),
-                                itemBuilder: (_) => [
-                                      PopupMenuItem(
-                                          value: 'edit',
-                                          child:
-                                              Text(nikoText('编辑', 'Edit'))),
-                                      PopupMenuItem(
-                                          value: 'remove',
-                                          child:
-                                              Text(nikoText('移除', 'Remove'))),
-                                    ]),
-                          ]),
-                        ]))),
-          ]);
+                        _IconAction(
+                            tooltip: nikoText('文件传输', 'File transfer'),
+                            icon: Icons.folder_outlined,
+                            onTap: _canConnect
+                                ? () => _connectWithDialog(device,
+                                    fileTransfer: true)
+                                : null),
+                        _IconAction(
+                            tooltip: nikoText('编辑', 'Edit'),
+                            icon: Icons.edit_outlined,
+                            onTap: () => _edit(device)),
+                        PopupMenuButton<String>(
+                            tooltip: nikoText('更多', 'More'),
+                            color: nikoIsLight(context)
+                                ? Colors.white
+                                : NikoPalette.darkCard,
+                            onSelected: (value) => value == 'edit'
+                                ? _edit(device)
+                                : _remove(device),
+                            itemBuilder: (_) => [
+                                  PopupMenuItem(
+                                      value: 'edit',
+                                      child: Text(nikoText('编辑', 'Edit'))),
+                                  PopupMenuItem(
+                                      value: 'remove',
+                                      child: Text(nikoText('移除', 'Remove'))),
+                                ]),
+                      ]),
+                    ]))),
+    ]);
   }
 
   Color _muted(BuildContext context) =>
@@ -817,12 +912,15 @@ class _StarButton extends StatelessWidget {
       {required this.favorite, required this.color, required this.onTap});
 
   @override
-  Widget build(BuildContext context) => IconButton(
-      visualDensity: VisualDensity.compact,
-      tooltip: favorite ? nikoText('取消收藏', 'Remove favorite') : nikoText('收藏', 'Favorite'),
+  Widget build(BuildContext context) => Semantics(toggled: favorite, child: IconButton(
+      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+      visualDensity: VisualDensity.standard,
+      tooltip: favorite
+          ? nikoText('取消收藏', 'Remove favorite')
+          : nikoText('收藏', 'Favorite'),
       onPressed: onTap,
       icon: Icon(favorite ? Icons.star_rounded : Icons.star_outline_rounded,
-          size: 20, color: favorite ? NikoPalette.warning : null));
+          size: 20, color: favorite ? NikoPalette.warning : null)));
 }
 
 class _IconAction extends StatelessWidget {
@@ -836,7 +934,8 @@ class _IconAction extends StatelessWidget {
   Widget build(BuildContext context) {
     final light = nikoIsLight(context);
     return IconButton(
-        visualDensity: VisualDensity.compact,
+        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+        visualDensity: VisualDensity.standard,
         tooltip: tooltip,
         onPressed: onTap,
         icon: Container(
@@ -875,17 +974,20 @@ class _OnlineDot extends StatelessWidget {
       color = NikoPalette.warning;
       label = nikoText('在线未知', 'Availability unknown');
     }
+    final foreground = !nikoIsLight(context) ? color
+        : state == true ? NikoPalette.lightSuccessText
+        : state == false ? NikoPalette.lightOfflineText : NikoPalette.lightWarningText;
     return Row(mainAxisSize: MainAxisSize.min, children: [
       Container(
           width: 7,
           height: 7,
           decoration: BoxDecoration(shape: BoxShape.circle, color: color)),
       const SizedBox(width: 5),
-      Text(label,
+      Flexible(child: Text(label,
           style: TextStyle(
               fontSize: dense ? 10.5 : 11,
               fontWeight: FontWeight.w600,
-              color: color)),
+              color: foreground))),
     ]);
   }
 }
@@ -913,13 +1015,17 @@ class _DeviceDialogState extends State<_DeviceDialog> {
 
   void _save() {
     if (!_form.currentState!.validate()) return;
-    Navigator.of(context).pop(DeviceEntry(
-        id: normalizeDeviceId(_id.text),
-        alias: _alias.text.trim(),
-        group: _group.text.trim(),
-        forceRelay: _relay,
-        favorite: widget.device?.favorite ?? false,
-        lastConnectedAt: widget.device?.lastConnectedAt));
+    final original = widget.device;
+    Navigator.of(context).pop(original == null
+        ? DeviceEntry(
+            id: normalizeDeviceId(_id.text),
+            alias: _alias.text.trim(),
+            group: _group.text.trim(),
+            forceRelay: _relay)
+        : original.copyWith(
+            alias: _alias.text.trim(),
+            group: _group.text.trim(),
+            forceRelay: _relay));
   }
 
   @override

@@ -24,6 +24,8 @@ import 'package:pull_down_button/pull_down_button.dart';
 
 import '../../common.dart';
 import '../../models/platform_model.dart';
+import '../../nikodesk/favorite_actions.dart';
+import '../../nikodesk/favorite_actions_native.dart';
 
 class PeerTabPage extends StatefulWidget {
   const PeerTabPage({Key? key}) : super(key: key);
@@ -401,6 +403,14 @@ class _PeerTabPageState extends State<PeerTabPage>
                 bind.mainLoadRecentPeers();
                 break;
               case 1:
+                if (const bool.fromEnvironment('NIKODESK')) {
+                  final saved = await nikoChangeNativeFavorites(peers.map(
+                      (peer) => NikoFavoritePeerRef(peer.id, peer.serverNamespace)),
+                      favorite: false);
+                  if (!saved) return;
+                  bind.mainLoadFavPeers();
+                  break;
+                }
                 final favs = (await bind.mainGetFav()).toList();
                 peers.map((p) {
                   favs.remove(p.id);
@@ -439,6 +449,15 @@ class _PeerTabPageState extends State<PeerTabPage>
         toolTip: translate('Add to Favorites'),
         onTap: () async {
           final peers = model.selectedPeers;
+          if (const bool.fromEnvironment('NIKODESK')) {
+            final saved = await nikoChangeNativeFavorites(peers.map(
+                (peer) => NikoFavoritePeerRef(peer.id, peer.serverNamespace)), favorite: true);
+            if (saved) {
+              model.setMultiSelectionMode(false);
+              showToast(translate('Successful'));
+            }
+            return;
+          }
           final favs = (await bind.mainGetFav()).toList();
           for (var p in peers) {
             if (!favs.contains(p.id)) {

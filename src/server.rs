@@ -133,17 +133,21 @@ pub fn new() -> ServerPtr {
         services: HashMap::new(),
         id_count: hbb_common::rand::random::<i32>() % 1000 + 1000, // ensure positive
     };
-    server.add_service(Box::new(audio_service::new()));
+    #[cfg(feature = "nikodesk")]
+    let system_desktop = crate::nikodesk::background::is_system_worker();
+    #[cfg(not(feature = "nikodesk"))]
+    let system_desktop = false;
+    if !system_desktop { server.add_service(Box::new(audio_service::new())); }
     #[cfg(not(target_os = "ios"))]
     {
         server.add_service(Box::new(display_service::new()));
-        server.add_service(Box::new(clipboard_service::new(
+        if !system_desktop { server.add_service(Box::new(clipboard_service::new(
             clipboard_service::NAME.to_owned(),
-        )));
+        ))); }
         #[cfg(feature = "unix-file-copy-paste")]
-        server.add_service(Box::new(clipboard_service::new(
+        if !system_desktop { server.add_service(Box::new(clipboard_service::new(
             clipboard_service::FILE_NAME.to_owned(),
-        )));
+        ))); }
     }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
@@ -160,7 +164,7 @@ pub fn new() -> ServerPtr {
         }
     }
     #[cfg(all(target_os = "windows", feature = "flutter"))]
-    {
+    if !system_desktop {
         match printer_service::init(&crate::get_app_name()) {
             Ok(()) => {
                 log::info!("printer service initialized");
@@ -175,6 +179,17 @@ pub fn new() -> ServerPtr {
     }
     // Terminal service is created per connection, not globally
     Arc::new(RwLock::new(server))
+}
+
+/// Dedicated granted worker: no generic main IPC, broker kill, CM launch,
+/// install/elevation or codec-check subprocess. The real rendezvous/connection,
+/// authentication, capture and input services are used unchanged below.
+#[cfg(all(feature = "nikodesk", windows))]
+pub(crate) async fn start_system_desktop_worker() {
+    if !crate::nikodesk::background::is_system_worker() { return; }
+    crate::common::set_server_running(true);
+    input_service::fix_key_down_timeout_loop();
+    crate::RendezvousMediator::start_all().await;
 }
 
 async fn accept_connection_(

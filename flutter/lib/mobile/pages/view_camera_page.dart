@@ -42,10 +42,12 @@ class ViewCameraPage extends StatefulWidget {
       required this.id,
       this.password,
       this.isSharedPassword,
+      this.serverNamespace,
       this.forceRelay})
       : super(key: key);
 
   final String id;
+  final String? serverNamespace;
   final String? password;
   final bool? isSharedPassword;
   final bool? forceRelay;
@@ -91,6 +93,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
       widget.id,
       isViewCamera: true,
       password: widget.password,
+      serverNamespace: widget.serverNamespace,
       isSharedPassword: widget.isSharedPassword,
       forceRelay: widget.forceRelay,
     );

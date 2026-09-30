@@ -29,6 +29,7 @@ import 'mobile/pages/home_page.dart';
 import 'mobile/pages/server_page.dart';
 import 'mobile/widgets/deploy_dialog.dart';
 import 'models/platform_model.dart';
+import 'nikodesk/mobile_home.dart';
 import 'nikodesk/theme.dart';
 
 /// Basic window and launch properties.
@@ -40,7 +41,7 @@ Future<void> main(List<String> args) async {
   earlyAssert();
   WidgetsFlutterBinding.ensureInitialized();
 
-  debugPrint("launch args: $args");
+  debugPrint("launch argument count: ${args.length}");
   kBootArgs = List.from(args);
 
   if (!isDesktop) {
@@ -289,12 +290,7 @@ void runConnectionManagerScreen() async {
   // incoming-confirmation UI matches the product instead of upstream blue.
   _runApp(
     '',
-    Theme(
-      data: nikoTheme(MyTheme.currentThemeMode() == ThemeMode.dark
-          ? Brightness.dark
-          : Brightness.light),
-      child: const DesktopServerPage(),
-    ),
+    const DesktopServerPage(),
     MyTheme.currentThemeMode(),
   );
   final hide = await bind.cmGetConfig(name: "hide_cm") == 'true';
@@ -369,8 +365,10 @@ void _runApp(
       navigatorKey: globalKey,
       debugShowCheckedModeBanner: false,
       title: title,
-      theme: MyTheme.lightTheme,
-      darkTheme: MyTheme.darkTheme,
+      theme: bind.mainGetAppNameSync() == 'NikoDesk'
+          ? nikoTheme(Brightness.light) : MyTheme.lightTheme,
+      darkTheme: bind.mainGetAppNameSync() == 'NikoDesk'
+          ? nikoTheme(Brightness.dark) : MyTheme.darkTheme,
       themeMode: themeMode,
       home: home,
       localizationsDelegates: const [
@@ -506,14 +504,18 @@ class _AppState extends State<App> with WidgetsBindingObserver {
           title: isWeb
               ? '${bind.mainGetAppNameSync()} Web Client V2 (Preview)'
               : bind.mainGetAppNameSync(),
-          theme: MyTheme.lightTheme,
-          darkTheme: MyTheme.darkTheme,
+          theme: bind.mainGetAppNameSync() == 'NikoDesk'
+          ? nikoTheme(Brightness.light) : MyTheme.lightTheme,
+          darkTheme: bind.mainGetAppNameSync() == 'NikoDesk'
+          ? nikoTheme(Brightness.dark) : MyTheme.darkTheme,
           themeMode: MyTheme.currentThemeMode(),
           home: isDesktop
               ? const DesktopTabPage()
               : isWeb
                   ? WebHomePage()
-                  : HomePage(),
+                  : isAndroid && bind.mainGetAppNameSync() == 'NikoDesk'
+                      ? const NikoMobileHome()
+                      : HomePage(),
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,

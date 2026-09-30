@@ -14,6 +14,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../common.dart';
 import '../generated_bridge.dart';
+import '../nikodesk/device_store.dart';
 
 final class RgbaFrame extends Struct {
   @Uint32()
@@ -167,7 +168,9 @@ class PlatformFFI {
         // Start ipc service for uri links.
         _ffiBind.mainStartIpcUrlServer();
       }
-      _startListenEvent(_ffiBind); // global event
+      const nikoBuild = bool.fromEnvironment('NIKODESK');
+      final deferAndroidEvents = isAndroid && nikoBuild;
+      if (!deferAndroidEvents) _startListenEvent(_ffiBind);
       try {
         if (isAndroid) {
           // Android file transfer uses app-specific storage. User-selected
@@ -218,12 +221,11 @@ class PlatformFFI {
         name = macOsInfo.computerName;
         id = macOsInfo.systemGUID ?? '';
       }
-      if (isAndroid || isIOS) {
+      if ((isAndroid && !nikoBuild) || isIOS) {
         debugPrint(
             '_appType:$_appType,info1-id:$id,info2-name:$name,dir:$_dir,homeDir:$_homeDir');
       } else {
-        debugPrint(
-            '_appType:$_appType,dir:$_dir');
+        debugPrint('_appType:$_appType,dir:$_dir');
       }
       if (desktopType == DesktopType.cm) {
         await _ffiBind.cmInit();
@@ -235,6 +237,10 @@ class PlatformFFI {
         appDir: _dir,
         customClientConfig: '',
       );
+      if (deferAndroidEvents) {
+        DeviceStore.configureAndroidDirectory(Directory('$_dir/NikoDesk'));
+        _startListenEvent(_ffiBind);
+      }
     } catch (e) {
       debugPrintStack(label: 'initialize failed: $e');
     }

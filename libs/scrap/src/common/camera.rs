@@ -26,10 +26,16 @@ lazy_static::lazy_static! {
     static ref SYNC_CAMERA_DISPLAYS: Arc<Mutex<Vec<DisplayInfo>>> = Arc::new(Mutex::new(Vec::new()));
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+#[cfg(not(any(target_os = "windows", target_os = "linux", all(target_os = "macos", feature = "nikodesk"))))]
 const CAMERA_NOT_SUPPORTED: &str = "This platform doesn't support camera yet";
 
 pub struct Cameras;
+
+#[cfg(all(target_os = "macos", feature = "nikodesk"))]
+#[path = "macos_camera.rs"]
+pub(crate) mod macos_camera;
+#[cfg(all(target_os = "macos", feature = "nikodesk"))]
+pub use macos_camera::{authorization_status, CameraAuthorization, CameraDevice, CameraFormat, CaptureSelection, PermissionRequest};
 
 // pre-condition
 pub fn primary_camera_exists() -> bool {
@@ -158,7 +164,43 @@ impl Cameras {
     }
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+#[cfg(all(target_os = "macos", feature = "nikodesk"))]
+impl Cameras {
+    pub fn devices() -> ResultType<Vec<CameraDevice>> { Ok(macos_camera::enumerate()?) }
+    pub fn all_info() -> ResultType<Vec<DisplayInfo>> {
+        // Metadata only. No input/session is created during discovery.
+        let devices = Self::devices()?;
+        let mut x = 0;
+        let infos = devices.iter().filter_map(|device| {
+            let format = device.formats.iter().filter(|f| f.width <= 1920 && f.height <= 1080)
+                .max_by_key(|f| u64::from(f.width) * u64::from(f.height))?;
+            let info = DisplayInfo { x, y: 0, name: device.name.clone(), width: format.width as i32,
+                height: format.height as i32, online: true, scale: 1.0,
+                original_resolution: Some(Resolution { width: format.width as i32, height: format.height as i32,
+                    ..Default::default() }).into(), ..Default::default() };
+            x += format.width as i32;
+            Some(info)
+        }).collect::<Vec<_>>();
+        *SYNC_CAMERA_DISPLAYS.lock().unwrap() = infos.clone();
+        Ok(infos)
+    }
+    pub fn exists(index: usize) -> bool { Self::get_sync_cameras().get(index).is_some() }
+    pub fn get_camera_resolution(index: usize) -> ResultType<Resolution> {
+        let infos = Self::get_sync_cameras();
+        let info = infos.get(index).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Camera metadata is unavailable"))?;
+        Ok(Resolution { width: info.width, height: info.height, ..Default::default() })
+    }
+    pub fn get_sync_cameras() -> Vec<DisplayInfo> { SYNC_CAMERA_DISPLAYS.lock().unwrap().clone() }
+    pub fn get_capturer(_current: usize) -> ResultType<Box<dyn TraitCapturer>> {
+        // A mutable roster index cannot identify a locally approved device.
+        bail!("Niko camera capture requires an exact locally approved uniqueID, format and epoch")
+    }
+    pub fn get_approved_capturer(selection: &CaptureSelection) -> ResultType<Box<dyn TraitCapturer>> {
+        Ok(Box::new(CameraCapturer { inner: macos_camera::CameraSession::start(selection)? }))
+    }
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "linux", all(target_os = "macos", feature = "nikodesk"))))]
 impl Cameras {
     pub fn all_info() -> ResultType<Vec<DisplayInfo>> {
         return Ok(Vec::new());
@@ -188,7 +230,10 @@ pub struct CameraCapturer {
     last_data: Vec<u8>, // for faster compare and copy
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+#[cfg(all(target_os = "macos", feature = "nikodesk"))]
+pub struct CameraCapturer { inner: macos_camera::CameraSession }
+
+#[cfg(not(any(target_os = "windows", target_os = "linux", all(target_os = "macos", feature = "nikodesk"))))]
 pub struct CameraCapturer;
 
 impl CameraCapturer {
@@ -204,7 +249,7 @@ impl CameraCapturer {
     }
 
     #[allow(dead_code)]
-    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    #[cfg(not(any(target_os = "windows", target_os = "linux", all(target_os = "macos", feature = "nikodesk"))))]
     fn new(_current: usize) -> ResultType<Self> {
         bail!(CAMERA_NOT_SUPPORTED);
     }
@@ -258,7 +303,14 @@ impl TraitCapturer for CameraCapturer {
         }
     }
 
-    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    #[cfg(all(target_os = "macos", feature = "nikodesk"))]
+    fn frame<'a>(&'a mut self, timeout: std::time::Duration) -> std::io::Result<Frame<'a>> {
+        Ok(Frame::PixelBuffer(crate::PixelBuffer::from_camera(self.inner.frame(timeout)?)))
+    }
+    #[cfg(all(target_os = "macos", feature = "nikodesk"))]
+    fn stop_capture(&mut self) -> std::io::Result<()> { self.inner.stop() }
+
+    #[cfg(not(any(target_os = "windows", target_os = "linux", all(target_os = "macos", feature = "nikodesk"))))]
     fn frame<'a>(&'a mut self, _timeout: std::time::Duration) -> std::io::Result<Frame<'a>> {
         Err(io::Error::new(
             io::ErrorKind::Other,

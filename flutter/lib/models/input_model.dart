@@ -1589,7 +1589,11 @@ class InputModel {
 
     if (_queryOtherWindowCoords) {
       Future.delayed(Duration.zero, () async {
-        _windowRect = await fillRemoteCoordsAndGetCurFrame(_remoteWindowCoords);
+        _windowRect = const bool.fromEnvironment('NIKODESK')
+            ? await fillRemoteCoordsAndGetCurFrame(_remoteWindowCoords,
+                peerId: parent.target?.id,
+                serverNamespace: parent.target?.serverNamespace)
+            : await fillRemoteCoordsAndGetCurFrame(_remoteWindowCoords);
       });
       _queryOtherWindowCoords = false;
     }
@@ -1630,9 +1634,13 @@ class InputModel {
   }
 
   static Future<Rect?> fillRemoteCoordsAndGetCurFrame(
-      List<RemoteWindowCoords> remoteWindowCoords) async {
-    final coords =
-        await rustDeskWinManager.getOtherRemoteWindowCoordsFromMain();
+      List<RemoteWindowCoords> remoteWindowCoords,
+      {String? peerId, String? serverNamespace}) async {
+    final coords = const bool.fromEnvironment('NIKODESK')
+        ? await rustDeskWinManager.getOtherRemoteWindowCoordsFromMain(
+            peerId: peerId, serverNamespace: serverNamespace)
+        : await rustDeskWinManager.getOtherRemoteWindowCoordsFromMain();
+    if (const bool.fromEnvironment('NIKODESK')) remoteWindowCoords.clear();
     final wc = WindowController.fromWindowId(kWindowId!);
     try {
       final frame = await wc.getFrame();
