@@ -53,7 +53,7 @@ core-foundation-sys = "0.8.2" # For linking to CoreFoundation.framework and hand
 mach2 = "0.4" # For access to mach_timebase type.
 
 [target.'cfg(target_os = "macos")'.dependencies]
-coreaudio-rs = { version = "0.11", default-features = false, features = ["audio_unit", "core_audio"] }
+coreaudio-rs-nikodesk = { package = "coreaudio-rs", version = "=0.11.3", path = "../nikodesk_coreaudio", default-features = false, features = ["audio_unit", "core_audio"] }
 cidre = { git = "https://github.com/yury/cidre.git", rev = "f05c428", features = [
     "blocks",
     "async",

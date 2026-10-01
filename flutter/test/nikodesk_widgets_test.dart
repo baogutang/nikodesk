@@ -159,6 +159,47 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets(
+      'a server change while the credential dialog is open cannot retarget its device',
+      (tester) async {
+    final first = 'a' * 64, second = 'b' * 64;
+    final scopedStore = DeviceStore(directory, serverNamespace: first);
+    await tester.runAsync(() =>
+        scopedStore.save(const DeviceEntry(id: '123456', alias: 'Office')));
+    final gateway = _ServerDouble(ServerSnapshot(
+        PrivateServerConfig(
+            'nas:21116', 'nas:21117', base64Encode(List.filled(32, 1))),
+        1,
+        true,
+        namespace: first));
+    var calls = 0;
+    await loadPage(
+        tester,
+        NikoDevicePage(
+            store: scopedStore,
+            gateway: gateway,
+            native: false,
+            onConnect: (_, __, ___, {isFileTransfer = false, password}) async {
+              calls++;
+            }));
+    await tester
+        .ensureVisible(find.byKey(const Key('nikodesk-device-connect-123456')));
+    await tester.tap(find.byKey(const Key('nikodesk-device-connect-123456')));
+    await tester.pumpAndSettle();
+    gateway.snapshot = ServerSnapshot(
+        PrivateServerConfig('other-nas:21116', 'other-nas:21117',
+            base64Encode(List.filled(32, 2))),
+        1,
+        true,
+        namespace: second);
+    await tester.enterText(
+        find.byKey(const Key('nikodesk-connect-password')), 'fixture-password');
+    await tester.tap(find.byKey(const Key('nikodesk-connect-submit')));
+    await tester.pumpAndSettle();
+    expect(calls, 0);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('an empty password in the dialog never dispatches a session',
       (tester) async {
     final gateway = _ServerDouble(ServerSnapshot(

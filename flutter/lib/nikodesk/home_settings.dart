@@ -8,6 +8,11 @@ import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'autostart.dart';
+import 'auto_lock_settings.dart';
+import 'privacy_settings.dart';
+import 'virtual_display_settings.dart';
+import 'wake_proxy_settings.dart';
+import 'mac_background_settings.dart';
 import 'policy.dart';
 import 'updater.dart';
 import 'server_gateway.dart';
@@ -440,6 +445,22 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
             ]),
           ]),
           const SizedBox(height: 16),
+          if (_native && (Platform.isMacOS || Platform.isWindows)) ...[
+            if (Platform.isMacOS) ...[
+              _section(context, nikoText('无人值守', 'Unattended access'), [const NikoMacBackgroundSettings()]),
+              const SizedBox(height: 16),
+            ],
+            _section(context, nikoText('会话安全', 'Session security'), [
+              const NikoAutoLockSettings(),
+              const SizedBox(height: 12),
+              const NikoPrivacySettings(),
+              const SizedBox(height: 16),
+              const NikoVirtualDisplaySettings(),
+            ]),
+            const SizedBox(height: 16),
+            _section(context, nikoText('远程开机', 'Remote wake'), [const NikoWakeProxySettings()]),
+            const SizedBox(height: 16),
+          ],
           _section(context, nikoText('外观', 'Appearance'), [
             Text(nikoText('主题', 'Theme'),
                 style: Theme.of(context)

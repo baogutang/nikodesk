@@ -60,10 +60,19 @@ fn locally<T>(
     namespace: &str,
     operation: impl FnOnce(Repository) -> ResultType<T>,
 ) -> ResultType<T> {
-    if !cfg!(any(target_os = "windows", target_os = "macos"))
+    if !cfg!(any(target_os = "windows", target_os = "macos", target_os = "android"))
         || super::background::is_system_worker()
     {
         bail!("unsupported_capability_policy");
+    }
+    #[cfg(target_os = "android")]
+    {
+        let app_uid=super::voice::android::normal_user_uid()
+            .map_err(|_|hbb_common::anyhow::anyhow!("unsupported_capability_policy"))?;
+        let uid=unsafe {hbb_common::libc::getuid()};
+        if app_uid<=0 || uid==0 || uid!=unsafe {hbb_common::libc::geteuid()} || uid!=app_uid as u32 {
+            bail!("unsupported_capability_policy");
+        }
     }
     if server_scope::ServerScope::from_namespace(namespace).is_none() {
         bail!("invalid_namespace");
@@ -82,10 +91,17 @@ pub(crate) fn get(namespace: &str) -> String {
 
 pub(crate) fn set(namespace: &str, revision: &str, capability: &str, enabled: bool) -> String {
     wire(kind(capability).and_then(|kind| {
+        if !kind_available(kind,cfg!(any(target_os="macos",target_os="windows")),cfg!(target_os="android")) {
+            bail!("unsupported_capability_policy");
+        }
         locally(namespace, |repository| {
             repository.set_allow_requests(namespace, revision, kind, enabled)
         })
     }))
+}
+
+fn kind_available(kind:Kind,desktop:bool,android:bool)->bool {
+    desktop || android && kind==Kind::Voice
 }
 
 #[cfg(test)]
@@ -115,6 +131,16 @@ mod tests {
         for invalid in ["Terminal", "shell", "", "voice\0", "camera:any"] {
             assert!(kind(invalid).is_err());
         }
+    }
+
+    #[test]
+    fn android_controller_can_change_only_its_voice_request_policy() {
+        for kind in [Kind::Terminal,Kind::Tunnel,Kind::Camera,Kind::Voice] {
+            assert!(kind_available(kind,true,false));
+            assert_eq!(kind_available(kind,false,true),kind==Kind::Voice);
+            assert!(!kind_available(kind,false,false));
+        }
+        assert_eq!(kind("voice").unwrap(),Kind::Voice);
     }
     #[test]
     fn errors_are_bounded_without_private_paths_or_raw_messages() {

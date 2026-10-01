@@ -288,6 +288,24 @@ fn bytes(file: &File, limit: u64) -> ResultType<Vec<u8>> {
     }
     Ok(content)
 }
+
+/// Read the provisioned profile through held, read-only SYSTEM storage handles.
+/// Ordinary-user readers change DACLs and must never be used by this worker.
+pub(crate) fn read_machine_runtime(root: &Path) -> ResultType<hbb_common::config::MachineRuntimeProfile> {
+    use hbb_common::config::{MachineEncryptionContext, MachineRuntimeProfile};
+    struct SecretBytes(Vec<u8>);
+    impl Drop for SecretBytes {
+        fn drop(&mut self) { hbb_common::sodiumoxide::utils::memzero(&mut self.0); }
+    }
+    if !super::is_system_worker() { bail!("Not a granted system desktop worker"); }
+    let _directory = protected_file(root, true, true)?;
+    let identity = protected_file(&root.join("NikoDesk.toml"), false, true)?;
+    let settings = protected_file(&root.join("NikoDesk2.toml"), false, true)?;
+    let identity_bytes = SecretBytes(bytes(&identity, 128 * 1024)?);
+    let settings_bytes = SecretBytes(bytes(&settings, 128 * 1024)?);
+    let context = MachineEncryptionContext::from_os_machine_uid()?;
+    MachineRuntimeProfile::decode(context, &identity_bytes.0, &settings_bytes.0)
+}
 pub(crate) struct Layout {
     pub config: PathBuf,
     install: PathBuf,
@@ -714,6 +732,9 @@ pub(crate) fn run(args: Vec<String>) -> ResultType<()> {
             LOAD_LIBRARY_SEARCH_APPLICATION_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32,
         )?;
         SetDllDirectoryW(PCWSTR(wide("").as_ptr()))?;
+    }
+    if let Some(code) = crate::nikodesk::privacy_windows::helper_entry() {
+        return if code == 0 { Ok(()) } else { Err(anyhow!("privacy_helper_ended_unconfirmed")) };
     }
     if args == ["--service"] {
         assert_system(Some(0))?;

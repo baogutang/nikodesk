@@ -21,6 +21,11 @@ use sodiumoxide::crypto::sign;
 
 mod permanent_password;
 mod trusted_root;
+mod machine_profile;
+pub use machine_profile::*;
+mod machine_runtime;
+pub use machine_runtime::MachineRuntimeProfile;
+pub(crate) use trusted_root::runtime_snapshot as machine_runtime_snapshot;
 
 pub use permanent_password::{
     compute_permanent_password_h1, decode_permanent_password_h1_from_storage,
@@ -489,6 +494,9 @@ fn patch(path: PathBuf) -> PathBuf {
 
 impl Config2 {
     fn load() -> Config2 {
+        if let Some(profile) = machine_runtime_snapshot() {
+            return profile.settings_snapshot();
+        }
         let mut config = Config::load_::<Config2>("2");
         let mut store = false;
         if let Some(mut socks) = config.socks {
@@ -605,6 +613,9 @@ impl Config {
     }
 
     fn load() -> Config {
+        if let Some(profile) = machine_runtime_snapshot() {
+            return profile.identity_snapshot();
+        }
         let mut config = Config::load_::<Config>("");
         let mut store = false;
         if let Err(err) = Self::validate_or_decrypt_permanent_password_storage(&mut config) {
@@ -807,6 +818,21 @@ impl Config {
     /// Existing clients never set this and retain their original path selection.
     pub fn initialize_trusted_storage_root(root: PathBuf) -> crate::ResultType<()> {
         trusted_root::install(root)
+    }
+
+    /// Caller has validated its SYSTEM role, root ACL and both protected file
+    /// handles. Install the root and verified snapshot before all Config access.
+    pub fn initialize_trusted_machine_runtime(
+        root: PathBuf,
+        profile: MachineRuntimeProfile,
+    ) -> crate::ResultType<()> {
+        trusted_root::install_runtime(root, profile)
+    }
+
+    /// Public service settings from the same verified startup snapshot.
+    /// Absence never selects a filesystem path or a generated configuration.
+    pub fn trusted_machine_runtime_options() -> Option<HashMap<String, String>> {
+        machine_runtime_snapshot().map(|profile| profile.settings_snapshot().options)
     }
 
     /// Get the log directory path.
@@ -1121,6 +1147,9 @@ impl Config {
     }
 
     pub fn get_key_pair() -> KeyPair {
+        if let Some(profile) = machine_runtime_snapshot() {
+            return profile.key_pair();
+        }
         // lock here to make sure no gen_keypair more than once
         // no use of CONFIG directly here to ensure no recursive calling in Config::load because of password dec which calling this function
         let mut lock = KEY_PAIR.lock().unwrap();
@@ -1150,6 +1179,9 @@ impl Config {
     /// Get existing key pair without generating a new one.
     /// Returns None if no key pair exists in cache or config file.
     pub fn get_existing_key_pair() -> Option<KeyPair> {
+        if let Some(profile) = machine_runtime_snapshot() {
+            return Some(profile.key_pair());
+        }
         let mut lock = KEY_PAIR.lock().unwrap();
         if let Some(p) = lock.as_ref() {
             return Some(p.clone());

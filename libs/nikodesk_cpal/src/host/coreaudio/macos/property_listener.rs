@@ -1,4 +1,5 @@
 //! Helper code for registering audio object property listeners.
+use super::coreaudio;
 use super::coreaudio::sys::{
     AudioObjectAddPropertyListener, AudioObjectID, AudioObjectPropertyAddress,
     AudioObjectRemovePropertyListener, OSStatus,

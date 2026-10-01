@@ -449,11 +449,13 @@ fn displays_to_msg(displays: Vec<DisplayInfo>) -> Message {
     };
     pi.displays = displays.clone();
 
-    #[cfg(windows)]
+    #[cfg(all(windows,not(feature="nikodesk")))]
     if crate::platform::is_installed() {
         let m = crate::virtual_display_manager::get_platform_additions();
         pi.platform_additions = serde_json::to_string(&m).unwrap_or_default();
     }
+    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+    { pi.platform_additions = serde_json::to_string(&crate::nikodesk::virtual_display::additions()).unwrap_or_default(); }
 
     // current_display should not be used in server.
     // It is set to 0 for compatibility with old clients.
@@ -792,6 +794,9 @@ pub fn try_get_displays_add_amyuni_headless() -> ResultType<Vec<Display>> {
 #[cfg(windows)]
 pub fn try_get_displays_(add_amyuni_headless: bool) -> ResultType<Vec<Display>> {
     let mut displays = Display::all()?;
+    // NikoDesk creates only connection-owned screens after local approval.
+    // Never let upstream's empty-screen fallback install or use another IDD.
+    if cfg!(feature="nikodesk") { return Ok(displays); }
 
     // Do not add virtual display if the platform is not installed or the virtual display is not supported.
     if !crate::platform::is_installed() || !virtual_display_manager::is_virtual_display_supported()

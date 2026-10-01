@@ -3,6 +3,7 @@ import 'connect_dialog.dart';
 import 'server_gateway.dart';
 
 import 'session_log.dart';
+import 'session_audit_view.dart';
 import 'theme.dart';
 import 'ui.dart';
 
@@ -30,17 +31,22 @@ class _NikoSessionHistoryPageState extends State<NikoSessionHistoryPage> {
   bool _loading = true;
   String? _error;
   int _refreshGeneration = 0;
+  bool _showNativeHistory = true;
+  bool get _nativeHistory =>
+      const bool.fromEnvironment('NIKODESK') && widget.store == null;
 
   @override
   void initState() {
     super.initState();
-    _refresh();
+    if (!_nativeHistory) _refresh();
   }
 
   @override
   void didUpdateWidget(covariant NikoSessionHistoryPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.active && !oldWidget.active) _refresh();
+    if (widget.active &&
+        !oldWidget.active &&
+        (!_nativeHistory || !_showNativeHistory)) _refresh();
   }
 
   Future<void> _refresh() async {
@@ -122,12 +128,41 @@ class _NikoSessionHistoryPageState extends State<NikoSessionHistoryPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_nativeHistory && _showNativeHistory) {
+      return FocusTraversalGroup(
+          child: Column(children: [
+        Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              key: const ValueKey('niko-history-show-attempts'),
+              onPressed: () {
+                setState(() => _showNativeHistory = false);
+                _refresh();
+              },
+              icon: const Icon(Icons.history_rounded),
+              label: Text(nikoText('查看发起记录', 'View initiation history')),
+            )),
+        Expanded(
+            child: NikoNativeSessionHistory(
+                namespace: _store.serverNamespace ?? '',
+                active: widget.active)),
+      ]));
+    }
     final muted =
         nikoIsLight(context) ? NikoPalette.lightMuted : NikoPalette.darkMuted;
     return FocusTraversalGroup(
         child: ListView(
             padding: const EdgeInsets.all(NikoTokens.pagePadding),
             children: [
+          if (_nativeHistory)
+            Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  key: const ValueKey('niko-history-show-results'),
+                  onPressed: () => setState(() => _showNativeHistory = true),
+                  icon: const Icon(Icons.fact_check_outlined),
+                  label: Text(nikoText('查看会话结果', 'View session results')),
+                )),
           Wrap(
               alignment: WrapAlignment.spaceBetween,
               crossAxisAlignment: WrapCrossAlignment.center,
@@ -217,45 +252,85 @@ class _NikoSessionHistoryPageState extends State<NikoSessionHistoryPage> {
                 padding: const EdgeInsets.all(14),
                 child: LayoutBuilder(builder: (context, constraints) {
                   final avatar = Container(
-                      width: 38, height: 38,
+                      width: 38,
+                      height: 38,
                       decoration: BoxDecoration(
-                          gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
-                              colors: NikoPalette.deviceAvatarGradient(entry.id)),
-                          borderRadius: BorderRadius.circular(NikoShapes.avatar)),
-                      child: Icon(entry.fileTransfer ? Icons.folder_rounded : Icons.desktop_windows_rounded,
-                          color: Colors.white, size: 18));
-                  final details = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(entry.title, maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 2),
-                    Text('${entry.id} · ${_time(entry.startedAt)}${entry.forceRelay ? ' · ${nikoText('中继', 'relay')}' : ''}',
-                        style: TextStyle(fontSize: 11.5, color: muted)),
-                  ]);
-                  final actions = Wrap(spacing: 6, runSpacing: 8,
-                      crossAxisAlignment: WrapCrossAlignment.center, children: [
-                    NikoPrimaryButton(compact: true, onPressed: () => _reconnect(entry),
-                        child: Text(nikoText(entry.fileTransfer ? '传文件' : '连接', entry.fileTransfer ? 'Files' : 'Connect'))),
-                    IconButton(
-                        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-                        visualDensity: VisualDensity.standard,
-                        tooltip: nikoText('删除该记录', 'Delete record'),
-                        onPressed: () async {
-                          try {
-                            await _store.removeAt(entry.startedAt);
-                            await _refresh();
-                          } catch (_) {}
-                        },
-                        icon: Icon(Icons.close_rounded, size: 18, color: muted)),
-                  ]);
-                  if (constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1) < 500) {
-                    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                      Row(children: [avatar, const SizedBox(width: 12), Expanded(child: details)]),
-                      const SizedBox(height: 12),
-                      Align(alignment: Alignment.centerRight, child: actions),
-                    ]);
+                          gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors:
+                                  NikoPalette.deviceAvatarGradient(entry.id)),
+                          borderRadius:
+                              BorderRadius.circular(NikoShapes.avatar)),
+                      child: Icon(
+                          entry.fileTransfer
+                              ? Icons.folder_rounded
+                              : Icons.desktop_windows_rounded,
+                          color: Colors.white,
+                          size: 18));
+                  final details = Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(entry.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 2),
+                        Text(
+                            '${entry.id} · ${_time(entry.startedAt)}${entry.forceRelay ? ' · ${nikoText('中继', 'relay')}' : ''}',
+                            style: TextStyle(fontSize: 11.5, color: muted)),
+                      ]);
+                  final actions = Wrap(
+                      spacing: 6,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        NikoPrimaryButton(
+                            compact: true,
+                            onPressed: () => _reconnect(entry),
+                            child: Text(nikoText(
+                                entry.fileTransfer ? '传文件' : '连接',
+                                entry.fileTransfer ? 'Files' : 'Connect'))),
+                        IconButton(
+                            constraints: const BoxConstraints(
+                                minWidth: 48, minHeight: 48),
+                            visualDensity: VisualDensity.standard,
+                            tooltip: nikoText('删除该记录', 'Delete record'),
+                            onPressed: () async {
+                              try {
+                                await _store.removeAt(entry.startedAt);
+                                await _refresh();
+                              } catch (_) {}
+                            },
+                            icon: Icon(Icons.close_rounded,
+                                size: 18, color: muted)),
+                      ]);
+                  if (constraints.maxWidth /
+                          MediaQuery.textScalerOf(context).scale(1) <
+                      500) {
+                    return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(children: [
+                            avatar,
+                            const SizedBox(width: 12),
+                            Expanded(child: details)
+                          ]),
+                          const SizedBox(height: 12),
+                          Align(
+                              alignment: Alignment.centerRight, child: actions),
+                        ]);
                   }
-                  return Row(children: [avatar, const SizedBox(width: 12), Expanded(child: details),
-                    const SizedBox(width: 8), actions]);
+                  return Row(children: [
+                    avatar,
+                    const SizedBox(width: 12),
+                    Expanded(child: details),
+                    const SizedBox(width: 8),
+                    actions
+                  ]);
                 }))));
       }
     }

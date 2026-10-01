@@ -51,6 +51,42 @@ message PortForward {
   string host = 1;
   int32 port = 2;
   bool multiplex = 3;
+  // Niko v1 is a dedicated typed connection; never a legacy raw fallback.
+  uint32 nikodesk_protocol = 4;
+  NikoTunnelBinding nikodesk_binding = 5;
+}
+
+// Stream-local correlation only. This is not authentication or a target grant.
+message NikoTunnelBinding {
+  uint32 protocol = 1;
+  bytes nonce = 2;
+  uint64 epoch = 3;
+}
+
+message NikoTunnelProbe {
+  uint32 protocol = 1;
+  bytes nonce = 2;
+}
+
+message NikoTunnelProbeReply {
+  uint32 protocol = 1;
+  bytes nonce = 2;
+  bool requests_allowed = 3;
+}
+
+message NikoTunnelStatus {
+  NikoTunnelBinding binding = 1;
+  string status_json = 2;
+}
+
+message NikoTunnelControl {
+  enum Op {
+    UNSPECIFIED = 0;
+    QUERY = 1;
+    REVOKE = 2;
+  }
+  NikoTunnelBinding binding = 1;
+  Op op = 2;
 }
 
 message FileTransfer {
@@ -58,7 +94,21 @@ message FileTransfer {
   bool show_hidden = 2;
 }
 
-message ViewCamera {}
+message ViewCamera {
+  // Request-only protocol. Local device selection and grants never travel here.
+  uint32 nikodesk_protocol = 1;
+}
+
+message NikoCameraProbe {
+  bytes nonce = 1;
+  uint32 protocol = 2;
+}
+
+message NikoCameraProbeReply {
+  bytes nonce = 1;
+  uint32 protocol = 2;
+  bool requests_allowed = 3;
+}
 
 message OSLogin {
   string username = 1;
@@ -84,6 +134,9 @@ message LoginRequest {
   string my_platform = 13;
   bytes hwid = 14;
   string avatar = 17;
+  // Additive controller protocol capabilities, bound to this authenticated login.
+  // Neither support nor permission to receive requests grants access to a device.
+  Features nikodesk_features = 18;
 }
 
 message Terminal {
@@ -103,6 +156,15 @@ message Features {
   bool port_forward_mux = 3;
   // Protocol support only. Never a permission or an active voice-call grant.
   bool nikodesk_voice_v1 = 4;
+  // Current policy snapshot only; each incoming request still needs a fresh check.
+  bool nikodesk_voice_requests_allowed = 5;
+  // Opt-in to read-only voice policy snapshots on this encrypted connection.
+  bool nikodesk_voice_policy_updates = 6;
+  // Typed tunnel protocol and request policy only; neither grants a target.
+  bool nikodesk_tunnel_v1 = 7;
+  bool nikodesk_tunnel_requests_allowed = 8;
+  // The controller can receive a call initiated by this desktop's CM.
+  bool nikodesk_voice_reverse_v1 = 9;
 }
 
 message CodecAbility {
@@ -835,6 +897,11 @@ message MessageQuery {
   int32 switch_display = 1;
 }
 
+message NikoVoicePolicy {
+  uint32 protocol = 1;
+  bool requests_allowed = 2;
+}
+
 message Misc {
   oneof union {
     ChatMessage chat_message = 4;
@@ -878,6 +945,7 @@ message Misc {
     // is rebuilt, and held again, the next time it is shown, before any connection names it
     // by id again, so the shape just selected is always there to give.
     uint64 request_cursor_data = 39;
+    NikoVoicePolicy nikodesk_voice_policy = 40;
   }
 }
 
@@ -1008,6 +1076,7 @@ message PortForwardChannel {
     PortForwardClose close = 4;
     PortForwardWindowUpdate window_update = 5;
   }
+  NikoTunnelBinding nikodesk_binding = 6;
 }
 
 message Message {
@@ -1043,5 +1112,11 @@ message Message {
     TerminalAction terminal_action = 31;
     TerminalResponse terminal_response = 32;
     PortForwardChannel port_forward_channel = 33;
+    NikoCameraProbe nikodesk_camera_probe = 34;
+    NikoCameraProbeReply nikodesk_camera_probe_reply = 35;
+    NikoTunnelProbe nikodesk_tunnel_probe = 36;
+    NikoTunnelProbeReply nikodesk_tunnel_probe_reply = 37;
+    NikoTunnelStatus nikodesk_tunnel_status = 38;
+    NikoTunnelControl nikodesk_tunnel_control = 39;
   }
 }

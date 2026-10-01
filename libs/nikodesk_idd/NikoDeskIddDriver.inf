@@ -1,0 +1,57 @@
+; NikoDesk independent software display, MS-PL derivative of RustDeskIddDriver.
+[Version]
+Signature="$Windows NT$"
+Class=Display
+ClassGuid={4D36E968-E325-11CE-BFC1-08002BE10318}
+ClassVer=2.0
+Provider=%ManufacturerName%
+CatalogFile=NikoDeskIddDriver.cat
+DriverVer=10/02/2026,1.0.0.0
+PnpLockDown=1
+
+[Manufacturer]
+%ManufacturerName%=NikoDesk,NTamd64.10.0...19041
+
+[NikoDesk.NTamd64.10.0...19041]
+%DeviceName%=NikoDisplay_Install,NikoDeskIddDriver
+
+[SourceDisksNames]
+1=%DiskName%
+[SourceDisksFiles]
+NikoDeskIddDriver.dll=1
+[DestinationDirs]
+NikoDisplayCopy=12,UMDF
+[NikoDisplayCopy]
+NikoDeskIddDriver.dll
+
+[NikoDisplay_Install.NT]
+CopyFiles=NikoDisplayCopy
+[NikoDisplay_Install.NT.HW]
+AddReg=NikoDisplay_Hardware
+[NikoDisplay_Hardware]
+HKR,,Exclusive,0x00010001,1
+HKR,,UpperFilters,0x00010000,"IndirectKmd"
+HKR,"WUDF",DeviceGroupId,0x00000000,"NikoDeskIddDriverGroup"
+HKR,,Security,,"D:P(A;;GA;;;BA)(A;;GA;;;SY)(A;;GA;;;UD)"
+[NikoDisplay_Install.NT.Services]
+AddService=WUDFRd,0x000001fa,WUDFRD_ServiceInstall
+[WUDFRD_ServiceInstall]
+DisplayName=%WudfRdName%
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\WUDFRd.sys
+[NikoDisplay_Install.NT.Wdf]
+UmdfService=NikoDeskIddDriver,NikoDesk_DriverInstall
+UmdfServiceOrder=NikoDeskIddDriver
+UmdfKernelModeClientPolicy=AllowKernelModeClients
+[NikoDesk_DriverInstall]
+UmdfLibraryVersion=2.25.0
+ServiceBinary=%12%\UMDF\NikoDeskIddDriver.dll
+UmdfExtensions=IddCx0104
+
+[Strings]
+ManufacturerName="NikoDesk"
+DeviceName="NikoDesk virtual display adapter"
+DiskName="NikoDesk virtual display driver"
+WudfRdName="Windows Driver Foundation - User-mode Driver Framework Reflector"

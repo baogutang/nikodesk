@@ -1,6 +1,7 @@
 //! Dedicated background entry. It is never reached by ordinary client CLI/IPC.
 mod policy;
 mod protocol;
+pub(crate) mod install;
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
@@ -17,6 +18,11 @@ static CORE_BOOTSTRAPPED: AtomicBool = AtomicBool::new(false);
 
 pub(crate) fn is_system_worker() -> bool {
     WORKER.get().is_some()
+}
+pub(crate) fn machine_permission(option: &str) -> bool {
+    if !is_system_worker() {return false;}
+    let Some(options) = hbb_common::config::Config::trusted_machine_runtime_options() else {return false;};
+    policy::allows_machine_permission(option, options.get(option).map(String::as_str))
 }
 pub(crate) fn worker_active() -> bool {
     is_system_worker() && WORKER_ACTIVE.load(Ordering::Acquire)
@@ -57,6 +63,8 @@ pub(crate) fn worker_input_ready() -> bool {
 }
 #[cfg(windows)]
 pub(crate) use worker::connection_status;
+#[cfg(windows)]
+pub(crate) use windows::read_machine_runtime;
 
 /// A dedicated binary may dispatch SCM or its fixed child worker only.
 pub fn run(arguments: Vec<String>) -> ResultType<()> {

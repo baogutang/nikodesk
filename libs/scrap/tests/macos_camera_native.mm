@@ -4,6 +4,8 @@
 #define NIKODESK_CAMERA_TEST_HOOKS
 #endif
 #include "../src/common/macos_camera_state.h"
+#import <Foundation/Foundation.h>
+#include <CoreMedia/CoreMedia.h>
 #include <libyuv.h>
 #include <vpx/vpx_encoder.h>
 #include <vpx/vp8cx.h>
@@ -47,6 +49,92 @@ template<class Function> static void test(const char* name, Function body) {
     body(); ++passed; std::printf("PASS %s\n", name);
 }
 int main() { try {
+    test("pending cleanup cannot stop an active capturer or another lease", [] {
+        require(NKCameraStopPending(0) == NKCAM_INVALID, "zero lease rejected");
+        require(NKCameraStopPending(987654321) == NKCAM_OK, "no constructor owner");
+        Session active;
+        require(NKCameraTestReserve(active.value) == NKCAM_OK, "active lease reserved");
+        NKCameraTestStarted(active.value); publish(active.value);
+        require(NKCameraStopPending(42) == NKCAM_BUSY, "live capturer is not a cleanup acknowledgment");
+        auto* duplicate = NKCameraTestCreate({16,16,30,42});
+        require(duplicate && NKCameraTestReserve(duplicate) == NKCAM_BUSY, "duplicate cannot acquire lease");
+        require(NKCameraSessionRelease(duplicate) == NKCAM_OK, "discard unreserved duplicate");
+        auto* frame = take(active.value); NKCameraFrameRelease(frame);
+    });
+    test("failed constructor retains reachable owner until its real retry ack", [] {
+        auto* failed = NKCameraTestCreate({16,16,30,110});
+        require(failed && NKCameraTestReserve(failed) == NKCAM_OK, "constructor lease reserved");
+        NKCameraTestStopFailures(failed, 2);
+        require(NKCameraSessionRelease(failed) == NKCAM_FAILED, "failed release transfers owner");
+        require(NKCameraStopPending(111) == NKCAM_OK, "foreign lease untouched");
+        auto* duplicate = NKCameraTestCreate({16,16,30,110});
+        require(duplicate && NKCameraTestReserve(duplicate) == NKCAM_BUSY, "unconfirmed owner still reserved");
+        require(NKCameraSessionRelease(duplicate) == NKCAM_OK, "unreserved duplicate released");
+        require(NKCameraStopPending(110) == NKCAM_FAILED, "first retry still unconfirmed");
+        require(NKCameraStopPending(110) == NKCAM_OK, "actual synthetic stop releases owner");
+        require(NKCameraStopPending(110) == NKCAM_OK, "acknowledged cleanup is idempotent");
+        auto* next = NKCameraTestCreate({16,16,30,110});
+        require(next && NKCameraTestReserve(next) == NKCAM_OK, "registry now proves old owner gone");
+        require(NKCameraSessionRelease(next) == NKCAM_OK, "next owner released");
+    });
+    test("same-size native subtypes and native indices have different exact keys", [] {
+        CMVideoFormatDescriptionRef bgra = nullptr, argb = nullptr;
+        require(CMVideoFormatDescriptionCreate(kCFAllocatorDefault, kCVPixelFormatType_32BGRA,
+            1920, 1080, nullptr, &bgra) == noErr, "BGRA description");
+        require(CMVideoFormatDescriptionCreate(kCFAllocatorDefault, kCVPixelFormatType_32ARGB,
+            1920, 1080, nullptr, &argb) == noErr, "ARGB description");
+        NKCameraFormat first{}, subtype{}, index{}, again{};
+        require(NKCameraTestFormat(bgra, nullptr, 0, 15, 60, &first) == NKCAM_OK, "first");
+        require(NKCameraTestFormat(argb, nullptr, 0, 15, 60, &subtype) == NKCAM_OK, "subtype");
+        require(NKCameraTestFormat(bgra, nullptr, 1, 15, 60, &index) == NKCAM_OK, "index");
+        require(NKCameraTestFormat(bgra, nullptr, 0, 15, 60, &again) == NKCAM_OK, "repeat");
+        require(!NKCameraTestFormatMatches(&first, &subtype) && !NKCameraTestFormatMatches(&first, &index) &&
+            NKCameraTestFormatMatches(&first, &again), "no same-size/fps first-match substitution");
+        CFRelease(bgra); CFRelease(argb);
+    });
+    test("format extension dictionary order is canonical and value types stay exact", [] {
+        @autoreleasepool {
+            CMVideoFormatDescriptionRef description = nullptr;
+            require(CMVideoFormatDescriptionCreate(kCFAllocatorDefault, kCVPixelFormatType_32BGRA,
+                16, 16, nullptr, &description) == noErr, "description");
+            NSMutableDictionary* a = [NSMutableDictionary dictionary]; a[@"color"] = @1; a[@"detail"] = @[@YES, @"range"];
+            NSMutableDictionary* b = [NSMutableDictionary dictionary]; b[@"detail"] = @[@YES, @"range"]; b[@"color"] = @1;
+            NKCameraFormat first{}, reordered{}, changed{};
+            require(NKCameraTestFormat(description, (__bridge CFDictionaryRef)a, 0, 30, 30, &first) == NKCAM_OK, "a");
+            require(NKCameraTestFormat(description, (__bridge CFDictionaryRef)b, 0, 30, 30, &reordered) == NKCAM_OK, "b");
+            require(NKCameraTestFormatMatches(&first, &reordered), "order independent");
+            b[@"color"] = @"1";
+            require(NKCameraTestFormat(description, (__bridge CFDictionaryRef)b, 0, 30, 30, &changed) == NKCAM_OK &&
+                !NKCameraTestFormatMatches(&first, &changed), "changed typed metadata requires a new grant");
+            CFRelease(description);
+        }
+    });
+    test("unserializable or oversized metadata fails closed", [] {
+        @autoreleasepool {
+            CMVideoFormatDescriptionRef description = nullptr;
+            require(CMVideoFormatDescriptionCreate(kCFAllocatorDefault, kCVPixelFormatType_32BGRA,
+                16, 16, nullptr, &description) == noErr, "description");
+            NKCameraFormat rejected{};
+            NSDictionary* unsupported = @{@"opaque": [NSDate date]};
+            NSDictionary* large = @{@"blob": [NSMutableData dataWithLength:65536]};
+            require(NKCameraTestFormat(description, (__bridge CFDictionaryRef)unsupported, 0, 30, 30, &rejected) == NKCAM_INVALID,
+                "no object-description fallback");
+            require(NKCameraTestFormat(description, (__bridge CFDictionaryRef)large, 0, 30, 30, &rejected) == NKCAM_INVALID,
+                "bounded metadata");
+            require(NKCameraTestFormat(description, nullptr, 4096, 30, 30, &rejected) == NKCAM_INVALID, "bounded native index");
+            CFRelease(description);
+        }
+    });
+    test("fractional native rate is preserved without rounding to 30fps", [] {
+        CMVideoFormatDescriptionRef description = nullptr;
+        require(CMVideoFormatDescriptionCreate(kCFAllocatorDefault, kCVPixelFormatType_32BGRA,
+            16, 16, nullptr, &description) == noErr, "description");
+        NKCameraFormat fractional{}, integer{};
+        require(NKCameraTestFormat(description, nullptr, 0, 29.97, 29.97, &fractional) == NKCAM_OK, "fractional");
+        require(NKCameraTestFormat(description, nullptr, 0, 30, 30, &integer) == NKCAM_OK, "integer");
+        require(fractional.max_fps_milli < 30000 && !NKCameraTestFormatMatches(&fractional, &integer), "not 30fps");
+        CFRelease(description);
+    });
     test("selection bounds", [] {
         require(nikodesk_camera::valid_selection({16,16,30,42}), "valid");
         for (auto selection : {NKCameraSelection{0,16,30,42}, {17,16,30,42}, {16,17,30,42},

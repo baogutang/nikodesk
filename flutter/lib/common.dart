@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -34,6 +33,7 @@ import 'mobile/pages/file_manager_page.dart';
 import 'mobile/pages/remote_page.dart';
 import 'mobile/pages/view_camera_page.dart';
 import 'mobile/pages/terminal_page.dart';
+import 'mobile/pages/port_forward_page.dart' as niko_mobile_tunnel;
 import 'desktop/pages/remote_page.dart' as desktop_remote;
 import 'desktop/pages/file_manager_page.dart' as desktop_file_manager;
 import 'desktop/pages/view_camera_page.dart' as desktop_view_camera;
@@ -2636,6 +2636,7 @@ connectMainDesktop(String id,
     await rustDeskWinManager.newRemoteDesktop(id,
         password: password,
         serverNamespace: serverNamespace,
+        connToken: connToken,
         isSharedPassword: isSharedPassword,
         forceRelay: forceRelay);
   }
@@ -2667,7 +2668,9 @@ connect(BuildContext context, String id,
       throw StateError('Private server identity changed or connections are paused');
     }
     serverNamespace = expected;
+    if (isMobile && isRDP) throw StateError('RDP is not supported on mobile');
     if (isMobile && !isTerminal && (NikoMobileFileOwner.hasActiveSession ||
+        niko_mobile_tunnel.NikoMobileTunnelOwner.hasActiveSession ||
         (!gFFI.closed && gFFI.serverNamespace != null))) {
       throw StateError('Close the current mobile session before opening another');
     }
@@ -2703,6 +2706,7 @@ connect(BuildContext context, String id,
         isRDP: isRDP,
         password: password,
         serverNamespace: serverNamespace,
+        connToken: connToken,
         isSharedPassword: isSharedPassword,
         forceRelay: forceRelay,
       );
@@ -2741,6 +2745,7 @@ connect(BuildContext context, String id,
           MaterialPageRoute(
             builder: (BuildContext context) => FileManagerPage(
                 id: id,
+                connToken: connToken,
                 password: password,
                 serverNamespace: serverNamespace,
                 isSharedPassword: isSharedPassword,
@@ -2770,6 +2775,7 @@ connect(BuildContext context, String id,
           MaterialPageRoute(
             builder: (BuildContext context) => ViewCameraPage(
                 id: id,
+                connToken: connToken,
                 password: password,
                 serverNamespace: serverNamespace,
                 isSharedPassword: isSharedPassword,
@@ -2783,6 +2789,7 @@ connect(BuildContext context, String id,
         MaterialPageRoute(
           builder: (BuildContext context) => TerminalPage(
             id: id,
+            connToken: connToken,
             password: password,
             serverNamespace: serverNamespace,
             isSharedPassword: isSharedPassword,
@@ -2790,6 +2797,12 @@ connect(BuildContext context, String id,
           ),
         ),
       );
+    } else if (const bool.fromEnvironment('NIKODESK') && isMobile && isTcpTunneling) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) =>
+          niko_mobile_tunnel.NikoMobilePortForwardPage(id: id, password: password,
+              connToken: connToken,
+              serverNamespace: serverNamespace, forceRelay: forceRelay,
+              isSharedPassword: isSharedPassword)));
     } else {
       if (isWeb) {
         Navigator.push(
@@ -2811,6 +2824,7 @@ connect(BuildContext context, String id,
           MaterialPageRoute(
             builder: (BuildContext context) => RemotePage(
                 id: id,
+                connToken: connToken,
                 password: password,
                 serverNamespace: serverNamespace,
                 isSharedPassword: isSharedPassword,

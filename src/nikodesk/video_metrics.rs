@@ -24,6 +24,7 @@ struct Control {
 pub struct SessionTelemetry {
     namespace: String,
     epoch: u64,
+    connection_route: Mutex<Option<String>>,
     control: Arc<Control>,
     displays: [Arc<DisplayTelemetry>; MAX_DISPLAYS],
 }
@@ -137,6 +138,7 @@ impl SessionTelemetry {
         Self {
             namespace,
             epoch,
+            connection_route: Mutex::new(None),
             displays: std::array::from_fn(|display| {
                 Arc::new(DisplayTelemetry {
                     display,
@@ -153,6 +155,15 @@ impl SessionTelemetry {
     }
     pub fn namespace(&self) -> &str {
         &self.namespace
+    }
+    pub(crate) fn capture_connection_route(&self, route: &super::connection_snapshot::ConnectionSnapshot, direct: bool) {
+        if self.is_active() {
+            *self.connection_route.lock().unwrap() = route.connected_route_json(direct);
+        }
+    }
+    pub(crate) fn connection_route(&self) -> Option<String> {
+        if !self.is_active() { return None; }
+        self.connection_route.lock().unwrap().clone()
     }
     pub fn revision(&self) -> u64 {
         self.control.revision.load(Ordering::Acquire)

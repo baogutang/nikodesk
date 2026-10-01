@@ -113,7 +113,20 @@ impl ServerScope {
 
     /// Filter names before upstream batch loading, which can delete incomplete files.
     pub fn peer_entries(&self) -> Vec<(String, SystemTime, PathBuf)> {
-        self.filter_entries(PeerConfig::get_vec_id_modified_time_path(&None))
+        let entries = super::favorites::application_root().and_then(|root| {
+            let repository = super::peer_migration::Repository::new(root.clone());
+            repository.scoped_preferences(self.namespace(), None).map(|items| {
+                items.into_iter().filter_map(|(id, modified, _)| {
+                    let key = self.peer_key(&id)?;
+                    Some((key.storage.clone(), modified,
+                        root.join(super::peer_migration::PEERS).join(format!("{}.toml", key.storage))))
+                }).collect()
+            })
+        });
+        entries.unwrap_or_else(|_| {
+            hbb_common::log::warn!("NikoDesk peer list requires the fallible preferences API");
+            Vec::new()
+        })
     }
 
     fn filter_entries(

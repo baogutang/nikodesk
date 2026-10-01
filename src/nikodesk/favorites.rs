@@ -54,7 +54,7 @@ impl Repository {
             validate_ids(namespace, &ids.iter().cloned().collect::<Vec<_>>())?;
         }
         if !document.seeded {
-            if let Some(bytes) = directory.read("NikoDesk_local.toml", 1024 * 1024)? {
+            if let Some(bytes) = directory.read_legacy("NikoDesk_local.toml", 1024 * 1024)? {
                 let value: hbb_common::toml::Value = hbb_common::toml::from_str(
                     std::str::from_utf8(&bytes)
                         .map_err(|_| anyhow!("invalid_legacy_favorites_file"))?,
@@ -893,10 +893,26 @@ pub(crate) mod storage {
             }
         }
 
+        pub(crate) fn read_legacy(&self, value: &str, limit: u64) -> ResultType<Option<Vec<u8>>> {
+            #[cfg(unix)]
+            { self.read(value, limit) }
+            #[cfg(windows)]
+            {
+                name(value)?;
+                match super::super::identity_file::read_owned_file(&self.path.join(value), limit) {
+                    Ok(bytes) => Ok(Some(bytes)),
+                    Err(error) if error.downcast_ref::<std::io::Error>()
+                        .map_or(false, |e| e.kind() == std::io::ErrorKind::NotFound) => Ok(None),
+                    Err(error) => Err(error),
+                }
+            }
+        }
+
         pub(crate) fn entries(&self) -> ResultType<Vec<String>> {
             let mut entries = Vec::new();
             for entry in fs::read_dir(&self.path)? {
-                if entries.len() >= 2048 {
+                // Up to 4096 preferences plus their persistent removal markers.
+                if entries.len() >= 8192 {
                     bail!("too_many_peer_files");
                 }
                 let entry = entry?;
@@ -978,10 +994,14 @@ pub(crate) mod storage {
 
         pub(crate) fn publish_new(&self, value: &str, bytes: &[u8]) -> ResultType<bool> {
             name(value)?;
+            if bytes.len() > 1024 * 1024 {bail!("storage_file_too_large");}
             #[cfg(windows)]
             {
-                let _ = (value, bytes);
-                bail!("atomic_peer_publish_unverified_on_windows");
+                let published = super::super::identity_file::publish_private_file(&self.path.join(value), bytes)?;
+                if published && self.read(value, 1024 * 1024)?.as_deref() != Some(bytes) {
+                    bail!("storage_readback_failed");
+                }
+                Ok(published)
             }
             #[cfg(unix)]
             {
@@ -1025,7 +1045,11 @@ pub(crate) mod storage {
                     Ok(true)
                 })();
                 let _ = fs::remove_file(self.path.join(temporary));
-                result
+                let published = result?;
+                if published && self.read(value, 1024 * 1024)?.as_deref() != Some(bytes) {
+                    bail!("storage_readback_failed");
+                }
+                Ok(published)
             }
         }
     }

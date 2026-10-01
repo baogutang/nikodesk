@@ -138,6 +138,8 @@ android {
         nikodesk {
             dimension "client"
             applicationId "io.nikodesk.android"
+            // JNI uses literal class names and method descriptors after R8.
+            proguardFile 'proguard-nikodesk-voice-rules'
         }
     }
 

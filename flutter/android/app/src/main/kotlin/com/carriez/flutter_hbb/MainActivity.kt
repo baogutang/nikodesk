@@ -51,6 +51,8 @@ class MainActivity : FlutterActivity() {
             get() = _rdClipboardManager;
     }
 
+    private var voiceResumed = false
+
     private val channelTag = "mChannel"
     private val logTag = "mMainActivity"
     private var mainService: MainService? = null
@@ -77,6 +79,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        VoiceFlavorPolicy.initialize(this)
         if (MainService.isReady) {
             Intent(activity, MainService::class.java).also {
                 bindService(it, serviceConnection, Context.BIND_AUTO_CREATE)
@@ -98,6 +101,8 @@ class MainActivity : FlutterActivity() {
 
     override fun onResume() {
         super.onResume()
+        voiceResumed = true
+        VoiceFlavorPolicy.visible(this, hasWindowFocus())
         val inputPer = InputService.isOpen
         activity.runOnUiThread {
             flutterMethodChannel?.invokeMethod(
@@ -105,6 +110,22 @@ class MainActivity : FlutterActivity() {
                 mapOf("name" to "input", "value" to inputPer.toString())
             )
         }
+    }
+
+    override fun onPause() {
+        voiceResumed = false
+        VoiceFlavorPolicy.visible(this, false)
+        super.onPause()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        VoiceFlavorPolicy.visible(this, voiceResumed && hasFocus)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        if (VoiceFlavorPolicy.permissionResult(this, requestCode, permissions, grantResults)) return
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
     }
 
     private fun requestMediaProjection() {
@@ -232,6 +253,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        VoiceFlavorPolicy.destroyed(this)
         Log.e(logTag, "onDestroy")
         // The process can outlive the UI whenever something keeps it alive:
         // MainService, or the accessibility InputService on its own. Only the
@@ -302,7 +324,12 @@ class MainActivity : FlutterActivity() {
                 }
                 "request_permission" -> {
                     if (call.arguments is String) {
-                        requestPermission(context, call.arguments as String)
+                        val permission = call.arguments as String
+                        if (!VoiceFlavorPolicy.legacyAudioAllowed && permission in setOf(android.Manifest.permission.RECORD_AUDIO, android.Manifest.permission.POST_NOTIFICATIONS)) {
+                            result.error("owned_voice_required", "Use the explicit connection-owned voice permission action", null)
+                            return@setMethodCallHandler
+                        }
+                        requestPermission(context, permission)
                         result.success(true)
                     } else {
                         result.success(false)
@@ -633,7 +660,7 @@ class MainActivity : FlutterActivity() {
                 GET_VALUE -> {
                     if (call.arguments is String) {
                         if (call.arguments == KEY_IS_SUPPORT_VOICE_CALL) {
-                            result.success(isSupportVoiceCall())
+                            result.success(VoiceFlavorPolicy.legacyAudioAllowed && isSupportVoiceCall())
                         } else {
                             result.error("-1", "No such key", null)
                         }
@@ -642,10 +669,18 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 "on_voice_call_started" -> {
-                    onVoiceCallStarted()
+                    if (VoiceFlavorPolicy.legacyAudioAllowed) {
+                        onVoiceCallStarted()
+                    } else {
+                        result.error("owned_voice_required", "Use the authorized voice-call panel", null)
+                    }
                 }
                 "on_voice_call_closed" -> {
-                    onVoiceCallClosed()
+                    if (VoiceFlavorPolicy.legacyAudioAllowed) {
+                        onVoiceCallClosed()
+                    } else {
+                        result.error("owned_voice_required", "Use the authorized voice-call panel", null)
+                    }
                 }
                 else -> {
                     result.error("-1", "No such method", null)
@@ -917,16 +952,17 @@ class MainActivity : FlutterActivity() {
             if (mime_type.isNotEmpty()) {
                 codecObject.put("mime_type", mime_type)
                 val caps = codec.getCapabilitiesForType(mime_type)
+                val videoCaps = caps.videoCapabilities ?: return@forEach
                 if (codec.isEncoder) {
                     // Encoder's max_height and max_width are interchangeable
-                    if (!caps.videoCapabilities.isSizeSupported(w,h) && !caps.videoCapabilities.isSizeSupported(h,w)) {
+                    if (!videoCaps.isSizeSupported(w,h) && !videoCaps.isSizeSupported(h,w)) {
                         return@forEach
                     }
                 }
-                codecObject.put("min_width", caps.videoCapabilities.supportedWidths.lower)
-                codecObject.put("max_width", caps.videoCapabilities.supportedWidths.upper)
-                codecObject.put("min_height", caps.videoCapabilities.supportedHeights.lower)
-                codecObject.put("max_height", caps.videoCapabilities.supportedHeights.upper)
+                codecObject.put("min_width", videoCaps.supportedWidths.lower)
+                codecObject.put("max_width", videoCaps.supportedWidths.upper)
+                codecObject.put("min_height", videoCaps.supportedHeights.lower)
+                codecObject.put("max_height", videoCaps.supportedHeights.upper)
                 val surface = caps.colorFormats.contains(COLOR_FormatSurface);
                 codecObject.put("surface", surface)
                 val nv12 = caps.colorFormats.contains(COLOR_FormatYUV420SemiPlanar)
@@ -934,8 +970,8 @@ class MainActivity : FlutterActivity() {
                 if (!(nv12 || surface)) {
                     return@forEach
                 }
-                codecObject.put("min_bitrate", caps.videoCapabilities.bitrateRange.lower / 1000)
-                codecObject.put("max_bitrate", caps.videoCapabilities.bitrateRange.upper / 1000)
+                codecObject.put("min_bitrate", videoCaps.bitrateRange.lower / 1000)
+                codecObject.put("max_bitrate", videoCaps.bitrateRange.upper / 1000)
                 if (!codec.isEncoder) {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                         codecObject.put("low_latency", caps.isFeatureSupported(MediaCodecInfo.CodecCapabilities.FEATURE_LowLatency))

@@ -210,6 +210,9 @@ fn decrypt(v: &[u8]) -> Result<Vec<u8>, ()> {
 }
 
 pub fn symmetric_crypt(data: &[u8], encrypt: bool) -> Result<Vec<u8>, ()> {
+    if let Some(profile) = crate::config::machine_runtime_snapshot() {
+        return profile.crypt(data, encrypt);
+    }
     use sodiumoxide::crypto::secretbox;
     use std::convert::TryInto;
 
@@ -242,6 +245,33 @@ pub fn symmetric_crypt(data: &[u8], encrypt: bool) -> Result<Vec<u8>, ()> {
             }
         }
         res
+    }
+}
+
+/// Machine provisioning supplies its OS context explicitly and must never
+/// consult Config or the get_uuid identity fallback.
+pub(crate) fn symmetric_crypt_with_explicit_key(
+    data: &[u8],
+    encrypt: bool,
+    key: &secretbox::Key,
+) -> Result<Vec<u8>, ()> {
+    if encrypt {
+        let nonce = secretbox::gen_nonce();
+        let encrypted = secretbox::seal(data, &nonce, key);
+        let mut output = Vec::with_capacity(1 + nonce.0.len() + encrypted.len());
+        output.push(FORMAT_V1);
+        output.extend(nonce.0);
+        output.extend(encrypted);
+        Ok(output)
+    } else {
+        if data.first() != Some(&FORMAT_V1)
+            || data.len() < 1 + secretbox::NONCEBYTES + secretbox::MACBYTES
+        {
+            return Err(());
+        }
+        let mut nonce = [0u8; secretbox::NONCEBYTES];
+        nonce.copy_from_slice(&data[1..1 + secretbox::NONCEBYTES]);
+        secretbox::open(&data[1 + secretbox::NONCEBYTES..], &secretbox::Nonce(nonce), key)
     }
 }
 

@@ -710,11 +710,17 @@ pub async fn start_server(is_server: bool, no_server: bool) {
     });
 
     if is_server {
+        #[cfg(all(feature="nikodesk",target_os="macos"))]
+        match crate::nikodesk::mac_background::claim_core() {
+            Ok(true) => {},
+            Ok(false) => return,
+            Err(_) => { log::error!("NikoDesk could not acquire its private core lease"); return; }
+        }
         crate::common::set_server_running(true);
         std::thread::spawn(move || {
             if let Err(err) = crate::ipc::start("") {
                 log::error!("Failed to start ipc: {}", err);
-                if crate::is_server() {
+                if !cfg!(feature="nikodesk") && crate::is_server() {
                     log::error!("ipc is occupied by another process, try kill it");
                     std::thread::spawn(stop_main_window_process).join().ok();
                 }

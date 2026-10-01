@@ -1,3 +1,6 @@
+#[cfg(target_os = "macos")]
+extern crate coreaudio_rs_nikodesk as coreaudio;
+#[cfg(not(target_os = "macos"))]
 extern crate coreaudio;
 
 use self::coreaudio::sys::{

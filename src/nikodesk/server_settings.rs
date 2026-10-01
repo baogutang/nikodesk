@@ -2,6 +2,11 @@ use super::*;
 
 static FLUTTER_RUNTIME: Mutex<Option<hbb_common::tokio::runtime::Handle>> = Mutex::new(None);
 
+#[cfg(feature = "flutter")]
+pub(crate) fn flutter_runtime() -> Option<hbb_common::tokio::runtime::Handle> {
+    FLUTTER_RUNTIME.lock().ok().and_then(|runtime| runtime.clone())
+}
+
 const REQUEST_LIFETIME: std::time::Duration = std::time::Duration::from_secs(5);
 const ROLLBACK_WAIT: std::time::Duration = std::time::Duration::from_secs(3);
 
@@ -46,8 +51,8 @@ impl Deadline {
 }
 
 #[cfg(any(feature = "flutter", target_os = "android", target_os = "ios"))]
-pub async fn run_flutter_tasks(
-    receiver: std::sync::mpsc::Receiver<Vec<String>>,
+pub(crate) async fn run_flutter_tasks(
+    receiver: std::sync::mpsc::Receiver<super::online_query::Query>,
 ) {
     use hbb_common::tokio;
     *FLUTTER_RUNTIME.lock().unwrap() = Some(tokio::runtime::Handle::current());
@@ -56,17 +61,18 @@ pub async fn run_flutter_tasks(
         let receiver = receiver.clone();
         let ids = tokio::task::spawn_blocking(move || receiver.lock().unwrap().recv()).await;
         match ids {
-            Ok(Ok(ids)) => {
-                let captured = tokio::task::spawn_blocking(server_scope::current).await;
-                if let Ok(Some(captured)) = captured {
-                    crate::client::peer_online::query_online_states(ids, move |onlines, offlines| {
-                        tokio::task::spawn_blocking(move || {
+            Ok(Ok(query)) => {
+                if let Ok((onlines,offlines))=query.run().await {
+                    let captured=query.route.clone();
+                    let _=tokio::task::spawn_blocking(move || {
                             let current = server_scope::current();
+                            if current.as_ref().map(server_scope::ServerScope::namespace)==Some(captured.namespace()) {
+                                super::online_status::observe(captured.namespace(),&onlines,&offlines);
+                            }
                             if let Some(event) = online_event(captured.namespace(),
                                 current.as_ref().map(server_scope::ServerScope::namespace), onlines, offlines) {
                                 let _ = crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, event);
                             }
-                        });
                     }).await;
                 }
             }
@@ -251,6 +257,9 @@ fn patch_transaction(key: &str, value: &str, backend: &mut impl SettingsBackend,
         Ok(options) => options,
         Err(_) => return SaveResult::unknown(),
     };
+    if key == super::wol_proxy::OPTION && super::wol_proxy::validate_patch(value, &options).is_err() {
+        return SaveResult::new(false, "invalid", false);
+    }
     if value.is_empty() {
         options.remove(key);
         if let Some(default) = config::DEFAULT_SETTINGS.read().unwrap().get(key) {
@@ -368,6 +377,9 @@ impl SettingsBackend for LocalSettingsBackend {
 }
 
 pub fn save_locally(json: &str, expires_at_ms: u64) -> SaveResult {
+    if super::background::is_system_worker() {
+        return SaveResult::new(false, "machine_settings_read_only", false);
+    }
     let settings = match PrivateServerSettings::parse(json) {
         Ok(settings) => settings,
         Err(_) => return SaveResult::new(false, "invalid", false),
@@ -386,6 +398,9 @@ pub fn save_locally(json: &str, expires_at_ms: u64) -> SaveResult {
 }
 
 pub fn patch_locally(key: &str, value: &str, expires_at_ms: u64) -> SaveResult {
+    if super::background::is_system_worker() {
+        return SaveResult::new(false, "machine_settings_read_only", false);
+    }
     if !valid_patch(key, value) {
         return SaveResult::new(false, "invalid", false);
     }
@@ -396,13 +411,17 @@ pub fn patch_locally(key: &str, value: &str, expires_at_ms: u64) -> SaveResult {
     };
     let result = with_write_lock(&Config::file(), &SETTINGS_WRITE_LOCK, gate(), deadline,
         &mut LocalSettingsBackend, |unconfirmed, backend| patch_transaction(key, value, backend, deadline, unconfirmed));
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    if result.ok && key == super::auto_lock::OPTION && value != "Y" {
+        super::auto_lock::cancel_pending();
+    }
     crate::rendezvous_mediator::RendezvousMediator::restart();
     result
 }
 
 fn valid_patch(key: &str, value: &str) -> bool {
     !key.is_empty() && key.len() <= 260 && value.len() <= 64 * 1024
-        && !matches!(key, "nikodesk-server-namespace" | "voice-call-input")
+        && !matches!(key, "nikodesk-server-namespace" | "nikodesk-two-factor-status" | "voice-call-input")
         && (!matches!(key, "custom-rendezvous-server" | "relay-server" | "key" | "api-server") || value.is_empty())
         && !config::OVERWRITE_SETTINGS.read().unwrap().get(key).map_or(false, |forced| forced != value)
 }
@@ -413,6 +432,7 @@ pub fn reject_snapshot_write() {
 }
 
 pub fn refresh_cache() -> ResultType<()> {
+    if super::background::is_system_worker() { bail!("Machine settings require a verified service restart"); }
     let _lock = SETTINGS_WRITE_LOCK.lock().unwrap();
     let (_file_lock, _) = identity_file::prepare(&Config::file())?;
     Config::replace_options_cache_without_store(read_options_file(&config::Config2::file())?);
@@ -420,6 +440,11 @@ pub fn refresh_cache() -> ResultType<()> {
 }
 
 pub fn read_verified_options() -> ResultType<HashMap<String, String>> {
+    #[cfg(windows)]
+    if super::background::is_system_worker() {
+        return Config::trusted_machine_runtime_options()
+            .ok_or_else(|| anyhow!("Verified machine startup settings are unavailable").into());
+    }
     with_verified_options(|options| Ok(options.clone()))
 }
 
@@ -429,6 +454,7 @@ pub fn read_verified_options() -> ResultType<HashMap<String, String>> {
 pub(crate) fn with_verified_options<T>(
     operation: impl FnOnce(&HashMap<String, String>) -> ResultType<T>,
 ) -> ResultType<T> {
+    if super::background::is_system_worker() { bail!("Machine settings are read-only in the ordinary settings API"); }
     let _lock = SETTINGS_WRITE_LOCK.lock().unwrap();
     let (_file_lock, _) = identity_file::prepare(&Config::file())?;
     if gate().unconfirmed() { bail!("NikoDesk settings have not been confirmed"); }

@@ -20,6 +20,7 @@ import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/nikodesk/server_settings.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
 import 'package:flutter_hbb/nikodesk/product_build_info.dart';
+import 'package:flutter_hbb/nikodesk/unattended_install_view.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -237,7 +238,8 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
           break;
         case SettingsTabKey.network:
           children.add(bind.mainGetAppNameSync() == 'NikoDesk'
-              ? const NikoNetworkSettings() : const _Network());
+              ? const NikoNetworkSettings()
+              : const _Network());
           break;
         case SettingsTabKey.display:
           children.add(const _Display());
@@ -463,9 +465,17 @@ class _GeneralState extends State<_General> {
   Widget service() {
     if (bind.mainGetAppNameSync() == 'NikoDesk') {
       return _Card(title: 'Service', children: [
-        Text(nikoText('仅使用当前应用内的私服注册。服务器配置有效后才启用；不安装系统服务。',
-            'Private registration runs inside this app after valid server setup. No system service is installed.')),
-        _Button('Network', () => DesktopSettingPage.switch2page(SettingsTabKey.network)),
+        Text(isWindows
+            ? nikoText('便携模式在当前应用内进行私服注册，服务器配置有效后才启用。Windows 系统服务需在下方单独确认安装。',
+                'Portable mode registers with the private server inside this app after valid server setup. A Windows system service requires a separate explicit installation below.')
+            : nikoText('仅使用当前应用内的私服注册。服务器配置有效后才启用；不安装系统服务。',
+                'Private registration runs inside this app after valid server setup. No system service is installed.')),
+        _Button('Network',
+            () => DesktopSettingPage.switch2page(SettingsTabKey.network)),
+        if (isWindows)
+          const Padding(
+              padding: EdgeInsets.only(top: 16),
+              child: NikoUnattendedInstallView()),
       ]);
     }
     if (bind.isOutgoingOnly()) {
@@ -499,7 +509,10 @@ class _GeneralState extends State<_General> {
     final incomingOnly = bind.isIncomingOnly();
     final outgoingOnly = bind.isOutgoingOnly();
     final showAutoUpdate = (isWindows && bind.mainIsInstalled()) ||
-    (isMacOS && bind.mainIsInstalled() && bind.mainIsInstalledDaemon(prompt: false) && !bind.isCustomClient());
+        (isMacOS &&
+            bind.mainIsInstalled() &&
+            bind.mainIsInstalledDaemon(prompt: false) &&
+            !bind.isCustomClient());
     final children = <Widget>[
       if (!isWeb && !incomingOnly)
         _OptionCheckBox(context, 'Confirm before closing multiple tabs',
@@ -607,7 +620,8 @@ class _GeneralState extends State<_General> {
           isServer: false,
         ),
       ],
-      if (!incomingOnly && bind.mainGetAppNameSync() != 'NikoDesk') ...webrtcOptions(context),
+      if (!incomingOnly && bind.mainGetAppNameSync() != 'NikoDesk')
+        ...webrtcOptions(context),
       if (!isWeb && !incomingOnly)
         Tooltip(
           message: translate('sync-clipboard-between-sessions-tip'),
@@ -996,8 +1010,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   bool get wantKeepAlive => true;
   // The NikoDesk build has no elevation path, so its unlock button could
   // never succeed; keep the page unlocked instead of a dead lock.
-  bool locked = bind.mainIsInstalled() &&
-      bind.mainGetAppNameSync() != 'NikoDesk';
+  bool locked =
+      bind.mainIsInstalled() && bind.mainGetAppNameSync() != 'NikoDesk';
   final scrollController = ScrollController();
 
   @override
@@ -1014,11 +1028,13 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             preventMouseKeyBuilder(
               block: locked,
               child: Column(children: [
-                if (bind.mainGetAppNameSync() == 'NikoDesk') Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text(nikoText('此实验版本不提供终端、隧道、摄像头、远程重启、隐私模式、屏蔽本机输入或远程修改配置。其余权限按需授予。',
-                      'This experimental build disables terminal, tunnels, camera, remote restart, privacy mode, input blocking and remote configuration changes. Grant other permissions only as needed.')),
-                ),
+                if (bind.mainGetAppNameSync() == 'NikoDesk')
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(nikoText(
+                        '终端、隧道、摄像头和语音默认关闭。请在 NikoDesk 设置的“高级功能请求”中分别开启，并在连接时明确批准。远程重启需在本次连接中单独授予权限。',
+                        'Terminal, tunnels, camera and voice are disabled by default. Enable them individually in NikoDesk Advanced capability requests and explicitly approve each request. Remote restart requires separate permission for the current connection.')),
+                  ),
                 permissions(context),
                 password(context),
                 _Card(title: '2FA', children: [tfa()]),
@@ -1032,17 +1048,22 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   }
 
   Widget tfa() {
-    bool enabled = !locked;
+    final isNiko = bind.mainGetAppNameSync() == 'NikoDesk';
+    final status =
+        isNiko ? bind.mainGetOptionSync(key: 'nikodesk-two-factor-status') : '';
+    bool enabled =
+        !locked && (!isNiko || status == 'enabled' || status == 'disabled');
     // Simple temp wrapper for PR check
     tmpWrapper() {
       RxBool has2fa = bind.mainHasValid2FaSync().obs;
-      RxBool hasBot = bind.mainHasValidBotSync().obs;
+      RxBool hasBot = (isNiko ? false : bind.mainHasValidBotSync()).obs;
       update() async {
         has2fa.value = bind.mainHasValid2FaSync();
         setState(() {});
       }
 
       onChanged(bool? checked) async {
+        if (!enabled) return;
         if (checked == false) {
           CommonConfirmDialog(
               gFFI.dialogManager, translate('cancel-2fa-confirm-tip'), () {
@@ -1074,6 +1095,60 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           onChanged(!has2fa.value);
         },
       ).marginOnly(left: _kCheckBoxLeftMargin);
+      if (isNiko) {
+        if (status == 'invalid' ||
+            (status != 'enabled' && status != 'disabled')) {
+          final invalid = status == 'invalid';
+          return Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  invalid
+                      ? nikoText('双重验证配置或使用记录异常。新连接会被拒绝，请在本机重新绑定验证器。',
+                          'The two-factor configuration or usage record is invalid. New connections are rejected. Set up the authenticator again on this device.')
+                      : nikoText('无法确认双重验证状态，请重新读取。',
+                          'Two-factor status is unavailable. Reload it.'),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  onPressed: locked
+                      ? null
+                      : () {
+                          if (invalid) {
+                            if (bind.mainGetOptionSync(
+                                    key: 'nikodesk-two-factor-status') ==
+                                'invalid') {
+                              change2fa(callback: update);
+                            } else {
+                              setState(() {});
+                            }
+                          } else {
+                            setState(() {});
+                          }
+                        },
+                  child: Text(invalid
+                      ? nikoText('修复双重验证', 'Repair two-factor authentication')
+                      : nikoText('重新读取', 'Reload')),
+                ),
+              ],
+            ),
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            tfa,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: Text(nikoText('密码登录的新连接需输入当前验证码。验证码只能使用一次；重新连接时请等待下一组验证码。',
+                  'New password-authenticated connections require a current code. Each code is single use; wait for the next code when reconnecting.')),
+            ),
+          ],
+        );
+      }
       if (!has2fa.value) {
         return tfa;
       }
@@ -2694,13 +2769,25 @@ Widget _OptionCheckBox(
   bool Function()? optGetter,
   Future<void> Function(String, bool)? optSetter,
 }) {
-  if (bind.mainGetAppNameSync() == 'NikoDesk' && const {
-    'enable-lan-discovery', 'direct-server', 'allow-auto-update',
-    'enable-check-update', 'enable-terminal', 'enable-tunnel', 'enable-camera',
-    'enable-remote-restart', 'enable-privacy-mode', 'enable-block-input',
-    'allow-remote-config-modification', 'allow-insecure-tls-fallback', 'allow-hide-cm',
-    'enable-webrtc', 'enable-ipv6-punch', 'enable-port-forward-mux',
-  }.contains(key)) return const SizedBox.shrink();
+  if (bind.mainGetAppNameSync() == 'NikoDesk' &&
+      const {
+        'enable-lan-discovery',
+        'direct-server',
+        'allow-auto-update',
+        'enable-check-update',
+        'enable-terminal',
+        'enable-tunnel',
+        'enable-camera',
+        'enable-remote-restart',
+        'enable-privacy-mode',
+        'enable-block-input',
+        'allow-remote-config-modification',
+        'allow-insecure-tls-fallback',
+        'allow-hide-cm',
+        'enable-webrtc',
+        'enable-ipv6-punch',
+        'enable-port-forward-mux',
+      }.contains(key)) return const SizedBox.shrink();
   getOpt() => optGetter != null
       ? optGetter()
       : (isServer

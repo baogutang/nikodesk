@@ -224,3 +224,10 @@ extern "C" bool MacSetPrivacyMode(bool on) {
     dispatch_sync(dispatch_get_main_queue(), ^{ result = NikoPrivacySetOnMain(on); });
     return result;
 }
+
+extern "C" bool NikoMacPrivacyModeActive() {
+    if ([NSThread isMainThread]) return nikoPrivacyActive;
+    __block bool active = false;
+    dispatch_sync(dispatch_get_main_queue(), ^{ active = nikoPrivacyActive; });
+    return active;
+}

@@ -1530,6 +1530,38 @@ pub extern "C" fn wire_session_add_port_forward(
 }
 
 #[no_mangle]
+pub extern "C" fn wire_session_niko_tunnel_command(
+    port_: i64,
+    session_id: *mut wire_uint_8_list,
+    json: *mut wire_uint_8_list,
+) {
+    wire_session_niko_tunnel_command_impl(port_, session_id, json)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_session_niko_tunnel_close(
+    port_: i64,
+    session_id: *mut wire_uint_8_list,
+    json: *mut wire_uint_8_list,
+) {
+    wire_session_niko_tunnel_close_impl(port_, session_id, json)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_session_niko_tunnel_query(
+    port_: i64,
+    session_id: *mut wire_uint_8_list,
+    json: *mut wire_uint_8_list,
+) {
+    wire_session_niko_tunnel_query_impl(port_, session_id, json)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_session_niko_tunnel_retired(port_: i64) {
+    wire_session_niko_tunnel_retired_impl(port_)
+}
+
+#[no_mangle]
 pub extern "C" fn wire_session_remove_port_forward(
     port_: i64,
     session_id: *mut wire_uint_8_list,
@@ -2400,6 +2432,97 @@ pub extern "C" fn wire_cm_nikodesk_capability_decision(port_: i64, json: *mut wi
 #[no_mangle]
 pub extern "C" fn wire_cm_nikodesk_capability_revoke(port_: i64, json: *mut wire_uint_8_list) {
     wire_cm_nikodesk_capability_revoke_impl(port_, json)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_cm_nikodesk_camera_command(
+    json: *mut wire_uint_8_list,
+) -> support::WireSyncReturn {
+    wire_cm_nikodesk_camera_command_impl(json)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_session_voice_prepare(port_: i64, session_id: *mut wire_uint_8_list) {
+    wire_session_voice_prepare_impl(port_, session_id)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_session_voice_command(
+    port_: i64,
+    session_id: *mut wire_uint_8_list,
+    json: *mut wire_uint_8_list,
+) {
+    wire_session_voice_command_impl(port_, session_id, json)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_session_voice_availability(port_: i64, session_id: *mut wire_uint_8_list) {
+    wire_session_voice_availability_impl(port_, session_id)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_cm_voice_command(port_: i64, json: *mut wire_uint_8_list) {
+    wire_cm_voice_command_impl(port_, json)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_cm_tunnel_command(port_: i64, json: *mut wire_uint_8_list) {
+    wire_cm_tunnel_command_impl(port_, json)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_cm_voice_availability(port_: i64, json_identity: *mut wire_uint_8_list) {
+    wire_cm_voice_availability_impl(port_, json_identity)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_voice_pending_cleanup(port_: i64) {
+    wire_voice_pending_cleanup_impl(port_)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_main_niko_unattended_install_begin(port_: i64, json: *mut wire_uint_8_list) {
+    wire_main_niko_unattended_install_begin_impl(port_, json)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_main_niko_unattended_install_status(
+    port_: i64,
+    job_id: *mut wire_uint_8_list,
+) {
+    wire_main_niko_unattended_install_status_impl(port_, job_id)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_main_niko_unattended_install_current(port_: i64) {
+    wire_main_niko_unattended_install_current_impl(port_)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_main_niko_unattended_install_cancel(
+    port_: i64,
+    job_id: *mut wire_uint_8_list,
+) {
+    wire_main_niko_unattended_install_cancel_impl(port_, job_id)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_main_niko_session_audit(port_: i64, namespace: *mut wire_uint_8_list) {
+    wire_main_niko_session_audit_impl(port_, namespace)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_main_niko_session_audit_clear(
+    port_: i64,
+    namespace: *mut wire_uint_8_list,
+    revision: *mut wire_uint_8_list,
+) {
+    wire_main_niko_session_audit_clear_impl(port_, namespace, revision)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_main_niko_virtual_driver(port_: i64, json: *mut wire_uint_8_list) {
+    wire_main_niko_virtual_driver_impl(port_, json)
 }
 
 // Section: allocate functions

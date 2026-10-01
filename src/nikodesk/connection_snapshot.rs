@@ -169,6 +169,7 @@ impl ConnectionSnapshot {
     pub fn proxy_enabled(&self) -> bool {
         self.proxy.is_some()
     }
+    pub(crate) fn websocket_enabled(&self) -> bool {self.websocket}
     pub fn forces_relay(&self) -> bool {
         self.proxy_enabled() || self.websocket
     }
@@ -195,6 +196,30 @@ impl ConnectionSnapshot {
             return Ok(String::new());
         }
         self.relay_target(advertised)
+    }
+
+    // Called only after the native transport wins and is secured. A nonempty
+    // captured relay overrides every advertised relay in relay_target(), so this
+    // is the target used by that transport, not a later Config lookup or a DNS IP.
+    // With an advertised-only relay we cannot recover the winning target here.
+    pub(crate) fn connected_route_json(&self, direct: bool) -> Option<String> {
+        let relay_target = if direct || self.relay.is_empty() {
+            None
+        } else if self.websocket {
+            self.websocket_target(&self.relay, true).ok()
+        } else {
+            Some(self.relay.clone())
+        };
+        let websocket_tls = relay_target.as_ref().and_then(|target| {
+            self.websocket.then(|| target.starts_with("wss://"))
+        });
+        serde_json::to_string(&serde_json::json!({
+            "schemaVersion": 1,
+            "relayTarget": relay_target,
+            "relayTargetSource": relay_target.as_ref().map(|_| "captured_private_relay"),
+            "proxyInUse": !direct && self.proxy.is_some(),
+            "websocketTls": websocket_tls,
+        })).ok()
     }
 
     fn websocket_target(&self, target: &str, relay: bool) -> ResultType<String> {
@@ -539,5 +564,53 @@ mod tests {
                 .check_uuid_binding(std::iter::once(&original), false)
                 .is_err());
         }
+    }
+
+    #[test]
+    fn connected_route_uses_the_captured_override_and_omits_proxy_credentials() {
+        let mut values = options();
+        values.insert("relay-server".into(), "relay.example:31117".into());
+        let snapshot = ConnectionSnapshot::from_options(&values, Some(Socks5Server {
+            proxy: "proxy.example:1080".into(), username: "private-user".into(),
+            password: "private-password".into(),
+        }), true, true).unwrap();
+        values.insert("relay-server".into(), "later.example:41117".into());
+        let telemetry = super::super::video_metrics::SessionTelemetry::new(
+            snapshot.namespace().to_owned(), Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            Arc::new(std::sync::atomic::AtomicU64::new(0)));
+        telemetry.capture_connection_route(&snapshot, false);
+        let json = telemetry.connection_route().unwrap();
+        let route: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(route["relayTarget"], "relay.example:31117");
+        assert_eq!(route["proxyInUse"], true);
+        for private in ["later.example", "proxy.example", "private-user", "private-password"] {
+            assert!(!json.contains(private));
+        }
+        telemetry.stop();
+        assert!(telemetry.connection_route().is_none());
+        let direct: serde_json::Value = serde_json::from_str(&snapshot.connected_route_json(true).unwrap()).unwrap();
+        assert!(direct["relayTarget"].is_null());
+        assert_eq!(direct["proxyInUse"], false);
+        let advertised_only = ConnectionSnapshot::from_options(&options(), None, true, true).unwrap();
+        let unknown: serde_json::Value = serde_json::from_str(&advertised_only.connected_route_json(false).unwrap()).unwrap();
+        assert!(unknown["relayTarget"].is_null());
+        assert!(unknown["relayTargetSource"].is_null());
+    }
+
+    #[test]
+    fn connected_websocket_route_reports_the_actual_url_and_tls_scheme() {
+        let mut values = options();
+        values.insert("relay-server".into(), "relay.example:21117".into());
+        values.insert("allow-websocket".into(), "Y".into());
+        values.insert("api-server".into(), "https://private.example".into());
+        let snapshot = ConnectionSnapshot::from_options(&values, None, true, true).unwrap();
+        let route: serde_json::Value = serde_json::from_str(&snapshot.connected_route_json(false).unwrap()).unwrap();
+        assert_eq!(route["relayTarget"], "wss://relay.example/ws/relay");
+        assert_eq!(route["websocketTls"], true);
+        values.insert("relay-server".into(), "[2001:db8::1]:21117".into());
+        let snapshot = ConnectionSnapshot::from_options(&values, None, true, true).unwrap();
+        let route: serde_json::Value = serde_json::from_str(&snapshot.connected_route_json(false).unwrap()).unwrap();
+        assert_eq!(route["relayTarget"], "ws://[2001:db8::1]:21119");
+        assert_eq!(route["websocketTls"], false);
     }
 }

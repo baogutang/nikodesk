@@ -102,6 +102,13 @@ mod audio_state_tests;
 pub mod file_trait;
 pub mod helper;
 pub mod io_loop;
+#[cfg(feature = "nikodesk")]
+#[path = "client/nikodesk_credentials.rs"]
+mod nikodesk_credentials;
+#[cfg(feature = "nikodesk")]
+pub(crate) mod nikodesk_tunnel;
+#[cfg(feature = "nikodesk")]
+pub(crate) mod nikodesk_tunnel_cleanup;
 pub mod screenshot;
 
 pub const MILLI1: Duration = Duration::from_millis(1);
@@ -400,7 +407,7 @@ impl Client {
                 bail!("NikoDesk server identity changed or is paused; start a new session");
             }
             if interface.get_lch().read().unwrap().other_server.is_some()
-                || !matches!(conn_type, ConnType::DEFAULT_CONN | ConnType::FILE_TRANSFER | ConnType::TERMINAL)
+                || !matches!(conn_type, ConnType::DEFAULT_CONN | ConnType::FILE_TRANSFER | ConnType::TERMINAL | ConnType::VIEW_CAMERA | ConnType::PORT_FORWARD)
             {
                 bail!("NikoDesk supports private-server desktop, file and locally approved terminal requests");
             }
@@ -3009,6 +3016,12 @@ pub struct LoginConfigHandler {
     peer_storage_lease: Option<Arc<crate::nikodesk::peer_migration::PeerLease>>,
     #[cfg(feature = "nikodesk")]
     connection_snapshot: Option<Arc<crate::nikodesk::connection_snapshot::ConnectionSnapshot>>,
+    #[cfg(feature = "nikodesk")]
+    stored_credential: Option<crate::nikodesk::credentials::StoredCredential>,
+    #[cfg(feature = "nikodesk")]
+    credential_choice: Option<bool>,
+    #[cfg(feature = "nikodesk")]
+    pub(crate) credential_warning: Option<&'static str>,
     pub conn_type: ConnType,
     pub is_terminal_admin: bool,
     hash: Hash,
@@ -3016,6 +3029,8 @@ pub struct LoginConfigHandler {
     pub remember: bool,
     config: PeerConfig,
     pub port_forward: (String, i32),
+    #[cfg(feature = "nikodesk")]
+    nikodesk_tunnel_login: Option<Arc<nikodesk_tunnel::LoginState>>,
     /// This login's `multiplex`, filled with `port_forward` under the turn
     /// lock. `port_forward_mux` says whether a mapping probes for the tunnel;
     /// one the probe latched to the raw pipe logs in without asking, so an
@@ -3166,7 +3181,7 @@ impl LoginConfigHandler {
         self.remember = !config.password.is_empty();
         #[cfg(feature = "nikodesk")]
         {
-            self.remember = false;
+            self.initialize_credentials(conn_token.as_deref());
         }
         self.config = config;
 
@@ -3623,6 +3638,11 @@ impl LoginConfigHandler {
             return None;
         }
         let mut msg = OptionMessage::new();
+        #[cfg(feature="nikodesk")]
+        if self.conn_type.eq(&ConnType::VIEW_CAMERA) {
+            msg.supported_decoding = MessageField::some(self.get_supported_decoding());
+            return Some(msg);
+        }
         if self.conn_type.eq(&ConnType::TERMINAL) {
             #[cfg(feature="nikodesk")]
             return None;
@@ -3934,6 +3954,7 @@ impl LoginConfigHandler {
         let password0 = config.password.clone();
         let remember = self.remember;
         let hash = self.hash.clone();
+        #[cfg(not(feature = "nikodesk"))]
         if remember {
             // remember is true: use PeerConfig password or ui login
             // not sync shared password to recent
@@ -3954,6 +3975,8 @@ impl LoginConfigHandler {
                 log::debug!("remove password of {}", self.id);
             }
         }
+        #[cfg(feature = "nikodesk")]
+        self.persist_authenticated_credential(&password, &hash);
         if let Some((_, b, c)) = self.other_server.as_ref() {
             if b != PUBLIC_SERVER {
                 config
@@ -4037,6 +4060,11 @@ impl LoginConfigHandler {
         os_password: String,
         password: Vec<u8>,
     ) -> Message {
+        #[cfg(feature = "nikodesk")]
+        if matches!(self.conn_type, ConnType::PORT_FORWARD | ConnType::RDP)
+            && (self.conn_type != ConnType::PORT_FORWARD || self.nikodesk_tunnel_login.is_none()) {
+            return Message::new();
+        }
         let my_id = Config::get_id();
         let (my_id, pure_id) = if let Some((id, _, _)) = self.other_server.as_ref() {
             let server = Config::get_rendezvous_server();
@@ -4125,19 +4153,37 @@ impl LoginConfigHandler {
             avatar,
             ..Default::default()
         };
+        #[cfg(all(feature="nikodesk",feature="flutter",any(target_os="macos",target_os="windows",target_os="android")))]
+        if self.conn_type==ConnType::DEFAULT_CONN && !crate::nikodesk::background::is_system_worker() {
+            // This advertises the compiled controller protocol. It does not
+            // enable incoming calls or grant its local microphone.
+            lr.nikodesk_features=Some(Features {nikodesk_voice_v1:true,nikodesk_voice_policy_updates:true,..Default::default()}).into();
+        }
         match self.conn_type {
             ConnType::FILE_TRANSFER => lr.set_file_transfer(FileTransfer {
                 dir: self.get_remote_dir(),
                 show_hidden: !self.get_option("remote_show_hidden").is_empty(),
                 ..Default::default()
             }),
-            ConnType::VIEW_CAMERA => lr.set_view_camera(Default::default()),
+            ConnType::VIEW_CAMERA => {
+                let mut camera = ViewCamera::default();
+                #[cfg(feature="nikodesk")]
+                { camera.nikodesk_protocol = 1; }
+                lr.set_view_camera(camera);
+            },
+            #[cfg(not(feature = "nikodesk"))]
             ConnType::PORT_FORWARD | ConnType::RDP => lr.set_port_forward(PortForward {
                 host: self.port_forward.0.clone(),
                 port: self.port_forward.1,
                 multiplex: self.port_forward_multiplex,
                 ..Default::default()
             }),
+            #[cfg(feature = "nikodesk")]
+            ConnType::PORT_FORWARD => {
+                if !self.nikodesk_tunnel_login.as_ref().map_or(false, |state| state.decorate(&mut lr)) {
+                    return Message::new();
+                }
+            }
             ConnType::TERMINAL => {
                 let mut terminal = Terminal::new();
                 #[cfg(not(feature="nikodesk"))]
@@ -4186,6 +4232,8 @@ impl LoginConfigHandler {
         self.restarting_remote_device = false;
         self.restart_remote_device_at = None;
     }
+    #[cfg(feature="nikodesk")]
+    pub(crate) fn restart_request_pending(&self) -> bool { self.restarting_remote_device }
 
     pub fn is_restarting_remote_device(&self) -> bool {
         if !self.restarting_remote_device {
@@ -4202,6 +4250,10 @@ impl LoginConfigHandler {
     }
 
     pub fn get_conn_token(&self) -> Option<String> {
+        #[cfg(feature = "nikodesk")]
+        return None;
+        #[cfg(not(feature = "nikodesk"))]
+        {
         if self.password.is_empty() {
             return None;
         }
@@ -4211,6 +4263,7 @@ impl LoginConfigHandler {
             session_id: self.session_id,
         })
         .ok()
+        }
     }
 
     pub fn get_id(&self) -> &str {
@@ -4944,6 +4997,10 @@ pub async fn handle_hash(
         }
     }
     // shared password
+    #[cfg(feature = "nikodesk")]
+    if password.is_empty() {
+        password = lc.write().unwrap().credential_password(&hash.salt).unwrap_or_default();
+    }
     // Currently it's used only when click shared ab peer card
     let shared_password = lc.write().unwrap().shared_password.take();
     if let Some(shared_password) = shared_password {
@@ -4997,6 +5054,12 @@ pub async fn handle_hash(
     let password = if password.is_empty() {
         // login without password, the remote side can click accept
         interface.msgbox("input-password", "Password Required", "", "");
+        #[cfg(feature = "nikodesk")]
+        {
+            lc.write().unwrap().hash = hash;
+            return true;
+        }
+        #[cfg(not(feature = "nikodesk"))]
         Vec::new()
     } else {
         let mut hasher = Sha256::new();
@@ -5057,6 +5120,8 @@ async fn send_login(
         .read()
         .unwrap()
         .create_login_msg(os_username, os_password, password);
+    #[cfg(feature = "nikodesk")]
+    if msg_out.union.is_none() || !peer.is_secured() { return; }
     allow_err!(peer.send(&msg_out).await);
 }
 
@@ -5094,6 +5159,8 @@ pub async fn handle_login_from_ui(
         hasher.update(&lc.read().unwrap().hash.salt);
         let res = hasher.finalize();
         lc.write().unwrap().remember = remember;
+        #[cfg(feature = "nikodesk")]
+        { lc.write().unwrap().credential_choice = Some(remember); }
         res[..].into()
     };
     lc.write().unwrap().password = hash_password.clone();
@@ -5234,6 +5301,8 @@ pub trait Interface: Send + Clone + 'static + Sized {
 /// Data used by the client interface.
 #[derive(Clone)]
 pub enum Data {
+    #[cfg(all(feature="nikodesk",feature="flutter"))]
+    NikoVoiceUi(crate::nikodesk::voice_session::Request),
     Close,
     RejectInsecureConnection,
     Login((String, String, String, bool)),
@@ -5467,6 +5536,7 @@ mod retry_tests {
 mod port_forward_mux_tests {
     use super::*;
 
+    #[cfg(not(feature = "nikodesk"))]
     #[test]
     fn a_login_asks_for_the_tunnel_when_its_mapping_probes() {
         let mut lc = LoginConfigHandler::default();

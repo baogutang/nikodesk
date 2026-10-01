@@ -12,6 +12,14 @@ import 'package:window_manager/window_manager.dart';
 
 import '../common.dart';
 import '../nikodesk/cm_capabilities.dart';
+import '../nikodesk/cm_camera.dart';
+import '../nikodesk/cm_voice_ledger.dart';
+import '../nikodesk/cm_voice_start.dart';
+import '../nikodesk/cm_tunnel.dart';
+import '../nikodesk/cm_tunnel_ledger.dart';
+import '../nikodesk/cm_tunnel_native.dart';
+import '../nikodesk/voice_session_model.dart';
+import '../nikodesk/voice_session_native.dart';
 import '../common/formatter/id_formatter.dart';
 import '../desktop/pages/server_page.dart' as desktop;
 import '../desktop/widgets/tabbar_widget.dart';
@@ -50,6 +58,152 @@ class ServerModel with ChangeNotifier {
   final List<Client> _clients = [];
   final Map<int, NikoCapabilityStatus> _nikoCapabilities = {};
   NikoCapabilityStatus? nikoCapability(int id) => _nikoCapabilities[id];
+  final Map<int, NikoCameraState> _nikoCameras = {};
+  NikoCameraState? nikoCamera(int id) => _nikoCameras[id];
+  late final NikoCmVoiceLedger _nikoVoices = NikoCmVoiceLedger(
+      command: const NativeNikoCmVoiceTransport().send,
+      readAvailability: const NativeNikoCmVoiceTransport().availability)
+    ..addListener(notifyListeners);
+  NikoVoiceSessionModel? nikoVoice(int id) => _nikoVoices.model(id);
+  late final NikoCmTunnelLedger _nikoTunnels = NikoCmTunnelLedger(
+      command: const NativeNikoCmTunnelTransport().send)
+    ..addListener(notifyListeners);
+  NikoCmTunnelModel? nikoTunnel(Client client) {
+    if (!const bool.fromEnvironment('NIKODESK')) return null;
+    final current = _nikoTunnels.model(client.id);
+    return client.nikoTunnel != null && current?.status.identity
+        .sameRequest(client.nikoTunnel!.identity) == true ? current : null;
+  }
+
+  bool _anchorNikoTunnel(Client client) {
+    if (!const bool.fromEnvironment('NIKODESK')) return true;
+    final status = client.nikoTunnel;
+    final context = client.nikoTunnelContext;
+    if (status == null || context == null) {
+      if (_nikoTunnels.requiresRetention(client.id)) {
+        _nikoTunnels.retire(client.id);
+        return false;
+      }
+      return true;
+    }
+    return _nikoTunnels.anchor(status, context) ||
+        _nikoTunnels.model(client.id) == null;
+  }
+
+  void _retainNikoTunnelClients(List<Client> previous) {
+    for (final client in previous) {
+      if (nikoTunnel(client) == null ||
+          !_nikoTunnels.requiresRetention(client.id) ||
+          _clients.any((c) => c.id == client.id)) continue;
+      client.authorized = false;
+      client.disconnected = true;
+      _clients.add(client);
+      _addTab(client, focusWindow: false);
+    }
+  }
+
+  Future<bool> closeNikoTunnel(Client client) async {
+    final current = nikoTunnel(client);
+    if (current == null) return false;
+    _nikoTunnels.retire(client.id);
+    notifyListeners();
+    try {
+      await bind.cmCloseConnection(connId: client.id).timeout(const Duration(seconds: 5));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void _anchorNikoVoice(Client client) {
+    if (!const bool.fromEnvironment('NIKODESK')) return;
+    final status = client.nikoVoice;
+    if (status != null) {
+      _nikoVoices.anchor(status, cleanupOnly: client.nikoVoiceCleanup,
+          catalog: client.nikoVoiceCatalog);
+    }
+  }
+
+  void handleNikoVoice(Map<String, dynamic> event) {
+    if (!const bool.fromEnvironment('NIKODESK')) return;
+    final payload = event['payload'];
+    if (payload is! String) return;
+    final status = event['name'] == 'nikodesk_voice_status'
+        ? NikoVoiceStatus.parse(payload) : null;
+    final catalog = event['name'] == 'nikodesk_voice_catalog'
+        ? NikoVoiceCatalog.parse(payload) : null;
+    final identity = status?.identity ?? catalog?.identity;
+    if (identity == null || event['namespace'] != identity.namespace ||
+        event['peer_id'] != identity.peerId ||
+        event['connection_nonce'] != identity.connectionNonce) return;
+    final clients = _clients.where((client) => client.id == identity.connectionId &&
+        client.peerId == identity.peerId && client.type_() == ClientType.remote &&
+        (client.nikoVoiceCleanup || client.authorized && !client.disconnected));
+    if (clients.isEmpty || _nikoVoices.model(identity.connectionId)?.status.identity
+        .sameRequest(identity) != true) return;
+    if (clients.first.nikoVoiceCleanup && (status == null ||
+        !{'Revoking', 'RecoveryRequired', 'Stopped'}.contains(status.phase))) return;
+    if (status != null) {
+      _nikoVoices.status(status);
+    } else if (catalog != null) {
+      _nikoVoices.acceptCatalog(catalog);
+    }
+  }
+
+  void _anchorNikoCamera(Client client) {
+    if (!const bool.fromEnvironment('NIKODESK')) return;
+    final status = client.nikoCamera;
+    if ((!client.nikoCameraCleanup && (!client.authorized || client.disconnected)) || !client.isViewCamera || status == null) {
+      _nikoCameras.remove(client.id);
+      return;
+    }
+    _nikoCameras[client.id] = nikoCameraAnchor(_nikoCameras[client.id], status);
+  }
+
+  void markNikoCameraCleanup(NikoCameraStatus status) {
+    if (_nikoCameras[status.identity.connectionId]?.markCleanup(status) == true) notifyListeners();
+  }
+
+  Future<bool> refreshNikoCamera(NikoCameraStatus captured) async {
+    final state = _nikoCameras[captured.identity.connectionId];
+    if (!const bool.fromEnvironment('NIKODESK') || state == null ||
+        !state.status.identity.sameRequest(captured.identity)) return false;
+    try {
+      final raw = await bind.cmGetClientsState().timeout(const Duration(seconds: 5));
+      if (raw.length > 1048576 || !identical(_nikoCameras[captured.identity.connectionId], state)) return false;
+      final snapshots = jsonDecode(raw);
+      if (snapshots is! List || snapshots.length > 256) return false;
+      for (final snapshot in snapshots) {
+        if (snapshot is! Map || snapshot['id'] != captured.identity.connectionId ||
+            snapshot['peer_id'] != captured.identity.peerId ||
+            !(snapshot['niko_camera_cleanup'] == true && snapshot['disconnected'] == true && snapshot['authorized'] == false || snapshot['authorized'] == true && snapshot['disconnected'] == false) || snapshot['is_view_camera'] != true ||
+            snapshot['niko_camera'] is! Map) continue;
+        final incoming = NikoCameraStatus.parse(jsonEncode(snapshot['niko_camera']));
+        if (incoming != null && state.update(incoming)) {
+          notifyListeners();
+          return true;
+        }
+      }
+    } catch (_) { }
+    return false;
+  }
+
+  void handleNikoCamera(Map<String, dynamic> event) {
+    if (!const bool.fromEnvironment('NIKODESK') || bind.mainGetAppNameSync() != 'NikoDesk') return;
+    final payload = event['payload'];
+    if (payload is! String) return;
+    final status = event['name'] == 'nikodesk_camera_status' ? NikoCameraStatus.parse(payload) : null;
+    final catalog = event['name'] == 'nikodesk_camera_catalog' ? NikoCameraCatalog.parse(payload) : null;
+    final identity = status?.identity ?? catalog?.identity;
+    if (identity == null) return;
+    final clients = _clients.where((c) => c.id == identity.connectionId &&
+        c.peerId == identity.peerId && c.isViewCamera && (c.nikoCameraCleanup || c.authorized && !c.disconnected));
+    if (clients.isEmpty) return;
+    if (clients.first.nikoCameraCleanup && (status == null || !{'Revoking', 'RecoveryRequired', 'Stopped'}.contains(status.phase))) return;
+    final state = _nikoCameras[identity.connectionId];
+    if (state == null || !state.status.identity.sameRequest(identity)) return;
+    if (status != null ? state.update(status) : state.acceptCatalog(catalog!)) notifyListeners();
+  }
 
   void handleNikoCapability(Map<String, dynamic> event) {
     if (bind.mainGetAppNameSync() != 'NikoDesk') return;
@@ -513,18 +667,37 @@ class ServerModel with ChangeNotifier {
     }
 
     final oldClientLenght = _clients.length;
+    final hadNikoCamera = _nikoCameras.isNotEmpty;
+    final hadNikoVoice = const bool.fromEnvironment('NIKODESK') && _nikoVoices.isNotEmpty;
+    final previousTunnels = const bool.fromEnvironment('NIKODESK')
+        ? _clients.where((c) => nikoTunnel(c) != null).toList() : <Client>[];
+    final cameraIds = const bool.fromEnvironment('NIKODESK') ? <int>{} : null;
+    final voiceIds = const bool.fromEnvironment('NIKODESK') ? <int>{} : null;
+    final tunnelIds = const bool.fromEnvironment('NIKODESK') ? <int>{} : null;
     _clients.clear();
     tabController.state.value.tabs.clear();
 
     for (var clientJson in clientsJson) {
       try {
         final client = Client.fromJson(clientJson);
+        if (!_anchorNikoTunnel(client)) continue;
+        _anchorNikoCamera(client);
+        _anchorNikoVoice(client);
+        cameraIds?.add(client.id);
+        voiceIds?.add(client.id);
+        if (nikoTunnel(client) != null) tunnelIds?.add(client.id);
         if (client.nikoCapability != null) _nikoCapabilities[client.id] = client.nikoCapability!;
         _clients.add(client);
         _addTab(client);
       } catch (e) {
         debugPrint("Failed to decode clientJson '$clientJson', error $e");
       }
+    }
+    if (cameraIds != null) _nikoCameras.removeWhere((id, _) => !cameraIds.contains(id));
+    if (voiceIds != null) _nikoVoices.retain(voiceIds);
+    if (tunnelIds != null) {
+      _nikoTunnels.retain(tunnelIds);
+      _retainNikoTunnelClients(previousTunnels);
     }
     if (desktopType == DesktopType.cm) {
       if (_clients.isEmpty) {
@@ -533,7 +706,10 @@ class ServerModel with ChangeNotifier {
         showCmWindow();
       }
     }
-    if (_clients.length != oldClientLenght) {
+    if (_clients.length != oldClientLenght ||
+        (const bool.fromEnvironment('NIKODESK') && (hadNikoCamera || _nikoCameras.isNotEmpty ||
+            hadNikoVoice || _nikoVoices.isNotEmpty ||
+            previousTunnels.isNotEmpty || _nikoTunnels.isNotEmpty))) {
       notifyListeners();
       if (isAndroid) androidUpdatekeepScreenOn();
     }
@@ -542,7 +718,32 @@ class ServerModel with ChangeNotifier {
   void addConnection(Map<String, dynamic> evt) {
     try {
       final client = Client.fromJson(jsonDecode(evt["client"]));
+      if (!_anchorNikoTunnel(client)) {
+        notifyListeners();
+        return;
+      }
+      _anchorNikoCamera(client);
+      _anchorNikoVoice(client);
       if (client.nikoCapability != null) _nikoCapabilities[client.id] = client.nikoCapability!;
+      if (const bool.fromEnvironment('NIKODESK') && client.nikoTunnel != null) {
+        final index = _clients.indexWhere((c) => c.id == client.id);
+        if (index >= 0) {
+          _clients[index] = client;
+          notifyListeners();
+          return;
+        }
+      }
+      if (client.nikoCameraCleanup || client.nikoVoiceCleanup || client.nikoTunnelCleanup) {
+        final index = _clients.indexWhere((c) => c.id == client.id);
+        if (index >= 0) {
+          _clients[index] = client;
+        } else {
+          _clients.add(client);
+          _addTab(client);
+        }
+        notifyListeners();
+        return;
+      }
       if (client.authorized) {
         parent.target?.dialogManager.dismissByTag(getLoginDialogTag(client.id));
         final index = _clients.indexWhere((c) => c.id == client.id);
@@ -551,6 +752,10 @@ class ServerModel with ChangeNotifier {
         } else {
           if (_clients[index].authorized) {
             _clients[index].privacyMode = client.privacyMode;
+            if (const bool.fromEnvironment('NIKODESK') && client.nikoVoice != null) {
+              _clients[index].nikoVoice = client.nikoVoice;
+              _clients[index].nikoVoiceCatalog = client.nikoVoiceCatalog;
+            }
             notifyListeners();
             return;
           }
@@ -569,7 +774,9 @@ class ServerModel with ChangeNotifier {
       _addTab(client);
       // remove disconnected
       final index_disconnected = _clients
-          .indexWhere((c) => c.disconnected && c.peerId == client.peerId);
+          .indexWhere((c) => c.disconnected && !c.nikoCameraCleanup && !c.nikoVoiceCleanup &&
+              !(const bool.fromEnvironment('NIKODESK') && _nikoTunnels.requiresRetention(c.id)) &&
+              c.peerId == client.peerId);
       if (index_disconnected >= 0) {
         _clients.removeAt(index_disconnected);
         tabController.remove(index_disconnected);
@@ -586,7 +793,7 @@ class ServerModel with ChangeNotifier {
     }
   }
 
-  void _addTab(Client client) {
+  void _addTab(Client client, {bool focusWindow = true}) {
     tabController.add(TabInfo(
         key: client.id.toString(),
         label: client.name,
@@ -594,10 +801,10 @@ class ServerModel with ChangeNotifier {
         onTap: () {},
         page: desktop.buildConnectionCard(client)));
     Future.delayed(Duration.zero, () async {
-      if (!hideCm) windowOnTop(null);
+      if (focusWindow && !hideCm) windowOnTop(null);
     });
     // Only do the hidden task when on Desktop.
-    if (client.authorized && isDesktop) {
+    if (focusWindow && client.authorized && isDesktop) {
       cmHiddenTimer = Timer(const Duration(seconds: 3), () {
         if (!hideCm) windowManager.minimize();
         cmHiddenTimer = null;
@@ -714,15 +921,34 @@ class ServerModel with ChangeNotifier {
   void onClientRemove(Map<String, dynamic> evt) {
     final capabilityId = int.tryParse(evt['id']?.toString() ?? '');
     if (capabilityId != null) _nikoCapabilities.remove(capabilityId);
+    if (capabilityId != null && !_clients.any((c) => c.id == capabilityId && c.nikoCameraCleanup) ) _nikoCameras.remove(capabilityId);
     try {
       final id = int.parse(evt['id'] as String);
       final close = (evt['close'] as String) == 'true';
+      if (const bool.fromEnvironment('NIKODESK') &&
+          _nikoTunnels.requiresRetention(id)) {
+        _nikoTunnels.retire(id);
+        for (final client in _clients.where((c) => c.id == id)) {
+          client.authorized = false;
+          client.disconnected = true;
+        }
+        notifyListeners();
+        return;
+      }
+      if (const bool.fromEnvironment('NIKODESK') && _clients.any((c) =>
+          c.id == id && c.nikoVoiceCleanup &&
+          _nikoVoices.model(id)?.status.phase != 'Stopped')) {
+        notifyListeners();
+        return;
+      }
       if (_clients.any((c) => c.id == id)) {
         final index = _clients.indexWhere((client) => client.id == id);
         if (index >= 0) {
           if (close) {
             _clients.removeAt(index);
             tabController.remove(index);
+            if (const bool.fromEnvironment('NIKODESK')) _nikoVoices.remove(id);
+            if (const bool.fromEnvironment('NIKODESK')) _nikoTunnels.remove(id);
           } else {
             _clients[index].disconnected = true;
           }
@@ -744,11 +970,22 @@ class ServerModel with ChangeNotifier {
   /// peers to go. The sessions end either way; only the close reason differs, and with it
   /// whether the peer is allowed to reconnect. See `ipc::Data::CmWindowClosed`.
   Future<void> closeAll({bool byOperator = true}) async {
+    if (const bool.fromEnvironment('NIKODESK')) {
+      for (final client in _clients.where((c) => nikoTunnel(c) != null)) {
+        _nikoTunnels.retire(client.id);
+      }
+    }
     await Future.wait(_clients.map((client) => byOperator
         ? bind.cmCloseConnection(connId: client.id)
         : bind.cmCloseConnectionWindow(connId: client.id)));
+    final retainedTunnels = const bool.fromEnvironment('NIKODESK')
+        ? _clients.where((c) => nikoTunnel(c) != null).toList() : <Client>[];
+    if (const bool.fromEnvironment('NIKODESK')) _nikoTunnels.clear();
     _clients.clear();
+    _nikoCameras.clear();
+    if (const bool.fromEnvironment('NIKODESK')) _nikoVoices.clear();
     tabController.state.value.tabs.clear();
+    _retainNikoTunnelClients(retainedTunnels);
     if (isAndroid) androidUpdatekeepScreenOn();
   }
 
@@ -839,6 +1076,17 @@ class Client {
   bool inVoiceCall = false;
   bool incomingVoiceCall = false;
   NikoCapabilityStatus? nikoCapability;
+  NikoCameraStatus? nikoCamera;
+  bool nikoCameraCleanup = false;
+  NikoVoiceStatus? nikoVoice;
+  NikoCmVoiceStartContext? nikoVoiceContext;
+  String? nikoVoicePrepareError;
+  int? nikoVoicePrepareDeadline;
+  NikoVoiceCatalog? nikoVoiceCatalog;
+  bool nikoVoiceCleanup = false;
+  NikoTunnelStatus? nikoTunnel;
+  NikoTunnelCmContext? nikoTunnelContext;
+  bool nikoTunnelCleanup = false;
 
   RxInt unreadChatMessageCount = 0.obs;
 
@@ -868,9 +1116,63 @@ class Client {
     fromSwitch = json['from_switch'];
     inVoiceCall = json['in_voice_call'];
     incomingVoiceCall = json['incoming_voice_call'];
+    if (const bool.fromEnvironment('NIKODESK') && authorized && !disconnected &&
+        type_() == ClientType.remote) {
+      final context = NikoCmVoiceStartContext.parse(json['niko_voice_context']);
+      if (context?.connectionId == id && context?.peerId == peerId) nikoVoiceContext = context;
+      if (nikoVoiceContext != null && json['niko_voice_prepare_deadline'] is int &&
+          json['niko_voice_prepare_deadline'] > 0 && json['niko_voice_prepare_error'] is String &&
+          RegExp(r'^[a-z0-9_]{1,96}$').hasMatch(json['niko_voice_prepare_error'])) {
+        nikoVoicePrepareError = json['niko_voice_prepare_error'];
+        nikoVoicePrepareDeadline = json['niko_voice_prepare_deadline'];
+      }
+    }
+    if (const bool.fromEnvironment('NIKODESK') && json['niko_tunnel'] is Map &&
+        portForward.isNotEmpty && !isFileTransfer && !isViewCamera && !isTerminal) {
+      final tunnel = NikoTunnelStatus.parse(jsonEncode(json['niko_tunnel']));
+      final cleanup = json['niko_tunnel_cleanup'] == true && disconnected && !authorized &&
+          tunnel != null && {'Revoking', 'RecoveryRequired', 'Stopped'}.contains(tunnel.phase);
+      if (tunnel?.identity.connectionId == id && tunnel?.identity.peerId == peerId &&
+          (cleanup || authorized && !disconnected) &&
+          (json['niko_tunnel_cleanup'] == null || json['niko_tunnel_cleanup'] is bool) &&
+          (json['niko_tunnel_cleanup'] != true || cleanup) &&
+          (tunnel?.cleanupOnly != true || cleanup)) {
+        nikoTunnel = tunnel;
+        nikoTunnelCleanup = cleanup;
+        nikoTunnelContext = NikoTunnelCmContext.verifiedNative(
+            identity: tunnel!.identity, active: !cleanup, cleanupOnly: cleanup);
+      }
+    }
     if (const bool.fromEnvironment('NIKODESK') && json['niko_capability'] is Map) {
       final capability = NikoCapabilityStatus.parse(jsonEncode(json['niko_capability']));
       if (capability?.identity.connectionId == id && capability?.identity.peerId == peerId && isTerminal) nikoCapability = capability;
+    }
+    if (const bool.fromEnvironment('NIKODESK') && json['niko_camera'] is Map) {
+      final camera = NikoCameraStatus.parse(jsonEncode(json['niko_camera']));
+      final cleanup = json['niko_camera_cleanup'] == true && disconnected && !authorized &&
+          camera != null && {'Revoking', 'RecoveryRequired', 'Stopped'}.contains(camera.phase);
+      if (camera?.identity.connectionId == id && camera?.identity.peerId == peerId && isViewCamera && (cleanup || authorized && !disconnected)) {
+        nikoCamera = camera;
+        nikoCameraCleanup = cleanup;
+      }
+    }
+    if (const bool.fromEnvironment('NIKODESK') && json['niko_voice'] is Map) {
+      final voice = NikoVoiceStatus.parse(jsonEncode(json['niko_voice']));
+      final cleanup = json['niko_voice_cleanup'] == true && disconnected && !authorized &&
+          voice != null && {'Revoking', 'RecoveryRequired', 'Stopped'}.contains(voice.phase);
+      if (voice?.identity.connectionId == id && voice?.identity.peerId == peerId &&
+          type_() == ClientType.remote && (cleanup || authorized && !disconnected) &&
+          (voice?.cleanupOnly != true || cleanup)) {
+        nikoVoice = voice;
+        nikoVoiceCleanup = cleanup;
+        if (!cleanup && json['niko_voice_catalog'] is Map) {
+          final catalog = NikoVoiceCatalog.parse(jsonEncode(json['niko_voice_catalog']));
+          if (catalog != null && voice!.identity.sameRequest(catalog.identity) &&
+              voice.revision == catalog.revision &&
+              voice.microphonePermission == catalog.microphonePermission &&
+              voice.phase == 'Pending') nikoVoiceCatalog = catalog;
+        }
+      }
     }
   }
 
@@ -897,6 +1199,7 @@ class Client {
     data['from_switch'] = fromSwitch;
     data['in_voice_call'] = inVoiceCall;
     data['incoming_voice_call'] = incomingVoiceCall;
+    if (nikoVoiceContext != null) data['niko_voice_context'] = nikoVoiceContext!.toJson();
     return data;
   }
 

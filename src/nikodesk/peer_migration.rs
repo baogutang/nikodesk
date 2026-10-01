@@ -8,6 +8,57 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, path::PathBuf};
 
+// Pre-coordination clients only write `peers/`. This generation has its own
+// destination; all of its writers use the disk lock and session leases below.
+pub(crate) const PEERS: &str = "nikodesk-peers-v2";
+const REMOVED: &[u8] = b"nikodesk-peer-removed-v2\n";
+
+fn existing_directory(root: &Directory, name: &str) -> ResultType<Option<Directory>> {
+    match root.child(name) {
+        Ok(directory) => Ok(Some(directory)),
+        Err(error) if error.downcast_ref::<std::io::Error>()
+            .map_or(false, |e| e.kind() == std::io::ErrorKind::NotFound) => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+fn validate_storage(storage: &str) -> ResultType<()> {
+    let (namespace, id) = storage.strip_prefix("nikodesk_v1_")
+        .and_then(|s| s.split_once('_')).ok_or_else(|| anyhow!("invalid_peer_storage"))?;
+    let scope = ServerScope::from_namespace(namespace)
+        .ok_or_else(|| anyhow!("invalid_peer_storage"))?;
+    if scope.peer_id(storage).as_deref() != Some(id) {bail!("invalid_peer_storage");}
+    Ok(())
+}
+
+fn validate_peer_file(bytes: &[u8]) -> ResultType<()> {
+    let value: toml::Value = toml::from_str(std::str::from_utf8(bytes)
+        .map_err(|_| anyhow!("invalid_peer_config"))?)
+        .map_err(|_| anyhow!("invalid_peer_config"))?;
+    if !value.is_table() {bail!("invalid_peer_config");}
+    Ok(())
+}
+
+// Caller owns nikodesk-peer-storage.lock. Only an already attributed scoped
+// legacy file may be copied automatically; numeric files require UI selection.
+fn read_peer_locked(root: &Directory, storage: &str) -> ResultType<Option<Vec<u8>>> {
+    validate_storage(storage)?;
+    let filename = format!("{storage}.toml");
+    if let Some(peers) = existing_directory(root, PEERS)? {
+        if let Some(bytes) = peers.read(&filename, 1024 * 1024)? {return Ok(Some(bytes));}
+        if let Some(marker) = peers.read(&format!("{storage}.removed"), 128)? {
+            if marker != REMOVED {bail!("invalid_peer_tombstone");}
+            return Ok(None);
+        }
+    }
+    let Some(legacy) = existing_directory(root, "peers")? else {return Ok(None);};
+    let Some(bytes) = legacy.read_legacy(&filename, 256 * 1024)? else {return Ok(None);};
+    let safe = toml::to_string(&sanitize(&bytes)?)?.into_bytes();
+    let peers = root.ensure_child(PEERS)?;
+    peers.publish_new(&filename, &safe)?;
+    peers.read(&filename, 1024 * 1024)
+}
+
 #[derive(Serialize)]
 pub struct Item {
     pub id: String,
@@ -17,6 +68,8 @@ pub struct Item {
     pub status: &'static str,
     #[serde(skip)]
     value: toml::Value,
+    #[serde(skip)]
+    source_name: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -35,6 +88,38 @@ pub(crate) struct Repository {
 impl Repository {
     pub(crate) fn new(root: PathBuf) -> Self {
         Self { root }
+    }
+
+    fn read_peer(&self, storage: &str) -> ResultType<Option<Vec<u8>>> {
+        let root = Directory::open(&self.root)?;
+        let _lock = root.lock("nikodesk-peer-storage.lock")?;
+        read_peer_locked(&root, storage)
+    }
+
+    fn write_peer(&self, storage: &str, bytes: &[u8]) -> ResultType<()> {
+        validate_storage(storage)?;
+        validate_peer_file(bytes)?;
+        let root = Directory::open(&self.root)?;
+        let _lock = root.lock("nikodesk-peer-storage.lock")?;
+        let peers = root.ensure_child(PEERS)?;
+        let filename = format!("{storage}.toml");
+        // A session may have fallen back to defaults after a failed load. It
+        // cannot silently overwrite the damaged record with those defaults.
+        if let Some(previous) = peers.read(&filename, 1024 * 1024)? {
+            validate_peer_file(&previous)?;
+        }
+        peers.replace(&filename, bytes)
+    }
+
+    fn remove_peer(&self, storage: &str) -> ResultType<()> {
+        validate_storage(storage)?;
+        let root = Directory::open(&self.root)?;
+        let _lock = root.lock("nikodesk-peer-storage.lock")?;
+        let peers = root.ensure_child(PEERS)?;
+        // Keep this marker after future saves as well. Removing the current file
+        // must never resurrect a preserved older-client snapshot on next read.
+        peers.replace(&format!("{storage}.removed"), REMOVED)?;
+        peers.remove(&format!("{storage}.toml"))
     }
 
     /// Read one scoped list under the same disk lock as all current writers.
@@ -56,20 +141,14 @@ impl Repository {
         }
         let root = Directory::open(&self.root)?;
         let _lock = root.lock("nikodesk-peer-storage.lock")?;
-        let peers = match root.child("peers") {
-            Ok(peers) => peers,
-            Err(error)
-                if error
-                    .downcast_ref::<std::io::Error>()
-                    .map_or(false, |e| e.kind() == std::io::ErrorKind::NotFound) =>
-            {
-                return Ok(Vec::new())
-            }
-            Err(error) => return Err(error),
-        };
+        let mut filenames = std::collections::BTreeSet::new();
+        for directory in [existing_directory(&root, PEERS)?, existing_directory(&root, "peers")?]
+            .into_iter().flatten() {
+            filenames.extend(directory.entries()?);
+        }
         let mut output = Vec::new();
         let mut byte_count = 0usize;
-        for filename in peers.entries()? {
+        for filename in filenames {
             let Some(storage) = filename.strip_suffix(".toml") else {
                 continue;
             };
@@ -79,16 +158,15 @@ impl Repository {
             if ids.map_or(false, |ids| !ids.contains(&id)) {
                 continue;
             }
-            let bytes = peers
-                .read(&filename, 1024 * 1024)?
-                .ok_or_else(|| anyhow!("peer_file_changed"))?;
+            let Some(bytes) = read_peer_locked(&root, storage)? else {continue;};
             byte_count = byte_count
                 .checked_add(bytes.len())
                 .ok_or_else(|| anyhow!("too_many_peers"))?;
             if byte_count > 32 * 1024 * 1024 {
                 bail!("too_many_peers");
             }
-            output.push((id, peers.modified(&filename)?, bytes));
+            if output.len() >= 4096 {bail!("too_many_peers");}
+            output.push((id, root.child(PEERS)?.modified(&filename)?, bytes));
         }
         output.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
         Ok(output)
@@ -103,18 +181,9 @@ impl Repository {
     fn preview_locked(namespace: &str, root: &Directory) -> ResultType<Preview> {
         let scope =
             ServerScope::from_namespace(namespace).ok_or_else(|| anyhow!("invalid_namespace"))?;
-        let peers = match root.child("peers") {
-            Ok(peers) => Some(peers),
-            Err(error)
-                if error
-                    .downcast_ref::<std::io::Error>()
-                    .map_or(false, |e| e.kind() == std::io::ErrorKind::NotFound) =>
-            {
-                None
-            }
-            Err(error) => return Err(error),
-        };
-        let mut items = Vec::new();
+        let peers = existing_directory(root, "peers")?;
+        let targets = existing_directory(root, PEERS)?;
+        let mut items = BTreeMap::new();
         let mut canonical = BTreeMap::new();
         for filename in peers
             .as_ref()
@@ -125,24 +194,26 @@ impl Repository {
             let peers = peers
                 .as_ref()
                 .ok_or_else(|| anyhow!("legacy_peer_changed"))?;
-            let Some(id) = filename.strip_suffix(".toml") else {
+            let Some(storage) = filename.strip_suffix(".toml") else {
                 continue;
             };
-            if super::validate_remote_id(id).is_err() {
-                continue;
-            }
+            let id = match scope.peer_id(storage) {
+                Some(id) => id,
+                None if super::validate_remote_id(storage).is_ok() => storage.to_owned(),
+                None => continue,
+            };
             let bytes = peers
-                .read(&filename, 256 * 1024)?
+                .read_legacy(&filename, 256 * 1024)?
                 .ok_or_else(|| anyhow!("legacy_peer_changed"))?;
             let value = sanitize(&bytes)?;
             let target = format!(
                 "{}.toml",
                 scope
-                    .peer_key(id)
+                    .peer_key(&id)
                     .ok_or_else(|| anyhow!("invalid_peer_id"))?
                     .storage()
             );
-            let target_exists = peers.exists(&target)?;
+            let target_exists = targets.as_ref().map(|d| d.exists(&target)).transpose()?.unwrap_or(false);
             let alias = value
                 .get("options")
                 .and_then(|v| v.get("alias"))
@@ -155,9 +226,11 @@ impl Repository {
                 .keys()
                 .cloned()
                 .collect();
-            canonical.insert(id.to_owned(), toml::to_string(&value)?);
-            items.push(Item {
-                id: id.to_owned(),
+            // Scoped entries sort after numeric ones and are already attributed
+            // to this server, so they take precedence for the same peer ID.
+            canonical.insert(id.clone(), (filename.clone(), toml::to_string(&value)?));
+            items.insert(id.clone(), Item {
+                id,
                 alias,
                 fields,
                 target_exists,
@@ -167,14 +240,44 @@ impl Repository {
                     "available"
                 },
                 value,
+                source_name: Some(filename),
             });
+        }
+        if let Some(bytes) = root.read_legacy("NikoDesk_local.toml", 1024 * 1024)? {
+            let local: toml::Value = toml::from_str(std::str::from_utf8(&bytes)
+                .map_err(|_| anyhow!("invalid_legacy_favorites_file"))?)
+                .map_err(|_| anyhow!("invalid_legacy_favorites_file"))?;
+            let favorites = local.get("fav").and_then(toml::Value::as_array)
+                .filter(|ids| ids.len() <= 4096)
+                .ok_or_else(|| anyhow!("invalid_legacy_favorites_file"))?;
+            for favorite in favorites {
+                let stored = favorite.as_str().ok_or_else(|| anyhow!("invalid_legacy_favorites_file"))?;
+                let id = match scope.peer_id(stored) {
+                    Some(id) => id,
+                    None if super::validate_remote_id(stored).is_ok() => stored.to_owned(),
+                    None => continue,
+                };
+                if items.contains_key(&id) {continue;}
+                let key = scope.peer_key(&id).ok_or_else(|| anyhow!("invalid_peer_id"))?;
+                let target_exists = targets.as_ref().map(|d| d.exists(&format!("{}.toml", key.storage())))
+                    .transpose()?.unwrap_or(false);
+                let value = toml::Value::Table(toml::map::Map::new());
+                canonical.insert(id.clone(), ("favorites".into(), toml::to_string(&value)?));
+                items.insert(id.clone(), Item {
+                    id, alias: String::new(), fields: Vec::new(), target_exists,
+                    status: if target_exists {"target_exists"} else {"available"},
+                    value, source_name: None,
+                });
+            }
         }
         let mut digest = Sha256::new();
         digest.update(b"nikodesk-peer-import-revision-v1\0");
         digest.update(namespace.as_bytes());
-        for (id, value) in canonical {
+        for (id, (filename, value)) in canonical {
             digest.update([0]);
             digest.update(id.as_bytes());
+            digest.update([0]);
+            digest.update(filename.as_bytes());
             digest.update([0]);
             digest.update(value.as_bytes());
         }
@@ -183,13 +286,13 @@ impl Repository {
             status: "preview",
             namespace: namespace.to_owned(),
             revision: format!("{:x}", digest.finalize()),
-            requires_local_restart: true,
-            items,
+            requires_local_restart: false,
+            items: items.into_values().collect(),
         })
     }
 
-    // Only a caller that has proved participation of every peer writer may
-    // commit. A private file marker cannot prove old processes have exited.
+    // Only current-generation writers participate in this destination. Older
+    // clients can change sources, which remain revision-checked and read-only.
     pub(crate) fn import(
         &self,
         namespace: &str,
@@ -220,15 +323,16 @@ impl Repository {
             ServerScope::from_namespace(namespace).ok_or_else(|| anyhow!("invalid_namespace"))?;
         let root = Directory::open(&self.root)?;
         let _lock = root.lock("nikodesk-peer-storage.lock")?;
-        // Bind the whole preview (including unselected entries) to this commit
-        // lock, so no changed source can sneak in between preview and publish.
+        // Re-read the whole preview under the current writer lock. Published
+        // values must match the confirmed snapshot; originals stay independent.
         let preview = Self::preview_locked(namespace, &root)?;
         if preview.revision != revision {
             return Ok(
                 serde_json::json!({"ok":false,"status":"revision_changed","namespace":namespace,"revision":preview.revision}),
             );
         }
-        let peers = root.ensure_child("peers")?;
+        let sources = existing_directory(&root, "peers")?;
+        let peers = root.ensure_child(PEERS)?;
         let mut imported = Vec::new();
         let mut skipped = BTreeMap::new();
         let mut prepared = Vec::new();
@@ -250,10 +354,15 @@ impl Repository {
                 skipped.insert(id.clone(), "active_peer");
                 continue;
             };
-            let bytes = peers
-                .read(&format!("{id}.toml"), 256 * 1024)?
-                .ok_or_else(|| anyhow!("legacy_peer_changed"))?;
-            let value = sanitize(&bytes)?;
+            let value = match &item.source_name {
+                Some(filename) => {
+                    let bytes = sources.as_ref().ok_or_else(|| anyhow!("legacy_peer_changed"))?
+                        .read_legacy(filename, 256 * 1024)?
+                        .ok_or_else(|| anyhow!("legacy_peer_changed"))?;
+                    sanitize(&bytes)?
+                }
+                None => item.value.clone(),
+            };
             if value != item.value {
                 bail!("legacy_peer_changed");
             }
@@ -295,22 +404,13 @@ pub(crate) fn acquire_lease(storage: &str) -> ResultType<std::sync::Arc<PeerLeas
     }))
 }
 pub(crate) fn read_peer(storage: &str) -> ResultType<Option<Vec<u8>>> {
-    let root = Directory::open(&favorites::application_root()?)?;
-    let _lock = root.lock("nikodesk-peer-storage.lock")?;
-    root.ensure_child("peers")?
-        .read(&format!("{storage}.toml"), 1024 * 1024)
+    Repository::new(favorites::application_root()?).read_peer(storage)
 }
 pub(crate) fn write_peer(storage: &str, bytes: &[u8]) -> ResultType<()> {
-    let root = Directory::open(&favorites::application_root()?)?;
-    let _lock = root.lock("nikodesk-peer-storage.lock")?;
-    root.ensure_child("peers")?
-        .replace(&format!("{storage}.toml"), bytes)
+    Repository::new(favorites::application_root()?).write_peer(storage, bytes)
 }
 pub(crate) fn remove_peer(storage: &str) -> ResultType<()> {
-    let root = Directory::open(&favorites::application_root()?)?;
-    let _lock = root.lock("nikodesk-peer-storage.lock")?;
-    root.ensure_child("peers")?
-        .remove(&format!("{storage}.toml"))
+    Repository::new(favorites::application_root()?).remove_peer(storage)
 }
 
 fn sanitize(bytes: &[u8]) -> ResultType<toml::Value> {
@@ -329,6 +429,9 @@ fn sanitize(bytes: &[u8]) -> ResultType<toml::Value> {
         ),
         ("image_quality", &["best", "balanced", "low", "custom"][..]),
         ("keyboard_mode", &["legacy", "map", "translate", "auto"][..]),
+        ("reverse_mouse_wheel", &["", "Y", "N"][..]),
+        ("displays_as_individual_windows", &["", "Y", "N"][..]),
+        ("use_all_my_displays_for_the_remote_session", &["", "Y", "N"][..]),
     ] {
         if let Some(value) = table.get(name) {
             let value = value
@@ -347,6 +450,7 @@ fn sanitize(bytes: &[u8]) -> ResultType<toml::Value> {
         "show_my_cursor",
         "disable_audio",
         "disable_clipboard",
+        "allow_swap_key",
     ] {
         if let Some(value) = table.get(name) {
             let value = value
@@ -355,7 +459,7 @@ fn sanitize(bytes: &[u8]) -> ResultType<toml::Value> {
             output.insert(name.into(), toml::Value::Boolean(value));
         }
     }
-    for name in ["size", "size_ft"] {
+    for name in ["size", "size_ft", "size_pf"] {
         if let Some(value) = table.get(name) {
             let values = value
                 .as_array()
@@ -397,6 +501,24 @@ fn sanitize(bytes: &[u8]) -> ResultType<toml::Value> {
         }
         output.insert("custom_image_quality".into(), value.clone());
     }
+    if let Some(resolutions) = table.get("custom_resolutions") {
+        let resolutions = resolutions.as_table().filter(|v| v.len() <= 64)
+            .ok_or_else(|| anyhow!("invalid_legacy_preference"))?;
+        for (display, resolution) in resolutions {
+            if display.is_empty() || display.len() > 128 || display.chars().any(char::is_control) {
+                bail!("invalid_legacy_preference");
+            }
+            let resolution = resolution.as_table().filter(|v| v.len() == 2)
+                .ok_or_else(|| anyhow!("invalid_legacy_preference"))?;
+            for dimension in ["w", "h"] {
+                if !resolution.get(dimension).and_then(toml::Value::as_integer)
+                    .map_or(false, |v| (0..=16384).contains(&v)) {
+                    bail!("invalid_legacy_preference");
+                }
+            }
+        }
+        output.insert("custom_resolutions".into(), toml::Value::Table(resolutions.clone()));
+    }
     if let Some(options) = table.get("options") {
         let options = options
             .as_table()
@@ -408,6 +530,24 @@ fn sanitize(bytes: &[u8]) -> ResultType<toml::Value> {
                 .filter(|v| v.len() <= 256 && !v.chars().any(char::is_control))
                 .ok_or_else(|| anyhow!("invalid_legacy_preference"))?;
             copied.insert("alias".into(), toml::Value::String(alias.to_owned()));
+        }
+        for (name, allowed) in [
+            ("codec-preference", &["", "auto", "vp8", "vp9", "av1", "h264", "h265"][..]),
+            ("nikodesk-picture-mode", &["office", "smooth", "constrained", "custom"][..]),
+            ("zoom-cursor", &["", "Y", "N"][..]),
+        ] {
+            if let Some(value) = options.get(name) {
+                let value = value.as_str().filter(|value| allowed.contains(value))
+                    .ok_or_else(|| anyhow!("invalid_legacy_preference"))?;
+                copied.insert(name.into(), toml::Value::String(value.to_owned()));
+            }
+        }
+        if let Some(value) = options.get("custom-fps") {
+            let value = value.as_str().ok_or_else(|| anyhow!("invalid_legacy_preference"))?;
+            if !value.is_empty() && !value.parse::<u32>().ok().map_or(false, |fps| fps <= 240) {
+                bail!("invalid_legacy_preference");
+            }
+            copied.insert("custom-fps".into(), toml::Value::String(value.to_owned()));
         }
         if !copied.is_empty() {
             output.insert("options".into(), toml::Value::Table(copied));
@@ -425,14 +565,14 @@ pub fn preview(namespace: &str) -> String {
 }
 pub fn import(namespace: &str, revision: &str, ids: &[String]) -> String {
     favorites::json(favorites::context(namespace).and_then(|_| {
-        // Foundation is supplied below, but pre-protocol processes are not observable
-        // in the registry. Keep the production gate until restart is proved.
+        // Older clients do not know the v2 destination. Every current peer writer
+        // and session uses this repository's disk lock and kernel-backed leases.
         Repository::new(favorites::application_root()?).import(
             namespace,
             revision,
             ids,
-            false,
-            |_| true,
+            true,
+            |_| false,
         )
     }))
 }
@@ -469,7 +609,7 @@ mod tests {
         let temp = Temp::new();
         let peers = Directory::open(&temp.0)
             .unwrap()
-            .ensure_child("peers")
+            .ensure_child(PEERS)
             .unwrap();
         let a = ServerScope::from_namespace(&ns('a')).unwrap();
         let b = ServerScope::from_namespace(&ns('b')).unwrap();
@@ -485,7 +625,7 @@ mod tests {
         for key in [unselected, foreign] {
             symlink(
                 temp.0.join("missing"),
-                temp.0.join("peers").join(format!("{}.toml", key.storage())),
+                temp.0.join(PEERS).join(format!("{}.toml", key.storage())),
             )
             .unwrap();
         }
@@ -505,13 +645,13 @@ mod tests {
         use std::os::unix::fs::symlink;
         let temp = Temp::new();
         let foreign = Temp::new();
-        symlink(&foreign.0, temp.0.join("peers")).unwrap();
+        symlink(&foreign.0, temp.0.join(PEERS)).unwrap();
         let repository = Repository::new(temp.0.clone());
         assert!(repository.scoped_preferences(&ns('a'), None).is_err());
-        fs::remove_file(temp.0.join("peers")).unwrap();
+        fs::remove_file(temp.0.join(PEERS)).unwrap();
         let peers = Directory::open(&temp.0)
             .unwrap()
-            .ensure_child("peers")
+            .ensure_child(PEERS)
             .unwrap();
         let key = ServerScope::from_namespace(&ns('a'))
             .unwrap()
@@ -521,12 +661,12 @@ mod tests {
         peers.replace(&name, b"complete").unwrap();
         let file = fs::OpenOptions::new()
             .write(true)
-            .open(temp.0.join("peers").join(&name))
+            .open(temp.0.join(PEERS).join(&name))
             .unwrap();
         file.set_len(1024 * 1024 + 1).unwrap();
         assert!(repository.scoped_preferences(&ns('a'), None).is_err());
         assert_eq!(
-            fs::metadata(temp.0.join("peers").join(name)).unwrap().len(),
+            fs::metadata(temp.0.join(PEERS).join(name)).unwrap().len(),
             1024 * 1024 + 1
         );
     }
@@ -552,7 +692,7 @@ mod tests {
             .import(&a, &p.revision, &["123456789".into()], true, |_| false)
             .unwrap();
         assert_eq!(result["imported"][0], "123456789");
-        let target = temp.0.join(format!("peers/nikodesk_v1_{a}_123456789.toml"));
+        let target = temp.0.join(PEERS).join(format!("nikodesk_v1_{a}_123456789.toml"));
         let first = fs::read(&target).unwrap();
         assert!(!String::from_utf8(first.clone())
             .unwrap()
@@ -661,6 +801,104 @@ mod tests {
                 .len(),
             256 * 1024 + 1
         );
+    }
+
+    #[test]
+    fn scoped_compatibility_copy_is_private_authoritative_and_deleted_peers_stay_deleted() {
+        let (temp, repo) = setup();
+        let legacy = Directory::open(&temp.0).unwrap().child("peers").unwrap();
+        let a = ns('a');
+        let storage = format!("nikodesk_v1_{a}_123456789");
+        let filename = format!("{storage}.toml");
+        let mut complete_source = b"reverse_mouse_wheel='Y'\nallow_swap_key=true\nsize_ft=[0,0,640,480]\n".to_vec();
+        complete_source.extend_from_slice(SOURCE);
+        complete_source.extend_from_slice(b"custom-fps='48'\ncodec-preference='auto'\nnikodesk-picture-mode='office'\n");
+        complete_source.extend_from_slice(b"[custom_resolutions.'0']\nw=1920\nh=1080\n");
+        legacy.replace(&filename, &complete_source).unwrap();
+        let copied = repo.read_peer(&storage).unwrap().unwrap();
+        let value: toml::Value = toml::from_str(std::str::from_utf8(&copied).unwrap()).unwrap();
+        assert_eq!(value["view_style"].as_str(), Some("original"));
+        assert_eq!(value["options"]["custom-fps"].as_str(), Some("48"));
+        assert_eq!(value["options"]["nikodesk-picture-mode"].as_str(), Some("office"));
+        assert_eq!(value["reverse_mouse_wheel"].as_str(), Some("Y"));
+        assert_eq!(value["allow_swap_key"].as_bool(), Some(true));
+        assert_eq!(value["size_ft"][2].as_integer(), Some(640));
+        assert_eq!(value["custom_resolutions"]["0"]["w"].as_integer(), Some(1920));
+        assert!(value.get("password").is_none());
+        assert!(value.get("port_forwards").is_none());
+        assert!(!std::str::from_utf8(&copied).unwrap().contains("synthetic-secret"));
+        assert_eq!(legacy.read(&filename, 256 * 1024).unwrap().unwrap(), complete_source);
+        assert_eq!(legacy.read("123456789.toml", 256 * 1024).unwrap().unwrap(), SOURCE);
+        legacy.replace(&filename, b"view_style='stretch'\n").unwrap();
+        assert_eq!(repo.read_peer(&storage).unwrap().unwrap(), copied);
+        repo.write_peer(&storage, b"view_style='adaptive'\n").unwrap();
+        assert_eq!(repo.read_peer(&storage).unwrap().unwrap(), b"view_style='adaptive'\n");
+        assert_eq!(legacy.read(&filename, 256 * 1024).unwrap().unwrap(), b"view_style='stretch'\n");
+        repo.remove_peer(&storage).unwrap();
+        assert!(repo.read_peer(&storage).unwrap().is_none());
+        assert!(repo.scoped_preferences(&a, None).unwrap().is_empty());
+        assert!(legacy.exists(&filename).unwrap());
+        // Explicitly selected import may restore a removed preference; a read cannot.
+        let preview = repo.preview(&a).unwrap();
+        assert!(!preview.requires_local_restart);
+        assert_eq!(preview.items.len(), 1);
+        repo.import(&a, &preview.revision, &["123456789".into()], true, |_| false).unwrap();
+        assert!(repo.read_peer(&storage).unwrap().is_some());
+        // An existing v2 record wins over later source edits and manual imports.
+        legacy.replace(&filename, SOURCE).unwrap();
+        let preview = repo.preview(&a).unwrap();
+        let result = repo.import(&a, &preview.revision, &["123456789".into()], true, |_| false).unwrap();
+        assert_eq!(result["skipped"]["123456789"], "target_exists");
+        assert_eq!(toml::from_str::<toml::Value>(std::str::from_utf8(&repo.read_peer(&storage).unwrap().unwrap()).unwrap()).unwrap()["view_style"].as_str(), Some("stretch"));
+        assert!(repo.read_peer("123456789").is_err());
+        assert!(repo.read_peer(&format!("nikodesk_v1_{a}_../123456789")).is_err());
+    }
+
+    #[test]
+    fn favorite_only_entries_can_be_attributed_without_modifying_legacy_files() {
+        let temp = Temp::new();
+        let root = Directory::open(&temp.0).unwrap();
+        let a = ns('a');
+        let b = ns('b');
+        let source = format!("fav=['123456789','nikodesk_v1_{a}_987654321','nikodesk_v1_{b}_111111111']\n[options]\npassword='synthetic-secret'\n");
+        root.replace("NikoDesk_local.toml", source.as_bytes()).unwrap();
+        let repo = Repository::new(temp.0.clone());
+        let preview = repo.preview(&a).unwrap();
+        assert_eq!(preview.items.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(), vec!["123456789", "987654321"]);
+        assert!(preview.items.iter().all(|item| item.fields.is_empty()));
+        let result = repo.import(&a, &preview.revision, &["123456789".into()], true, |_| false).unwrap();
+        assert_eq!(result["imported"][0], "123456789");
+        let storage = format!("nikodesk_v1_{a}_123456789");
+        let imported = repo.read_peer(&storage).unwrap().unwrap();
+        assert!(toml::from_str::<toml::Value>(std::str::from_utf8(&imported).unwrap()).unwrap().as_table().unwrap().is_empty());
+        assert!(!std::str::from_utf8(&imported).unwrap().contains("synthetic-secret"));
+        assert_eq!(root.read("NikoDesk_local.toml", 1024 * 1024).unwrap().unwrap(), source.as_bytes());
+        assert!(!temp.0.join("peers").exists());
+        root.replace("NikoDesk_local.toml", b"fav=[]\n").unwrap();
+        let result = repo.import(&a, &preview.revision, &["987654321".into()], true, |_| false).unwrap();
+        assert_eq!(result["status"], "revision_changed");
+        assert!(repo.read_peer(&format!("nikodesk_v1_{a}_987654321")).unwrap().is_none());
+    }
+
+    #[test]
+    fn failed_load_cannot_overwrite_a_damaged_current_preference() {
+        let temp = Temp::new();
+        let root = Directory::open(&temp.0).unwrap();
+        let repo = Repository::new(temp.0.clone());
+        let storage = format!("nikodesk_v1_{}_123456789", ns('a'));
+        assert!(repo.write_peer(&storage, b"view_style=[").is_err());
+        assert!(!temp.0.join(PEERS).exists());
+        let peers = root.ensure_child(PEERS).unwrap();
+        let filename = format!("{storage}.toml");
+        for damaged in [b"view_style=[".as_slice(), b"\xff".as_slice()] {
+            peers.replace(&filename, damaged).unwrap();
+            assert!(repo.write_peer(&storage, b"view_style='original'\n").is_err());
+            assert_eq!(peers.read(&filename, 1024).unwrap().unwrap(), damaged);
+        }
+        peers.replace(&filename, b"view_style=[").unwrap();
+        repo.remove_peer(&storage).unwrap();
+        repo.write_peer(&storage, b"view_style='original'\n").unwrap();
+        assert_eq!(repo.read_peer(&storage).unwrap().unwrap(), b"view_style='original'\n");
     }
 
     #[test]

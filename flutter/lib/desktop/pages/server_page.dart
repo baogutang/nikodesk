@@ -23,6 +23,12 @@ import '../../models/platform_model.dart';
 import '../../models/server_model.dart';
 import '../../nikodesk/theme.dart';
 import '../../nikodesk/cm_capability_panel.dart';
+import '../../nikodesk/cm_camera_panel.dart';
+import '../../nikodesk/ui.dart';
+import '../../nikodesk/cm_camera_native.dart';
+import '../../nikodesk/cm_voice_panel.dart';
+import '../../nikodesk/cm_voice_start.dart';
+import '../../nikodesk/cm_tunnel_panel.dart';
 
 /// Set only by this window's own close control, and only once the user has confirmed. Any other
 /// way the window can go - a session logout closing every window, the window manager, a native
@@ -367,7 +373,22 @@ class ConnectionManagerState extends State<ConnectionManager>
 
 Widget buildConnectionCard(Client client) {
   return Consumer<ServerModel>(
-    builder: (context, value, child) => Column(
+    builder: (context, value, child) {
+      // A retired voice row is delivered as a new authoritative Client snapshot.
+      // A tab must render that snapshot rather than the object captured at login.
+      final latest = value.clients.where((c) => c.id == client.id);
+      final shown = const bool.fromEnvironment('NIKODESK') && latest.isNotEmpty &&
+          (latest.first.nikoVoice != null || latest.first.nikoVoiceCleanup ||
+              latest.first.nikoTunnel != null || latest.first.nikoTunnelCleanup ||
+              latest.first.type_() == ClientType.portForward)
+          ? latest.first : client;
+      return _buildConnectionCardContents(shown);
+    },
+  );
+}
+
+Widget _buildConnectionCardContents(Client client) {
+  return Column(
       mainAxisAlignment: MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.start,
       key: ValueKey(client.id),
@@ -376,18 +397,22 @@ Widget buildConnectionCard(Client client) {
         client.type_() == ClientType.file ||
                 client.type_() == ClientType.portForward ||
                 client.type_() == ClientType.terminal ||
+                (const bool.fromEnvironment('NIKODESK') && client.isViewCamera) ||
                 client.disconnected
             ? Offstage()
             : _PrivilegeBoard(client: client),
         Expanded(
           child: Align(
             alignment: Alignment.bottomCenter,
-            child: _CmControlPanel(client: client),
+            child: const bool.fromEnvironment('NIKODESK') &&
+                (client.isViewCamera || client.nikoVoice != null || client.nikoVoiceCleanup ||
+                    client.type_() == ClientType.portForward)
+                ? SingleChildScrollView(child: _CmControlPanel(client: client))
+                : _CmControlPanel(client: client),
           ),
         )
       ],
-    ).paddingSymmetric(vertical: 4.0, horizontal: 8.0),
-  );
+    ).paddingSymmetric(vertical: 4.0, horizontal: 8.0);
 }
 
 class _AppIcon extends StatelessWidget {
@@ -533,7 +558,9 @@ class _CmHeaderState extends State<_CmHeader>
                 if (client.portForward.isNotEmpty)
                   FittedBox(
                     child: Text(
-                      "Port Forward: ${client.portForward}",
+                      const bool.fromEnvironment('NIKODESK')
+                          ? '${nikoText('隧道目标', 'Tunnel target')}: ${client.nikoTunnel?.target.label ?? client.portForward}'
+                          : "Port Forward: ${client.portForward}",
                       style: TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                   ),
@@ -542,7 +569,10 @@ class _CmHeaderState extends State<_CmHeader>
                     child: Row(
                   children: [
                     Text(
-                      client.authorized
+                      const bool.fromEnvironment('NIKODESK') &&
+                              client.type_() == ClientType.portForward && client.disconnected
+                          ? nikoText('等待清理确认', 'Waiting for cleanup confirmation')
+                          : client.authorized
                           ? client.disconnected
                               ? translate("Disconnected")
                               : translate("Connected")
@@ -890,6 +920,40 @@ class _CmControlPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (const bool.fromEnvironment('NIKODESK') &&
+        client.type_() == ClientType.portForward) {
+      final model = Provider.of<ServerModel>(context);
+      final tunnel = model.nikoTunnel(client);
+      return Column(mainAxisSize: MainAxisSize.min, children: [
+        if (tunnel != null)
+          NikoCmTunnelPanel(model: tunnel)
+        else
+          Text(nikoText('尚未确认此隧道的授权状态；可以退出连接。',
+              'Tunnel approval has not been confirmed. You can leave the connection.')),
+        if (tunnel == null || !tunnel.cleanupOnly)
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+            onPressed: () async {
+              if (tunnel == null) {
+                handleDisconnect();
+              } else if (!await model.closeNikoTunnel(client) && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
+                    nikoText('退出结果未确认；请检查状态或重试清理。',
+                        'Leaving is unconfirmed. Check the status or retry cleanup.'))));
+              }
+            },
+            child: Text(nikoText('退出连接', 'Leave connection')),
+          ),
+        if (tunnel?.cleanupOnly == true && tunnel!.status.phase == 'Stopped' &&
+            !tunnel.cleanupUnconfirmed)
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+            onPressed: handleClose,
+            child: Text(nikoText('关闭记录', 'Close record')),
+          ),
+      ]).marginOnly(bottom: buttonBottomMargin);
+    }
+    if (client.nikoCameraCleanup || client.nikoVoiceCleanup) return buildDisconnected(context);
     return client.authorized
         ? client.disconnected
             ? buildDisconnected(context)
@@ -900,6 +964,9 @@ class _CmControlPanel extends StatelessWidget {
   buildAuthorized(BuildContext context) {
     final bool canElevate = bind.cmCanElevate();
     final model = Provider.of<ServerModel>(context);
+    final camera = const bool.fromEnvironment('NIKODESK') && client.isViewCamera
+        ? model.nikoCamera(client.id) : null;
+    final cameraStatus = camera?.status;
     final showElevation = canElevate &&
         model.showElevation &&
         client.type_() == ClientType.remote;
@@ -908,8 +975,31 @@ class _CmControlPanel extends StatelessWidget {
       children: [
         if (bind.mainGetAppNameSync() == 'NikoDesk' && client.isTerminal && model.nikoCapability(client.id) != null)
           NikoTerminalCapabilityPanel(status: model.nikoCapability(client.id)!),
+        if (bind.mainGetAppNameSync() == 'NikoDesk' && cameraStatus != null)
+          NikoCameraCapabilityPanel(
+            status: cameraStatus,
+            catalog: camera?.catalog,
+            cleanupUnconfirmed: camera?.cleanupUnconfirmed ?? false,
+            onCleanupRequested: () => model.markNikoCameraCleanup(cameraStatus),
+            refreshStatus: () => model.refreshNikoCamera(cameraStatus),
+            canRequestSystemPermission: isMacOS,
+            sendCommand: const NativeNikoCameraTransport().send,
+          ),
+        if (const bool.fromEnvironment('NIKODESK') &&
+            client.type_() == ClientType.remote && model.nikoVoice(client.id) != null)
+          NikoCmVoicePanel(model: model.nikoVoice(client.id)!),
+        if (const bool.fromEnvironment('NIKODESK') && client.authorized &&
+            !client.disconnected && client.nikoVoiceContext != null &&
+            (model.nikoVoice(client.id) == null ||
+             model.nikoVoice(client.id)!.status.phase == 'Stopped' &&
+             !model.nikoVoice(client.id)!.cleanupUnconfirmed))
+          NikoCmVoiceStart(
+            key: ValueKey('cm-voice-start-${client.id}-${client.nikoVoiceContext!.connectionNonce}'),
+            context: client.nikoVoiceContext!,
+            prepareError: client.nikoVoicePrepareError,
+            prepareDeadline: client.nikoVoicePrepareDeadline),
         Offstage(
-          offstage: !client.inVoiceCall,
+          offstage: const bool.fromEnvironment('NIKODESK') || !client.inVoiceCall,
           child: Row(
             children: [
               Expanded(
@@ -995,7 +1085,7 @@ class _CmControlPanel extends StatelessWidget {
           ),
         ),
         Offstage(
-          offstage: !client.incomingVoiceCall,
+          offstage: const bool.fromEnvironment('NIKODESK') || !client.incomingVoiceCall,
           child: Row(
             children: [
               Expanded(
@@ -1075,6 +1165,37 @@ class _CmControlPanel extends StatelessWidget {
   }
 
   buildDisconnected(BuildContext context) {
+    final model = Provider.of<ServerModel>(context);
+    final voice = client.nikoVoiceCleanup ? model.nikoVoice(client.id) : null;
+    if (voice != null) {
+      return Column(mainAxisSize: MainAxisSize.min, children: [
+        Text(nikoText('远端连接已关闭；此记录仅用于确认音频清理。',
+            'The remote connection is closed. This record only tracks audio cleanup.')),
+        NikoCmVoicePanel(model: voice),
+        if (voice.status.phase == 'Stopped' && !voice.cleanupUnconfirmed)
+          buildButton(context, color: _cmAccent(context), onClick: handleClose,
+              text: 'Close', textColor: Colors.white),
+      ]).marginOnly(bottom: buttonBottomMargin);
+    }
+    final cleanup = client.nikoCameraCleanup ? model.nikoCamera(client.id) : null;
+    if (cleanup != null) {
+      final status = cleanup.status;
+      return Column(children: [
+        Text(nikoText('远端连接已关闭；此记录仅用于确认摄像头清理。',
+            'The remote connection is closed. This record only tracks camera cleanup.')),
+        NikoCameraCapabilityPanel(
+          status: status,
+          cleanupOnly: true,
+          cleanupUnconfirmed: cleanup.cleanupUnconfirmed,
+          onCleanupRequested: () => model.markNikoCameraCleanup(status),
+          refreshStatus: () => model.refreshNikoCamera(status),
+          sendCommand: const NativeNikoCameraTransport().send,
+        ),
+        if (status.phase == 'Stopped')
+          buildButton(context, color: _cmAccent(context), onClick: handleClose,
+              text: 'Close', textColor: Colors.white),
+      ]).marginOnly(bottom: buttonBottomMargin);
+    }
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [

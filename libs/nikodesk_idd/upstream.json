@@ -1,0 +1,40 @@
+{
+  "commit": "448e627e2fc6238f0371f8d9963a6ad7a5925f4e",
+  "files": [
+    {
+      "file": "RustDeskIddDriver/Driver.cpp",
+      "url": "https://raw.githubusercontent.com/rustdesk-org/RustDeskIddDriver/448e627e2fc6238f0371f8d9963a6ad7a5925f4e/RustDeskIddDriver/Driver.cpp",
+      "sha256": "e6e72e593246cc4b25d8ff8fd4db37c397885a5c02f82aaee10828cc43a6881c"
+    },
+    {
+      "file": "RustDeskIddDriver/Driver.h",
+      "url": "https://raw.githubusercontent.com/rustdesk-org/RustDeskIddDriver/448e627e2fc6238f0371f8d9963a6ad7a5925f4e/RustDeskIddDriver/Driver.h",
+      "sha256": "dbd7fca993673fd7c3d236a3ffcf61de0d13c861e744c0e1403f6f9348a39c17"
+    },
+    {
+      "file": "RustDeskIddDriver/Trace.h",
+      "url": "https://raw.githubusercontent.com/rustdesk-org/RustDeskIddDriver/448e627e2fc6238f0371f8d9963a6ad7a5925f4e/RustDeskIddDriver/Trace.h",
+      "sha256": "937ed3725943d90aa20543400791ac8611d004fe4cabfc363671bde2b9827ce4"
+    },
+    {
+      "file": "RustDeskIddDriver/Public.h",
+      "url": "https://raw.githubusercontent.com/rustdesk-org/RustDeskIddDriver/448e627e2fc6238f0371f8d9963a6ad7a5925f4e/RustDeskIddDriver/Public.h",
+      "sha256": "ff05c2b955805799101ecb14a178604c2698215a5c453e6318eafa098588860c"
+    },
+    {
+      "file": "RustDeskIddDriver/RustDeskIddDriver.vcxproj",
+      "url": "https://raw.githubusercontent.com/rustdesk-org/RustDeskIddDriver/448e627e2fc6238f0371f8d9963a6ad7a5925f4e/RustDeskIddDriver/RustDeskIddDriver.vcxproj",
+      "sha256": "f9bcb4edee732ddd4836af3e213aa616f40aca06edca11ab3bc3d38fdaf2049f"
+    },
+    {
+      "file": "RustDeskIddDriver/RustDeskIddDriver.inf",
+      "url": "https://raw.githubusercontent.com/rustdesk-org/RustDeskIddDriver/448e627e2fc6238f0371f8d9963a6ad7a5925f4e/RustDeskIddDriver/RustDeskIddDriver.inf",
+      "sha256": "04406df84f5c2de680b831ca400ee43516052a9b7e5be80c3612c8d0ca0d5cb9"
+    },
+    {
+      "file": "LICENSE",
+      "url": "https://raw.githubusercontent.com/rustdesk-org/RustDeskIddDriver/448e627e2fc6238f0371f8d9963a6ad7a5925f4e/LICENSE",
+      "sha256": "07639618c7b94ab9953cc61715f6325877e1854dca611ed9b1bd54497cf5e93a"
+    }
+  ]
+}

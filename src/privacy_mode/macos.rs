@@ -3,6 +3,8 @@ use hbb_common::{anyhow::anyhow, ResultType};
 
 extern "C" {
     fn MacSetPrivacyMode(on: bool) -> bool;
+    #[cfg(feature="nikodesk")]
+    fn NikoMacPrivacyModeActive() -> bool;
 }
 
 pub const PRIVACY_MODE_IMPL: &str = "privacy_mode_impl_macos";
@@ -69,6 +71,15 @@ impl PrivacyMode for PrivacyModeImpl {
 
     fn get_impl_key(&self) -> &str {
         &self.impl_key
+    }
+
+    #[cfg(feature="nikodesk")]
+    fn nikodesk_heartbeat(&mut self, conn_id:i32, permitted:bool)->bool {
+        if self.conn_id != conn_id || self.conn_id == 0 {return false;}
+        if permitted && unsafe {NikoMacPrivacyModeActive()} {return false;}
+        // Local emergency exit, helper recovery and monitor changes must update
+        // the controller too. Keep the owner if actual restoration is uncertain.
+        if unsafe {MacSetPrivacyMode(false)} {self.conn_id=0;true} else {false}
     }
 }
 

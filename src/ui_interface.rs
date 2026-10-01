@@ -288,6 +288,9 @@ pub fn set_kb_layout_type(kb_layout_type: String) {
 
 #[inline]
 pub fn peer_has_password(id: String) -> bool {
+    #[cfg(feature = "nikodesk")]
+    return crate::nikodesk::credentials::status(&id) == "present";
+    #[cfg(not(feature = "nikodesk"))]
     !get_peer(id).password.is_empty()
 }
 
@@ -295,7 +298,10 @@ pub fn peer_has_password(id: String) -> bool {
 pub fn forget_password(id: String) {
     #[cfg(feature = "nikodesk")]
     {
-        if let Some(key) = crate::nikodesk::server_scope::current_peer_key(&id) {
+        if let Ok(key) = crate::nikodesk::credentials::selected(&id) {
+            if crate::nikodesk::credentials::delete(&key).is_err() {
+                log::warn!("NikoDesk credential removal was not confirmed");
+            }
             let mut c = key.load();
             c.password.clear();
             key.store(&c);
@@ -312,6 +318,22 @@ pub fn forget_password(id: String) {
 
 #[inline]
 pub fn get_peer_option(id: String, name: String) -> String {
+    #[cfg(feature = "nikodesk")]
+    if name == "nikodesk-credential-status" {
+        return crate::nikodesk::credentials::status(&id).to_owned();
+    }
+    #[cfg(feature = "nikodesk")]
+    if name == "nikodesk-wake-proxy-status" {
+        return crate::nikodesk::wol_proxy::status(&id);
+    }
+    #[cfg(feature = "nikodesk")]
+    if name == "nikodesk-peer-online-status" {
+        return crate::nikodesk::online_status::status(&id);
+    }
+    #[cfg(all(feature = "nikodesk", feature = "flutter"))]
+    if name == "nikodesk-wake-tunnels" {
+        return crate::client::nikodesk_tunnel::ui::wake_endpoints(&id);
+    }
     let c = get_peer(id);
     c.options.get(&name).unwrap_or(&"".to_owned()).to_owned()
 }

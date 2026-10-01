@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 
 import 'connect_dialog.dart';
+import 'credential_connect_dialog.dart';
 import 'policy.dart';
 import 'server_gateway.dart';
 import 'ui.dart';
@@ -54,7 +55,9 @@ class NikoLinkRequest {
           uri.userInfo.isNotEmpty ||
           uri.hasPort ||
           uri.fragment.isNotEmpty) return null;
-      if (uri.authority.isEmpty && (uri.path.isEmpty || uri.path == '/') && !uri.hasQuery) {
+      if (uri.authority.isEmpty &&
+          (uri.path.isEmpty || uri.path == '/') &&
+          !uri.hasQuery) {
         return const NikoLinkRequest('', 'open', null, false);
       }
       final query = uri.queryParametersAll;
@@ -131,31 +134,65 @@ class NikoLinkInbox {
 
 Future<void> dispatchNikoLink(BuildContext context, NikoLinkRequest request,
     {ServerGateway? gateway,
+    Future<String> Function()? credentialStatusLoader,
     Future<void> Function(BuildContext, String, bool,
             {bool isFileTransfer, String? password})?
-      onConnect}) async {
+        onConnect}) async {
   if (request.mode == 'open') return;
   if (!validDeviceId(request.id)) {
-    nikoNotice(context, nikoText('链接无效或不支持。请从设备页输入远端 ID。',
-        'This link is invalid or unsupported. Enter the remote ID on Devices.'));
+    nikoNotice(
+        context,
+        nikoText('链接无效或不支持。请从设备页输入远端 ID。',
+            'This link is invalid or unsupported. Enter the remote ID on Devices.'));
     return;
   }
-  var password = request.password;
-  if (password == null || password.isEmpty) {
-    password = await nikoAskConnectPassword(context, request.id, '',
-        fileTransfer: request.mode == 'file-transfer');
+  final selectedGateway = gateway ?? NativeServerGateway();
+  ServerSnapshot snapshot;
+  try {
+    snapshot = await selectedGateway.read();
+  } catch (_) {
+    if (context.mounted) {
+      nikoNotice(
+          context,
+          nikoText('无法读取私服配置，请稍后重试。',
+              'Private server settings are unavailable. Try again.'));
+    }
+    return;
   }
-  if (password == null || !context.mounted) return;
+  if (!context.mounted) return;
+  if (!snapshot.enabled || !snapshot.config.isValid) {
+    nikoNotice(
+        context,
+        nikoText('请先完成有效的私服配置并启用连接。',
+            'Configure a valid private server and enable connections first.'));
+    return;
+  }
+  final scope = snapshot.namespace;
+  NikoConnectAuth? auth;
+  if (request.password == null || request.password!.isEmpty) {
+    auth = await nikoAskCredentialConnect(context, request.id, '',
+        namespace: scope ?? '',
+        native: scope != null,
+        fileTransfer: request.mode == 'file-transfer',
+        statusLoader: credentialStatusLoader);
+  } else {
+    // An external link never chooses whether to save or remove a credential.
+    auth = NikoConnectAuth(request.password!);
+  }
+  if (auth == null || !context.mounted) return;
+  final connToken = scope == null ? null : auth.token(scope);
   await nikoDispatchConnection(context,
       id: request.id,
-      password: password,
+      password: auth.password,
+      useSavedCredential: auth.useSaved,
+      connToken: connToken,
+      expectedServerNamespace: scope,
       fileTransfer: request.mode == 'file-transfer',
       forceRelay: request.forceRelay,
-      gateway: gateway,
+      gateway: selectedGateway,
       onConnect: onConnect ??
           (ctx, id, relay, {isFileTransfer = false, password}) async {
-            if (!isDesktop &&
-                (request.mode == 'port-forward' || request.mode == 'rdp')) {
+            if (!isDesktop && request.mode == 'rdp') {
               nikoNotice(
                   ctx,
                   nikoText('手机暂不支持此会话类型。',
@@ -165,6 +202,8 @@ Future<void> dispatchNikoLink(BuildContext context, NikoLinkRequest request,
             await connect(ctx, id,
                 forceRelay: relay,
                 password: password,
+                serverNamespace: scope,
+                connToken: connToken,
                 isFileTransfer: isFileTransfer,
                 isViewCamera: request.mode == 'view-camera',
                 isTerminal: request.mode == 'terminal',

@@ -90,8 +90,8 @@
   },
   "modified_files": {
     "src/host/coreaudio/macos/mod.rs": {
-      "change": "one read-only nikodesk_audio_device_id accessor; stock source unchanged",
-      "sha256": "4a4b78daaaa8cae27289c6b59bb969ab3cadeb6cd7df04ea8e78fc3959ac9ee9"
+      "change": "read-only device ID plus empty owned HAL stream/explicit prepare/actual release ACK; no default start or hardware sample-rate mutation",
+      "sha256": "15edd274edf4996ed933c5f471c534315658b9574ceea1d51b0001f46ae00594"
     },
     "src/host/wasapi/device.rs": {
       "change": "Niko Windows input render-loopback marker and event owner; initialization flags unchanged",
@@ -108,7 +108,33 @@
     "src/host/wasapi/stream/loopback_packet.rs": {
       "change": "new pure production packet release guard and aligned silence with tests",
       "sha256": "a7245ddc471949ad84a178f9c128ad5372a57c54adbb80339543b05f0d1cbb0a"
+    },
+    "Cargo.toml": {
+      "change": "macOS-only private coreaudio path alias; iOS registry and root stock Git dependency unchanged",
+      "sha256": "4638416181f611ff35982cc08e5992409b325249ff200192ffad020041771c39"
+    },
+    "src/host/coreaudio/mod.rs": {
+      "change": "macOS-only private crate alias; iOS unchanged",
+      "sha256": "5383a760645de03b8b0a18df7d9157b489c7dcf1aae775a0a3b8c9a7d74449a3"
+    },
+    "src/host/coreaudio/macos/enumerate.rs": {
+      "change": "macOS-only private coreaudio crate alias; existing enumeration implementation preserved",
+      "sha256": "3c1a21fdb496187704b9e9e3d278ce3056a568e444b51f57a37f1e0e6bfab300"
+    },
+    "src/host/coreaudio/macos/property_listener.rs": {
+      "change": "import existing private macOS coreaudio alias; no new listener in owned voice path",
+      "sha256": "a7d0f95b203b32bd84248f8446e8559c7ab8e1cf9a1a7701912917eb8f29ad2b"
     }
   },
-  "runtime_scope": "optional Niko macOS voice exact-device UID and Niko Windows system audio WASAPI; stock Git dependency unchanged"
+  "runtime_scope": "optional Niko macOS owned voice exact-device UID/partial construction/callback cleanup ACK and Niko Windows system audio WASAPI; root stock Git CPAL and iOS unchanged",
+  "modification_history": [
+    {
+      "stage": "voice-stage-b-readonly-uid",
+      "file": "src/host/coreaudio/macos/mod.rs",
+      "record": {
+        "change": "one read-only nikodesk_audio_device_id accessor; stock source unchanged",
+        "sha256": "4a4b78daaaa8cae27289c6b59bb969ab3cadeb6cd7df04ea8e78fc3959ac9ee9"
+      }
+    }
+  ]
 }

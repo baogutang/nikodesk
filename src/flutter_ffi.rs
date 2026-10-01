@@ -222,7 +222,7 @@ pub fn session_add_nikodesk_sync(
             crate::nikodesk::connection_snapshot::validate_namespace(&expected_server_namespace)?;
             crate::nikodesk::validate_remote_id(&id)?;
             crate::nikodesk::validate_connection_credentials(&password)?;
-            if is_view_camera || is_port_forward || is_rdp || (is_terminal && is_file_transfer) || !switch_uuid.is_empty() {
+            if is_port_forward || is_rdp || (is_terminal && is_file_transfer) || (is_view_camera && (is_file_transfer || is_terminal)) || !switch_uuid.is_empty() {
                 hbb_common::bail!("NikoDesk supports private-server desktop, file and locally approved terminal requests");
             }
             let snapshot = crate::nikodesk::connection_snapshot::ConnectionSnapshot::capture(&expected_server_namespace)?;
@@ -1114,6 +1114,11 @@ pub fn main_get_http_status(url: String) -> Option<String> {
 }
 
 pub fn main_get_option(key: String) -> String {
+    #[cfg(feature="nikodesk")]
+    if key == "nikodesk-two-factor-status" {
+        return if crate::nikodesk::settings_save_failed() {"unknown"}
+            else {crate::auth_2fa::configuration_status(None)}.to_owned();
+    }
     #[cfg(feature = "nikodesk")]
     return if crate::nikodesk::settings_save_failed() && key != "stop-service" {
         String::new()
@@ -2104,6 +2109,44 @@ pub fn session_add_port_forward(
     }
 }
 
+pub fn session_niko_tunnel_command(session_id: SessionID, json: String) -> String {
+    #[cfg(feature = "nikodesk")]
+    { crate::client::nikodesk_tunnel::ui::command(session_id, json) }
+    #[cfg(not(feature = "nikodesk"))]
+    { let _ = (session_id, json); "{\"ok\":false,\"reason\":\"tunnel_protocol_unsupported\"}".into() }
+}
+
+pub fn session_niko_tunnel_close(session_id: SessionID, json: String) -> String {
+    #[cfg(feature = "nikodesk")]
+    { crate::client::nikodesk_tunnel_cleanup::close(session_id, json) }
+    #[cfg(not(feature = "nikodesk"))]
+    {
+        let _ = json;
+        hbb_common::serde_json::json!({"session_id":session_id.to_string(),"namespace":"",
+            "peer_id":"","ok":false,"reason":"tunnel_protocol_unsupported",
+            "local_resources_closed":false}).to_string()
+    }
+}
+
+pub fn session_niko_tunnel_query(session_id: SessionID, json: String) -> String {
+    #[cfg(feature = "nikodesk")]
+    { crate::client::nikodesk_tunnel_cleanup::query(session_id, json) }
+    #[cfg(not(feature = "nikodesk"))]
+    {
+        let _ = json;
+        hbb_common::serde_json::json!({"session_id":session_id.to_string(),"namespace":"",
+            "peer_id":"","ok":false,"reason":"tunnel_protocol_unsupported",
+            "local_resources_closed":false}).to_string()
+    }
+}
+
+pub fn session_niko_tunnel_retired() -> String {
+    #[cfg(feature = "nikodesk")]
+    { crate::client::nikodesk_tunnel_cleanup::list() }
+    #[cfg(not(feature = "nikodesk"))]
+    { "{\"ok\":false,\"reason\":\"tunnel_protocol_unsupported\",\"owners\":[]}".into() }
+}
+
 pub fn session_remove_port_forward(session_id: SessionID, local_port: i32) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.remove_port_forward(local_port);
@@ -3006,6 +3049,9 @@ pub fn main_verify2fa(code: String) -> bool {
 }
 
 pub fn main_has_valid_2fa_sync() -> SyncReturn<bool> {
+    #[cfg(feature="nikodesk")]
+    return SyncReturn(crate::auth_2fa::configuration_status(None)=="enabled");
+    #[cfg(not(feature="nikodesk"))]
     SyncReturn(has_valid_2fa())
 }
 
@@ -3474,4 +3520,119 @@ pub fn cm_nikodesk_capability_revoke(json: String) -> String {
     {return crate::ui_cm_interface::nikodesk_capability_decision(json,true);}
     #[cfg(not(all(feature="nikodesk",not(any(target_os="android",target_os="ios")))))]
     {let _=json;"{\"ok\":false,\"status\":\"unsupported\"}".into()}
+}
+
+/// Queue an identity-bound local camera action; native status events report completion.
+pub fn cm_nikodesk_camera_command(json: String) -> SyncReturn<String> {
+    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+    { return SyncReturn(crate::ui_cm_interface::nikodesk_camera_command(json)); }
+    #[cfg(not(all(feature="nikodesk",any(target_os="macos",target_os="windows"))))]
+    { let _=json; SyncReturn("{\"ok\":false,\"status\":\"error\",\"reason\":\"camera_unsupported\"}".into()) }
+}
+
+pub fn session_voice_prepare(session_id:SessionID)->String {
+    #[cfg(feature="nikodesk")]
+    {return crate::nikodesk::voice_bridge::session(session_id,crate::nikodesk::voice_session::Input::Prepare);}
+    #[cfg(not(feature="nikodesk"))]
+    {let _=session_id;"{\"ok\":false,\"status\":\"error\",\"reason\":\"unsupported\"}".into()}
+}
+
+pub fn session_voice_command(session_id:SessionID,json:String)->String {
+    #[cfg(feature="nikodesk")]
+    {
+        return match crate::nikodesk::voice_flow::Command::parse(&json) {
+            Ok(command)=>crate::nikodesk::voice_bridge::session(session_id,crate::nikodesk::voice_session::Input::Command(command)),
+            Err(reason)=>serde_json::json!({"ok":false,"status":"error","reason":reason}).to_string(),
+        };
+    }
+    #[cfg(not(feature="nikodesk"))]
+    {let _=(session_id,json);"{\"ok\":false,\"status\":\"error\",\"reason\":\"unsupported\"}".into()}
+}
+
+pub fn session_voice_availability(session_id:SessionID)->String {
+    #[cfg(feature="nikodesk")]
+    {return crate::nikodesk::voice_bridge::session(session_id,crate::nikodesk::voice_session::Input::Availability);}
+    #[cfg(not(feature="nikodesk"))]
+    {let _=session_id;"{\"supported\":false,\"requests_allowed\":false,\"peer_supported\":false,\"peer_requests_allowed\":false,\"reason\":\"unsupported\"}".into()}
+}
+
+pub fn cm_voice_command(json:String)->String {
+    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+    {return crate::ui_cm_interface::nikodesk_voice_command(json);}
+    #[cfg(not(all(feature="nikodesk",any(target_os="macos",target_os="windows"))))]
+    {let _=json;"{\"ok\":false,\"status\":\"error\",\"reason\":\"unsupported\"}".into()}
+}
+
+pub fn cm_tunnel_command(json:String)->String {
+    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+    {return crate::ui_cm_interface::nikodesk_tunnel_command(json);}
+    #[cfg(not(all(feature="nikodesk",any(target_os="macos",target_os="windows"))))]
+    {let _=json;"{\"ok\":false,\"reason\":\"tunnel_backend_unsupported\"}".into()}
+}
+
+pub fn cm_voice_availability(json_identity:String)->String {
+    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+    {return crate::nikodesk::voice_bridge::cm_availability(json_identity);}
+    #[cfg(not(all(feature="nikodesk",any(target_os="macos",target_os="windows"))))]
+    {let _=json_identity;"{\"supported\":false,\"requests_allowed\":false,\"peer_supported\":false,\"peer_requests_allowed\":false,\"reason\":\"unsupported\"}".into()}
+}
+
+pub fn voice_pending_cleanup()->String {
+    #[cfg(feature="nikodesk")]
+    {return crate::nikodesk::voice_session::pending_cleanup();}
+    #[cfg(not(feature="nikodesk"))]
+    {"{\"ok\":false,\"pending\":[],\"reason\":\"unsupported\"}".into()}
+}
+
+pub fn main_niko_unattended_install_begin(json: String) -> String {
+    #[cfg(all(feature = "nikodesk", windows))]
+    { return crate::nikodesk::unattended_install::dispatch(crate::nikodesk::unattended_install::begin(json)); }
+    #[cfg(not(all(feature = "nikodesk", windows)))]
+    {
+        let mut json = json;
+        unsafe { hbb_common::sodiumoxide::utils::memzero(json.as_bytes_mut()); }
+        "{\"ok\":false,\"job_id\":\"\",\"namespace\":\"\",\"phase\":\"idle\",\"reason\":\"unsupported\",\"quiescent\":false,\"process_exited\":false,\"task_joined\":false}".into()
+    }
+}
+
+pub fn main_niko_unattended_install_status(job_id: String) -> String {
+    #[cfg(all(feature = "nikodesk", windows))]
+    { return crate::nikodesk::unattended_install::dispatch(crate::nikodesk::unattended_install::status(job_id)); }
+    #[cfg(not(all(feature = "nikodesk", windows)))]
+    { let _ = job_id; "{\"ok\":false,\"job_id\":\"\",\"namespace\":\"\",\"phase\":\"idle\",\"reason\":\"unsupported\",\"quiescent\":false,\"process_exited\":false,\"task_joined\":false}".into() }
+}
+
+pub fn main_niko_unattended_install_current() -> String {
+    #[cfg(all(feature = "nikodesk", windows))]
+    { return crate::nikodesk::unattended_install::dispatch(crate::nikodesk::unattended_install::current()); }
+    #[cfg(not(all(feature = "nikodesk", windows)))]
+    { "{\"ok\":false,\"job_id\":\"\",\"namespace\":\"\",\"phase\":\"idle\",\"reason\":\"unsupported\",\"quiescent\":false,\"process_exited\":false,\"task_joined\":false}".into() }
+}
+
+pub fn main_niko_unattended_install_cancel(job_id: String) -> String {
+    #[cfg(all(feature = "nikodesk", windows))]
+    { return crate::nikodesk::unattended_install::dispatch(crate::nikodesk::unattended_install::cancel(job_id)); }
+    #[cfg(not(all(feature = "nikodesk", windows)))]
+    { let _ = job_id; "{\"ok\":false,\"job_id\":\"\",\"namespace\":\"\",\"phase\":\"idle\",\"reason\":\"unsupported\",\"quiescent\":false,\"process_exited\":false,\"task_joined\":false}".into() }
+}
+
+pub fn main_niko_session_audit(namespace: String) -> String {
+    #[cfg(feature = "nikodesk")]
+    { return crate::nikodesk::session_audit::read(&namespace); }
+    #[cfg(not(feature = "nikodesk"))]
+    { let _ = namespace; r#"{"ok":false,"status":"unsupported"}"#.to_owned() }
+}
+
+pub fn main_niko_session_audit_clear(namespace: String, revision: String) -> String {
+    #[cfg(feature = "nikodesk")]
+    { return crate::nikodesk::session_audit::clear(&namespace, &revision); }
+    #[cfg(not(feature = "nikodesk"))]
+    { let _ = (namespace, revision); r#"{"ok":false,"status":"unsupported"}"#.to_owned() }
+}
+
+pub fn main_niko_virtual_driver(json: String) -> String {
+    #[cfg(feature="nikodesk")]
+    { return crate::nikodesk::virtual_driver::command(&json); }
+    #[cfg(not(feature="nikodesk"))]
+    { let _ = json; r#"{"ok":false,"namespace":"","job_id":"","phase":"idle","reason":"unsupported","elevated":false,"os_supported":false,"joined":false}"#.to_owned() }
 }

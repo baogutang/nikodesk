@@ -42,6 +42,8 @@ fn main() {
                 .set("ProductName", "NikoDesk")
                 .set("OriginalFilename", "NikoDesk.exe")
                 .set("FileDescription", "NikoDesk Remote Desktop");
+            #[cfg(feature = "nikodesk-installer")]
+            res.set("FileDescription", "NikoDesk Installation Assistant");
         }
         #[cfg(not(feature = "nikodesk"))]
         res.set_icon("../../res/icon.ico")

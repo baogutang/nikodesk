@@ -239,6 +239,17 @@ fn main() {
         }
         cc::Build::new().cpp(true).flag("-std=c++17").flag("-fobjc-arc").flag("-fblocks")
             .file("src/common/macos_camera.mm").compile("nikodesk_camera");
+        // @available needs Clang's availability runtime on our macOS 12.3
+        // baseline. rustc uses -nodefaultlibs, so the C++ driver cannot add it.
+        let compiler = cc::Build::new().cpp(true).get_compiler();
+        let resource = compiler.to_command().arg("-print-resource-dir").output()
+            .expect("Cannot find the macOS Clang runtime");
+        assert!(resource.status.success(), "Cannot locate the macOS Clang runtime");
+        let runtime = PathBuf::from(String::from_utf8(resource.stdout).unwrap().trim())
+            .join("lib/darwin");
+        assert!(runtime.join("libclang_rt.osx.a").is_file(), "Missing macOS availability runtime");
+        println!("cargo:rustc-link-search=native={}", runtime.display());
+        println!("cargo:rustc-link-lib=static=clang_rt.osx");
         for framework in ["AVFoundation", "Foundation", "CoreMedia", "CoreVideo"] {
             println!("cargo:rustc-link-lib=framework={framework}");
         }

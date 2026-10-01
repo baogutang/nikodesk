@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(target_os = "linux", all(target_os = "windows", not(feature = "nikodesk"))))]
 use nokhwa::{
     pixel_format::RgbAFormat,
     query,
@@ -37,12 +37,18 @@ pub(crate) mod macos_camera;
 #[cfg(all(target_os = "macos", feature = "nikodesk"))]
 pub use macos_camera::{authorization_status, CameraAuthorization, CameraDevice, CameraFormat, CaptureSelection, PermissionRequest};
 
+#[cfg(all(target_os = "windows", feature = "nikodesk"))]
+#[path = "windows_camera.rs"]
+pub(crate) mod windows_camera;
+#[cfg(all(target_os = "windows", feature = "nikodesk"))]
+pub use windows_camera::{authorization_status, CameraAuthorization, CameraDevice, CameraFormat, CaptureSelection};
+
 // pre-condition
 pub fn primary_camera_exists() -> bool {
     Cameras::exists(PRIMARY_CAMERA_IDX)
 }
 
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(target_os = "linux", all(target_os = "windows", not(feature = "nikodesk"))))]
 impl Cameras {
     pub fn all_info() -> ResultType<Vec<DisplayInfo>> {
         match query(ApiBackend::Auto) {
@@ -198,6 +204,36 @@ impl Cameras {
     pub fn get_approved_capturer(selection: &CaptureSelection) -> ResultType<Box<dyn TraitCapturer>> {
         Ok(Box::new(CameraCapturer { inner: macos_camera::CameraSession::start(selection)? }))
     }
+    pub fn stop_pending_capture(lease: u64) -> ResultType<()> {
+        Ok(macos_camera::stop_pending_capture(lease)?)
+    }
+}
+
+#[cfg(all(target_os = "windows", feature = "nikodesk"))]
+impl Cameras {
+    /// Metadata only: enumeration does not activate a source or probe formats.
+    pub fn devices() -> ResultType<Vec<CameraDevice>> { Ok(windows_camera::enumerate()?) }
+    /// Explicit local approval to open this exact device for format probing is
+    /// required before this call; errors retain an unacknowledged native owner.
+    pub fn probe_approved_formats(unique_id: &str, epoch: u64) -> ResultType<CameraDevice> {
+        Ok(windows_camera::probe_approved_formats(unique_id, epoch)?)
+    }
+    pub fn stop_pending_capture(native_lease: u64) -> ResultType<()> {
+        Ok(windows_camera::stop_pending_capture(native_lease)?)
+    }
+    // The legacy mutable-index service must never open a Niko camera.
+    pub fn all_info() -> ResultType<Vec<DisplayInfo>> { Ok(Vec::new()) }
+    pub fn exists(_index: usize) -> bool { false }
+    pub fn get_camera_resolution(_index: usize) -> ResultType<Resolution> {
+        bail!("Niko camera requires an exact locally approved device and native format")
+    }
+    pub fn get_sync_cameras() -> Vec<DisplayInfo> { Vec::new() }
+    pub fn get_capturer(_current: usize) -> ResultType<Box<dyn TraitCapturer>> {
+        bail!("Niko camera requires an exact locally approved device, native format and epoch")
+    }
+    pub fn get_approved_capturer(selection: &CaptureSelection) -> ResultType<Box<dyn TraitCapturer>> {
+        Ok(Box::new(CameraCapturer { inner: windows_camera::CameraSession::start(selection)?, held: None }))
+    }
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "linux", all(target_os = "macos", feature = "nikodesk"))))]
@@ -223,7 +259,7 @@ impl Cameras {
     }
 }
 
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(target_os = "linux", all(target_os = "windows", not(feature = "nikodesk"))))]
 pub struct CameraCapturer {
     camera: Camera,
     data: Vec<u8>,
@@ -233,11 +269,14 @@ pub struct CameraCapturer {
 #[cfg(all(target_os = "macos", feature = "nikodesk"))]
 pub struct CameraCapturer { inner: macos_camera::CameraSession }
 
+#[cfg(all(target_os = "windows", feature = "nikodesk"))]
+pub struct CameraCapturer { inner: windows_camera::CameraSession, held: Option<windows_camera::OwnedFrame> }
+
 #[cfg(not(any(target_os = "windows", target_os = "linux", all(target_os = "macos", feature = "nikodesk"))))]
 pub struct CameraCapturer;
 
 impl CameraCapturer {
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(target_os = "linux", all(target_os = "windows", not(feature = "nikodesk"))))]
     fn new(current: usize) -> ResultType<Self> {
         let index = CameraIndex::Index(current as u32);
         let camera = Cameras::create_camera(&index)?;
@@ -256,7 +295,7 @@ impl CameraCapturer {
 }
 
 impl TraitCapturer for CameraCapturer {
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(target_os = "linux", all(target_os = "windows", not(feature = "nikodesk"))))]
     fn frame<'a>(&'a mut self, _timeout: std::time::Duration) -> std::io::Result<Frame<'a>> {
         // TODO: move this check outside `frame`.
         if !self.camera.is_stream_open() {
@@ -302,6 +341,17 @@ impl TraitCapturer for CameraCapturer {
             )),
         }
     }
+
+    #[cfg(all(target_os = "windows", feature = "nikodesk"))]
+    fn frame<'a>(&'a mut self, timeout: std::time::Duration) -> std::io::Result<Frame<'a>> {
+        self.held = Some(self.inner.frame(timeout)?);
+        let frame = self.held.as_ref().ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Niko camera frame unavailable"))?;
+        // Compact, owned top-down BGRA. The existing libyuv -> EncodeInput::YUV
+        // path consumes this borrow synchronously before an async send.
+        Ok(Frame::PixelBuffer(PixelBuffer::new(&frame.data, Pixfmt::BGRA, frame.width as usize, frame.height as usize)))
+    }
+    #[cfg(all(target_os = "windows", feature = "nikodesk"))]
+    fn stop_capture(&mut self) -> std::io::Result<()> { self.held.take(); self.inner.stop() }
 
     #[cfg(all(target_os = "macos", feature = "nikodesk"))]
     fn frame<'a>(&'a mut self, timeout: std::time::Duration) -> std::io::Result<Frame<'a>> {

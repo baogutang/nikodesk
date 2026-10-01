@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{1CE376A7-C6D8-4DBE-AD82-64597341BBD5}</ProjectGuid>
+    <TargetName>NikoDeskIddDriver</TargetName>
+    <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(NikoDriverKitRoot)\microsoft.windows.wdk.x64\build\native\Microsoft.Windows.WDK.x64.props" Condition="'$(NikoDriverKitRoot)' != ''" />
+  <Import Project="$(NikoDriverKitRoot)\microsoft.windows.sdk.cpp.x64\build\native\Microsoft.Windows.SDK.cpp.x64.props" Condition="'$(NikoDriverKitRoot)' != ''" />
+  <Import Project="$(NikoDriverKitRoot)\microsoft.windows.sdk.cpp\build\Microsoft.Windows.SDK.cpp.props" Condition="'$(NikoDriverKitRoot)' != ''" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <PlatformToolset>WindowsUserModeDriver10.0</PlatformToolset>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <DriverTargetPlatform>Universal</DriverTargetPlatform>
+    <TargetVersion>Windows10</TargetVersion>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <UMDF_VERSION_MAJOR>2</UMDF_VERSION_MAJOR><UMDF_VERSION_MINOR>25</UMDF_VERSION_MINOR>
+    <IndirectDisplayDriver>true</IndirectDisplayDriver>
+    <IDDCX_VERSION_MAJOR>1</IDDCX_VERSION_MAJOR><IDDCX_VERSION_MINOR>4</IDDCX_VERSION_MINOR>
+    <IDDCX_MINIMUM_VERSION_REQUIRED>4</IDDCX_MINIMUM_VERSION_REQUIRED>
+    <SignMode>Off</SignMode>
+    <EnableInf2Cat>false</EnableInf2Cat>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <OutDir>$(MSBuildThisFileDirectory)out\$(Platform)\</OutDir>
+    <IntDir>$(MSBuildThisFileDirectory)out\obj\$(Platform)\</IntDir>
+    <RunCodeAnalysis>true</RunCodeAnalysis>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <WppEnabled>true</WppEnabled><WppRecorderEnabled>true</WppRecorderEnabled>
+      <WppScanConfigurationData>Trace.h</WppScanConfigurationData>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <PreprocessorDefinitions>UMDF_DRIVER;IDDCX_VERSION_MAJOR=1;IDDCX_VERSION_MINOR=4;IDDCX_MINIMUM_VERSION_REQUIRED=4;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link><AdditionalDependencies>OneCoreUAP.lib;avrt.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
+  </ItemDefinitionGroup>
+  <ItemGroup><ClCompile Include="Driver.cpp" /></ItemGroup>
+  <ItemGroup><ClInclude Include="Driver.h" /><ClInclude Include="Public.h" /><ClInclude Include="Trace.h" /></ItemGroup>
+  <!-- The INF is a fixed signed-package input. Never stamp/rewrite it after catalog generation. -->
+  <ItemGroup><None Include="NikoDeskIddDriver.inf"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></None></ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

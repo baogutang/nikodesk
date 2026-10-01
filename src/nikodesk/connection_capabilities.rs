@@ -398,7 +398,7 @@ impl Context {
     }
 }
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn normal_user() -> ResultType<NormalUser> {
+pub(crate) fn normal_user() -> ResultType<NormalUser> {
     #[cfg(unix)]
     {
         let uid = unsafe { hbb_common::libc::geteuid() };
@@ -440,6 +440,7 @@ pub(crate) struct TerminalFlow {
     pub(crate) required_2fa: bool,
     verified_totp: bool,
     last_refresh: Instant,
+    audit: Option<super::capability_audit::Context>,
 }
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 impl TerminalFlow {
@@ -451,8 +452,10 @@ impl TerminalFlow {
             required_2fa,
             verified_totp: false,
             last_refresh: Instant::now(),
+            audit: None,
         }
     }
+    pub(crate) fn set_audit(&mut self, context: super::capability_audit::Context) { self.audit=Some(context); }
     pub(crate) fn record_verified_totp(&mut self) {
         self.verified_totp = true;
     }
@@ -518,6 +521,8 @@ impl TerminalFlow {
             self.required_2fa,
             self.verified_totp,
         )?;
+        if let Ok(mut state) = adapter.gate.state.lock() {state.capabilities.attach_audit(self.audit.clone());}
+        else { super::session_audit::failed(); }
         let status = adapter.status("Waiting for local terminal approval (expires in 120 seconds)");
         self.adapter = Some(adapter);
         Ok(status)

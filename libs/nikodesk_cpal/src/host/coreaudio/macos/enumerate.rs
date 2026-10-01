@@ -1,4 +1,4 @@
-extern crate coreaudio;
+extern crate coreaudio_rs_nikodesk as coreaudio;
 
 use self::coreaudio::sys::{
     kAudioHardwareNoError, kAudioHardwarePropertyDefaultInputDevice,

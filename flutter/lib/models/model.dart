@@ -1,5 +1,10 @@
 import 'package:flutter_hbb/nikodesk/server_scope.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart' show nikoText;
+import 'package:flutter_hbb/nikodesk/voice_session_native.dart';
+import 'package:flutter_hbb/nikodesk/voice_session_owner.dart';
+import 'package:flutter_hbb/nikodesk/tunnel_controller.dart';
+import 'package:flutter_hbb/nikodesk/tunnel_cleanup.dart';
+import 'package:flutter_hbb/nikodesk/tunnel_cleanup_view.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -345,6 +350,10 @@ class FfiModel with ChangeNotifier {
 
   // todo: why called by two position
   StreamEventHandler startEventListener(SessionID sessionId, String peerId) {
+    final capturedVoiceOwner = const bool.fromEnvironment('NIKODESK')
+        ? parent.target?.nikoVoiceOwner : null;
+    final capturedTunnelController = const bool.fromEnvironment('NIKODESK')
+        ? parent.target?.nikoTunnelController : null;
     return (evt) async {
       var name = evt['name'];
       if (name == 'msgbox') {
@@ -414,6 +423,22 @@ class FfiModel with ChangeNotifier {
         parent.target?.serverModel.addConnection(evt);
       } else if (name == 'nikodesk_capability_status') {
         parent.target?.serverModel.handleNikoCapability(evt);
+      } else if (const bool.fromEnvironment('NIKODESK') &&
+          (name == 'nikodesk_camera_status' || name == 'nikodesk_camera_catalog')) {
+        parent.target?.serverModel.handleNikoCamera(evt);
+      } else if (const bool.fromEnvironment('NIKODESK') &&
+          (name == 'nikodesk_voice_status' || name == 'nikodesk_voice_catalog')) {
+        if (capturedVoiceOwner != null) {
+          if (capturedVoiceOwner.handleEvent(evt)) {
+            final ffi = parent.target;
+            if (ffi != null) showNikoIncomingVoice(ffi, capturedVoiceOwner);
+          }
+        } else if (peerId.isEmpty) {
+          parent.target?.serverModel.handleNikoVoice(evt);
+        }
+      } else if (const bool.fromEnvironment('NIKODESK') &&
+          name == 'nikodesk_tunnel_controller') {
+        capturedTunnelController?.handleEvent(evt);
       } else if (name == 'on_client_remove') {
         parent.target?.serverModel.onClientRemove(evt);
       } else if (name == 'update_quality_status') {
@@ -436,6 +461,11 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'on_url_scheme_received') {
         // currently comes from "_url" ipc of mac and dbus of linux
         onUrlSchemeReceived(evt);
+      } else if (const bool.fromEnvironment('NIKODESK') &&
+          {'on_voice_call_waiting', 'on_voice_call_started', 'on_voice_call_closed',
+            'on_voice_call_incoming', 'update_voice_call_state'}.contains(name)) {
+        // Legacy notifications cannot grant owned audio or set its call state.
+        return;
       } else if (name == 'on_voice_call_waiting') {
         // Waiting for the response from the peer.
         parent.target?.chatModel.onVoiceCallWaiting();
@@ -1769,11 +1799,15 @@ class FfiModel with ChangeNotifier {
     }
 
     if (updateData.isEmpty) {
+      if (const bool.fromEnvironment('NIKODESK')) _pi.platformAdditions.remove('nikodesk_virtual_display');
       _pi.platformAdditions.remove(kPlatformAdditionsRustDeskVirtualDisplays);
       _pi.platformAdditions.remove(kPlatformAdditionsAmyuniVirtualDisplays);
     } else {
       try {
         final updateJson = json.decode(updateData) as Map<String, dynamic>;
+        if (const bool.fromEnvironment('NIKODESK') && !updateJson.containsKey('nikodesk_virtual_display')) {
+          _pi.platformAdditions.remove('nikodesk_virtual_display');
+        }
         for (final key in updateJson.keys) {
           _pi.platformAdditions[key] = updateJson[key];
         }
@@ -3965,9 +3999,17 @@ class QualityMonitorModel with ChangeNotifier {
   }
 
   checkShowQualityMonitor(SessionID sessionId) async {
+    final owner = parent.target;
+    if (const bool.fromEnvironment('NIKODESK')) {
+      if (owner == null || owner.closed || owner.sessionId != sessionId) return;
+    }
     final show = await bind.sessionGetToggleOption(
             sessionId: sessionId, arg: 'show-quality-monitor') ==
         true;
+    if (const bool.fromEnvironment('NIKODESK')) {
+      if (!identical(parent.target, owner) ||
+          owner == null || owner.closed || owner.sessionId != sessionId) return;
+    }
     if (_show != show) {
       _show = show;
       notifyListeners();
@@ -4090,6 +4132,82 @@ enum ConnType {
 class FFI {
   String? _serverNamespace;
   String? get serverNamespace => _serverNamespace;
+  NikoVoiceSessionOwner? _nikoVoiceOwner;
+  NikoVoiceSessionOwner? get nikoVoiceOwner => _nikoVoiceOwner;
+  VoidCallback? _nikoVoiceScopeListener;
+
+  void disposeNikoVoiceOwner({NikoVoiceSessionOwner? expectedOwner}) {
+    if (expectedOwner != null && !identical(_nikoVoiceOwner, expectedOwner)) return;
+    if (_nikoVoiceScopeListener != null) {
+      NikoServerScope.changes.removeListener(_nikoVoiceScopeListener!);
+      _nikoVoiceScopeListener = null;
+    }
+    _nikoVoiceOwner?.dispose();
+    _nikoVoiceOwner = null;
+  }
+
+  void _startNikoVoiceOwner(String peer) {
+    disposeNikoVoiceOwner();
+    final scope = _serverNamespace;
+    if (connType != ConnType.defaultConn || scope == null || isWeb) return;
+    final capturedId = sessionId;
+    final transport = NativeNikoSessionVoiceTransport(capturedId);
+    late final NikoVoiceSessionOwner owner;
+    owner = NikoVoiceSessionOwner(contextKey: '${capturedId.toString()}/$scope/$peer',
+        namespace: scope, peerId: peer,
+        androidController: isAndroid,
+        isCurrent: () => !closed && identical(_nikoVoiceOwner, owner) &&
+            sessionId == capturedId && id == peer && _serverNamespace == scope,
+        readAvailability: transport.availability, prepareNative: transport.prepare,
+        commandNative: transport.send);
+    _nikoVoiceOwner = owner;
+    _nikoVoiceScopeListener = () {
+      if (NikoServerScope.current != scope) disposeNikoVoiceOwner();
+    };
+    NikoServerScope.changes.addListener(_nikoVoiceScopeListener!);
+  }
+  NikoTunnelController? _nikoTunnelController;
+  NikoTunnelController? get nikoTunnelController => _nikoTunnelController;
+  VoidCallback? _nikoTunnelScopeListener;
+
+  void _invalidateNikoTunnelController() {
+    if (_nikoTunnelScopeListener != null) {
+      NikoServerScope.changes.removeListener(_nikoTunnelScopeListener!);
+      _nikoTunnelScopeListener = null;
+    }
+    _nikoTunnelController?.invalidate();
+  }
+
+  void _startNikoTunnelController(String peer) {
+    _invalidateNikoTunnelController();
+    _nikoTunnelController?.dispose();
+    _nikoTunnelController = null;
+    final scope = _serverNamespace;
+    if (connType != ConnType.portForward || scope == null || isWeb) return;
+    final capturedId = sessionId;
+    late final NikoTunnelController controller;
+    controller = NikoTunnelController(contextKey: '$capturedId/$scope/$peer',
+        namespace: scope, peerId: peer,
+        isCurrent: () => !closed && identical(_nikoTunnelController, controller) &&
+            sessionId == capturedId && id == peer && _serverNamespace == scope);
+    _nikoTunnelController = controller;
+    _nikoTunnelScopeListener = () {
+      if (NikoServerScope.current != scope) _invalidateNikoTunnelController();
+    };
+    NikoServerScope.changes.addListener(_nikoTunnelScopeListener!);
+  }
+
+  Future<String> sendNikoTunnelCommand(NikoTunnelCommand command) async {
+    final controller = _nikoTunnelController;
+    if (!const bool.fromEnvironment('NIKODESK') || controller == null ||
+        !controller.active || command.namespace != controller.namespace ||
+        command.peerId != controller.peerId || connType != ConnType.portForward) {
+      return '{"ok":false,"reason":"session_closed"}';
+    }
+    // The original FFI UUID is captured by this instance, never gFFI/current scope.
+    return const NativeNikoTunnelCleanupTransport().command(
+        NikoTunnelOwnerIdentity(sessionId.toString(), controller.namespace, controller.peerId), command);
+  }
   var id = '';
   var version = '';
   var connType = ConnType.defaultConn;
@@ -4170,6 +4288,8 @@ class FFI {
 
   /// Start with the given [id]. Only transfer file if [isFileTransfer], only view camera if [isViewCamera], only port forward if [isPortForward].
   void _nikoStartFailure() {
+    disposeNikoVoiceOwner();
+    _invalidateNikoTunnelController();
     closed = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       scheduleMicrotask(() {
@@ -4343,6 +4463,11 @@ class FFI {
       return;
     }
 
+    if (const bool.fromEnvironment('NIKODESK')) {
+      this.id = id;
+      _startNikoVoiceOwner(id);
+      _startNikoTunnelController(id);
+    }
     final cb = ffiModel.startEventListener(sessionId, id);
 
     imageModel.updateUserTextureRender();
@@ -4380,6 +4505,10 @@ class FFI {
         if (message is EventToUI_Event) {
           if (message.field0 == "close") {
             closed = true;
+            if (const bool.fromEnvironment('NIKODESK')) {
+              disposeNikoVoiceOwner();
+              _invalidateNikoTunnelController();
+            }
             debugPrint('Exit session event loop');
             return;
           }
@@ -4484,7 +4613,21 @@ class FFI {
 
   /// Close the remote session.
   Future<void> close({bool closeSession = true}) async {
+    if (const bool.fromEnvironment('NIKODESK') && closeSession &&
+        connType == ConnType.portForward && _serverNamespace != null && id.isNotEmpty) {
+      final owner = NikoTunnelOwnerIdentity(sessionId.toString(), _serverNamespace!, id);
+      _invalidateNikoTunnelController();
+      try {
+        final reply = NikoTunnelCleanupReply.parse(await const NativeNikoTunnelCleanupTransport()
+            .close(owner).timeout(const Duration(seconds: 5)), owner);
+        if (reply?.confirmed == true) NikoTunnelCleanupProofs.record(reply!);
+      } catch (_) { /* Native keeps the original owner; home offers cleanup. */ }
+    }
     closed = true;
+    if (const bool.fromEnvironment('NIKODESK')) {
+      disposeNikoVoiceOwner();
+      _invalidateNikoTunnelController();
+    }
     if (isWeb) {
       platformFFI.clearVideoFrameCallback();
     }
@@ -4513,7 +4656,8 @@ class FFI {
     // Dispose relative mouse mode resources to ensure cursor is restored
     inputModel.disposeRelativeMouseMode();
     inputModel.disposeSideButtonTracking();
-    if (closeSession) {
+    if (closeSession && !(const bool.fromEnvironment('NIKODESK') &&
+        connType == ConnType.portForward)) {
       await bind.sessionClose(sessionId: sessionId);
     }
     debugPrint('model $id closed');

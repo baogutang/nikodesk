@@ -132,9 +132,7 @@ class PictureRequest {
     if (mode == null ||
         mode == PictureMode.custom ||
         codecPreference == null ||
-        (codecPreference != null &&
-            codecPreference.isNotEmpty &&
-            codecPreference != 'auto')) {
+        (codecPreference.isNotEmpty && codecPreference != 'auto')) {
       return PictureMode.custom;
     }
     final request = PictureRequest.forMode(mode);

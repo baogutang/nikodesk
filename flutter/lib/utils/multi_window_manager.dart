@@ -324,6 +324,7 @@ class RustDeskMultiWindowManager {
     String remoteId, {
     String? password,
     String? serverNamespace,
+    String? connToken,
     bool? isSharedPassword,
     String? switchUuid,
     bool? forceRelay,
@@ -335,6 +336,7 @@ class RustDeskMultiWindowManager {
       _remoteDesktopWindows,
       password: password,
       serverNamespace: serverNamespace,
+      connToken: connToken,
       forceRelay: forceRelay,
       switchUuid: switchUuid,
       isSharedPassword: isSharedPassword,

@@ -1,5 +1,5 @@
 extern crate core_foundation_sys;
-extern crate coreaudio;
+extern crate coreaudio_rs_nikodesk as coreaudio;
 
 use super::{asbd_from_config, check_os_status, frames_to_duration, host_time_to_stream_instant};
 
@@ -920,6 +920,70 @@ pub struct Stream {
 }
 
 impl Stream {
+    /// Niko-only empty owner: no device/AudioUnit is opened by construction.
+    pub fn nikodesk_empty(device_id: AudioDeviceID, lease: u64) -> Self {
+        Self::new(StreamInner { playing: false, audio_unit: AudioUnit::nikodesk_empty(lease),
+            _disconnect_listener: None, device_id })
+    }
+    fn nikodesk_prepare(&self, channels: u16, input: bool,
+        install: impl FnOnce(&mut AudioUnit) -> Result<(), coreaudio::Error>) -> Result<(), coreaudio::Error> {
+        if !(1..=2).contains(&channels) { return Err(coreaudio::Error::Unspecified); }
+        let mut stream = self.inner.lock().unwrap_or_else(|error| error.into_inner());
+        let device_id = stream.device_id;
+        let unit = &mut stream.audio_unit;
+        unit.nikodesk_create_hal()?;
+        unit.set_property(kAudioOutputUnitProperty_EnableIO, Scope::Input, Element::Input, Some(&(input as u32)))?;
+        unit.set_property(kAudioOutputUnitProperty_EnableIO, Scope::Output, Element::Output, Some(&(!input as u32)))?;
+        unit.set_property(kAudioOutputUnitProperty_CurrentDevice, Scope::Global, Element::Output, Some(&device_id))?;
+        // Only the client-side ASBD is set. No hardware rate, buffer size,
+        // default device, property listener, or global routing is modified.
+        let config = StreamConfig { channels, sample_rate: SampleRate(48_000), buffer_size: BufferSize::Default };
+        let format = asbd_from_config(&config, SampleFormat::F32);
+        let (scope, element) = if input { (Scope::Output, Element::Input) } else { (Scope::Input, Element::Output) };
+        unit.set_property(kAudioUnitProperty_StreamFormat, scope, element, Some(&format))?;
+        let actual: AudioStreamBasicDescription = unit.get_property(kAudioUnitProperty_StreamFormat, scope, element)?;
+        if actual.mSampleRate != 48_000. || actual.mFormatID != format.mFormatID || actual.mFormatFlags != format.mFormatFlags
+            || actual.mChannelsPerFrame != channels as u32 || actual.mBytesPerFrame != channels as u32 * 4
+            || actual.mBitsPerChannel != 32 || actual.mFramesPerPacket != 1 || actual.mBytesPerPacket != channels as u32 * 4 {
+            return Err(coreaudio::Error::Unspecified);
+        }
+        install(unit)?;
+        unit.initialize()
+    }
+    pub fn nikodesk_prepare_capture(&self, channels: u16, mut callback: impl FnMut(&[f32]) + Send + 'static) -> Result<(), coreaudio::Error> {
+        self.nikodesk_prepare(channels, true, |unit| unit.set_input_callback(move |args: render_callback::Args<data::Raw>| {
+            if args.data.data.is_null() { return Err(()); }
+            let buffer = unsafe { &*args.data.data };
+            if buffer.mNumberBuffers != 1 { return Err(()); }
+            let buffer = &buffer.mBuffers[0];
+            let len = args.num_frames.checked_mul(channels as usize).ok_or(())?;
+            if args.num_frames > 48_000 || buffer.mNumberChannels != channels as u32 || buffer.mData.is_null()
+                || buffer.mData as usize % mem::align_of::<f32>() != 0 || buffer.mDataByteSize as usize != len * 4 { return Err(()); }
+            callback(unsafe { slice::from_raw_parts(buffer.mData.cast::<f32>(), len) });
+            Ok(())
+        }))
+    }
+    pub fn nikodesk_prepare_playback(&self, channels: u16, mut callback: impl FnMut(&mut [f32]) + Send + 'static) -> Result<(), coreaudio::Error> {
+        self.nikodesk_prepare(channels, false, |unit| unit.set_render_callback(move |args: render_callback::Args<data::Raw>| {
+            if args.data.data.is_null() { return Err(()); }
+            let buffer = unsafe { &*args.data.data };
+            if buffer.mNumberBuffers != 1 { return Err(()); }
+            let buffer = &buffer.mBuffers[0];
+            let len = args.num_frames.checked_mul(channels as usize).ok_or(())?;
+            if args.num_frames > 48_000 || buffer.mNumberChannels != channels as u32 || buffer.mData.is_null()
+                || buffer.mData as usize % mem::align_of::<f32>() != 0 || buffer.mDataByteSize as usize != len * 4 { return Err(()); }
+            callback(unsafe { slice::from_raw_parts_mut(buffer.mData.cast::<f32>(), len) });
+            Ok(())
+        }))
+    }
+    pub fn nikodesk_release(&self) -> Result<(), coreaudio::Error> {
+        let mut stream = self.inner.lock().unwrap_or_else(|error| error.into_inner());
+        stream.audio_unit.nikodesk_release()?;
+        stream.playing = false;
+        Ok(())
+    }
+    pub fn nikodesk_retry_pending(lease: u64) -> Result<(), coreaudio::Error> { AudioUnit::nikodesk_retry_pending(lease) }
+    pub fn nikodesk_pending(lease: u64) -> bool { AudioUnit::nikodesk_pending(lease) }
     fn new(inner: StreamInner) -> Self {
         Self {
             inner: Arc::new(Mutex::new(inner)),

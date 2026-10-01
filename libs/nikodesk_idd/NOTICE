@@ -1,0 +1,12 @@
+NikoDeskIddDriver is an independent MS-PL derivative of RustDeskIddDriver
+(rustdesk-org/RustDeskIddDriver, commit 448e627e2fc6238f0371f8d9963a6ad7a5925f4e),
+which derives from the Microsoft indirect-display sample.
+Copyright (c) Microsoft Corporation. Copyright (c) 2015 Microsoft.
+Original source URLs and SHA256 values are retained in upstream.json.
+The full Microsoft Public License accompanies these sources in LICENSE.
+
+NikoDesk changes: independent software hardware ID, interface and tracing GUIDs,
+single-screen exclusive adapter, versioned bounded IOCTLs, fixed EDID-less SDR
+1080p/1440p/4K modes, monitor/swapchain ownership cleanup, and consistent IddCx 1.4.
+These sources are not a signed driver package. Build output must receive a valid
+production catalog signature covering the exact INF and DLL before installation.

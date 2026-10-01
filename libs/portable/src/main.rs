@@ -8,6 +8,8 @@ use std::{
 use bin_reader::{normalize_path, BinaryReader};
 
 pub mod bin_reader;
+#[cfg(feature = "nikodesk-installer")]
+mod installer;
 #[cfg(test)]
 #[path = "../version.rs"]
 mod product_version_tests;
@@ -276,6 +278,7 @@ fn execute(path: PathBuf, args: Vec<String>, _ui: bool) {
     }
 }
 
+#[cfg(not(feature = "nikodesk-installer"))]
 fn main() -> Result<(), String> {
     let mut args = Vec::new();
     #[cfg(not(feature = "nikodesk"))]
@@ -322,6 +325,16 @@ fn main() -> Result<(), String> {
         execute(exe, args, ui);
     }
     Ok(())
+}
+
+#[cfg(feature = "nikodesk-installer")]
+fn main() -> Result<(), String> {
+    let result = installer::run();
+    #[cfg(windows)]
+    if let Err(error) = &result {
+        native_windows_gui::simple_message("NikoDesk 安装 / Installation", error);
+    }
+    result
 }
 
 #[cfg(windows)]

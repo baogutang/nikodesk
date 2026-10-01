@@ -10,7 +10,7 @@ authors = ["Ram <quadrupleslap@gmail.com>"]
 edition = "2018"
 
 [features]
-nikodesk = []
+nikodesk = ["dep:windows", "dep:windows-core"]
 wayland = ["gstreamer", "gstreamer-app", "gstreamer-video", "dbus", "tracing", "zbus"]
 # `drm` is a pure runtime-dlopen backend: rustdesk loads `libdrmtap.so.0` at runtime (`drmtap_dl.rs`)
 # and NEVER link-time links it, so the graceful PipeWire fallback when the .so or EGL is absent is
@@ -79,3 +79,9 @@ optional = true
 [target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
 nokhwa = { git = "https://github.com/rustdesk-org/nokhwa.git", branch = "fix_from_raw_parts", features = ["input-native"] }
 
+
+# Niko MF is dynamically loaded from System32. No new SDK/runtime dependency
+# version: use the windows 0.61 package already pinned by the application lock.
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.61", optional = true, features = ["Devices_Enumeration", "Win32_Foundation", "Win32_Media_MediaFoundation", "Win32_Security", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_System_LibraryLoader", "Win32_System_RemoteDesktop", "Win32_System_Threading", "Win32_System_WinRT"] }
+windows-core = { version = "0.61", optional = true }

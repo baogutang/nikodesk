@@ -3392,6 +3392,70 @@ fn wire_session_add_port_forward_impl(
         },
     )
 }
+fn wire_session_niko_tunnel_command_impl(
+    port_: MessagePort,
+    session_id: impl Wire2Api<uuid::Uuid> + UnwindSafe,
+    json: impl Wire2Api<String> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "session_niko_tunnel_command",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_session_id = session_id.wire2api();
+            let api_json = json.wire2api();
+            move |task_callback| Ok(session_niko_tunnel_command(api_session_id, api_json))
+        },
+    )
+}
+fn wire_session_niko_tunnel_close_impl(
+    port_: MessagePort,
+    session_id: impl Wire2Api<uuid::Uuid> + UnwindSafe,
+    json: impl Wire2Api<String> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "session_niko_tunnel_close",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_session_id = session_id.wire2api();
+            let api_json = json.wire2api();
+            move |task_callback| Ok(session_niko_tunnel_close(api_session_id, api_json))
+        },
+    )
+}
+fn wire_session_niko_tunnel_query_impl(
+    port_: MessagePort,
+    session_id: impl Wire2Api<uuid::Uuid> + UnwindSafe,
+    json: impl Wire2Api<String> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "session_niko_tunnel_query",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_session_id = session_id.wire2api();
+            let api_json = json.wire2api();
+            move |task_callback| Ok(session_niko_tunnel_query(api_session_id, api_json))
+        },
+    )
+}
+fn wire_session_niko_tunnel_retired_impl(port_: MessagePort) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "session_niko_tunnel_retired",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || move |task_callback| Ok(session_niko_tunnel_retired()),
+    )
+}
 fn wire_session_remove_port_forward_impl(
     port_: MessagePort,
     session_id: impl Wire2Api<uuid::Uuid> + UnwindSafe,
@@ -5386,6 +5450,231 @@ fn wire_cm_nikodesk_capability_revoke_impl(
         move || {
             let api_json = json.wire2api();
             move |task_callback| Ok(cm_nikodesk_capability_revoke(api_json))
+        },
+    )
+}
+fn wire_cm_nikodesk_camera_command_impl(
+    json: impl Wire2Api<String> + UnwindSafe,
+) -> support::WireSyncReturn {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync(
+        WrapInfo {
+            debug_name: "cm_nikodesk_camera_command",
+            port: None,
+            mode: FfiCallMode::Sync,
+        },
+        move || {
+            let api_json = json.wire2api();
+            Ok(cm_nikodesk_camera_command(api_json))
+        },
+    )
+}
+fn wire_session_voice_prepare_impl(
+    port_: MessagePort,
+    session_id: impl Wire2Api<uuid::Uuid> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "session_voice_prepare",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_session_id = session_id.wire2api();
+            move |task_callback| Ok(session_voice_prepare(api_session_id))
+        },
+    )
+}
+fn wire_session_voice_command_impl(
+    port_: MessagePort,
+    session_id: impl Wire2Api<uuid::Uuid> + UnwindSafe,
+    json: impl Wire2Api<String> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "session_voice_command",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_session_id = session_id.wire2api();
+            let api_json = json.wire2api();
+            move |task_callback| Ok(session_voice_command(api_session_id, api_json))
+        },
+    )
+}
+fn wire_session_voice_availability_impl(
+    port_: MessagePort,
+    session_id: impl Wire2Api<uuid::Uuid> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "session_voice_availability",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_session_id = session_id.wire2api();
+            move |task_callback| Ok(session_voice_availability(api_session_id))
+        },
+    )
+}
+fn wire_cm_voice_command_impl(port_: MessagePort, json: impl Wire2Api<String> + UnwindSafe) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "cm_voice_command",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_json = json.wire2api();
+            move |task_callback| Ok(cm_voice_command(api_json))
+        },
+    )
+}
+fn wire_cm_tunnel_command_impl(port_: MessagePort, json: impl Wire2Api<String> + UnwindSafe) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "cm_tunnel_command",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_json = json.wire2api();
+            move |task_callback| Ok(cm_tunnel_command(api_json))
+        },
+    )
+}
+fn wire_cm_voice_availability_impl(
+    port_: MessagePort,
+    json_identity: impl Wire2Api<String> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "cm_voice_availability",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_json_identity = json_identity.wire2api();
+            move |task_callback| Ok(cm_voice_availability(api_json_identity))
+        },
+    )
+}
+fn wire_voice_pending_cleanup_impl(port_: MessagePort) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "voice_pending_cleanup",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || move |task_callback| Ok(voice_pending_cleanup()),
+    )
+}
+fn wire_main_niko_unattended_install_begin_impl(
+    port_: MessagePort,
+    json: impl Wire2Api<String> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "main_niko_unattended_install_begin",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_json = json.wire2api();
+            move |task_callback| Ok(main_niko_unattended_install_begin(api_json))
+        },
+    )
+}
+fn wire_main_niko_unattended_install_status_impl(
+    port_: MessagePort,
+    job_id: impl Wire2Api<String> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "main_niko_unattended_install_status",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_job_id = job_id.wire2api();
+            move |task_callback| Ok(main_niko_unattended_install_status(api_job_id))
+        },
+    )
+}
+fn wire_main_niko_unattended_install_current_impl(port_: MessagePort) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "main_niko_unattended_install_current",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || move |task_callback| Ok(main_niko_unattended_install_current()),
+    )
+}
+fn wire_main_niko_unattended_install_cancel_impl(
+    port_: MessagePort,
+    job_id: impl Wire2Api<String> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "main_niko_unattended_install_cancel",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_job_id = job_id.wire2api();
+            move |task_callback| Ok(main_niko_unattended_install_cancel(api_job_id))
+        },
+    )
+}
+fn wire_main_niko_session_audit_impl(
+    port_: MessagePort,
+    namespace: impl Wire2Api<String> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "main_niko_session_audit",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_namespace = namespace.wire2api();
+            move |task_callback| Ok(main_niko_session_audit(api_namespace))
+        },
+    )
+}
+fn wire_main_niko_session_audit_clear_impl(
+    port_: MessagePort,
+    namespace: impl Wire2Api<String> + UnwindSafe,
+    revision: impl Wire2Api<String> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "main_niko_session_audit_clear",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_namespace = namespace.wire2api();
+            let api_revision = revision.wire2api();
+            move |task_callback| Ok(main_niko_session_audit_clear(api_namespace, api_revision))
+        },
+    )
+}
+fn wire_main_niko_virtual_driver_impl(
+    port_: MessagePort,
+    json: impl Wire2Api<String> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "main_niko_virtual_driver",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_json = json.wire2api();
+            move |task_callback| Ok(main_niko_virtual_driver(api_json))
         },
     )
 }

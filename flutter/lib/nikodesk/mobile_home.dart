@@ -16,6 +16,9 @@ import 'session_log.dart';
 import 'theme.dart';
 import 'ui.dart';
 import 'product_build_info.dart';
+import 'voice_cleanup_panel.dart';
+import 'tunnel_cleanup_view.dart';
+import 'capability_policy_view.dart';
 
 /// Android controller home. Sessions keep the upstream mobile canvas and input.
 class NikoMobileHome extends StatefulWidget {
@@ -91,7 +94,14 @@ class _NikoMobileHomeState extends State<NikoMobileHome> {
           ),
           body: SafeArea(
             bottom: false,
-            child: DecoratedBox(
+            child: Column(children: [
+              if (_native) const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: NikoVoiceCleanupEntryPoint()),
+              if (_native) const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: NikoTunnelCleanupEntryPoint()),
+              Expanded(child: DecoratedBox(
               decoration: BoxDecoration(
                   gradient: light ? NikoPalette.lightCanvas : null,
                   color: light ? null : NikoPalette.darkScaffold),
@@ -119,7 +129,8 @@ class _NikoMobileHomeState extends State<NikoMobileHome> {
                     gateway: widget.gateway, active: _index == 2),
               ].asMap().entries.map((entry) => ExcludeFocus(
                   excluding: _index != entry.key, child: entry.value)).toList()),
-            ),
+              )),
+            ]),
           ),
           bottomNavigationBar: NavigationBar(
             selectedIndex: _index,
@@ -228,6 +239,10 @@ class _MobileServerSettingsState extends State<_MobileServerSettings> {
                     ]));
               }),
           const SizedBox(height: 16),
+          if (widget.gateway == null || widget.gateway is NativeServerGateway) ...[
+            const NikoMobileVoicePolicyCard(),
+            const SizedBox(height: 16),
+          ],
           NikoGlassCard(
               padding: EdgeInsets.zero,
               child: ExpansionTile(

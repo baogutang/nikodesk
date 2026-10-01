@@ -13,6 +13,9 @@ import '../../common/formatter/id_formatter.dart';
 import '../../models/peer_model.dart';
 import '../../models/platform_model.dart';
 import '../../nikodesk/favorite_actions.dart';
+import '../../nikodesk/connect_dialog.dart';
+import '../../nikodesk/credential_connect_dialog.dart';
+import '../../nikodesk/ui.dart';
 import '../../nikodesk/favorite_actions_native.dart';
 import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 import '../../desktop/widgets/popup_menu.dart';
@@ -847,13 +850,24 @@ abstract class BasePeerCard extends StatelessWidget {
   }
 
   @protected
-  MenuEntryBase<String> _unrememberPasswordAction(String id) {
+  MenuEntryBase<String> _unrememberPasswordAction(Peer peer) {
+    final id = peer.id;
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
         translate('Forget Password'),
         style: style,
       ),
       proc: () async {
+        if (const bool.fromEnvironment('NIKODESK')) {
+          final scope=peer.serverNamespace;
+          if (scope == null) {showToast(nikoText('设备的私服身份未确认。', 'This device has no confirmed private server identity.'));return;}
+          try {
+            await bind.mainForgetPassword(id:nikoCredentialSelector(scope,id));
+            final status=await nikoCredentialStatus(scope,id);
+            showToast(status=='missing' ? nikoText('已移除本机保存的密码。', 'Saved password removed.') : nikoText('移除未确认，请重试。', 'Removal is unconfirmed. Try again.'));
+          } catch (_) {showToast(nikoText('无法读取系统安全存储，请重试。', 'Secure storage is unavailable. Try again.'));}
+          return;
+        }
         bool succ = await gFFI.abModel.changePersonalHashPassword(id, '');
         await bind.mainForgetPassword(id: id);
         if (succ) {
@@ -1005,7 +1019,8 @@ class RecentPeerCard extends BasePeerCard {
         ? await nikoReadNativeFavorites(NikoFavoritePeerRef(peer.id, peer.serverNamespace))
         : (await bind.mainGetFav()).toList();
 
-    if (isDesktop && peer.platform != kPeerPlatformAndroid) {
+    if ((isDesktop || (const bool.fromEnvironment('NIKODESK') && isMobile)) &&
+        peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context));
     }
     // menuItems.add(await _openNewConnInOptAction(peer.id));
@@ -1023,7 +1038,7 @@ class RecentPeerCard extends BasePeerCard {
       menuItems.add(_renameAction(peer.id));
     }
     if (await bind.mainPeerHasPassword(id: peer.id)) {
-      menuItems.add(_unrememberPasswordAction(peer.id));
+      menuItems.add(_unrememberPasswordAction(peer));
     }
 
     if (favs != null && !favs.contains(peer.id)) {
@@ -1068,7 +1083,8 @@ class FavoritePeerCard extends BasePeerCard {
       menuItems.add(_terminalRunAsAdminAction(context));
     }
 
-    if (isDesktop && peer.platform != kPeerPlatformAndroid) {
+    if ((isDesktop || (const bool.fromEnvironment('NIKODESK') && isMobile)) &&
+        peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context));
     }
     // menuItems.add(await _openNewConnInOptAction(peer.id));
@@ -1086,7 +1102,7 @@ class FavoritePeerCard extends BasePeerCard {
       menuItems.add(_renameAction(peer.id));
     }
     if (await bind.mainPeerHasPassword(id: peer.id)) {
-      menuItems.add(_unrememberPasswordAction(peer.id));
+      menuItems.add(_unrememberPasswordAction(peer));
     }
     menuItems.add(_rmFavAction(peer.id, () async {
       await bind.mainLoadFavPeers();
@@ -1132,7 +1148,8 @@ class DiscoveredPeerCard extends BasePeerCard {
         ? await nikoReadNativeFavorites(NikoFavoritePeerRef(peer.id, peer.serverNamespace))
         : (await bind.mainGetFav()).toList();
 
-    if (isDesktop && peer.platform != kPeerPlatformAndroid) {
+    if ((isDesktop || (const bool.fromEnvironment('NIKODESK') && isMobile)) &&
+        peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context));
     }
     // menuItems.add(await _openNewConnInOptAction(peer.id));
@@ -1189,7 +1206,8 @@ class AddressBookPeerCard extends BasePeerCard {
       menuItems.add(_terminalRunAsAdminAction(context));
     }
 
-    if (isDesktop && peer.platform != kPeerPlatformAndroid) {
+    if ((isDesktop || (const bool.fromEnvironment('NIKODESK') && isMobile)) &&
+        peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context));
     }
     // menuItems.add(await _openNewConnInOptAction(peer.id));
@@ -1208,7 +1226,7 @@ class AddressBookPeerCard extends BasePeerCard {
         menuItems.add(_renameAction(peer.id));
       }
       if (gFFI.abModel.current.isPersonal() && peer.hash.isNotEmpty) {
-        menuItems.add(_unrememberPasswordAction(peer.id));
+        menuItems.add(_unrememberPasswordAction(peer));
       }
       if (!gFFI.abModel.current.isPersonal()) {
         menuItems.add(_changeSharedAbPassword());
@@ -1346,7 +1364,8 @@ class MyGroupPeerCard extends BasePeerCard {
       menuItems.add(_terminalRunAsAdminAction(context));
     }
 
-    if (isDesktop && peer.platform != kPeerPlatformAndroid) {
+    if ((isDesktop || (const bool.fromEnvironment('NIKODESK') && isMobile)) &&
+        peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context));
     }
     // menuItems.add(await _openNewConnInOptAction(peer.id));
@@ -1572,6 +1591,25 @@ void connectInPeerTab(BuildContext context, Peer peer, PeerTabIndex tab,
     bool isTcpTunneling = false,
     bool isRDP = false,
     bool isTerminal = false}) async {
+  if (const bool.fromEnvironment('NIKODESK')) {
+    final scope = peer.serverNamespace;
+    if (scope == null) {
+      nikoNotice(context, nikoText('此设备的私服身份未确认，请从当前设备目录重新选择。',
+          'This device has no confirmed private server identity. Select it from the current device directory.'));
+      return;
+    }
+    final auth = await nikoAskCredentialConnect(context, peer.id, peer.alias,namespace:scope,fileTransfer:isFileTransfer);
+    if (auth == null || !context.mounted) return;
+    final connToken=auth.token(scope);
+    await nikoDispatchConnection(context, id: peer.id, password: auth.password,
+        useSavedCredential:auth.useSaved,connToken:connToken,
+        fileTransfer: isFileTransfer, forceRelay: false, expectedServerNamespace: scope,
+        onConnect: (ctx, id, relay, {isFileTransfer = false, password}) => connect(
+            ctx, id, password: password, forceRelay: relay,
+            serverNamespace: scope, connToken:connToken, isTcpTunneling: isTcpTunneling,
+            isFileTransfer:isFileTransfer,isViewCamera:isViewCamera,isTerminal:isTerminal,isRDP:isRDP));
+    return;
+  }
   var password = '';
   bool isSharedPassword = false;
   if (tab == PeerTabIndex.ab) {

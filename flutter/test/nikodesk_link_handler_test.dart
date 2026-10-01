@@ -121,7 +121,7 @@ void main() {
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(calls, 0);
-      expect(gateway.reads, 0);
+      expect(gateway.reads, 1);
       expect(tester.takeException(), isNull);
     });
   }
@@ -151,7 +151,7 @@ void main() {
     await tester.tap(find.byKey(const Key('nikodesk-connect-submit')));
     await tester.pumpAndSettle();
     expect(calls, 0);
-    expect(gateway.reads, 1);
+    expect(gateway.reads, 2);
     expect(find.textContaining('connections are paused'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

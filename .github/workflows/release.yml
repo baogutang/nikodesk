@@ -14,6 +14,14 @@ on:
         description: Build Windows and Android experiments (runtime acceptance pending)
         type: boolean
         default: true
+      windows_setup_validation:
+        description: Build and upload the unsigned Windows unattended validation bundle (does not install)
+        type: boolean
+        default: false
+      windows_driver_validation:
+        description: Compile and upload the unsigned independent Windows virtual display driver (does not install)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -117,6 +125,7 @@ jobs:
         run: |
           APP="flutter/build/macos/Build/Products/Release/NikoDesk.app"
           python3 .github/scripts/prepare-macos-camera.py "$APP"
+          python3 .github/scripts/package-macos.py "$APP" --prepare-coreaudio-licenses
           python3 .github/scripts/build-macos-privacy-watchdog.py "$APP" --architecture arm64
           cp LICENCE "$APP/Contents/Resources/NikoDesk-LICENCE.txt"
           printf 'NikoDesk source: https://github.com/%s/tree/%s\n' "$GITHUB_REPOSITORY" "$GITHUB_SHA" \
@@ -132,8 +141,10 @@ jobs:
 
   build-windows:
     name: Experimental Windows x64 (build only)
-    if: (github.event_name == 'workflow_dispatch' && inputs.experimental_platforms) || startsWith(github.ref, 'refs/heads/validation/')
+    if: (github.event_name == 'workflow_dispatch' && (inputs.experimental_platforms || inputs.windows_setup_validation)) || startsWith(github.ref, 'refs/heads/validation/')
     runs-on: windows-2022
+    env:
+      NIKODESK_WINDOWS_SETUP_VALIDATION: ${{ (github.event_name == 'workflow_dispatch' && inputs.windows_setup_validation) || startsWith(github.ref, 'refs/heads/validation/') }}
     steps:
       - name: Export GitHub Actions cache environment variables
         uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
@@ -197,16 +208,30 @@ jobs:
           NIKODESK_SOURCE_DIRTY: 'false'
           PRODUCT_VERSION: ${{ steps.product-version.outputs.version_name }}
           PRODUCT_BUILD_NUMBER: ${{ steps.product-version.outputs.build_number }}
-        run: python3 .\build.py --flutter --hwcodec --nikodesk --build-name "$env:PRODUCT_VERSION" --build-number "$env:PRODUCT_BUILD_NUMBER"
+        run: |
+          python3 -m pip install --disable-pip-version-check --only-binary=:all: --index-url https://pypi.org/simple --target .tools/package-verifier Brotli==1.2.0
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:PYTHONPATH="$env:GITHUB_WORKSPACE\.tools\package-verifier"
+          $arguments=@('.github/scripts/build-windows-product.py', '--build-name', "$env:PRODUCT_VERSION", '--build-number', "$env:PRODUCT_BUILD_NUMBER")
+          if ($env:NIKODESK_WINDOWS_SETUP_VALIDATION -eq 'true') {
+            New-Item -ItemType Directory -Force dist | Out-Null
+            $arguments+=@('--setup-output', 'dist/NikoDesk-windows-x64-setup-validation', '--setup-trust-mode', 'reviewed-local-unsigned-validation')
+          }
+          python3 @arguments
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Test Windows identity and portable boundaries
         shell: pwsh
         run: |
+          $env:PYTHONPATH="$env:GITHUB_WORKSPACE\.tools\package-verifier"
           cargo test --locked --lib --features flutter,hwcodec,nikodesk nikodesk_windows_
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test --locked -p rustdesk-portable-packer --features nikodesk
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python3 -m unittest discover -s libs/portable/tests -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python3 -m unittest discover -s .github/scripts/tests -p test_windows_product.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Package
         shell: pwsh
@@ -239,6 +264,36 @@ jobs:
         with:
           name: NikoDesk-windows-x64-experimental
           path: NikoDesk-windows-x64-experimental.*
+          if-no-files-found: error
+
+      - name: Upload setup validation artifacts
+        if: env.NIKODESK_WINDOWS_SETUP_VALIDATION == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: NikoDesk-windows-x64-setup-validation
+          path: |
+            dist/NikoDesk-windows-x64-setup-validation.exe
+            dist/NikoDesk-windows-x64-setup-validation.zip
+            dist/NikoDesk-windows-x64-setup-validation.json
+            dist/NikoDesk-windows-x64-setup-validation.txt
+          if-no-files-found: error
+
+  build-windows-driver:
+    name: Independent Windows x64 virtual display driver (unsigned build only)
+    if: startsWith(github.ref, 'refs/heads/validation/') || (github.event_name == 'workflow_dispatch' && inputs.windows_driver_validation)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile the native driver with pinned private WDK and SDK
+        shell: pwsh
+        run: |
+          python3 .github/scripts/build-windows-idd.py --output dist/NikoDesk-windows-x64-driver-validation
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload unsigned driver source validation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: NikoDesk-windows-x64-driver-validation
+          path: dist/NikoDesk-windows-x64-driver-validation/
           if-no-files-found: error
 
   build-android:
@@ -380,6 +435,7 @@ jobs:
           python3 -m unittest discover -s .github/scripts/tests -v
           python3 .github/scripts/verify-package-android.py NikoDesk-android-arm64-unsigned.apk \
             --application-id io.nikodesk.android.dev --version-name "$PRODUCT_VERSION" --version-code "$PRODUCT_BUILD_NUMBER" --unsigned \
+            --require-owned-voice \
             --manifest-output NikoDesk-android-arm64-unsigned-manifest.xml \
             --report-output NikoDesk-android-arm64-unsigned-report.json
 

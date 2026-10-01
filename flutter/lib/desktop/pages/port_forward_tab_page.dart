@@ -40,6 +40,8 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
     tabController.add(TabInfo(
         key: params['id'],
         label: params['id'],
+        onTabCloseButton: const bool.fromEnvironment('NIKODESK')
+            ? () => _closeNikoTab(params['id']) : null,
         selectedIcon: selectedIcon,
         unselectedIcon: unselectedIcon,
         page: PortForwardPage(
@@ -85,6 +87,8 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
         tabController.add(TabInfo(
             key: id,
             label: id,
+            onTabCloseButton: const bool.fromEnvironment('NIKODESK')
+                ? () => _closeNikoTab(id) : null,
             selectedIcon: selectedIcon,
             unselectedIcon: unselectedIcon,
             page: PortForwardPage(
@@ -117,6 +121,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
       body: DesktopTab(
         controller: tabController,
         onWindowCloseButton: () async {
+          if (const bool.fromEnvironment('NIKODESK')) return _closeNikoWindow();
           tabController.clear();
           return true;
         },
@@ -149,6 +154,27 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
               windowId: stateGlobal.windowId,
             ),
           );
+  }
+
+  Future<void> _closeNikoTab(String id) async {
+    final tabs = tabController.state.value.tabs;
+    final index = tabs.indexWhere((tab) => tab.key == id);
+    if (index < 0) return;
+    final original = tabs[index];
+    final page = original.page;
+    if (page is! PortForwardPage || !await page.requestNikoClose() || !mounted) return;
+    final current = tabs.indexWhere((tab) => identical(tab, original));
+    if (current >= 0) tabController.remove(current);
+  }
+
+  Future<bool> _closeNikoWindow() async {
+    for (final original in List<TabInfo>.of(tabController.state.value.tabs)) {
+      final page = original.page;
+      if (page is! PortForwardPage || !await page.requestNikoClose()) continue;
+      final current = tabController.state.value.tabs.indexWhere((tab) => identical(tab, original));
+      if (current >= 0) tabController.remove(current);
+    }
+    return tabController.state.value.tabs.isEmpty;
   }
 
   void onRemoveId(String id) {

@@ -616,6 +616,7 @@ impl FlutterHandler {
             ("niko_video_epoch", &metrics.epoch().to_string()),
             ("niko_video_revision", &metrics.revision().to_string()),
             ("niko_video_existing", &"true".to_owned()),
+            ("niko_connection_route", &metrics.connection_route().unwrap_or_default()),
         ], &[session_id]);
     }
     /// Push an event to all the event queues.
@@ -815,6 +816,7 @@ impl InvokeUiSession for FlutterHandler {
             ("secure", &is_secured.to_string()), ("direct", &direct.to_string()),
             ("stream_type", &stream_type.to_string()), ("niko_video_namespace", &namespace.to_owned()),
             ("niko_video_epoch", &epoch.to_string()), ("niko_video_revision", &revision.to_string()),
+            ("niko_connection_route", &metrics.connection_route().unwrap_or_default()),
         ], &[]);
     }
 
@@ -1511,6 +1513,13 @@ pub fn session_start_(
                 session.use_texture_render.load(Ordering::Relaxed)
             );
             let session = (*session).clone();
+            #[cfg(feature = "nikodesk")]
+            if session.is_port_forward() {
+                let round = session.connection_round_state.lock().unwrap().new_round();
+                crate::client::nikodesk_tunnel_cleanup::start_thread(&session, round)
+                    .map_err(|reason| anyhow!(reason))?;
+                return Ok(());
+            }
             std::thread::spawn(move || {
                 let round = session.connection_round_state.lock().unwrap().new_round();
                 io_loop(session, round);
@@ -2220,6 +2229,19 @@ pub mod sessions {
             .cloned()
     }
 
+    #[cfg(feature = "nikodesk")]
+    pub(crate) fn nikodesk_voice_ui_owner(lc: &Arc<RwLock<LoginConfigHandler>>) -> Option<(SessionID, FlutterHandler)> {
+        let preferred = super::get_cur_session_id();
+        let sessions = SESSIONS.read().ok()?;
+        let session = sessions.values().find(|session| session.is_default() && Arc::ptr_eq(&session.lc, lc))?;
+        let handlers = session.ui_handler.session_handlers.read().ok()?;
+        let mut ids = handlers.iter().filter(|(_, handler)| handler.event_stream.is_some())
+            .map(|(id, _)| *id).collect::<Vec<_>>();
+        ids.sort();
+        let id = if ids.contains(&preferred) { preferred } else { *ids.first()? };
+        Some((id, session.ui_handler.clone()))
+    }
+
     #[inline]
     pub fn get_session_by_peer_id(peer_id: String, conn_type: ConnType) -> Option<FlutterSession> {
         #[cfg(feature = "nikodesk")]
@@ -2250,6 +2272,42 @@ pub mod sessions {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         update_session_count_to_server();
         s
+    }
+
+    #[cfg(feature = "nikodesk")]
+    pub(crate) fn detach_nikodesk_tunnel_ui_if_current(
+        id: &SessionID, original: &FlutterSession, on_last: impl FnOnce() -> Result<(), &'static str>,
+    ) -> Result<bool, &'static str> {
+        let mut sessions = SESSIONS.write().map_err(|_| "tunnel_worker_failed")?;
+        let key = sessions.iter().find_map(|(key, session)| {
+            Arc::ptr_eq(session, original).then(|| key.clone())
+        }).ok_or("tunnel_session_closed")?;
+        let last = {
+            let mut handlers = original.session_handlers.write().map_err(|_| "tunnel_worker_failed")?;
+            let handler = handlers.get(id).ok_or("tunnel_session_closed")?;
+            let last = handlers.len() == 1;
+            if last { on_last()?; }
+            try_send_close_event(&handler.event_stream);
+            handlers.remove(id);
+            last
+        };
+        if last { sessions.remove(&key); }
+        Ok(last)
+    }
+
+    #[cfg(feature = "nikodesk")]
+    pub(crate) fn requested_nikodesk_tunnel_owners() -> Result<Vec<(SessionID, String, String)>, &'static str> {
+        let sessions = SESSIONS.read().map_err(|_| "tunnel_worker_failed")?;
+        let mut owners = Vec::new();
+        for session in sessions.values() {
+            if !session.niko_tunnel_thread.close_requested() { continue; }
+            let snapshot = session.connection_snapshot().map_err(|_| "tunnel_worker_failed")?;
+            let peer_id = session.get_id();
+            let handlers = session.session_handlers.read().map_err(|_| "tunnel_worker_failed")?;
+            owners.extend(handlers.keys().map(|id| (*id, snapshot.namespace().to_owned(), peer_id.clone())));
+        }
+        owners.sort_by_key(|(id, _, _)| *id);
+        Ok(owners)
     }
 
     /// Close every client session, returning how many peer sessions were closed.
@@ -2409,6 +2467,11 @@ pub mod sessions {
         };
         #[cfg(not(feature = "nikodesk"))]
         let key = (session.get_id(), conn_type);
+        #[cfg(feature = "nikodesk")]
+        let tunnel_admission = if conn_type == ConnType::PORT_FORWARD {
+            Some(crate::client::nikodesk_tunnel_cleanup::admit_uuid(&session_id)
+                .map_err(|reason| anyhow!(reason))?)
+        } else { None };
         let mut sessions = SESSIONS.write().unwrap();
         #[cfg(feature = "nikodesk")]
         key.check_uuid_binding(sessions.iter().filter_map(|(existing, session)| {
@@ -2423,6 +2486,8 @@ pub mod sessions {
             .unwrap()
             .insert(session_id, Default::default());
         drop(sessions);
+        #[cfg(feature = "nikodesk")]
+        drop(tunnel_admission);
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         update_session_count_to_server();
         Ok(())
@@ -2455,6 +2520,11 @@ pub mod sessions {
     }
 
     fn insert_peer_session_id_for_key(key: RegistryKey, session_id: SessionID, displays: Vec<i32>) -> bool {
+        #[cfg(feature = "nikodesk")]
+        let _tunnel_admission = if key.conn_type == ConnType::PORT_FORWARD {
+            let Ok(admission) = crate::client::nikodesk_tunnel_cleanup::admit_uuid(&session_id) else { return false; };
+            Some(admission)
+        } else { None };
         #[cfg(feature = "nikodesk")]
         let sessions = SESSIONS.write().unwrap();
         #[cfg(feature = "nikodesk")]
@@ -2526,7 +2596,11 @@ pub(super) mod async_tasks {
         },
     };
 
-    type TxQueryOnlines = SyncSender<Vec<String>>;
+    #[cfg(feature="nikodesk")]
+    type OnlineTask = crate::nikodesk::online_query::Query;
+    #[cfg(not(feature="nikodesk"))]
+    type OnlineTask = Vec<String>;
+    type TxQueryOnlines = SyncSender<OnlineTask>;
     lazy_static::lazy_static! {
         static ref TX_QUERY_ONLINES: Arc<Mutex<Option<TxQueryOnlines>>> = Default::default();
     }
@@ -2544,12 +2618,13 @@ pub(super) mod async_tasks {
     #[tokio::main(flavor = "current_thread")]
     async fn start_flutter_async_runner_() {
         // Only one task is allowed to run at the same time.
-        let (tx_onlines, rx_onlines) = sync_channel::<Vec<String>>(1);
+        let (tx_onlines, rx_onlines) = sync_channel::<OnlineTask>(1);
         TX_QUERY_ONLINES.lock().unwrap().replace(tx_onlines);
 
         #[cfg(feature = "nikodesk")]
         return crate::nikodesk::server_settings::run_flutter_tasks(rx_onlines).await;
 
+        #[cfg(not(feature="nikodesk"))]
         loop {
             match rx_onlines.recv() {
                 Ok(ids) => {
@@ -2564,9 +2639,11 @@ pub(super) mod async_tasks {
     }
 
     pub fn query_onlines(ids: Vec<String>) -> ResultType<()> {
+        #[cfg(feature="nikodesk")]
+        let ids=crate::nikodesk::online_query::Query::capture(ids)?;
         if let Some(tx) = TX_QUERY_ONLINES.lock().unwrap().as_ref() {
             // Ignore if the channel is full.
-            let _ = tx.try_send(ids)?;
+            tx.try_send(ids).map_err(|_|hbb_common::anyhow::anyhow!("online_query_queue_full"))?;
         } else {
             bail!("No tx_query_onlines");
         }

@@ -359,6 +359,40 @@ pub enum Data {
     NikoCapabilityRevoke(crate::nikodesk::connection_capabilities::Identity),
     #[cfg(feature="nikodesk")]
     NikoCapabilityStatus(crate::nikodesk::connection_capabilities::Status),
+    #[cfg(feature="nikodesk")]
+    NikoCameraCommand(crate::nikodesk::camera_flow::Command),
+    #[cfg(feature="nikodesk")]
+    NikoCameraStatus(crate::nikodesk::camera_flow::Status),
+    #[cfg(feature="nikodesk")]
+    NikoCameraRetired(crate::nikodesk::camera_flow::Status),
+    #[cfg(feature="nikodesk")]
+    NikoCameraCleanupStatus(crate::nikodesk::camera_flow::Status),
+    #[cfg(feature="nikodesk")]
+    NikoCameraCatalog(crate::nikodesk::camera_flow::Catalog),
+    #[cfg(feature="nikodesk")]
+    NikoVoiceCommand(crate::nikodesk::voice_flow::Command),
+    #[cfg(feature="nikodesk")]
+    NikoVoiceReady { context: crate::nikodesk::voice_start::Context, peer_requests_allowed: bool },
+    #[cfg(feature="nikodesk")]
+    NikoVoicePrepare(crate::nikodesk::voice_start::Prepare),
+    #[cfg(feature="nikodesk")]
+    NikoVoicePrepareError { context: crate::nikodesk::voice_start::Context, expires_at_ms: u64, reason: String },
+    #[cfg(feature="nikodesk")]
+    NikoVoiceStatus {status:crate::nikodesk::voice_flow::Status,peer_supported:bool,peer_requests_allowed:bool},
+    #[cfg(feature="nikodesk")]
+    NikoVoiceRetired(crate::nikodesk::voice_flow::Status),
+    #[cfg(feature="nikodesk")]
+    NikoVoiceCleanupStatus(crate::nikodesk::voice_flow::Status),
+    #[cfg(feature="nikodesk")]
+    NikoVoiceCatalog(crate::nikodesk::voice_flow::Catalog),
+    #[cfg(feature="nikodesk")]
+    NikoTunnelCommand(crate::nikodesk::tunnel_flow::Command),
+    #[cfg(feature="nikodesk")]
+    NikoTunnelStatus(String),
+    #[cfg(feature="nikodesk")]
+    NikoTunnelRetired(String),
+    #[cfg(feature="nikodesk")]
+    NikoTunnelCleanupStatus(String),
     Authorize,
     Close,
     #[cfg(windows)]

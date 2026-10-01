@@ -32,6 +32,21 @@ pub(crate) struct Target {
 }
 
 impl Target {
+    pub(crate) fn host(&self) -> &str {
+        &self.host
+    }
+
+    pub(crate) fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub(crate) fn label(&self) -> String {
+        match self.host.parse::<IpAddr>() {
+            Ok(ip) => SocketAddr::new(ip, self.port).to_string(),
+            Err(_) => format!("{}:{}", self.host, self.port),
+        }
+    }
+
     pub(crate) fn parse(host: &str, port: i32) -> Result<Self, Error> {
         if !(1..=65535).contains(&port)
             || host.is_empty()

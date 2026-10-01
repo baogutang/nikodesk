@@ -63,6 +63,9 @@ pub trait PrivacyMode: Sync + Send {
 
     fn get_impl_key(&self) -> &str;
 
+    #[cfg(all(feature = "nikodesk", any(target_os="windows",target_os="macos")))]
+    fn nikodesk_heartbeat(&mut self, _conn_id: i32, _permitted: bool) -> bool { false }
+
     #[inline]
     fn check_on_conn_id(&self, conn_id: i32) -> ResultType<bool> {
         let pre_conn_id = self.pre_conn_id();
@@ -92,6 +95,10 @@ lazy_static::lazy_static! {
     pub static ref DEFAULT_PRIVACY_MODE_IMPL: String = {
         #[cfg(windows)]
         {
+            #[cfg(feature = "nikodesk")]
+            { if crate::nikodesk::privacy_windows::supported() { crate::nikodesk::privacy_windows::IMPL } else { "" }.to_owned() }
+            #[cfg(not(feature = "nikodesk"))]
+            {
             if win_exclude_from_capture::is_supported() {
                 PRIVACY_MODE_IMPL_WIN_EXCLUDE_FROM_CAPTURE
             } else {
@@ -105,6 +112,7 @@ lazy_static::lazy_static! {
                     }
                 }
             }.to_owned()
+            }
         }
         #[cfg(not(windows))]
         {
@@ -146,7 +154,7 @@ lazy_static::lazy_static! {
         }
         #[cfg(windows)]
         let mut map: HashMap<&'static str, PrivacyModeCreator> = HashMap::new();
-        #[cfg(windows)]
+        #[cfg(all(windows, not(feature = "nikodesk")))]
         {
             if win_exclude_from_capture::is_supported() {
                 map.insert(win_exclude_from_capture::PRIVACY_MODE_IMPL, |impl_key: &str| {
@@ -161,6 +169,12 @@ lazy_static::lazy_static! {
             map.insert(win_virtual_display::PRIVACY_MODE_IMPL, |impl_key: &str| {
                     Box::new(win_virtual_display::PrivacyModeImpl::new(impl_key))
                 });
+        }
+        #[cfg(all(windows, feature = "nikodesk"))]
+        {
+            map.insert(crate::nikodesk::privacy_windows::IMPL, |key| {
+                Box::new(crate::nikodesk::privacy_windows::PrivacyModeImpl::new(key))
+            });
         }
         Arc::new(Mutex::new(map))
     };
@@ -209,6 +223,10 @@ fn get_supported_impl(impl_key: &str) -> String {
 }
 
 pub async fn turn_on_privacy(impl_key: &str, conn_id: i32) -> Option<ResultType<bool>> {
+    #[cfg(feature = "nikodesk")]
+    if !get_supported_privacy_mode_impl().iter().any(|(key, _)| *key == impl_key) {
+        return Some(Err(anyhow!("Requested privacy screen implementation is unavailable")));
+    }
     if is_async_privacy_mode() {
         turn_on_privacy_async(impl_key.to_string(), conn_id).await
     } else {
@@ -325,7 +343,13 @@ async fn set_privacy_mode_state(
 }
 
 pub fn get_supported_privacy_mode_impl() -> Vec<(&'static str, &'static str)> {
-    #[cfg(target_os = "windows")]
+    #[cfg(all(target_os = "windows", feature = "nikodesk"))]
+    {
+        if crate::nikodesk::privacy_windows::supported() {
+            vec![(crate::nikodesk::privacy_windows::IMPL, "NikoDesk privacy screen")]
+        } else { Vec::new() }
+    }
+    #[cfg(all(target_os = "windows", not(feature = "nikodesk")))]
     {
         let mut vec_impls = Vec::new();
 
@@ -408,7 +432,15 @@ pub fn check_privacy_mode_err(
 
 #[inline]
 pub fn is_privacy_mode_supported() -> bool {
+    #[cfg(feature = "nikodesk")]
+    { return !get_supported_privacy_mode_impl().is_empty(); }
+    #[cfg(not(feature = "nikodesk"))]
     !DEFAULT_PRIVACY_MODE_IMPL.is_empty()
+}
+
+#[cfg(all(feature = "nikodesk", any(target_os="windows",target_os="macos")))]
+pub(crate) fn nikodesk_heartbeat(conn_id: i32, permitted: bool) -> bool {
+    PRIVACY_MODE.lock().unwrap().as_mut().is_some_and(|mode| mode.nikodesk_heartbeat(conn_id, permitted))
 }
 
 #[inline]

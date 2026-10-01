@@ -69,6 +69,24 @@ fn rdp_display_name(lc: &Arc<RwLock<LoginConfigHandler>>, id: &str) -> String {
     }
 }
 
+#[cfg(feature = "nikodesk")]
+pub async fn listen(
+    id: String,
+    password: String,
+    port: i32,
+    interface: impl Interface + Sync,
+    ui_receiver: mpsc::UnboundedReceiver<Data>,
+    key: &str,
+    token: &str,
+    lc: Arc<RwLock<LoginConfigHandler>>,
+    remote_host: String,
+    remote_port: i32,
+) -> ResultType<()> {
+    crate::client::nikodesk_tunnel::listen(id, password, port, interface, ui_receiver,
+        key, token, lc, remote_host, remote_port).await
+}
+
+#[cfg(not(feature = "nikodesk"))]
 pub async fn listen(
     id: String,
     password: String,
@@ -584,7 +602,7 @@ async fn run_forward(forward: Framed<TcpStream, BytesCodec>, stream: Stream) -> 
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "nikodesk")))]
 mod login_tests {
     use super::*;
     use async_trait::async_trait;

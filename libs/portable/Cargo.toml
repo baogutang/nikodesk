@@ -10,6 +10,7 @@ build = "build.rs"
 
 [features]
 nikodesk = []
+nikodesk-installer = ["nikodesk"]
 
 [dependencies]
 brotli = "3.4"
@@ -38,4 +39,3 @@ FileDescription = "RustDesk Remote Desktop"
 [target.'cfg(target_os="windows")'.build-dependencies]
 winres = "0.1"
 winapi = { version = "0.3", features = [ "winnt", "pdh", "synchapi" ] }
-

@@ -20,6 +20,7 @@ import 'package:window_size/window_size.dart' as window_size;
 import '../../common.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
+import '../../nikodesk/voice_session_native.dart';
 import '../../common/shared_state.dart';
 import './popup_menu.dart';
 import './kb_layout_type_chooser.dart';
@@ -851,7 +852,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       toolbarItems.add(_KeyboardMenu(id: widget.id, ffi: widget.ffi));
     }
     toolbarItems.add(_ChatMenu(id: widget.id, ffi: widget.ffi));
-    if (!isWeb) {
+    if (!isWeb && !const bool.fromEnvironment('NIKODESK')) {
       toolbarItems.add(_VoiceCallMenu(id: widget.id, ffi: widget.ffi));
     }
     if (!isWeb) toolbarItems.add(_RecordMenu());
@@ -2825,7 +2826,7 @@ class _ChatMenuState extends State<_ChatMenu> {
           hoverColor: _ToolbarTheme.hoverBlueColor,
           menuChildrenGetter: (_) => [
             textChat(),
-            if (const bool.fromEnvironment('NIKODESK') == false) voiceCall(),
+            voiceCall(),
           ]);
     }
   }
@@ -2865,8 +2866,9 @@ class _ChatMenuState extends State<_ChatMenu> {
     return MenuButton(
       child: Text(translate('Voice call')),
       ffi: widget.ffi,
-      onPressed: () =>
-          bind.sessionRequestVoiceCall(sessionId: widget.ffi.sessionId),
+      onPressed: () => const bool.fromEnvironment('NIKODESK')
+          ? showNikoVoiceSession(context, widget.ffi.nikoVoiceOwner)
+          : bind.sessionRequestVoiceCall(sessionId: widget.ffi.sessionId),
     );
   }
 }

@@ -68,6 +68,8 @@ pub struct Session<T: InvokeUiSession> {
     pub lc: Arc<RwLock<LoginConfigHandler>>,
     pub sender: Arc<RwLock<Option<mpsc::UnboundedSender<Data>>>>,
     pub thread: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
+    #[cfg(feature = "nikodesk")]
+    pub(crate) niko_tunnel_thread: Arc<crate::client::nikodesk_tunnel_cleanup::ThreadProofState>,
     pub ui_handler: T,
     pub server_keyboard_enabled: Arc<RwLock<bool>>,
     pub server_file_transfer_enabled: Arc<RwLock<bool>>,
@@ -114,6 +116,10 @@ pub struct ConnectionRoundState {
 }
 
 impl ConnectionRoundState {
+    #[cfg(feature="nikodesk")]
+    pub(crate) fn niko_voice_round(&self)->Option<u32> {
+        self.is_connected().then_some(self.round)
+    }
     pub fn new_round(&mut self) -> u32 {
         self.round += 1;
         self.state = ConnectionState::Connecting;
@@ -244,7 +250,7 @@ impl<T: InvokeUiSession> Session<T> {
         conn_type == ConnType::PORT_FORWARD || conn_type == ConnType::RDP
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(any(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
     pub fn is_rdp(&self) -> bool {
         self.lc.read().unwrap().conn_type.eq(&ConnType::RDP)
     }
@@ -581,10 +587,20 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn restart_remote_device(&self) {
+        #[cfg(all(feature = "nikodesk", feature = "flutter"))]
+        {
+            if let Err(reason) = crate::nikodesk::session_power::request_restart(self) {
+                self.msgbox("error", "Restart remote device", reason, "");
+            }
+            return;
+        }
+        #[cfg(not(all(feature = "nikodesk", feature = "flutter")))]
+        {
         let mut lc = self.lc.write().unwrap();
         lc.mark_restarting_remote_device();
         let msg = lc.restart_remote_device();
         self.send(Data::Message(msg));
+        }
     }
 
     pub fn get_audit_server(&self, typ: String) -> String {
@@ -1306,6 +1322,13 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn reconnect(&self, force_relay: bool) {
+        #[cfg(feature = "nikodesk")]
+        if self.is_port_forward() {
+            if let Err(reason) = crate::client::nikodesk_tunnel_cleanup::reconnect(self, force_relay) {
+                self.on_error(reason);
+            }
+            return;
+        }
         // 1. If current session is connecting, do not reconnect.
         // 2. If the connection is established, send `Data::Close`.
         // 3. If the connection is disconnected, do nothing.
@@ -1400,7 +1423,7 @@ impl<T: InvokeUiSession> Session<T> {
         password: String,
         remember: bool,
     ) {
-        #[cfg(feature = "nikodesk")]
+        #[cfg(all(feature = "nikodesk", not(any(target_os = "macos", target_os = "windows", target_os = "android"))))]
         let remember = false;
         self.send(Data::Login((os_username, os_password, password, remember)));
     }
@@ -1837,6 +1860,15 @@ impl<T: InvokeUiSession> Interface for Session<T> {
         if pi.current_display as usize >= pi.displays.len() {
             pi.current_display = 0;
         }
+        #[cfg(feature="nikodesk")]
+        if self.is_view_camera() && pi.displays.is_empty()
+            && serde_json::from_str::<serde_json::Value>(&pi.platform_additions).ok().map_or(false,|value|value.get("nikodesk_camera_protocol").and_then(|v|v.as_u64())==Some(1) && value.get("nikodesk_camera_pending").and_then(|v|v.as_bool())==Some(true)) {
+            self.lc.write().unwrap().handle_peer_info(&pi);
+            self.set_peer_info(&pi);
+            self.on_connected(self.lc.read().unwrap().conn_type);
+            self.msgbox("success","Camera request authenticated","Waiting for local camera approval and device selection","");
+            return;
+        }
         if get_version_number(&pi.version) < get_version_number("1.1.10") {
             self.set_permission("restart", false);
         }
@@ -1997,6 +2029,20 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
     let key = String::new(); // Client::start takes the key from the captured snapshot.
     #[cfg(not(feature = "nikodesk"))]
     let key = crate::get_key(false).await;
+    #[cfg(feature = "nikodesk")]
+    if handler.is_port_forward() {
+        if handler.is_rdp() { handler.on_error("tunnel_rdp_unsupported"); return; }
+        let Some(proof) = handler.niko_tunnel_thread.run_proof() else {
+            handler.on_error("tunnel_worker_failed"); return;
+        };
+        if handler.niko_tunnel_thread.closing() { proof.record_children_cleanup(true); return; }
+        let saved = handler.lc.read().unwrap().port_forwards.clone();
+        let args = handler.args.clone();
+        let closed = crate::client::nikodesk_tunnel::run_mappings(handler.clone(), handler.password.clone(),
+            args, saved, receiver, key, token).await;
+        proof.record_children_cleanup(closed);
+        return;
+    }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if handler.is_port_forward() {
         handler.lc.write().unwrap().port_forward_mux = crate::port_forward::mux_enabled();

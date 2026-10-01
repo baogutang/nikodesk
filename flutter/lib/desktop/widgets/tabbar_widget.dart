@@ -202,6 +202,14 @@ class DesktopTabController {
   void closeBy(String? key) {
     if (!isDesktop) return;
     assert(onRemoved != null);
+    if (const bool.fromEnvironment('NIKODESK') && tabType == DesktopTabType.portForward) {
+      final tabs = state.value.tabs;
+      final index = key == null ? state.value.selected : tabs.indexWhere((tab) => tab.key == key);
+      if (index >= 0 && index < tabs.length && tabs[index].onTabCloseButton != null) {
+        tabs[index].onTabCloseButton!();
+        return;
+      }
+    }
     if (key == null) {
       if (state.value.selected < state.value.tabs.length) {
         remove(state.value.selected);

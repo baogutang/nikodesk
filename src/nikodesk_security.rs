@@ -9,7 +9,19 @@ pub(crate) fn require_encrypted(secured: bool) -> ResultType<()> {
 }
 
 pub(crate) fn allows_login(request: &LoginRequest) -> bool {
+    #[cfg(target_os="macos")]
+    if crate::nikodesk::mac_background::selected() && !crate::nikodesk::mac_background::active_user() { return false; }
     if crate::nikodesk::background::is_system_worker() { return allows_system_login(request); }
+    if let Some(login_request::Union::PortForward(tunnel)) = request.union.as_ref() {
+        return cfg!(any(target_os="macos",target_os="windows"))
+            && request.os_login.username.is_empty() && request.os_login.password.is_empty()
+            && request.nikodesk_features.as_ref().map_or(false, |peer| peer.nikodesk_tunnel_v1 && peer.port_forward_mux)
+            && crate::nikodesk::tunnel_wire::parse_login(tunnel).is_ok();
+    }
+    if let Some(login_request::Union::ViewCamera(camera))=request.union.as_ref() {
+        return crate::nikodesk::camera_flow::supported() && camera.nikodesk_protocol==1
+            && request.os_login.username.is_empty() && request.os_login.password.is_empty();
+    }
     if matches!(request.union.as_ref(),Some(login_request::Union::Terminal(terminal))
         if terminal.service_id.is_empty()) {
         return cfg!(not(any(target_os="android",target_os="ios")))
@@ -33,6 +45,9 @@ fn allows_system_message(message: &Message, authenticated: bool, keyboard: bool,
         | Some(message::Union::PointerDeviceEvent(_)) => authenticated && keyboard,
         Some(message::Union::Misc(misc)) => match misc.union.as_ref() {
             Some(misc::Union::CloseReason(_)) => true,
+            Some(misc::Union::ToggleVirtualDisplay(_)) => authenticated && keyboard,
+            Some(misc::Union::TogglePrivacyMode(_)) => authenticated && keyboard,
+            Some(misc::Union::RestartRemoteDevice(restart)) => *restart && authenticated && keyboard,
             Some(misc::Union::Option(_)) | Some(misc::Union::RefreshVideo(_))
             | Some(misc::Union::VideoReceived(_)) | Some(misc::Union::SwitchDisplay(_))
             | Some(misc::Union::CaptureDisplays(_)) | Some(misc::Union::RefreshVideoDisplay(_))
@@ -53,6 +68,8 @@ pub(crate) fn allows_message(
     file: bool,
     file_clipboard: bool,
 ) -> bool {
+    #[cfg(target_os="macos")]
+    if crate::nikodesk::mac_background::selected() && !crate::nikodesk::mac_background::active_user() { return false; }
     if crate::nikodesk::background::is_system_worker() {
         return allows_system_message(message, authenticated, keyboard, crate::nikodesk::background::worker_input_ready());
     }
@@ -164,6 +181,10 @@ mod tests {
         assert!(!allows_login(&login));
         login.set_view_camera(Default::default());
         assert!(!allows_login(&login));
+        login.set_view_camera(base::message_proto::ViewCamera{nikodesk_protocol:1,..Default::default()});
+        assert_eq!(allows_login(&login),crate::nikodesk::camera_flow::supported());
+        login.os_login.mut_or_insert_default().username="administrator".into();assert!(!allows_login(&login));
+        login.os_login=Default::default();
         login.set_terminal(Default::default());
         assert_eq!(allows_login(&login),cfg!(not(any(target_os="android",target_os="ios"))));
         if let Some(login_request::Union::Terminal(terminal))=login.union.as_mut() {terminal.service_id="ts_foreign".into();}
@@ -183,5 +204,25 @@ mod tests {
         msg.set_voice_call_request(Default::default());assert!(!allows_system_message(&msg,true,true,true));
         msg.set_key_event(Default::default());assert!(allows_system_message(&msg,true,true,true));
         assert!(!allows_system_message(&msg,true,true,false));assert!(!allows_system_message(&msg,false,true,true));
+    }
+    #[test]
+    fn system_desktop_power_and_privacy_reach_only_the_authenticated_active_control_owner() {
+        let mut misc = base::message_proto::Misc::new();
+        misc.set_toggle_privacy_mode(Default::default());
+        let mut message = Message::new();
+        message.set_misc(misc);
+        assert!(allows_system_message(&message, true, true, true));
+        for (authenticated, keyboard, active) in [(false,true,true),(true,false,true),(true,true,false)] {
+            assert!(!allows_system_message(&message, authenticated, keyboard, active));
+        }
+        for requested in [false, true] {
+            let mut misc = base::message_proto::Misc::new();
+            misc.set_restart_remote_device(requested);
+            message.set_misc(misc);
+            assert_eq!(allows_system_message(&message, true, true, true), requested);
+            for (authenticated, keyboard, active) in [(false,true,true),(true,false,true),(true,true,false)] {
+                assert!(!allows_system_message(&message, authenticated, keyboard, active));
+            }
+        }
     }
 }

@@ -6,6 +6,10 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/nikodesk/tunnel_controller_view.dart';
+import 'package:flutter_hbb/nikodesk/tunnel_cleanup.dart';
+import 'package:flutter_hbb/nikodesk/tunnel_cleanup_view.dart';
+import 'package:flutter_hbb/nikodesk/ui.dart';
 import 'package:get/get.dart';
 
 const double _kColumn1Width = 30;
@@ -47,6 +51,11 @@ class PortForwardPage extends StatefulWidget {
   final SimpleWrapper<State<PortForwardPage>?> _lastState = SimpleWrapper(null);
 
   FFI get ffi => (_lastState.value! as _PortForwardPageState)._ffi;
+  Future<bool> requestNikoClose() async {
+    final state = _lastState.value;
+    if (state is _PortForwardPageState && state.mounted) return state.requestNikoClose();
+    return false;
+  }
 
   @override
   State<PortForwardPage> createState() {
@@ -63,6 +72,38 @@ class _PortForwardPageState extends State<PortForwardPage>
   final TextEditingController remotePortController = TextEditingController();
   RxList<_PortForward> pfs = RxList.empty(growable: true);
   late FFI _ffi;
+  bool _nikoClosing = false, _nikoCloseUnconfirmed = false;
+
+  Future<bool> requestNikoClose({bool query = false}) async {
+    if (_nikoClosing) return false;
+    final scope = _ffi.serverNamespace;
+    final peer = _ffi.nikoTunnelController?.peerId ?? widget.id;
+    if (scope == null) return false;
+    final owner = NikoTunnelOwnerIdentity(_ffi.sessionId.toString(), scope, peer);
+    setState(() => _nikoClosing = true);
+    _ffi.nikoTunnelController?.invalidate();
+    NikoTunnelCleanupReply? reply;
+    try {
+      const transport = NativeNikoTunnelCleanupTransport();
+      reply = NikoTunnelCleanupReply.parse(await (query ? transport.query(owner) : transport.close(owner))
+          .timeout(const Duration(seconds: 5)), owner);
+    } catch (_) { /* No timeout or raw error is a cleanup proof. */ }
+    final detachable = reply?.confirmed == true || reply?.reason == 'cleanup_pending' ||
+        (reply?.ok == true && reply?.reason == 'ui_detached');
+    if (reply?.confirmed == true) NikoTunnelCleanupProofs.record(reply!);
+    if (detachable) {
+      try { await _ffi.close(closeSession: false).timeout(const Duration(seconds: 5)); }
+      catch (_) { /* The native original owner remains the cleanup authority. */ }
+    }
+    if (mounted) setState(() { _nikoClosing = false; _nikoCloseUnconfirmed = !detachable; });
+    return detachable;
+  }
+
+  Future<void> _retryNikoClose({bool query = false}) async {
+    if (!await requestNikoClose(query: query) || !mounted) return;
+    final index = widget.tabController.state.value.tabs.indexWhere((tab) => identical(tab.page, widget));
+    if (index >= 0) widget.tabController.remove(index);
+  }
 
   @override
   void initState() {
@@ -95,6 +136,30 @@ class _PortForwardPageState extends State<PortForwardPage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    if (const bool.fromEnvironment('NIKODESK')) {
+      final controller = _ffi.nikoTunnelController;
+      return Scaffold(body: Column(children: [
+        if (_nikoClosing || _nikoCloseUnconfirmed) Padding(padding: const EdgeInsets.all(16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Semantics(liveRegion: true, child: Text(_nikoClosing
+                ? nikoText('正在退出，等待本机资源确认。', 'Exiting; waiting for local resource confirmation.')
+                : nikoText('此会话尚未能退出，窗口已保留。请重试退出或查询清理。',
+                    'This session could not exit. The window is retained. Retry exit or check cleanup.'))),
+            if (!_nikoClosing) Wrap(spacing: 8, runSpacing: 8, children: [
+              OutlinedButton(style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+                  onPressed: _retryNikoClose, child: Text(nikoText('重试退出', 'Retry exit'))),
+              OutlinedButton(style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+                  onPressed: () => _retryNikoClose(query: true), child: Text(nikoText('查询清理', 'Check cleanup'))),
+            ]),
+          ])),
+        Expanded(child: controller == null || widget.isRDP
+          ? Padding(padding: const EdgeInsets.all(16), child: Text(nikoText(
+              '此隧道会话未能创建。请关闭窗口，检查私服与密码后重试。RDP 暂不支持。',
+              'The tunnel session could not be created. Close this window, check the private server and password, and retry. RDP is not supported.')))
+          : NikoTunnelControllerView(controller: controller,
+              sendCommand: _ffi.sendNikoTunnelCommand)),
+      ]));
+    }
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: FutureBuilder(future: () async {

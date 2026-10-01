@@ -6,6 +6,8 @@ import 'server_gateway.dart';
 import 'server_scope.dart';
 import 'theme.dart';
 import 'ui.dart';
+import 'credential_connect_dialog.dart'
+    show nikoCredentialStatus, nikoAskCredentialConnect;
 
 /// NikoDesk controller-side security policy: a session is never started with
 /// only a device id. The remote password must be entered in this client
@@ -128,12 +130,17 @@ Future<bool> nikoConnectWithPassword(
     return false;
   }
   final namespace = expectedServerNamespace ?? NikoServerScope.current;
-  final password = await nikoAskConnectPassword(context, id, alias,
+  final auth = await nikoAskCredentialConnect(context, id, alias,
+      namespace: namespace ?? '',
+      native: namespace != null &&
+          (gateway == null || gateway is NativeServerGateway),
       fileTransfer: fileTransfer);
-  if (password == null || !context.mounted) return false;
+  if (auth == null || !context.mounted) return false;
   return nikoDispatchConnection(context,
       id: id,
-      password: password,
+      password: auth.password,
+      useSavedCredential: auth.useSaved,
+      connToken: namespace == null ? null : auth.token(namespace),
       fileTransfer: fileTransfer,
       forceRelay: forceRelay,
       gateway: gateway,
@@ -146,6 +153,8 @@ Future<bool> nikoDispatchConnection(
   BuildContext context, {
   required String id,
   required String password,
+  bool useSavedCredential = false,
+  String? connToken,
   bool fileTransfer = false,
   bool forceRelay = false,
   ServerGateway? gateway,
@@ -155,7 +164,7 @@ Future<bool> nikoDispatchConnection(
       onConnect,
   void Function()? onDispatched,
 }) async {
-  if (!validDeviceId(id) || password.trim().isEmpty) {
+  if (!validDeviceId(id) || (password.trim().isEmpty && !useSavedCredential)) {
     nikoNotice(
         context,
         nikoText('安全策略：必须输入远端密码才能发起连接。',
@@ -180,6 +189,16 @@ Future<bool> nikoDispatchConnection(
               'The private server is not ready or connections are paused.'));
       return false;
     }
+    if (useSavedCredential &&
+        (current.namespace == null ||
+            await nikoCredentialStatus(current.namespace!, id) != 'present')) {
+      if (context.mounted)
+        nikoNotice(
+            context,
+            nikoText('已保存凭据不可用，请输入密码。',
+                'The saved credential is unavailable. Enter a password.'));
+      return false;
+    }
     if (onConnect != null) {
       await onConnect(context, id, forceRelay,
           isFileTransfer: fileTransfer, password: password);
@@ -187,7 +206,9 @@ Future<bool> nikoDispatchConnection(
       await connect(context, id,
           forceRelay: forceRelay,
           isFileTransfer: fileTransfer,
-          password: password, serverNamespace: current.namespace);
+          password: password,
+          serverNamespace: current.namespace,
+          connToken: connToken);
     }
     onDispatched?.call();
     return true;

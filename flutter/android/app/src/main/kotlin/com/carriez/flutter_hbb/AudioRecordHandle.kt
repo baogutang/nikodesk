@@ -55,6 +55,7 @@ class AudioRecordHandle(private var context: Context, private var isVideoStart: 
 
     @RequiresApi(Build.VERSION_CODES.M)
     fun createAudioRecorder(inVoiceCall: Boolean, mediaProjection: MediaProjection?): Boolean {
+        if (!VoiceFlavorPolicy.legacyAudioAllowed) return false
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             return false
         }
@@ -150,6 +151,7 @@ class AudioRecordHandle(private var context: Context, private var isVideoStart: 
 
     @RequiresApi(Build.VERSION_CODES.M)
     fun startAudioRecorder(): Boolean {
+        if (!VoiceFlavorPolicy.legacyAudioAllowed) return false
         val recorder = audioRecorder
         if (recorder == null) {
             Log.d(logTag, "startAudioRecorder fail")

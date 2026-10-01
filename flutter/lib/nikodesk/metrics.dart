@@ -74,6 +74,9 @@ class SessionMetrics {
   bool? secure;
   bool? direct;
   String? transport;
+  String? relayTarget;
+  bool? proxyInUse;
+  bool? websocketTls;
   DateTime? connectionSampledAt;
   DateTime? authenticatedAt;
   bool connectionFromCache = false;
@@ -128,7 +131,55 @@ class SessionMetrics {
     _nativeEpoch = epoch;
     _highestNativeEpoch = epoch;
     _nativeNamespace = namespace;
+    _readConnectionRoute(event['niko_connection_route']);
     return true;
+  }
+
+  void _readConnectionRoute(Object? raw) {
+    try {
+      if (raw is! String || raw.length > 1024) return;
+      final route = jsonDecode(raw);
+      if (route is! Map<String, dynamic> ||
+          route['schemaVersion'] != 1 ||
+          route['proxyInUse'] is! bool ||
+          (route['websocketTls'] != null && route['websocketTls'] is! bool)) {
+        return;
+      }
+      final target = route['relayTarget'];
+      if (target != null) {
+        if (direct != false ||
+            target is! String ||
+            target.isEmpty ||
+            target.length > 512 ||
+            route['relayTargetSource'] != 'captured_private_relay' ||
+            !RegExp(r'^[\x21-\x7e]+$').hasMatch(target)) return;
+        final websocket = transport == 'WebSocket';
+        final uri = Uri.tryParse(websocket ? target : 'tcp://$target');
+        if (uri == null ||
+            !const ['tcp', 'ws', 'wss'].contains(uri.scheme) ||
+            uri.host.isEmpty ||
+            uri.userInfo.isNotEmpty ||
+            uri.hasQuery ||
+            uri.hasFragment ||
+            (websocket
+                ? !const ['ws', 'wss'].contains(uri.scheme) ||
+                    (uri.path.isNotEmpty && uri.path != '/ws/relay') ||
+                    route['websocketTls'] != (uri.scheme == 'wss')
+                : uri.path.isNotEmpty ||
+                    !uri.hasPort ||
+                    route['websocketTls'] != null) ||
+            (uri.hasPort && (uri.port < 1 || uri.port > 65535))) return;
+        relayTarget = target;
+      }
+      if (direct == true &&
+          (route['proxyInUse'] == true || route['websocketTls'] != null)) {
+        return;
+      }
+      proxyInUse = route['proxyInUse'];
+      websocketTls = route['websocketTls'];
+    } catch (_) {
+      // Older/native-unavailable headers keep route details unknown.
+    }
   }
 
   void nativeVisibility(bool visible) {
@@ -346,6 +397,9 @@ class SessionMetrics {
     secure = null;
     direct = null;
     transport = null;
+    relayTarget = null;
+    proxyInUse = null;
+    websocketTls = null;
     connectionSampledAt = null;
     authenticatedAt = null;
     connectionFromCache = false;
@@ -442,6 +496,17 @@ class SessionMetrics {
           'encrypted': secure,
           'direct': direct,
           'transport': transport,
+          'relayTarget': relayTarget == null ? null : 'redacted',
+          'relayTargetState': direct == true
+              ? 'not-used'
+              : relayTarget == null
+                  ? 'unknown'
+                  : 'redacted',
+          'relayTargetSource': relayTarget == null
+              ? null
+              : 'captured_private_relay; connected target, not resolved socket IP',
+          'proxyInUse': proxyInUse,
+          'websocketTls': websocketTls,
           'sampledAt': connectionSampledAt?.toIso8601String(),
           'authenticatedAt': authenticatedAt?.toIso8601String(),
           'source': connectionFromCache
@@ -474,7 +539,7 @@ class SessionMetrics {
           'queueDepth',
           'droppedFrames',
           'networkPing',
-          'relayAddress'
+          'resolvedRelayIp'
         ],
       };
 }

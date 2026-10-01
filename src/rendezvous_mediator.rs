@@ -287,6 +287,8 @@ impl RendezvousMediator {
         let server = new_server();
         #[cfg(feature = "nikodesk")]
         crate::nikodesk::background::core_bootstrap_ready();
+        #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
+        crate::nikodesk::wol_proxy::start();
         if config::option2bool("stop-service", &Config::get_option("stop-service")) {
             crate::test_rendezvous_server();
         }

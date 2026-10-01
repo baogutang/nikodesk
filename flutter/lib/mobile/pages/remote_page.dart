@@ -23,6 +23,11 @@ import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../utils/image.dart';
 import '../../nikodesk/mobile_session_guide.dart';
+import '../../nikodesk/mobile_chat_options.dart';
+import '../../nikodesk/session_tools.dart';
+import '../../nikodesk/ui.dart';
+import '../../nikodesk/voice_session_native.dart';
+import '../../nikodesk/voice_session_owner.dart';
 import '../widgets/dialog.dart';
 import '../widgets/custom_scale_widget.dart';
 
@@ -46,6 +51,7 @@ class RemotePage extends StatefulWidget {
       {Key? key,
       required this.id,
       this.password,
+      this.connToken,
       this.isSharedPassword,
       this.serverNamespace,
       this.forceRelay})
@@ -54,6 +60,7 @@ class RemotePage extends StatefulWidget {
   final String id;
   final String? serverNamespace;
   final String? password;
+  final String? connToken;
   final bool? isSharedPassword;
   final bool? forceRelay;
 
@@ -66,6 +73,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   bool _showBar = !isWebDesktop;
   bool _showGestureHelp = false;
   bool _nikoGuideScheduled = false;
+  NikoVoiceSessionOwner? _nikoVoiceOwner;
   String _value = '';
   Orientation? _currentOrientation;
   final _uniqueKey = UniqueKey();
@@ -101,10 +109,13 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     gFFI.start(
       widget.id,
       password: widget.password,
+      connToken: widget.connToken,
       serverNamespace: widget.serverNamespace,
       isSharedPassword: widget.isSharedPassword,
       forceRelay: widget.forceRelay,
     );
+    if (const bool.fromEnvironment('NIKODESK'))
+      _nikoVoiceOwner = gFFI.nikoVoiceOwner;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       gFFI.dialogManager
@@ -156,6 +167,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   @override
   Future<void> dispose() async {
     WidgetsBinding.instance.removeObserver(this);
+    if (const bool.fromEnvironment('NIKODESK') && _nikoVoiceOwner != null) {
+      gFFI.disposeNikoVoiceOwner(expectedOwner: _nikoVoiceOwner);
+    }
     // Close the session up-front. `gFFI.close()` below only calls `sessionClose`
     // after several awaits (canvas save, image update, the `enable_soft_keyboard`
     // platform call), so if the app is backgrounded while this page is disposing,
@@ -216,8 +230,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       gFFI.inputModel.enterOrLeave(false);
       final openGestures = await showDialog<bool>(
           context: context,
-          builder: (_) => NikoMobileSessionGuide(
-              touchMode: gFFI.ffiModel.touchMode));
+          builder: (_) =>
+              NikoMobileSessionGuide(touchMode: gFFI.ffiModel.touchMode));
       if (openGestures == null || !mounted || gFFI.closed) return;
       if (openGestures) setState(() => _showGestureHelp = true);
       await bind.setLocalFlutterOption(k: nikoMobileGuideSeenKey, v: 'Y');
@@ -233,8 +247,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
     _waylandKeyboardGateInitialized = true;
 
-    final allowWaylandKeyboard =
-        sessionGetPeerBoolOptionSync(sessionId, widget.id, kPeerOptionAllowWaylandKeyboard);
+    final allowWaylandKeyboard = sessionGetPeerBoolOptionSync(
+        sessionId, widget.id, kPeerOptionAllowWaylandKeyboard);
     if (!shouldShowWaylandKeyboardPrompt(
       connectionId: sessionId.toString(),
       isWaylandPeer: _shouldGateKeyboardForWayland(),
@@ -420,8 +434,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   }
 
   void openKeyboard() {
-    final allowWaylandKeyboard =
-        sessionGetPeerBoolOptionSync(sessionId, widget.id, kPeerOptionAllowWaylandKeyboard);
+    final allowWaylandKeyboard = sessionGetPeerBoolOptionSync(
+        sessionId, widget.id, kPeerOptionAllowWaylandKeyboard);
     if (shouldShowWaylandKeyboardPrompt(
       connectionId: sessionId.toString(),
       isWaylandPeer: _shouldGateKeyboardForWayland(),
@@ -840,6 +854,12 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   }
 
   showChatOptions(String id) async {
+    if (const bool.fromEnvironment('NIKODESK')) {
+      await showNikoMobileChatOptions(context,
+          onTextChat: () => onPressedTextChat(widget.id),
+          onVoiceCall: () => showNikoVoiceSession(context, _nikoVoiceOwner));
+      return;
+    }
     onPressVoiceCall() => bind.sessionRequestVoiceCall(sessionId: sessionId);
     onPressEndVoiceCall() => bind.sessionCloseVoiceCall(sessionId: sessionId);
 
@@ -1423,6 +1443,21 @@ void showOptions(
     }
 
     var popupDialogMenus = List<Widget>.empty(growable: true);
+    if (const bool.fromEnvironment('NIKODESK')) {
+      for (final diagnostics in [false, true]) {
+        popupDialogMenus.add(ListTile(
+          leading:
+              Icon(diagnostics ? Icons.monitor_heart_outlined : Icons.tune),
+          title: Text(diagnostics
+              ? nikoText('会话诊断', 'Session diagnostics')
+              : nikoText('画面模式', 'Picture mode')),
+          onTap: () {
+            close();
+            showNikoSessionTools(gFFI, diagnostics: diagnostics);
+          },
+        ));
+      }
+    }
     final resolution = getResolutionMenu(gFFI, id);
     if (resolution != null) {
       popupDialogMenus.add(ListTile(

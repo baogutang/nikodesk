@@ -26,7 +26,8 @@ void main() {
     }
   });
 
-  test('missing identity fails before any window RPC or serialization', () async {
+  test('missing identity fails before any window RPC or serialization',
+      () async {
     var calls = 0;
     expect(() => nikoSessionWindowMessage({'id': '1000000001'}, null),
         throwsStateError);
@@ -41,11 +42,28 @@ void main() {
         throwsStateError);
     expect(calls, 0);
   });
+  test(
+      'child window preserves only the credential choice and its private server scope',
+      () {
+    final choice = jsonEncode({
+      'nikodesk_credentials': {'schema': 1, 'namespace': a, 'remember': true}
+    });
+    final message = nikoSessionWindowMessage(
+        {'type': 1, 'id': '1000000001', 'connToken': choice}, a);
+    final received = jsonDecode(message) as Map<String, dynamic>;
+    expect(received['connToken'], choice);
+    expect(
+        jsonDecode(received['connToken'])['nikodesk_credentials']['namespace'],
+        nikoWindowNamespace(received));
+    expect((jsonDecode(choice)['nikodesk_credentials'] as Map).keys.toSet(),
+        {'schema', 'namespace', 'remember'});
+  });
 
   test('same numeric peer on another server is never activated', () async {
     final activated = <int>[];
-    final result = await nikoActivatePeerWindow([1, 2, 3], a,
-        (window) async => {1: b, 2: a, 3: a}[window], (window) async {
+    final result = await nikoActivatePeerWindow(
+        [1, 2, 3], a, (window) async => {1: b, 2: a, 3: a}[window],
+        (window) async {
       activated.add(window);
       return true;
     });
@@ -56,8 +74,8 @@ void main() {
   test('closing matching windows cannot force reuse of a foreign window',
       () async {
     final activated = <int>[];
-    final result = await nikoActivatePeerWindow([1, 2, 3, 4], a,
-        (window) async {
+    final result =
+        await nikoActivatePeerWindow([1, 2, 3, 4], a, (window) async {
       if (window == 4) throw StateError('Closed');
       return window == 2 ? b : a;
     }, (window) async {
@@ -74,8 +92,8 @@ void main() {
     final first = Completer<Object?>();
     final windows = [1, 2];
     final activated = <int>[];
-    final pending = nikoActivatePeerWindow(windows, a,
-        (window) => window == 1 ? first.future : Future.value(a),
+    final pending = nikoActivatePeerWindow(
+        windows, a, (window) => window == 1 ? first.future : Future.value(a),
         (window) async {
       activated.add(window);
       return true;

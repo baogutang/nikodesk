@@ -71,9 +71,18 @@ use std::{
     },
 };
 
+#[cfg(all(feature="nikodesk",feature="flutter"))]
+#[path="nikodesk_voice.rs"]
+mod nikodesk_voice;
+#[cfg(all(feature="nikodesk",feature="flutter"))]
+#[path="nikodesk_voice_policy.rs"]
+mod nikodesk_voice_policy;
+
 pub struct Remote<T: InvokeUiSession> {
     #[cfg(feature = "nikodesk")]
     video_metrics: Arc<crate::nikodesk::video_metrics::SessionTelemetry>,
+    #[cfg(feature = "nikodesk")]
+    niko_audit: Option<crate::nikodesk::session_audit::SessionAudit>,
     handler: Session<T>,
     audio_sender: MediaSender,
     receiver: mpsc::UnboundedReceiver<Data>,
@@ -104,10 +113,16 @@ pub struct Remote<T: InvokeUiSession> {
     last_record_state: bool,
     sent_close_reason: bool,
     cursor_dedupe: CursorDedupe,
+    #[cfg(feature="nikodesk")]
+    niko_camera_probe_verified: bool,
+    #[cfg(all(feature="nikodesk",feature="flutter"))]
+    niko_voice: Option<crate::nikodesk::voice_session::Controller>,
 }
 
 #[derive(Default)]
 struct ParsedPeerInfo {
+    #[cfg(all(feature="nikodesk",feature="flutter"))]
+    niko_voice_features: Option<Features>,
     platform: String,
     is_installed: bool,
     idd_impl: String,
@@ -129,6 +144,11 @@ impl<T: InvokeUiSession> Remote<T> {
         receiver: mpsc::UnboundedReceiver<Data>,
         sender: mpsc::UnboundedSender<Data>,
     ) -> Self {
+        #[cfg(all(feature="nikodesk",feature="flutter"))]
+        let niko_voice={
+            let namespace=handler.lc.read().unwrap().connection_snapshot().map(|snapshot|snapshot.namespace().to_owned());
+            namespace.and_then(|namespace|crate::nikodesk::voice_session::Controller::new(namespace,handler.get_id()).ok())
+        };
         #[cfg(feature = "nikodesk")]
         let video_metrics = Arc::new(crate::nikodesk::video_metrics::SessionTelemetry::new(
             handler.lc.read().unwrap().connection_snapshot().map(|snapshot| snapshot.namespace().to_owned()).unwrap_or_default(),
@@ -138,6 +158,8 @@ impl<T: InvokeUiSession> Remote<T> {
         Self {
             #[cfg(feature = "nikodesk")]
             video_metrics,
+            #[cfg(feature = "nikodesk")]
+            niko_audit: None,
             handler,
             audio_sender: crate::client::start_audio_thread(),
             receiver,
@@ -164,10 +186,16 @@ impl<T: InvokeUiSession> Remote<T> {
             last_record_state: false,
             sent_close_reason: false,
             cursor_dedupe: Default::default(),
+            #[cfg(feature="nikodesk")]
+            niko_camera_probe_verified: false,
+            #[cfg(all(feature="nikodesk",feature="flutter"))]
+            niko_voice,
         }
     }
 
     pub async fn io_loop(&mut self, key: &str, token: &str, round: u32) {
+        #[cfg(all(feature="nikodesk",feature="flutter"))]
+        if let Some(voice)=self.niko_voice.as_mut() {voice.round=round;}
         #[cfg(feature = "nikodesk")]
         self.handler.video_metrics_enabled.store(self.handler.video_metrics_revision.load(Ordering::Acquire) != u64::MAX && self.handler.get_toggle_option("show-quality-monitor".to_owned()), Ordering::Release);
         #[cfg(target_os = "windows")]
@@ -203,6 +231,19 @@ impl<T: InvokeUiSession> Remote<T> {
             ConnType::default()
         };
 
+        #[cfg(feature = "nikodesk")]
+        {
+            use crate::nikodesk::session_audit::{Kind, Role, SessionAudit};
+            let kind = if self.handler.is_file_transfer() { Kind::FileTransfer }
+                else if self.handler.is_view_camera() { Kind::Camera }
+                else if self.handler.is_terminal() { Kind::Terminal }
+                else { Kind::Desktop };
+            self.niko_audit = SessionAudit::begin(self.video_metrics.namespace(), &self.handler.get_id(), Role::Controller, kind);
+            #[cfg(feature="flutter")]
+            if let (Some(audit), Some(voice)) = (self.niko_audit.as_ref(), self.niko_voice.as_mut()) {
+                voice.audit = Some(audit.capability_context());
+            }
+        }
         match Client::start(
             &self.handler.get_id(),
             key,
@@ -231,7 +272,12 @@ impl<T: InvokeUiSession> Remote<T> {
                 self.handler
                     .set_connection_type(is_secured, direct, stream_type); // flutter -> connection_ready
                 #[cfg(feature = "nikodesk")]
-                self.handler.set_connection_type_with_video_epoch(is_secured, direct, stream_type, self.video_metrics.namespace(), self.video_metrics.epoch(), self.video_metrics.revision());
+                {
+                    if let Ok(route) = self.handler.connection_snapshot() {
+                        self.video_metrics.capture_connection_route(&route, direct);
+                    }
+                    self.handler.set_connection_type_with_video_epoch(is_secured, direct, stream_type, self.video_metrics.namespace(), self.video_metrics.epoch(), self.video_metrics.revision());
+                }
                 if !is_secured
                     && !crate::common::is_direct_ip_access(&self.handler.get_id())
                     && !client::confirm_insecure_connection(&self.handler, &mut self.receiver).await
@@ -284,9 +330,20 @@ impl<T: InvokeUiSession> Remote<T> {
                 let mut webrtc_suspect_since: Option<Instant> = None;
                 let mut last_rx_progress = peer.rx_progress();
                 let mut peer_gone = false;
+                #[cfg(all(feature="nikodesk",feature="flutter"))]
+                let mut niko_voice_timer=time::interval(Duration::from_millis(10));
 
                 loop {
                     tokio::select! {
+                        _ = async {
+                            #[cfg(all(feature="nikodesk",feature="flutter"))]
+                            {niko_voice_timer.tick().await;}
+                            #[cfg(not(all(feature="nikodesk",feature="flutter")))]
+                            {std::future::pending::<()>().await;}
+                        } => {
+                            #[cfg(all(feature="nikodesk",feature="flutter"))]
+                            self.poll_nikodesk_voice(&mut peer).await;
+                        }
                         res = peer.next() => {
                             if let Some(res) = res {
                                 match res {
@@ -424,6 +481,8 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                 }
+                #[cfg(all(feature="nikodesk",feature="flutter"))]
+                if let Some(voice)=self.niko_voice.as_mut() {voice.retire();}
                 log::debug!("Exit io_loop of id={}", self.handler.get_id());
                 // Stop client audio server.
                 if let Some(s) = self.stop_voice_call_sender.take() {
@@ -449,7 +508,9 @@ impl<T: InvokeUiSession> Remote<T> {
         self.handle_disconnected(round);
     }
 
-    fn handle_disconnected(&self, round: u32) {
+    fn handle_disconnected(&mut self, round: u32) {
+        #[cfg(feature = "nikodesk")]
+        if let Some(audit) = self.niko_audit.as_mut() { audit.finish(); }
         #[cfg(feature = "nikodesk")]
         self.video_metrics.stop();
         // set_disconnected_ok is used to check if new connection round is started.
@@ -745,11 +806,17 @@ impl<T: InvokeUiSession> Remote<T> {
 
     async fn handle_msg_from_ui(&mut self, data: Data, peer: &mut Stream) -> bool {
         match data {
+            #[cfg(all(feature="nikodesk",feature="flutter"))]
+            Data::NikoVoiceUi(request)=>{self.handle_nikodesk_voice_ui(request,peer).await;}
             Data::Close => {
                 self.send_close_reason(peer, "").await;
                 return false;
             }
             Data::Login((os_username, os_password, password, remember)) => {
+                #[cfg(feature="nikodesk")]
+                if self.handler.is_view_camera() && !self.niko_camera_probe_verified {
+                    self.handler.on_error("Camera protocol must be verified before login");return false;
+                }
                 self.handler
                     .handle_login_from_ui(os_username, os_password, password, remember, peer)
                     .await;
@@ -780,6 +847,10 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
             }
             Data::Message(msg) => {
+                #[cfg(feature="nikodesk")]
+                if !crate::nikodesk::camera_probe::allows_outgoing_login(
+                    self.handler.is_view_camera(),self.niko_camera_probe_verified,&msg,
+                ) { self.handler.on_error("Camera protocol must be verified before login");return false; }
                 // The Flutter clipboard broadcast is process-wide, so a clipboard can reach this
                 // round's queue before the round has logged in; it is dropped here, on the round
                 // itself.
@@ -1556,6 +1627,13 @@ impl<T: InvokeUiSession> Remote<T> {
 
     async fn handle_msg_from_peer(&mut self, data: &[u8], peer: &mut Stream) -> bool {
         if let Ok(msg_in) = Message::parse_from_bytes(&data) {
+            #[cfg(all(feature="nikodesk",feature="flutter"))]
+            if self.handle_nikodesk_voice_policy(&msg_in,peer) {return true;}
+            #[cfg(all(feature="nikodesk",feature="flutter"))]
+            if crate::nikodesk::voice_wire::is_voice_candidate(&msg_in) {
+                self.handle_nikodesk_incoming_voice(&msg_in,peer).await;
+                return true;
+            }
             match msg_in.union {
                 Some(message::Union::VideoFrame(vf)) => {
                     if !self.first_frame {
@@ -1596,6 +1674,15 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
                 Some(message::Union::Hash(hash)) => {
+                    #[cfg(feature="nikodesk")]
+                    if self.handler.is_view_camera() {
+                        if self.niko_camera_probe_verified {self.handler.on_error("Repeated camera login challenge is unsupported");return false;}
+                        if let Err(error)=crate::nikodesk::camera_probe::verify(peer).await {self.handler.on_error(&error.to_string());return false;}
+                        let key={self.handler.lc.read().unwrap().peer_storage_key.clone()};
+                        if !tokio::task::spawn_blocking(move||key.as_ref().map_or(false,|key|key.is_current())).await.unwrap_or(false) {self.handler.on_error("Private server changed during camera protocol probe");return false;}
+                        self.niko_camera_probe_verified=true;
+                    }
+
                     if !self
                         .handler
                         .handle_hash(&self.handler.password.clone(), hash, peer)
@@ -1604,6 +1691,8 @@ impl<T: InvokeUiSession> Remote<T> {
                         return false;
                     }
                 }
+                #[cfg(feature="nikodesk")]
+                Some(message::Union::NikodeskCameraProbeReply(_)) => {return false;}
                 Some(message::Union::LoginResponse(lr)) => match lr.union {
                     Some(login_response::Union::Error(err)) => {
                         if err == client::REQUIRE_2FA {
@@ -1615,9 +1704,15 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(login_response::Union::PeerInfo(pi)) => {
+                        #[cfg(feature = "nikodesk")]
+                        if let Some(audit) = self.niko_audit.as_mut() { audit.authenticated(); }
                         let peer_version = pi.version.clone();
                         let peer_platform = pi.platform.clone();
                         self.set_peer_info(&pi);
+                        #[cfg(feature="nikodesk")]
+                        if self.handler.is_view_camera() && serde_json::from_str::<serde_json::Value>(&pi.platform_additions).ok().and_then(|value|value.get("nikodesk_camera_protocol").and_then(|v|v.as_u64())).unwrap_or(0)!=1 {
+                            self.handler.on_error("Remote side does not support locally approved NikoDesk camera requests");return false;
+                        }
                         if self.handler.is_view_camera() {
                             if !self.check_view_camera_support(&peer_version, &peer_platform) {
                                 self.handler.lc.write().unwrap().handle_peer_info(&pi);
@@ -1631,6 +1726,13 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         self.handler.handle_peer_info(pi);
+                        #[cfg(feature = "nikodesk")]
+                        {
+                            let warning = self.handler.lc.write().unwrap().credential_warning.take();
+                            if let Some(warning) = warning {
+                                self.handler.msgbox("error", "Credential storage", warning, "");
+                            }
+                        }
                         #[cfg(all(target_os = "windows", not(feature = "flutter")))]
                         self.check_clipboard_file_context();
                         if self.handler.is_default() {
@@ -2330,10 +2432,19 @@ impl<T: InvokeUiSession> Remote<T> {
                     _ => {}
                 },
                 Some(message::Union::MessageBox(msgbox)) => {
+                    #[cfg(feature="nikodesk")]
+                    if msgbox.msgtype == "nikodesk-restart-failed" {
+                        self.handler.lc.write().unwrap().clear_restarting_remote_device();
+                        self.handler.msgbox("error", "Restart remote device", &msgbox.text, "");
+                        return true;
+                    }
                     let mut link = msgbox.link;
                     if let Some(v) = config::HELPER_URL.get(&link as &str) {
                         link = v.to_string();
                     } else {
+                        #[cfg(feature="nikodesk")]
+                        log::warn!("NikoDesk ignored an unrecognized help link");
+                        #[cfg(not(feature="nikodesk"))]
                         log::warn!("Message box ignore link {} for security", &link);
                         link = "".to_string();
                     }
@@ -2374,6 +2485,12 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
                 Some(message::Union::PeerInfo(pi)) => {
+                    #[cfg(feature="nikodesk")]
+                    if self.handler.is_view_camera() {
+                        let mut lc=self.handler.lc.write().unwrap();
+                        if let Some(current)=lc.peer_info.as_mut() {current.displays=pi.displays.clone();current.platform_additions=pi.platform_additions.clone();}
+                    }
+
                     self.handler.set_displays(&pi.displays);
                     self.handler.set_platform_additions(&pi.platform_additions);
                 }
@@ -2400,6 +2517,8 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     fn set_peer_info(&mut self, pi: &PeerInfo) {
+        #[cfg(all(feature="nikodesk",feature="flutter"))]
+        {self.peer_info.niko_voice_features=pi.features.as_ref().cloned();}
         self.peer_info.platform = pi.platform.clone();
 
         // Check features field for terminal support

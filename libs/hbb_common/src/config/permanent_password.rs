@@ -50,6 +50,34 @@ pub(super) fn encode_permanent_password_encrypted_storage_from_h1(
     encrypt_permanent_password_storage(&hashed_storage)
 }
 
+pub(super) fn encode_permanent_password_encrypted_storage_from_h1_with_explicit_key(
+    h1: &[u8; PERMANENT_PASSWORD_H1_LEN],
+    key: &sodiumoxide::crypto::secretbox::Key,
+) -> Option<String> {
+    let mut hashed_storage = encode_permanent_password_storage_from_h1(h1).into_bytes();
+    let encrypted = crate::password_security::symmetric_crypt_with_explicit_key(
+        &hashed_storage, true, key,
+    );
+    sodiumoxide::utils::memzero(&mut hashed_storage);
+    Some(PERMANENT_PASSWORD_ENC_VERSION.to_owned()
+        + &base64::encode(encrypted.ok()?, base64::Variant::Original))
+}
+
+pub(super) fn decode_permanent_password_h1_from_storage_with_explicit_key(
+    storage: &str,
+    key: &sodiumoxide::crypto::secretbox::Key,
+) -> Option<[u8; PERMANENT_PASSWORD_H1_LEN]> {
+    let encoded = storage.strip_prefix(PERMANENT_PASSWORD_ENC_VERSION)?;
+    let payload = base64::decode(encoded, base64::Variant::Original).ok()?;
+    let mut plaintext = crate::password_security::symmetric_crypt_with_explicit_key(
+        &payload, false, key,
+    ).ok()?;
+    let result = std::str::from_utf8(&plaintext).ok()
+        .and_then(decode_permanent_password_h1_from_hashed_storage);
+    sodiumoxide::utils::memzero(&mut plaintext);
+    result
+}
+
 pub(super) fn decode_permanent_password_h1_from_hashed_storage(
     storage: &str,
 ) -> Option<[u8; PERMANENT_PASSWORD_H1_LEN]> {

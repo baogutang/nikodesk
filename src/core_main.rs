@@ -30,6 +30,10 @@ macro_rules! my_println{
 /// If it returns [`Some`], then the process will continue, and flutter gui will be started.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn core_main() -> Option<Vec<String>> {
+    #[cfg(all(feature = "nikodesk", windows))]
+    if let Some(code) = crate::nikodesk::privacy_windows::helper_entry() {
+        std::process::exit(code);
+    }
     #[cfg(feature = "nikodesk")]
     if let Err(err) = crate::nikodesk::validate_cli_args(std::env::args().skip(1))
         .and_then(|_| crate::nikodesk::initialize())
@@ -38,6 +42,14 @@ pub fn core_main() -> Option<Vec<String>> {
         std::process::exit(1);
     }
     if !crate::common::global_init() {
+        return None;
+    }
+    #[cfg(all(feature="nikodesk",target_os="macos"))]
+    if std::env::args().skip(1).collect::<Vec<_>>() == ["--nikodesk-background-agent"] {
+        if crate::nikodesk::mac_background::run().is_err() {
+            eprintln!("NikoDesk background agent could not start; check the private server, unattended policy and local permissions in NikoDesk.");
+            std::process::exit(1);
+        }
         return None;
     }
     #[cfg(not(feature = "nikodesk"))]

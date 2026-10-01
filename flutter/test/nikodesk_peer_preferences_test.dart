@@ -310,6 +310,71 @@ void main() {
     expect(result.confirmed, isFalse);
   });
 
+  for (final conflict in [false, true]) {
+    testWidgets('selected import can add favorites with conflict=$conflict',
+        (tester) async {
+      NikoLanguage.english = false;
+      addTearDown(() => NikoLanguage.english = false);
+      await tester.binding.setSurfaceSize(const Size(320, 760));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final changes = ValueNotifier<String?>(_a);
+      addTearDown(changes.dispose);
+      final transport = _Transport()
+        ..favoritesResponse = _favorites(ids: [])
+        ..previewResponse = jsonEncode(
+            (jsonDecode(_preview()) as Map<String, dynamic>)
+              ..['requires_local_restart'] = false)
+        ..importResponse = jsonEncode({
+          'ok': true,
+          'status': 'imported',
+          'namespace': _a,
+          'revision': _revision,
+          'imported': ['123456789'],
+          'skipped': {}
+        })
+        ..delayedPatch = () async => _favorites(
+            conflict: conflict, ids: conflict ? ['987654321'] : ['123456789']);
+      await tester.pumpWidget(MaterialApp(
+          theme: nikoTheme(Brightness.light),
+          builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: const TextScaler.linear(2)),
+              child: child!),
+          home: NikoPeerPreferencesView(
+              namespace: _a,
+              scopeChanges: changes,
+              preferences: NikoPeerPreferences(transport,
+                  currentNamespace: () => changes.value))));
+      await tester.pumpAndSettle();
+      final favorites = find.byKey(const Key('peer-legacy-add-favorites'));
+      expect(tester.widget<CheckboxListTile>(favorites).value, false);
+      expect(find.textContaining('导入前需要关闭旧版本窗口'), findsNothing);
+      expect(transport.calls.where((call) => call.first == 'import'), isEmpty);
+      final selected = find.byKey(const Key('peer-legacy-select-123456789'));
+      await tester.ensureVisible(selected);
+      await tester.tap(selected);
+      await tester.ensureVisible(favorites);
+      await tester.tap(favorites);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(FilledButton));
+      await tester.pumpAndSettle();
+      expect(transport.calls.where((call) => call.first == 'import'),
+          hasLength(1));
+      expect(transport.calls.where((call) => call.first == 'patch').single, [
+        'patch',
+        _a,
+        _revision,
+        ['123456789'],
+        <String>[]
+      ]);
+      expect(find.textContaining('已确认导入 1 台'), findsOneWidget);
+      expect(find.textContaining(conflict ? '本次未加入收藏' : '已确认加入收藏'),
+          findsOneWidget);
+      expect(tester.widget<CheckboxListTile>(favorites).value, false);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
   for (final english in [false, true]) {
     for (final brightness in [Brightness.light, Brightness.dark]) {
       testWidgets(
@@ -339,12 +404,16 @@ void main() {
             transport.calls.where((call) => call.first == 'import'), isEmpty);
         expect(
             tester
-                .widget<CheckboxListTile>(find.byType(CheckboxListTile))
+                .widget<CheckboxListTile>(
+                    find.byKey(const Key('peer-legacy-select-123456789')))
                 .value,
             isFalse);
-        await tester.ensureVisible(find.byType(Checkbox));
+        final selected = find.descendant(
+            of: find.byKey(const Key('peer-legacy-select-123456789')),
+            matching: find.byType(Checkbox));
+        await tester.ensureVisible(selected);
         await tester.pumpAndSettle();
-        await tester.tap(find.byType(Checkbox));
+        await tester.tap(selected);
         await tester.pumpAndSettle();
         await tester.tap(find.byType(FilledButton));
         await tester.pumpAndSettle();
@@ -355,7 +424,8 @@ void main() {
             hasLength(1));
         expect(
             tester
-                .widget<CheckboxListTile>(find.byType(CheckboxListTile))
+                .widget<CheckboxListTile>(
+                    find.byKey(const Key('peer-legacy-select-123456789')))
                 .value,
             isFalse);
         changes.value = _b;

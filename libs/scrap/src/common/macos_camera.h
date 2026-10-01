@@ -18,6 +18,8 @@ enum NKCameraResult {
 enum NKCameraPhase { NKCAM_STARTING = 0, NKCAM_RUNNING = 1, NKCAM_REVOKING = 2, NKCAM_ENDED = 3, NKCAM_ERROR = 4 };
 typedef struct {
     uint32_t width, height, min_fps_milli, max_fps_milli;
+    uint32_t native_index, range_index;
+    uint8_t native_fingerprint[32];
 } NKCameraFormat;
 typedef struct { const char* unique_id; const char* name; size_t format_count; } NKCameraDevice;
 typedef struct { uint32_t width, height, fps; uint64_t epoch; } NKCameraSelection;
@@ -42,13 +44,17 @@ void NKCameraDevicesRelease(NKCameraDevices*);
 
 // Caller must provide the exact locally approved uniqueID/format and epoch.
 // No index/default-device fallback and no implicit requestAccess calls.
-NKCameraSession* NKCameraStart(const char* unique_id, NKCameraSelection selection, int* result);
+NKCameraSession* NKCameraStart(const char* unique_id, NKCameraSelection selection,
+    const NKCameraFormat* approved_format, int* result);
 int NKCameraWaitRunning(NKCameraSession*, uint32_t timeout_ms);
 int NKCameraTakeLatest(NKCameraSession*, uint64_t epoch, uint32_t timeout_ms, NKCameraFrame**);
 int NKCameraSessionStatus(NKCameraSession*, int* phase);
 int NKCameraStop(NKCameraSession*);
-// On failed stop the native owner is deliberately retained, not falsely freed.
+// Failed release transfers the handle to the pending owner registry. Do not
+// reuse that raw handle; retry only with its unique process-local capture lease.
 int NKCameraSessionRelease(NKCameraSession*);
+// Only failed construction/release owners are eligible, never a live capturer.
+int NKCameraStopPending(uint64_t capture_lease);
 int NKCameraFrameDescribe(const NKCameraFrame*, NKCameraFrameView*);
 void NKCameraFrameRelease(NKCameraFrame*);
 
@@ -58,6 +64,12 @@ NKCameraSession* NKCameraTestCreate(NKCameraSelection selection);
 void NKCameraTestStarted(NKCameraSession*);
 int NKCameraTestPublish(NKCameraSession*, void* pixel_buffer, uint64_t epoch);
 void NKCameraTestFail(NKCameraSession*);
+int NKCameraTestReserve(NKCameraSession*);
+void NKCameraTestStopFailures(NKCameraSession*, uint32_t failures);
+// Pure format-description fixtures. No discovery, input, session or TCC calls.
+int NKCameraTestFormat(const void* description, const void* extensions, uint32_t native_index,
+    double minimum_fps, double maximum_fps, NKCameraFormat* output);
+int NKCameraTestFormatMatches(const NKCameraFormat*, const NKCameraFormat*);
 #endif
 
 #ifdef __cplusplus

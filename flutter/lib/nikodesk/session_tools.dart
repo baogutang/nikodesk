@@ -4,13 +4,37 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/common.dart' show CustomAlertDialog;
+import 'package:flutter_hbb/common.dart' show CustomAlertDialog, SessionID;
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 
 import 'metrics.dart';
+import 'diagnostics_export.dart';
 import 'policy.dart';
 import 'ui.dart';
+
+void showNikoSessionTools(FFI ffi, {bool diagnostics = false}) {
+  if (ffi.closed || !ffi.ffiModel.pi.isSet.value) return;
+  final session = ffi.sessionId;
+  final language = bind.mainGetLocalOption(key: 'lang');
+  NikoLanguage.english = language.isNotEmpty && !language.startsWith('zh');
+  ffi.inputModel.enterOrLeave(false);
+  ffi.dialogManager.show((_, close, context) {
+    final width = (MediaQuery.sizeOf(context).width - 64)
+        .clamp(0.0, diagnostics ? 690.0 : 590.0);
+    return CustomAlertDialog(
+      onCancel: close,
+      contentBoxConstraints: BoxConstraints(maxWidth: width),
+      content: SizedBox(
+        width: width,
+        child: diagnostics
+            ? NikoDiagnostics(ffi: ffi, onClose: close, session: session)
+            : _PictureModes(ffi: ffi, onClose: close, session: session),
+      ),
+    );
+  }, backDismiss: true, tag: 'nikodesk-session-panel');
+}
 
 class NikoSessionButton extends StatelessWidget {
   final FFI ffi;
@@ -27,25 +51,7 @@ class NikoSessionButton extends StatelessWidget {
             : nikoText('画面模式', 'Picture mode'),
         icon: Icon(
             diagnostics ? Icons.monitor_heart_outlined : Icons.tune_rounded),
-        onPressed: () {
-          final language = bind.mainGetLocalOption(key: 'lang');
-          NikoLanguage.english =
-              language.isNotEmpty && !language.startsWith('zh');
-          ffi.inputModel.enterOrLeave(false);
-          ffi.dialogManager.show(
-              (_, close, context) => CustomAlertDialog(
-                  onCancel: close,
-                  contentBoxConstraints:
-                      BoxConstraints(maxWidth: diagnostics ? 690 : 590),
-                  content: SizedBox(
-                    width: diagnostics ? 690 : 590,
-                    child: diagnostics
-                        ? NikoDiagnostics(ffi: ffi, onClose: close)
-                        : _PictureModes(ffi: ffi, onClose: close),
-                  )),
-              backDismiss: true,
-              tag: 'nikodesk-session-panel');
-        },
+        onPressed: () => showNikoSessionTools(ffi, diagnostics: diagnostics),
       );
 }
 
@@ -65,12 +71,17 @@ String _modeLabel(PictureMode mode) {
 class _PictureModes extends StatefulWidget {
   final FFI ffi;
   final VoidCallback onClose;
-  const _PictureModes({required this.ffi, required this.onClose});
+  final SessionID session;
+  const _PictureModes(
+      {required this.ffi, required this.onClose, required this.session});
   @override
   State<_PictureModes> createState() => _PictureModesState();
 }
 
 class _PictureModesState extends State<_PictureModes> {
+  late final SessionID _session;
+  bool get _sessionCurrent =>
+      !widget.ffi.closed && widget.ffi.sessionId == _session;
   PictureMode _mode = PictureMode.smooth;
   double _quality = 50;
   double _fps = 30;
@@ -85,12 +96,14 @@ class _PictureModesState extends State<_PictureModes> {
   @override
   void initState() {
     super.initState();
+    _session = widget.session;
     _read();
   }
 
   Future<void> _read() async {
+    if (!_sessionCurrent) return;
     try {
-      final session = widget.ffi.sessionId;
+      final session = _session;
       final saved = await bind.sessionGetPeerOption(
           sessionId: session, name: 'nikodesk-picture-mode');
       final quality =
@@ -101,7 +114,7 @@ class _PictureModesState extends State<_PictureModes> {
       final viewStyle = await bind.sessionGetViewStyle(sessionId: session);
       final codec = await bind.sessionGetOption(
           sessionId: session, arg: 'codec-preference');
-      if (mounted) {
+      if (mounted && _sessionCurrent) {
         setState(() {
           _mode = PictureRequest.observedMode(saved,
               quality: current,
@@ -134,13 +147,14 @@ class _PictureModesState extends State<_PictureModes> {
   }
 
   Future<void> _apply() async {
+    if (!_sessionCurrent || _loading || _saving) return;
     setState(() {
       _saving = true;
       _message = null;
     });
     final request = PictureRequest.forMode(_mode,
         customPercent: _quality.round(), customFps: _fps.round());
-    final session = widget.ffi.sessionId;
+    final session = _session;
     try {
       await bind.sessionPeerOption(
           sessionId: session, name: 'codec-preference', value: 'auto');
@@ -156,7 +170,7 @@ class _PictureModesState extends State<_PictureModes> {
       }
       if (request.originalScale) {
         await bind.sessionSetViewStyle(sessionId: session, value: 'original');
-        await widget.ffi.canvasModel.updateViewStyle();
+        if (_sessionCurrent) await widget.ffi.canvasModel.updateViewStyle();
       }
       await bind.sessionPeerOption(
           sessionId: session, name: 'nikodesk-picture-mode', value: _mode.name);
@@ -196,95 +210,110 @@ class _PictureModesState extends State<_PictureModes> {
   }
 
   @override
-  Widget build(BuildContext context) => SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(nikoText('画面模式', 'Picture mode'),
-                style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 8),
-            Text(nikoText('编码器自动协商；不强制硬编、H.264 或 4:4:4。',
-                'Codec is negotiated automatically. Hardware encoding, H.264 and 4:4:4 are not forced.')),
-            const SizedBox(height: 12),
-            if (_loading)
-              const Center(child: CircularProgressIndicator())
-            else
-              ...PictureMode.values.map((mode) => RadioListTile<PictureMode>(
-                    contentPadding: EdgeInsets.zero,
-                    value: mode,
-                    groupValue: _mode,
-                    onChanged: _saving
-                        ? null
-                        : (value) => setState(() => _mode = value!),
-                    title: Text(_modeLabel(mode)),
-                    subtitle: Text(_description(mode)),
-                  )),
-            if (_mode == PictureMode.custom) ...[
-              const Divider(),
-              Text(
-                  '${nikoText('码率比例', 'Bitrate ratio')}: ${_quality.round()}%'),
-              Slider(
-                  value: _quality,
-                  min: 10,
-                  max: 100,
-                  divisions: 90,
-                  label: '${_quality.round()}%',
-                  onChanged: _saving
-                      ? null
-                      : (value) => setState(() => _quality = value)),
-              Text('${nikoText('目标 FPS', 'Target FPS')}: ${_fps.round()}'),
-              Slider(
-                  value: _fps,
-                  min: 5,
-                  max: 60,
-                  divisions: 55,
-                  label: '${_fps.round()}',
-                  onChanged: _saving || !_supportsFps
-                      ? null
-                      : (value) => setState(() => _fps = value)),
-            ],
-            if (!_supportsFps)
-              Text(nikoText('对端版本未知或低于 1.2.0：不会发送自定义 FPS。',
-                  'Peer version is unknown or older than 1.2.0: custom FPS will not be sent.')),
-            const SizedBox(height: 12),
-            Text(
-                '${nikoText('当前核心画质设置', 'Current core quality setting')}: ${_currentQuality ?? nikoText('未知', 'Unknown')}'
-                '${_currentQuality == 'custom' ? ' · ${nikoText('目标 FPS', 'Target FPS')}: ${_currentFps ?? nikoText('未知', 'Unknown')}' : ''}',
-                style: Theme.of(context).textTheme.bodySmall),
-            if (_message != null)
-              Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Text(_message!)),
-            const SizedBox(height: 20),
-            Wrap(spacing: 12, runSpacing: 8, children: [
-              TextButton(
-                  onPressed: _saving ? null : widget.onClose,
-                  child: Text(nikoText('关闭', 'Close'))),
-              FilledButton(
-                  onPressed: _loading || _saving ? null : _apply,
-                  child: Text(nikoText('应用并保存', 'Apply and save'))),
-            ]),
-          ]));
+  Widget build(BuildContext context) => !_sessionCurrent
+      ? Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(nikoText(
+              '此会话已结束，请关闭面板。', 'This session has ended. Close the panel.')))
+      : SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(nikoText('画面模式', 'Picture mode'),
+                    style: Theme.of(context).textTheme.headlineSmall),
+                const SizedBox(height: 8),
+                Text(nikoText('编码器自动协商；不强制硬编、H.264 或 4:4:4。',
+                    'Codec is negotiated automatically. Hardware encoding, H.264 and 4:4:4 are not forced.')),
+                const SizedBox(height: 12),
+                if (_loading)
+                  const Center(child: CircularProgressIndicator())
+                else
+                  ...PictureMode.values
+                      .map((mode) => RadioListTile<PictureMode>(
+                            contentPadding: EdgeInsets.zero,
+                            value: mode,
+                            groupValue: _mode,
+                            onChanged: _saving
+                                ? null
+                                : (value) => setState(() => _mode = value!),
+                            title: Text(_modeLabel(mode)),
+                            subtitle: Text(_description(mode)),
+                          )),
+                if (_mode == PictureMode.custom) ...[
+                  const Divider(),
+                  Text(
+                      '${nikoText('码率比例', 'Bitrate ratio')}: ${_quality.round()}%'),
+                  Slider(
+                      value: _quality,
+                      min: 10,
+                      max: 100,
+                      divisions: 90,
+                      label: '${_quality.round()}%',
+                      onChanged: _saving
+                          ? null
+                          : (value) => setState(() => _quality = value)),
+                  Text('${nikoText('目标 FPS', 'Target FPS')}: ${_fps.round()}'),
+                  Slider(
+                      value: _fps,
+                      min: 5,
+                      max: 60,
+                      divisions: 55,
+                      label: '${_fps.round()}',
+                      onChanged: _saving || !_supportsFps
+                          ? null
+                          : (value) => setState(() => _fps = value)),
+                ],
+                if (!_supportsFps)
+                  Text(nikoText('对端版本未知或低于 1.2.0：不会发送自定义 FPS。',
+                      'Peer version is unknown or older than 1.2.0: custom FPS will not be sent.')),
+                const SizedBox(height: 12),
+                Text(
+                    '${nikoText('当前核心画质设置', 'Current core quality setting')}: ${_currentQuality ?? nikoText('未知', 'Unknown')}'
+                    '${_currentQuality == 'custom' ? ' · ${nikoText('目标 FPS', 'Target FPS')}: ${_currentFps ?? nikoText('未知', 'Unknown')}' : ''}',
+                    style: Theme.of(context).textTheme.bodySmall),
+                if (_message != null)
+                  Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Text(_message!)),
+                const SizedBox(height: 20),
+                Wrap(spacing: 12, runSpacing: 8, children: [
+                  TextButton(
+                      onPressed: _saving ? null : widget.onClose,
+                      child: Text(nikoText('关闭', 'Close'))),
+                  FilledButton(
+                      onPressed: _loading || _saving ? null : _apply,
+                      child: Text(nikoText('应用并保存', 'Apply and save'))),
+                ]),
+              ]));
 }
 
 class NikoDiagnostics extends StatefulWidget {
   final FFI ffi;
   final VoidCallback onClose;
-  const NikoDiagnostics({super.key, required this.ffi, required this.onClose});
+  final SessionID? session;
+  const NikoDiagnostics(
+      {super.key, required this.ffi, required this.onClose, this.session});
   @override
   State<NikoDiagnostics> createState() => _NikoDiagnosticsState();
 }
 
 class _NikoDiagnosticsState extends State<NikoDiagnostics> {
+  late final SessionID _session;
+  bool get _sessionCurrent =>
+      !widget.ffi.closed && widget.ffi.sessionId == _session;
   Timer? _timer;
   String? _feedback;
   bool _exporting = false;
+  bool? _sampling;
+  bool _samplingBusy = false;
   SessionMetrics get _metrics => widget.ffi.qualityMonitorModel.nikoMetrics;
   @override
   void initState() {
     super.initState();
+    _session = widget.session ?? widget.ffi.sessionId;
+    unawaited(_loadSampling());
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
@@ -296,15 +325,57 @@ class _NikoDiagnosticsState extends State<NikoDiagnostics> {
     super.dispose();
   }
 
-  Future<void> _export() async {
-    setState(() => _exporting = true);
+  Future<void> _loadSampling() async {
     try {
-      final path = await FilePicker.platform.saveFile(
-          dialogTitle: nikoText('保存脱敏诊断', 'Save redacted diagnostics'),
-          fileName: 'NikoDesk-diagnostics.json',
-          type: FileType.custom,
-          allowedExtensions: ['json']);
-      if (path == null) return;
+      final enabled = await bind.sessionGetToggleOption(
+          sessionId: _session, arg: 'show-quality-monitor');
+      if (mounted && _sessionCurrent) {
+        setState(() => _sampling = enabled);
+        if (enabled != null) {
+          await widget.ffi.qualityMonitorModel
+              .checkShowQualityMonitor(_session);
+        }
+      }
+    } catch (_) {
+      if (mounted && _sessionCurrent) setState(() => _sampling = null);
+    }
+  }
+
+  Future<void> _setSampling(bool enabled) async {
+    if (!_sessionCurrent || _samplingBusy || _sampling == null) return;
+    setState(() => _samplingBusy = true);
+    try {
+      final current = await bind.sessionGetToggleOption(
+          sessionId: _session, arg: 'show-quality-monitor');
+      if (current == null) throw StateError('Sampling state unavailable');
+      if (current != enabled && _sessionCurrent) {
+        await bind.sessionToggleOption(
+            sessionId: _session, value: 'show-quality-monitor');
+      }
+      await _loadSampling();
+      if (_sessionCurrent && _sampling == enabled) {
+        await widget.ffi.qualityMonitorModel.checkShowQualityMonitor(_session);
+      } else if (mounted && _sessionCurrent) {
+        setState(() => _feedback = nikoText(
+            '采样设置未确认，请重新读取。', 'Sampling was not confirmed. Reload it.'));
+      }
+    } catch (_) {
+      if (mounted && _sessionCurrent) {
+        setState(() => _feedback =
+            nikoText('无法确认采样设置，请重试。', 'Could not confirm sampling. Retry.'));
+      }
+    } finally {
+      if (mounted) setState(() => _samplingBusy = false);
+    }
+  }
+
+  Future<void> _export() async {
+    if (!_sessionCurrent || _exporting) return;
+    setState(() {
+      _exporting = true;
+      _feedback = null;
+    });
+    try {
       final report = _metrics.export();
       report['display'] = {
         'source': 'peer_info.displays and CanvasModel.scale',
@@ -316,9 +387,21 @@ class _NikoDiagnosticsState extends State<NikoDiagnostics> {
         'limitation':
             'Display metadata is not a measurement of capture or presentation time.',
       };
-      await File(path).writeAsString(
-          const JsonEncoder.withIndent('  ').convert(report),
-          flush: true);
+      final contents = const JsonEncoder.withIndent('  ').convert(report);
+      if (Platform.isAndroid) {
+        final saved = await exportNikoAndroidDiagnostics(contents,
+            exportFile: (path) => widget.ffi
+                .invokeMethod(AndroidChannel.kExportFile, {'path': path}));
+        if (!saved) return;
+      } else {
+        final path = await FilePicker.platform.saveFile(
+            dialogTitle: nikoText('保存脱敏诊断', 'Save redacted diagnostics'),
+            fileName: 'NikoDesk-diagnostics.json',
+            type: FileType.custom,
+            allowedExtensions: ['json']);
+        if (path == null) return;
+        await File(path).writeAsString(contents, flush: true);
+      }
       if (mounted) {
         setState(() => _feedback = nikoText(
             '已保存脱敏 JSON。报告不含设备 ID、IP、密钥、密码、剪贴板或画面内容。',
@@ -454,6 +537,12 @@ class _NikoDiagnosticsState extends State<NikoDiagnostics> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_sessionCurrent) {
+      return Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(nikoText(
+              '此会话已结束，请关闭面板。', 'This session has ended. Close the panel.')));
+    }
     final metrics = _metrics;
     final connection = metrics.connectionSampledAt;
     final unknown = nikoText('未知', 'Unknown');
@@ -474,8 +563,23 @@ class _NikoDiagnosticsState extends State<NikoDiagnostics> {
                     icon: const Icon(Icons.close))
               ]),
               const SizedBox(height: 8),
-              Text(nikoText('每秒刷新 · 10 秒无新样本后标记失效 · 仅在导出时写入磁盘',
-                  'Updates once per second · Samples expire after 10 seconds · Disk writes only on export')),
+              Text(nikoText('每秒刷新 · 10 秒无新样本后标记失效 · 脱敏报告仅在导出时保存',
+                  'Updates once per second · Samples expire after 10 seconds · Redacted reports are saved only on export')),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(nikoText('性能采样', 'Performance sampling')),
+                subtitle: Text(nikoText('与会话性能浮窗同步；开启后才会记录原生视频处理样本。',
+                    'Shares the session performance overlay setting. Native video samples are recorded while enabled.')),
+                value: _sampling ?? false,
+                onChanged:
+                    _sampling == null || _samplingBusy ? null : _setSampling,
+              ),
+              if (_sampling == null)
+                TextButton(
+                  onPressed: _loadSampling,
+                  child: Text(nikoText(
+                      '采样状态未知，重新读取', 'Sampling state unknown. Reload')),
+                ),
               const SizedBox(height: 16),
               NikoCard(
                   child: Column(
@@ -487,12 +591,22 @@ class _NikoDiagnosticsState extends State<NikoDiagnostics> {
                     Text(
                         '${nikoText('会话加密', 'Session encryption')}: ${connection == null ? unknown : metrics.secure == true ? nikoText('核心报告已加密', 'Encrypted per core event') : nikoText('核心报告未加密', 'Unencrypted per core event')}'),
                     const SizedBox(height: 6),
+                    if (metrics.direct != true)
+                      SelectableText(
+                          '${nikoText('中继目标', 'Relay target')}: ${metrics.relayTarget ?? unknown}'),
+                    Text(
+                        '${nikoText('代理路径', 'Proxy path')}: ${metrics.proxyInUse == null ? unknown : metrics.proxyInUse == true ? nikoText('已使用本次连接的代理', 'Uses this connection’s captured proxy') : nikoText('未使用代理', 'No proxy used')}'),
+                    if (metrics.transport == 'WebSocket')
+                      Text(
+                          '${nikoText('WebSocket TLS', 'WebSocket TLS')}: ${metrics.websocketTls == null ? unknown : metrics.websocketTls == true ? nikoText('已启用', 'Enabled') : nikoText('未启用', 'Disabled')}'),
+                    const SizedBox(height: 6),
                     Text(
                         '${metrics.connectionFromCache ? nikoText('会话缓存接收时间（非新握手）', 'Session cache received (not a new handshake)') : nikoText('握手采样时间', 'Handshake sampled at')}: ${connection?.toLocal().toIso8601String() ?? unknown}',
                         style: Theme.of(context).textTheme.bodySmall),
                     Text(
-                        nikoText('服务器注册、会话认证与加密是不同状态；中继地址尚未接入。',
-                            'Server registration, session authentication and encryption are separate states. Relay address is unavailable.'),
+                        nikoText(
+                            '服务器注册、会话认证与加密是不同状态。中继目标来自本次连接固定的路由，非解析后的 IP；导出时隐藏地址。',
+                            'Server registration, session authentication and encryption are separate states. The relay target comes from this connection’s captured route, not its resolved IP. Exports hide the address.'),
                         style: Theme.of(context).textTheme.bodySmall),
                   ])),
               const SizedBox(height: 12),

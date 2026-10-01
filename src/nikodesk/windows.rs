@@ -163,14 +163,7 @@ fn restrict_to_current_user(path: &Path) -> ResultType<()> {
     restrict_handle_to_current_user(&file)
 }
 
-fn restrict_handle_to_current_user(file: &File) -> ResultType<()> {
-    let metadata = file.metadata()?;
-    if metadata.file_attributes() & 0x400 != 0 || (!metadata.is_dir() && !metadata.is_file()) {
-        bail!("Invalid NikoDesk storage object");
-    }
-    if metadata.is_file() {
-        check_file(file, u64::MAX)?;
-    }
+fn owned_user_sid(file: &File) -> ResultType<String> {
     let user = crate::platform::windows::current_process_user_sid_string()?;
     let user_wide = user
         .encode_utf16()
@@ -202,6 +195,19 @@ fn restrict_handle_to_current_user(file: &File) -> ResultType<()> {
     }
     unsafe { EqualSid(owner, expected) }
         .map_err(|_| anyhow!("NikoDesk storage belongs to another user"))?;
+    Ok(user)
+}
+
+fn restrict_handle_to_current_user(file: &File) -> ResultType<()> {
+    let metadata = file.metadata()?;
+    if metadata.file_attributes() & 0x400 != 0 || (!metadata.is_dir() && !metadata.is_file()) {
+        bail!("Invalid NikoDesk storage object");
+    }
+    if metadata.is_file() {
+        check_file(file, u64::MAX)?;
+    }
+    let user = owned_user_sid(file)?;
+    let handle = HANDLE(file.as_raw_handle());
     let descriptor = format!("D:P(A;OICI;FA;;;{user})")
         .encode_utf16()
         .chain(std::iter::once(0))
@@ -271,6 +277,21 @@ pub(super) fn read_private_file(path: &Path, limit: u64) -> ResultType<String> {
     Ok(contents)
 }
 
+// Legacy preference sources remain read-only, including their original ACL.
+pub(super) fn read_owned_file(path: &Path, limit: u64) -> ResultType<Vec<u8>> {
+    check_path(path)?;
+    let file = OpenOptions::new()
+        .access_mode(FILE_GENERIC_READ.0 | READ_CONTROL.0)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT.0)
+        .open(path)?;
+    check_file(&file, limit)?;
+    owned_user_sid(&file)?;
+    let mut bytes = Vec::new();
+    file.take(limit.saturating_add(1)).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > limit {bail!("storage_file_too_large");}
+    Ok(bytes)
+}
+
 pub(super) fn write_private_file(path: &Path, contents: &[u8]) -> ResultType<()> {
     let directory = path
         .parent()
@@ -312,6 +333,41 @@ pub(super) fn write_private_file(path: &Path, contents: &[u8]) -> ResultType<()>
     })();
     if result.is_err() {
         let _ = fs::remove_file(&temporary);
+    }
+    result
+}
+
+// Publish a complete private file only if the destination is still absent.
+// MoveFileEx without REPLACE_EXISTING resolves concurrent publishers in the OS.
+pub(super) fn publish_private_file(path: &Path, contents: &[u8]) -> ResultType<bool> {
+    if contents.len() > 1024 * 1024 {bail!("storage_file_too_large");}
+    let directory = path.parent().ok_or_else(|| anyhow!("Invalid NikoDesk file path"))?;
+    restrict_to_current_user(directory)?;
+    check_path(path)?;
+    let temporary = directory.join(format!(".nikodesk-import-{}.tmp", hbb_common::uuid::Uuid::new_v4()));
+    let mut file = create_private_file(
+        &temporary,
+        FILE_GENERIC_WRITE.0 | READ_CONTROL.0 | WRITE_DAC.0,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+    )?;
+    let result = (|| -> ResultType<bool> {
+        file.write_all(contents)?;
+        file.sync_all()?;
+        restrict_handle_to_current_user(&file)?;
+        drop(file);
+        match unsafe {
+            MoveFileExW(PCWSTR(wide(&temporary).as_ptr()), PCWSTR(wide(path).as_ptr()), MOVEFILE_WRITE_THROUGH)
+        } {
+            Ok(()) => Ok(true),
+            Err(error) if matches!(error.code(), code if
+                code == windows::core::HRESULT::from_win32(80) ||
+                code == windows::core::HRESULT::from_win32(183)) => Ok(false),
+            Err(error) => Err(error.into()),
+        }
+    })();
+    // CREATE_NEW above proved this temporary file belongs to this operation.
+    if !matches!(result, Ok(true)) {
+        fs::remove_file(&temporary)?;
     }
     result
 }
@@ -507,6 +563,28 @@ mod tests {
         assert!(create_private_file(&path, FILE_GENERIC_WRITE.0, FILE_SHARE_MODE(0)).is_err());
         assert_eq!(fs::read(&path).unwrap(), b"original");
         assert_private_creation(&open_for_security(&path));
+    }
+
+    #[test]
+    fn nikodesk_windows_atomic_publish_race_keeps_one_complete_private_winner() {
+        let temp = Temp::new();
+        let path = temp.0.join("preferences.toml");
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let tasks = [b"first-whole-file".as_slice(), b"second-whole-file".as_slice()]
+            .into_iter().map(|bytes| {
+                let path = path.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    publish_private_file(&path, bytes).unwrap()
+                })
+            }).collect::<Vec<_>>();
+        let published = tasks.into_iter().map(|task| task.join().unwrap()).filter(|published| *published).count();
+        assert_eq!(published, 1);
+        let value = read_private_file(&path, 1024).unwrap();
+        assert!(value == "first-whole-file" || value == "second-whole-file");
+        assert_private_creation(&open_for_security(&path));
+        assert_eq!(fs::read_dir(&temp.0).unwrap().count(), 1);
     }
 
     #[test]

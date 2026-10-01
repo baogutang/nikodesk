@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter_hbb/nikodesk/ui.dart';
 
 import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
@@ -970,7 +971,8 @@ _connectDialog(
   final errUsername = ''.obs;
   final nikoDesk = bind.mainGetAppNameSync() == 'NikoDesk';
   var rememberPassword = false;
-  if (passwordController != null && !nikoDesk) {
+  final secureRemember = nikoDesk && (isWindows || isMacOS || isAndroid);
+  if (passwordController != null && (!nikoDesk || secureRemember)) {
     rememberPassword =
         await bind.sessionGetRemember(sessionId: sessionId) ?? false;
   }
@@ -1092,19 +1094,24 @@ _connectDialog(
             controller: passwordController,
             autoFocus: osUsernameController == null,
           ),
-          if (nikoDesk)
+          if (nikoDesk && !secureRemember)
             Text(bind.mainGetLocalOption(key: 'lang') == 'en'
                 ? 'Passwords are not saved on this device'
                 : '本机不保存控制密码'),
-          if (!nikoDesk) rememberWidget(
-            translate('Remember password'),
-            rememberPassword,
-            (v) {
-              if (v != null) {
-                setState(() => rememberPassword = v);
-              }
-            },
-          ),
+          if (!nikoDesk || secureRemember)
+            rememberWidget(
+              secureRemember
+                  ? (bind.mainGetLocalOption(key: 'lang') == 'en'
+                      ? 'Save to this device’s secure credential storage'
+                      : '保存到本机系统安全凭据存储')
+                  : translate('Remember password'),
+              rememberPassword,
+              (v) {
+                if (v != null) {
+                  setState(() => rememberPassword = v);
+                }
+              },
+            ),
         ],
       );
     }
@@ -2282,6 +2289,7 @@ void changeBot({Function()? callback}) async {
 }
 
 void change2fa({Function()? callback}) async {
+  final isNiko = bind.mainGetAppNameSync() == 'NikoDesk';
   if (bind.mainHasValid2FaSync()) {
     await bind.mainSetOption(key: "2fa", value: "");
     await bind.mainClearTrustedDevices();
@@ -2289,17 +2297,54 @@ void change2fa({Function()? callback}) async {
     return;
   }
   var new2fa = (await bind.mainGenerate2Fa());
+  if (isNiko && new2fa.isEmpty) {
+    gFFI.dialogManager.show((setState, close, context) => CustomAlertDialog(
+          title: Text(nikoText(
+              '无法准备双重验证', 'Could not prepare two-factor authentication')),
+          content: Text(nikoText('请确认本机配置可用后重试。现有双重验证配置未被替换。',
+              'Check the local configuration and retry. The existing two-factor configuration has not been replaced.')),
+          actions: [dialogButton('OK', onPressed: close)],
+          onCancel: close,
+        ));
+    return;
+  }
   final secretRegex = RegExp(r'secret=([^&]+)');
   final secret = secretRegex.firstMatch(new2fa)?.group(1);
   String? errorText;
+  bool verifying = false, dismissed = false;
   final controller = TextEditingController();
-  gFFI.dialogManager.show((setState, close, context) {
+  final dialog = gFFI.dialogManager.show((setState, close, context) {
+    cancel() {
+      if (isNiko) dismissed = true;
+      close();
+    }
+
     onVerify() async {
-      if (await bind.mainVerify2Fa(code: controller.text.trim())) {
+      if (isNiko && (verifying || dismissed)) return;
+      if (isNiko) {
+        setState(() {
+          verifying = true;
+          errorText = null;
+        });
+      }
+      bool confirmed;
+      try {
+        confirmed = await bind.mainVerify2Fa(code: controller.text.trim());
+      } catch (_) {
+        if (!isNiko) rethrow;
+        confirmed = false;
+      }
+      if (isNiko && dismissed) return;
+      if (confirmed) {
         callback?.call();
+        if (isNiko) dismissed = true;
         close();
       } else {
-        errorText = translate('wrong-2fa-code');
+        errorText = isNiko
+            ? nikoText('绑定未确认。请检查验证码和本机保存权限；已使用的验证码需等待下一组，超过五分钟需重新生成。',
+                'Setup was not confirmed. Check the code and local storage permissions. Wait for the next code if it was already used; generate a new setup after five minutes.')
+            : translate('wrong-2fa-code');
+        if (isNiko) setState(() => verifying = false);
       }
     }
 
@@ -2314,7 +2359,8 @@ void change2fa({Function()? callback}) async {
       },
     );
 
-    getOnSubmit() => codeField.isReady ? onVerify : null;
+    getOnSubmit() =>
+        codeField.isReady && (!isNiko || !verifying) ? onVerify : null;
 
     return CustomAlertDialog(
       title: Text(translate("enable-2fa-title")),
@@ -2340,12 +2386,21 @@ void change2fa({Function()? callback}) async {
         ],
       ),
       actions: [
-        dialogButton("Cancel", onPressed: close, isOutline: true),
+        dialogButton("Cancel", onPressed: cancel, isOutline: true),
         dialogButton("OK", onPressed: getOnSubmit()),
       ],
-      onCancel: close,
+      onCancel: cancel,
     );
   });
+  if (isNiko) {
+    try {
+      await dialog;
+    } finally {
+      dismissed = true;
+      controller.clear();
+      controller.dispose();
+    }
+  }
 }
 
 void enter2FaDialog(

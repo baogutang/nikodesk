@@ -6,6 +6,11 @@ pub(crate) const HOST_SERVICE: &str = "NikoDeskHost";
 pub(crate) const HOST_EXE: &str = "nikodesk-host.exe";
 pub(crate) const SYSTEM_SID: &str = "S-1-5-18";
 
+pub(crate) fn allows_machine_permission(option: &str, verified_value: Option<&str>) -> bool {
+    matches!(option, "enable-keyboard" | "enable-privacy-mode" | "enable-remote-restart")
+        && verified_value == Some("Y")
+}
+
 pub(crate) fn allows_storage_ace(mask: u32, trusted_principal: bool, private: bool) -> bool {
     // Generic write/all, delete, owner/DACL changes and filesystem mutation.
     const MUTATING: u32 = 0x500d0156;
@@ -174,6 +179,19 @@ impl WorkerAuthorization {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn machine_desktop_permissions_require_exact_verified_grants_without_opening_extensions() {
+        for option in ["enable-keyboard", "enable-privacy-mode", "enable-remote-restart"] {
+            assert!(super::allows_machine_permission(option, Some("Y")));
+            for value in [None, Some("N"), Some(""), Some("true"), Some("y")] {
+                assert!(!super::allows_machine_permission(option, value));
+            }
+        }
+        for option in ["enable-clipboard", "enable-file-transfer", "enable-audio", "enable-camera",
+            "enable-terminal", "enable-tunnel", "enable-block-input", "enable-trusted-devices"] {
+            assert!(!super::allows_machine_permission(option, Some("Y")));
+        }
+    }
     use super::*;
     fn binding() -> Binding {
         Binding {

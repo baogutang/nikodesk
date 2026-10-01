@@ -14,6 +14,7 @@ import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/nikodesk/connect_dialog.dart';
 import 'package:flutter_hbb/nikodesk/server_scope.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
+import 'package:flutter_hbb/nikodesk/virtual_display.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -548,8 +549,10 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     );
   }
   // restart
-  if (bind.mainGetAppNameSync() != 'NikoDesk' && isDefaultConn &&
-      perms['restart'] != false &&
+  if (isDefaultConn &&
+      (bind.mainGetAppNameSync() == 'NikoDesk'
+          ? perms['restart'] == true
+          : perms['restart'] != false) &&
       (pi.platform == kPeerPlatformLinux ||
           pi.platform == kPeerPlatformWindows ||
           pi.platform == kPeerPlatformMacOS)) {
@@ -1267,6 +1270,9 @@ List<TToggleMenu> toolbarKeyboardToggles(FFI ffi) {
 }
 
 bool showVirtualDisplayMenu(FFI ffi) {
+  if (const bool.fromEnvironment('NIKODESK')) {
+    return NikoVirtualDisplays.parse(ffi.ffiModel.pi.platformAdditions['nikodesk_virtual_display']) != null;
+  }
   if (ffi.ffiModel.pi.platform != kPeerPlatformWindows) {
     return false;
   }
@@ -1286,6 +1292,26 @@ List<Widget> getVirtualDisplayMenuChildren(
   }
   final pi = ffi.ffiModel.pi;
   final privacyModeState = PrivacyModeState.find(id);
+  if (const bool.fromEnvironment('NIKODESK')) {
+    final screens = NikoVirtualDisplays.parse(pi.platformAdditions['nikodesk_virtual_display']);
+    if (screens == null) return [];
+    return [
+      if (!screens.supported || !screens.allowed)
+        MenuButton(ffi: ffi, onPressed: null, child: Text(!screens.supported
+            ? nikoText('此设备暂不能创建虚拟屏', 'Virtual displays are unavailable on this device')
+            : nikoText('请在被控端开启虚拟屏权限', 'Allow virtual displays on the controlled device'))),
+      for (var slot = 1; slot <= 4; slot++)
+        Obx(() => CkbMenuButton(ffi: ffi, value: screens.active.contains(slot),
+          child: Text(nikoText('虚拟屏 $slot${screens.cleanup.contains(slot) ? '（待移除确认）' : ''}',
+              'Virtual display $slot${screens.cleanup.contains(slot) ? ' (removal unconfirmed)' : ''}')),
+          onChanged: privacyModeState.isNotEmpty || !screens.supported || !screens.allowed || screens.cleanup.contains(slot)
+              ? null : (value) { if (value == null) return; bind.sessionToggleVirtualDisplay(sessionId: ffi.sessionId, index: slot, on: value); clickCallBack?.call(); })),
+      const Divider(),
+      Obx(() => MenuButton(ffi: ffi, onPressed: privacyModeState.isNotEmpty || screens.active.isEmpty && screens.cleanup.isEmpty
+          ? null : () { bind.sessionToggleVirtualDisplay(sessionId: ffi.sessionId, index: -1, on: false); clickCallBack?.call(); },
+        child: Text(nikoText('移除本连接创建的虚拟屏', 'Remove this connection’s virtual displays')))),
+    ];
+  }
   if (pi.isRustDeskIdd) {
     final virtualDisplays = ffi.ffiModel.pi.RustDeskVirtualDisplays;
     final children = <Widget>[];

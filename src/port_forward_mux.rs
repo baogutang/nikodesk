@@ -216,6 +216,8 @@ pub enum FrameSink {
         control: mpsc::UnboundedSender<Message>,
     },
     Direct(mpsc::UnboundedSender<(Instant, Arc<Message>)>),
+    #[cfg(feature = "nikodesk")]
+    BoundedDirect(mpsc::Sender<(Instant, Arc<Message>)>),
 }
 
 fn writer_gone(what: &str) -> std::io::Error {
@@ -232,6 +234,10 @@ impl FrameSink {
             FrameSink::Direct(tx) => tx
                 .send((Instant::now(), Arc::new(msg)))
                 .map_err(|_| writer_gone("connection writer").into()),
+            #[cfg(feature = "nikodesk")]
+            FrameSink::BoundedDirect(tx) => tx
+                .try_send((Instant::now(), Arc::new(msg)))
+                .map_err(|_| writer_gone("bounded connection writer").into()),
         }
     }
 
@@ -243,6 +249,10 @@ impl FrameSink {
             FrameSink::Direct(tx) => tx
                 .send((Instant::now(), Arc::new(msg)))
                 .map_err(|_| writer_gone("connection writer").into()),
+            #[cfg(feature = "nikodesk")]
+            FrameSink::BoundedDirect(tx) => tx
+                .try_send((Instant::now(), Arc::new(msg)))
+                .map_err(|_| writer_gone("bounded connection writer").into()),
         }
     }
 
@@ -250,6 +260,8 @@ impl FrameSink {
         match self {
             FrameSink::Queued { data, .. } => data.is_closed(),
             FrameSink::Direct(tx) => tx.is_closed(),
+            #[cfg(feature = "nikodesk")]
+            FrameSink::BoundedDirect(tx) => tx.is_closed(),
         }
     }
 }
@@ -412,6 +424,65 @@ pub async fn run_channel<R, W>(
     }
     log::debug!("port forward channel {} ended: {:?} / {:?}", id, first, second);
 }
+
+#[cfg(feature = "nikodesk")]
+pub async fn run_channel_checked<R, W>(
+    id: i32,
+    reader: R,
+    writer: W,
+    prebuf: Vec<u8>,
+    initial_out: Vec<Bytes>,
+    credit: Arc<SendCredit>,
+    window: Arc<Mutex<RecvWindow>>,
+    inbound: mpsc::UnboundedReceiver<Inbound>,
+    sink: FrameSink,
+    mut teardown: watch::Receiver<bool>,
+) -> bool where
+    R: AsyncRead + Unpin + Send + 'static,
+    W: AsyncWrite + Unpin + Send + 'static,
+{
+    let (cancel_tx, cancel_rx) = watch::channel(false);
+    let mut to_tunnel = tokio::spawn(relay_socket_to_tunnel(
+        id, reader, prebuf, credit, sink.clone(), cancel_rx.clone(),
+    ));
+    let mut to_socket = tokio::spawn(relay_tunnel_to_socket(
+        id, writer, initial_out, inbound, window, sink.clone(), cancel_rx,
+    ));
+    let (first, second, joined) = tokio::select! {
+        r = &mut to_tunnel => {
+            let _ = cancel_tx.send(true);
+            let other = to_socket.await;
+            let joined = r.is_ok() && other.is_ok();
+            (r.unwrap_or(RelayEnd::Cancelled), other.unwrap_or(RelayEnd::Cancelled), joined)
+        }
+        r = &mut to_socket => {
+            let _ = cancel_tx.send(true);
+            let other = to_tunnel.await;
+            let joined = r.is_ok() && other.is_ok();
+            (r.unwrap_or(RelayEnd::Cancelled), other.unwrap_or(RelayEnd::Cancelled), joined)
+        }
+        // Wrapped so `select!` keeps a `bool`, not the `Ref` (a read guard,
+        // not `Send`) it would otherwise hold across the joins.
+        _ = async { teardown.wait_for(|down| *down).await.is_ok() } => {
+            let _ = cancel_tx.send(true);
+            let first = to_tunnel.await;
+            let second = to_socket.await;
+            let joined = first.is_ok() && second.is_ok();
+            (first.unwrap_or(RelayEnd::Cancelled), second.unwrap_or(RelayEnd::Cancelled), joined)
+        }
+    };
+    let peer_closed = first == RelayEnd::PeerClosed || second == RelayEnd::PeerClosed;
+    let tunnel_gone = first == RelayEnd::TunnelGone || second == RelayEnd::TunnelGone;
+    let local_reason = matches!(first, RelayEnd::LocalEof | RelayEnd::Violation)
+        || matches!(second, RelayEnd::LocalEof | RelayEnd::Violation);
+    if !peer_closed && !tunnel_gone && local_reason {
+        if let Err(e) = sink.send_ordered(close_msg(id)).await {
+            log::debug!("port forward channel {} close not sent: {}", id, e);
+        }
+    }
+    joined
+}
+
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use tunnel::{Claim, Tunnel};

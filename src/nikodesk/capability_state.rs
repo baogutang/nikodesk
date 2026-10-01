@@ -29,6 +29,8 @@ pub(crate) enum Scope {
     Tunnel(SocketAddr),
     Camera(String),
     Voice { capture: bool, playback: bool },
+    // A local voice approval freezes the exact devices, format and call binding.
+    VoiceDevices { fingerprint: String },
 }
 
 impl Scope {
@@ -37,7 +39,7 @@ impl Scope {
             Self::Terminal(_) => Kind::Terminal,
             Self::Tunnel(_) => Kind::Tunnel,
             Self::Camera(_) => Kind::Camera,
-            Self::Voice { .. } => Kind::Voice,
+            Self::Voice { .. } | Self::VoiceDevices { .. } => Kind::Voice,
         }
     }
 
@@ -68,6 +70,12 @@ impl Scope {
                 !device.is_empty() && device.len() <= 256 && !device.chars().any(char::is_control)
             }
             Self::Voice { capture, playback } => *capture || *playback,
+            Self::VoiceDevices { fingerprint } => {
+                fingerprint.len() == 64
+                    && fingerprint.bytes().all(|byte| {
+                        byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)
+                    })
+            }
         }
     }
 }
@@ -220,6 +228,7 @@ pub(crate) struct Capabilities {
     binding: Binding,
     authenticated: bool,
     slots: BTreeMap<Kind, Slot>,
+    audit: Option<super::capability_audit::Context>,
 }
 
 impl Capabilities {
@@ -233,7 +242,25 @@ impl Capabilities {
             binding,
             authenticated: secured && authenticated,
             slots,
+            audit: None,
         }
+    }
+
+    pub(crate) fn attach_audit(&mut self, context: Option<super::capability_audit::Context>) {
+        if self.audit.is_none() && self.authenticated {
+            self.audit = context.filter(|context| context.matches(&self.binding.namespace,&self.binding.peer_id));
+            for kind in [Kind::Terminal,Kind::Camera,Kind::Tunnel,Kind::Voice] {self.audit_phase(kind);}
+        }
+    }
+    fn audit_phase(&self, kind: Kind) {
+        let Some(context) = self.audit.as_ref() else {return;};
+        let Some(nonce) = self.slots[&kind].last_nonce else {return;};
+        let phase = self.slots[&kind].phase;
+        let nonce = nonce.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
+        let kind = match kind {Kind::Terminal=>super::capability_audit::Kind::Terminal,Kind::Camera=>super::capability_audit::Kind::Camera,
+            Kind::Tunnel=>super::capability_audit::Kind::Tunnel,Kind::Voice=>super::capability_audit::Kind::Voice};
+        context.observe(kind,&self.binding.namespace,&self.binding.peer_id,&nonce,
+            &format!("{phase:?}"),false,false);
     }
 
     pub(crate) fn phase(&self, kind: Kind) -> Phase {
@@ -313,6 +340,7 @@ impl Capabilities {
         }
         slot.last_nonce = Some(nonce);
         slot.request = Some(request.clone());
+        self.audit_phase(request.scope.kind());
         Ok(request)
     }
 
@@ -345,6 +373,7 @@ impl Capabilities {
         let deadline = now.checked_add(lifetime).ok_or(Error::InvalidLifetime)?;
         slot.phase = Phase::Starting;
         slot.deadline = Some(deadline);
+        self.audit_phase(request.scope.kind());
         Ok(Ticket {
             request: request.clone(),
         })
@@ -379,6 +408,7 @@ impl Capabilities {
             .get_mut(&ticket.request.scope.kind())
             .ok_or(Error::Unsupported)?
             .phase = Phase::Running;
+        self.audit_phase(ticket.request.scope.kind());
         Ok(())
     }
 
@@ -387,6 +417,11 @@ impl Capabilities {
     }
 
     pub(crate) fn revoke(&mut self, kind: Kind) -> Result<Option<StopTicket>, Error> {
+        let result = self.revoke_inner(kind);
+        self.audit_phase(kind);
+        result
+    }
+    fn revoke_inner(&mut self, kind: Kind) -> Result<Option<StopTicket>, Error> {
         let slot = self.slots.get_mut(&kind).ok_or(Error::Unsupported)?;
         if slot.exhausted {
             return Ok(
@@ -467,6 +502,7 @@ impl Capabilities {
         } else {
             Phase::RecoveryRequired
         };
+        self.audit_phase(ticket.kind);
         Ok(())
     }
 
@@ -806,6 +842,47 @@ mod tests {
         ] {
             assert!(!scope.valid());
         }
+    }
+
+    #[test]
+    fn voice_device_scope_rejects_malformed_fingerprints_and_requires_policy() {
+        let now = Instant::now();
+        let mut state = ready();
+        let scope = Scope::VoiceDevices { fingerprint: "a".repeat(64) };
+        assert_eq!(state.request(scope.clone(), [4; 16], now), Err(Error::Unsupported));
+        state.set_policy(Kind::Voice, true, false).unwrap();
+        assert_eq!(state.request(scope, [4; 16], now), Err(Error::Disabled));
+        state.set_policy(Kind::Voice, true, true).unwrap();
+        for fingerprint in ["".into(), "a".repeat(63), "A".repeat(64), "g".repeat(64)] {
+            assert_eq!(
+                state.request(Scope::VoiceDevices { fingerprint }, [5; 16], now),
+                Err(Error::InvalidScope)
+            );
+        }
+    }
+
+    #[test]
+    fn voice_device_grant_cannot_cover_other_devices_or_survive_regrant() {
+        let now = Instant::now();
+        let mut state = ready();
+        state.set_policy(Kind::Voice, true, true).unwrap();
+        let first = Scope::VoiceDevices { fingerprint: "a".repeat(64) };
+        let second = Scope::VoiceDevices { fingerprint: "b".repeat(64) };
+        let request = state.request(first.clone(), [6; 16], now).unwrap();
+        let old = state.approve(&request, now, Duration::from_secs(60)).unwrap();
+        state.did_start(&old, now).unwrap();
+        assert!(state.may_execute(&old, &first, now));
+        assert!(!state.may_execute(&old, &second, now));
+        assert!(!state.may_execute(&old, &Scope::Voice { capture: true, playback: true }, now));
+        let stop = state.revoke(Kind::Voice).unwrap().unwrap();
+        state.did_stop(&stop, true).unwrap();
+        let request = state.request(second.clone(), [7; 16], now).unwrap();
+        let current = state.approve(&request, now, Duration::from_secs(60)).unwrap();
+        state.did_start(&current, now).unwrap();
+        assert!(!state.may_execute(&old, &first, now));
+        assert!(state.may_execute(&current, &second, now));
+        assert_eq!(state.did_stop(&stop, true), Err(Error::Stale));
+        assert_eq!(state.phase(Kind::Voice), Phase::Running);
     }
 
     #[test]

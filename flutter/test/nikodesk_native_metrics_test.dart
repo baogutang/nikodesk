@@ -80,6 +80,106 @@ SessionMetrics ready({String epoch = '1'}) {
 }
 
 void main() {
+  Map<String, dynamic> relayHeader(
+          {String epoch = '1',
+          String namespace = scope,
+          String target = 'private-relay.example:21117',
+          String transport = 'Relay',
+          bool proxy = false,
+          bool? tls}) =>
+      {
+        ...header(epoch: epoch, namespace: namespace),
+        'direct': 'false',
+        'stream_type': transport,
+        'niko_connection_route': jsonEncode({
+          'schemaVersion': 1,
+          'relayTarget': target,
+          'relayTargetSource': 'captured_private_relay',
+          'proxyInUse': proxy,
+          'websocketTls': tls,
+        }),
+      };
+  test('connected relay details stay local and reports redact the address', () {
+    final metrics = SessionMetrics();
+    expect(
+        metrics.connectionFromNative(relayHeader(proxy: true), scope), isTrue);
+    expect(metrics.relayTarget, 'private-relay.example:21117');
+    expect(metrics.proxyInUse, isTrue);
+    final report = jsonEncode(metrics.export());
+    expect(report, isNot(contains('private-relay.example')));
+    expect(report, contains('redacted'));
+    expect(
+        metrics.connectionFromNative(
+            relayHeader(
+                epoch: '2',
+                target: 'wss://private-relay.example/ws/relay',
+                transport: 'WebSocket',
+                tls: true),
+            scope),
+        isTrue);
+    expect(metrics.websocketTls, isTrue);
+    expect(metrics.proxyInUse, isFalse);
+  });
+  test('replay retains route details and reconnect never inherits them', () {
+    final metrics = SessionMetrics();
+    metrics.connectionFromNative(relayHeader(epoch: '2'), scope);
+    expect(
+        metrics.connectionFromNative(
+            relayHeader(epoch: '1', target: 'old-relay.example:21117'), scope),
+        isFalse);
+    expect(
+        metrics.connectionFromNative(
+            relayHeader(epoch: '3', namespace: 'b' * 64), scope),
+        isFalse);
+    expect(metrics.relayTarget, 'private-relay.example:21117');
+    metrics.connection(
+        secure: true, direct: true, transport: 'TCP', fromCache: true);
+    expect(metrics.relayTarget, 'private-relay.example:21117');
+    expect(
+        metrics.connectionFromNative(
+            {...relayHeader(epoch: '2'), 'niko_video_existing': 'true'}, scope),
+        isTrue);
+    expect(metrics.relayTarget, 'private-relay.example:21117');
+    expect(metrics.connectionFromCache, isTrue);
+    metrics.connectionFromNative(header(epoch: '3'), scope);
+    expect(metrics.relayTarget, isNull);
+    expect(metrics.proxyInUse, isNull);
+    expect((metrics.export()['connection'] as Map)['relayTargetState'],
+        'not-used');
+    metrics.clear();
+    expect(metrics.websocketTls, isNull);
+  });
+  test('invalid route metadata cannot be displayed or exported', () {
+    for (final target in [
+      'private-user:private-password@relay.example:21117',
+      'relay.example:0',
+      'relay.example:65536',
+      'relay.example:21117/private',
+      'relay.example:21117?token=private',
+      'relay.example:21117#private',
+      'relay.example:21117\nprivate',
+      'x' * 513,
+    ]) {
+      final metrics = SessionMetrics();
+      expect(metrics.connectionFromNative(relayHeader(target: target), scope),
+          isTrue);
+      expect(metrics.relayTarget, isNull);
+      expect(metrics.proxyInUse, isNull);
+      expect(jsonEncode(metrics.export()), isNot(contains(target)));
+    }
+    final metrics = SessionMetrics();
+    metrics.connectionFromNative({...relayHeader(), 'direct': 'true'}, scope);
+    expect(metrics.relayTarget, isNull);
+    metrics.connectionFromNative(
+        relayHeader(
+            epoch: '2',
+            target: 'ws://relay.example/ws/relay',
+            transport: 'WebSocket',
+            tls: true),
+        scope);
+    expect(metrics.relayTarget, isNull);
+    expect(metrics.websocketTls, isNull);
+  });
   test('native data requires a real matching header and current binding', () {
     final metrics = SessionMetrics()..nativeVisibility(true);
     expect(

@@ -2,6 +2,16 @@
 use crate::ipc::Connection;
 #[cfg(not(any(target_os = "ios")))]
 use crate::ipc::{self, Data};
+#[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
+#[path="nikodesk/voice_cm.rs"]
+mod nikodesk_voice;
+#[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
+#[path="nikodesk/tunnel_cm.rs"]
+mod nikodesk_tunnel;
+#[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+pub(crate) use nikodesk_tunnel::nikodesk_tunnel_command;
+#[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+pub(crate) use nikodesk_voice::{nikodesk_voice_command,nikodesk_voice_availability};
 #[cfg(target_os = "windows")]
 use crate::{clipboard::ClipboardSide, ipc::ClipboardNonFile};
 #[cfg(target_os = "windows")]
@@ -152,9 +162,78 @@ pub struct Client {
     #[cfg(feature="nikodesk")]
     #[serde(skip_serializing_if="Option::is_none")]
     pub niko_capability: Option<crate::nikodesk::connection_capabilities::Status>,
+    #[cfg(feature="nikodesk")]
+    #[serde(skip_serializing_if="Option::is_none")]
+    pub niko_camera: Option<crate::nikodesk::camera_flow::Status>,
+    #[cfg(feature="nikodesk")]
+    pub niko_camera_cleanup: bool,
+    #[cfg(feature="nikodesk")]
+    #[serde(skip_serializing_if="Option::is_none")]
+    pub niko_voice:Option<crate::nikodesk::voice_flow::Status>,
+    #[cfg(feature="nikodesk")]
+    #[serde(skip_serializing_if="Option::is_none")]
+    pub niko_voice_context:Option<crate::nikodesk::voice_start::Context>,
+    #[cfg(feature="nikodesk")]
+    #[serde(skip_serializing_if="Option::is_none")]
+    pub niko_voice_prepare_error:Option<String>,
+    #[cfg(feature="nikodesk")]
+    #[serde(skip_serializing_if="Option::is_none")]
+    pub niko_voice_prepare_deadline:Option<u64>,
+    #[cfg(feature="nikodesk")]
+    #[serde(skip_serializing_if="Option::is_none")]
+    pub niko_voice_catalog:Option<crate::nikodesk::voice_flow::Catalog>,
+    #[cfg(feature="nikodesk")]
+    pub niko_voice_cleanup:bool,
+    #[cfg(feature="nikodesk")]
+    #[serde(skip_serializing_if="Option::is_none")]
+    pub niko_tunnel:Option<crate::nikodesk::tunnel_wire::ReadOnlyStatus>,
+    #[cfg(feature="nikodesk")]
+    pub niko_tunnel_cleanup:bool,
+    #[cfg(feature="nikodesk")]
+    #[serde(skip)]
+    niko_voice_peer_supported:bool,
+    #[cfg(feature="nikodesk")]
+    #[serde(skip)]
+    niko_voice_peer_requests_allowed:bool,
     #[serde(skip)]
     #[cfg(not(any(target_os = "ios")))]
     tx: UnboundedSender<Data>,
+}
+
+#[cfg(feature="nikodesk")]
+impl Client {
+    pub(crate) fn apply_camera_cleanup(&mut self, status: &crate::nikodesk::camera_flow::Status, retiring: bool) -> bool {
+        let Some(old)=self.niko_camera.as_ref() else {return false;};
+        if !self.is_view_camera || status.identity!=old.identity || status.identity.connection_id!=self.id
+            || status.identity.peer_id!=self.peer_id || !status.identity.valid() || status.kind!="camera"
+            || !matches!(status.phase.as_str(),"Revoking"|"RecoveryRequired"|"Stopped")
+            || old.phase=="Stopped" && status.phase!="Stopped"
+            || status.revision.parse::<u64>().ok().zip(old.revision.parse::<u64>().ok()).map_or(true,|(new,old)|new<=old)
+            || status.resource_epoch.parse::<u64>().ok().zip(old.resource_epoch.parse::<u64>().ok()).map_or(true,|(new,old)|new<old)
+            || if retiring {self.niko_camera_cleanup || self.disconnected || !self.authorized} else {!self.niko_camera_cleanup || !self.disconnected || self.authorized}
+        {return false;}
+        self.niko_camera_cleanup=true;
+        self.disconnected=true;
+        self.authorized=false;
+        self.niko_camera=Some(status.clone());
+        true
+    }
+    fn accepts_cleanup_dispatch(&self, data: &Data) -> bool {
+        if self.niko_tunnel_cleanup {
+            #[cfg(not(any(target_os="android",target_os="ios")))]
+            return self.tunnel_cleanup_dispatch(data);
+            #[cfg(any(target_os="android",target_os="ios"))]
+            return false;
+        }
+        if !self.niko_camera_cleanup && !self.niko_voice_cleanup {return true;}
+        match data {
+            Data::NikoCameraCommand(command)=>self.niko_camera.as_ref().map_or(false,|status| command.identity==status.identity && matches!(command.op.as_str(),"query"|"retry_cleanup") && command.validate().is_ok()),
+            Data::NikoVoiceCommand(command)=>self.niko_voice.as_ref().map_or(false,|status|command.identity==status.identity && matches!(command.op,crate::nikodesk::voice_flow::Operation::Query|crate::nikodesk::voice_flow::Operation::RetryCleanup)),
+            Data::Close=>(!self.niko_camera_cleanup || self.niko_camera.as_ref().map_or(false,|status|status.phase=="Stopped"))
+                && (!self.niko_voice_cleanup || self.niko_voice.as_ref().map_or(false,|status|status.phase==crate::nikodesk::voice_flow::Phase::Stopped)),
+            _=>false,
+        }
+    }
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -166,6 +245,12 @@ struct IpcTaskRunner<T: InvokeUiCM> {
     close: bool,
     running: bool,
     conn_id: i32,
+    #[cfg(feature="nikodesk")]
+    camera_cleanup_identity: Option<crate::nikodesk::connection_capabilities::Identity>,
+    #[cfg(feature="nikodesk")]
+    voice_cleanup_identity:Option<crate::nikodesk::voice_flow::Identity>,
+    #[cfg(feature="nikodesk")]
+    tunnel_cleanup_identity:Option<crate::nikodesk::connection_capabilities::Identity>,
     #[cfg(target_os = "windows")]
     file_transfer_enabled: bool,
     #[cfg(target_os = "windows")]
@@ -266,11 +351,39 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             incoming_voice_call: false,
             #[cfg(feature="nikodesk")]
             niko_capability: None,
+            #[cfg(feature="nikodesk")]
+            niko_camera: None,
+            #[cfg(feature="nikodesk")]
+            niko_camera_cleanup: false,
+            #[cfg(feature="nikodesk")]
+            niko_voice:None,
+            #[cfg(feature="nikodesk")]
+            niko_voice_context:None,
+            #[cfg(feature="nikodesk")]
+            niko_voice_prepare_error:None,
+            #[cfg(feature="nikodesk")]
+            niko_voice_prepare_deadline:None,
+            #[cfg(feature="nikodesk")]
+            niko_voice_catalog:None,
+            #[cfg(feature="nikodesk")]
+            niko_voice_cleanup:false,
+            #[cfg(feature="nikodesk")]
+            niko_tunnel:None,
+            #[cfg(feature="nikodesk")]
+            niko_tunnel_cleanup:false,
+            #[cfg(feature="nikodesk")]
+            niko_voice_peer_supported:false,
+            #[cfg(feature="nikodesk")]
+            niko_voice_peer_requests_allowed:false,
         };
         CLIENTS
             .write()
             .unwrap()
-            .retain(|_, c| !(c.disconnected && c.peer_id == client.peer_id));
+            .retain(|_, c| {
+                #[cfg(feature="nikodesk")]
+                if c.niko_camera_cleanup || c.niko_voice_cleanup || c.niko_tunnel_cleanup { return true; }
+                !(c.disconnected && c.peer_id == client.peer_id)
+            });
         CLIENTS.write().unwrap().insert(id, client.clone());
         self.ui_handler.add_connection(&client);
     }
@@ -287,6 +400,8 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
     }
 
     fn remove_connection(&self, id: i32, close: bool) {
+        #[cfg(feature="nikodesk")]
+        let close = close && !CLIENTS.read().ok().and_then(|clients|clients.get(&id).map(|c|c.niko_camera_cleanup || c.niko_voice_cleanup || c.niko_tunnel_cleanup)).unwrap_or(false);
         if close {
             CLIENTS.write().unwrap().remove(&id);
         } else {
@@ -371,6 +486,8 @@ pub fn get_click_time() -> i64 {
 #[cfg(not(any(target_os = "ios")))]
 pub fn authorize(id: i32) {
     if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
+        #[cfg(feature="nikodesk")]
+        if client.niko_camera_cleanup || client.niko_voice_cleanup || client.niko_tunnel_cleanup { return; }
         client.authorized = true;
         allow_err!(client.tx.send(Data::Authorize));
     };
@@ -395,6 +512,12 @@ pub fn close_window(id: i32) {
 
 #[inline]
 pub fn remove(id: i32) {
+    #[cfg(feature="nikodesk")]
+    if CLIENTS.read().ok().and_then(|clients|clients.get(&id).map(|c|c.niko_tunnel_cleanup && c.niko_tunnel.as_ref().map_or(true,|s|s.phase!=crate::nikodesk::tunnel_wire::ReadPhase::Stopped))).unwrap_or(true) {return;}
+    #[cfg(feature="nikodesk")]
+    if CLIENTS.read().ok().and_then(|clients|clients.get(&id).map(|c|c.niko_camera_cleanup && c.niko_camera.as_ref().map_or(true,|s|s.phase!="Stopped"))).unwrap_or(true) { return; }
+    #[cfg(feature="nikodesk")]
+    if CLIENTS.read().ok().and_then(|clients|clients.get(&id).map(|c|c.niko_voice_cleanup && c.niko_voice.as_ref().map_or(true,|s|s.phase!=crate::nikodesk::voice_flow::Phase::Stopped))).unwrap_or(true) {return;}
     CLIENTS.write().unwrap().remove(&id);
 }
 
@@ -560,6 +683,11 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                         Ok(Some(data)) => {
                             match data {
                                 Data::Login{id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, avatar, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording, block_input, privacy_mode, from_switch} => {
+                                    #[cfg(feature="nikodesk")]
+                                    if CLIENTS.read().ok().and_then(|clients|clients.get(&id).map(|c|c.niko_camera_cleanup || c.niko_voice_cleanup || c.niko_tunnel_cleanup)).unwrap_or(false) {
+                                        let _=self.stream.send(&Data::Close).await;
+                                        break;
+                                    }
                                     log::debug!("conn_id: {}", id);
                                     self.cm.add_connection(id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, avatar, authorized, keyboard, clipboard, audio, file, restart, recording, block_input, privacy_mode, from_switch, self.tx.clone());
                                     self.conn_id = id;
@@ -602,6 +730,52 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                         }
                                     }
                                 }
+                                #[cfg(feature="nikodesk")]
+                                Data::NikoCameraStatus(status) => {
+                                    let mut initial_anchor=None;
+                                    let accepted = if let Ok(mut clients)=CLIENTS.write() {
+                                        if let Some(client)=clients.get_mut(&self.conn_id) {
+                                            let valid=crate::nikodesk::camera_flow::accepts_cm_status(self.conn_id,&client.peer_id,client.authorized,client.is_view_camera,client.disconnected,client.niko_camera.as_ref(),&status);
+                                            if valid {
+                                                let initial=client.niko_camera.is_none();
+                                                client.niko_camera=Some(status.clone());
+                                                if initial {initial_anchor=Some(client.clone());}
+                                            }valid
+                                        } else {false}
+                                    } else {false};
+                                    if let Some(client)=initial_anchor {self.cm.ui_handler.add_connection(&client);}
+                                    #[cfg(feature="flutter")]
+                                    if accepted { if let Ok(payload)=serde_json::to_string(&status) {
+                                        let _=crate::flutter::push_global_event(crate::flutter::APP_TYPE_CM,serde_json::json!({"name":"nikodesk_camera_status","payload":payload}).to_string());
+                                    }}
+                                }
+                                #[cfg(feature="nikodesk")]
+                                Data::NikoCameraRetired(ref status) | Data::NikoCameraCleanupStatus(ref status) => {
+                                    let retiring=matches!(&data,Data::NikoCameraRetired(_));
+                                    let snapshot=CLIENTS.write().ok().and_then(|mut clients|clients.get_mut(&self.conn_id).and_then(|client| {
+                                        if !client.apply_camera_cleanup(&status,retiring) {return None;}
+                                        Some(client.clone())
+                                    }));
+                                    if let Some(client)=snapshot {
+                                        self.camera_cleanup_identity=Some(status.identity.clone());
+                                        self.close=false;
+                                        self.cm.ui_handler.add_connection(&client);
+                                        #[cfg(feature="flutter")]
+                                        if let Ok(payload)=serde_json::to_string(&status) {let _=crate::flutter::push_global_event(crate::flutter::APP_TYPE_CM,serde_json::json!({"name":"nikodesk_camera_status","payload":payload}).to_string());}
+                                    }
+                                }
+                                #[cfg(feature="nikodesk")]
+                                Data::NikoCameraCatalog(catalog) => {
+                                    let accepted=CLIENTS.read().ok().and_then(|clients|clients.get(&self.conn_id).and_then(|client|client.niko_camera.as_ref().map(|status|client.authorized && !client.disconnected && status.identity==catalog.identity && status.revision==catalog.revision && status.phase=="Pending"))).unwrap_or(false);
+                                    #[cfg(feature="flutter")]
+                                    if accepted { if let Ok(payload)=serde_json::to_string(&catalog) {
+                                        let _=crate::flutter::push_global_event(crate::flutter::APP_TYPE_CM,serde_json::json!({"name":"nikodesk_camera_catalog","payload":payload}).to_string());
+                                    }}
+                                }
+                                #[cfg(feature="nikodesk")]
+                                data @ (Data::NikoVoiceReady {..}|Data::NikoVoicePrepareError {..}|Data::NikoVoiceStatus {..}|Data::NikoVoiceRetired(_)|Data::NikoVoiceCleanupStatus(_)|Data::NikoVoiceCatalog(_))=>{self.handle_nikodesk_voice_data(data);}
+                                #[cfg(feature="nikodesk")]
+                                data @ (Data::NikoTunnelStatus(_)|Data::NikoTunnelRetired(_)|Data::NikoTunnelCleanupStatus(_))=>{self.handle_nikodesk_tunnel_data(data);}
                                 Data::ChatMessage { text } => {
                                     self.cm.new_message(self.conn_id, text);
                                 }
@@ -742,6 +916,8 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                     }
                 }
                 Some(data) = self.rx.recv() => {
+                    #[cfg(feature="nikodesk")]
+                    if CLIENTS.read().ok().and_then(|clients|clients.get(&self.conn_id).map(|client| !client.accepts_cleanup_dispatch(&data))).unwrap_or(false) {continue;}
                     // For FileBlockFromCM, data is sent separately via send_raw (data field has #[serde(skip)]).
                     // This avoids JSON encoding overhead for large binary data.
                     // This mirrors the WriteBlock pattern in start_ipc (see rx_to_cm handler).
@@ -849,6 +1025,12 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             close: true,
             running: true,
             conn_id: 0,
+            #[cfg(feature="nikodesk")]
+            camera_cleanup_identity: None,
+            #[cfg(feature="nikodesk")]
+            voice_cleanup_identity:None,
+            #[cfg(feature="nikodesk")]
+            tunnel_cleanup_identity:None,
             #[cfg(target_os = "windows")]
             file_transfer_enabled: false,
             #[cfg(target_os = "windows")]
@@ -859,7 +1041,15 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
         while task_runner.running {
             task_runner.run().await;
         }
-        if task_runner.conn_id > 0 {
+        #[cfg(feature="nikodesk")]
+        let owns_record=task_runner.camera_cleanup_identity.as_ref().map_or(true,|identity|CLIENTS.read().ok().and_then(|clients|clients.get(&task_runner.conn_id).and_then(|client|client.niko_camera.as_ref().map(|status|status.identity==*identity))).unwrap_or(false));
+        #[cfg(feature="nikodesk")]
+        let owns_record=owns_record && task_runner.voice_cleanup_identity.as_ref().map_or(true,|identity|CLIENTS.read().ok().and_then(|clients|clients.get(&task_runner.conn_id).and_then(|client|client.niko_voice.as_ref().map(|status|status.identity==*identity))).unwrap_or(false));
+        #[cfg(feature="nikodesk")]
+        let owns_record=owns_record && task_runner.tunnel_cleanup_identity.as_ref().map_or(true,|identity|CLIENTS.read().ok().and_then(|clients|clients.get(&task_runner.conn_id).and_then(|client|client.niko_tunnel.as_ref().map(|status|status.identity==*identity))).unwrap_or(false));
+        #[cfg(not(feature="nikodesk"))]
+        let owns_record=true;
+        if task_runner.conn_id > 0 && owns_record {
             task_runner
                 .cm
                 .remove_connection(task_runner.conn_id, task_runner.close);
@@ -2029,4 +2219,87 @@ pub(crate) fn nikodesk_capability_decision(json:String,revoke:bool)->String {
     })();
     match result {Ok(())=>serde_json::json!({"ok":true,"status":"queued"}).to_string(),
         Err(error)=>serde_json::json!({"ok":false,"status":"error","error":error.to_string()}).to_string()}
+}
+
+#[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+pub(crate) fn nikodesk_camera_command(json:String)->String {
+    use crate::nikodesk::{camera_flow::Command,connection_capabilities::parse};
+    let command=parse::<Command>(&json);
+    let identity=command.as_ref().ok().map(|c|c.identity.clone());
+    let revision=command.as_ref().ok().map(|c|c.revision.clone());
+    let result=(||->ResultType<()> {
+        let command=command?;command.validate()?;
+        let clients=CLIENTS.read().map_err(|_|hbb_common::anyhow::anyhow!("cm_registry_unavailable"))?;
+        let client=clients.get(&command.identity.connection_id).ok_or_else(||hbb_common::anyhow::anyhow!("cm_connection_missing"))?;
+        let status=client.niko_camera.as_ref().ok_or_else(||hbb_common::anyhow::anyhow!("camera_request_missing"))?;
+        if client.niko_camera_cleanup {
+            if !client.disconnected || client.authorized || !matches!(command.op.as_str(),"query"|"retry_cleanup") {bail!("camera_cleanup_only");}
+        } else if client.disconnected || !client.authorized {bail!("camera_command_stale");}
+        if !client.is_view_camera || client.peer_id!=command.identity.peer_id || status.identity!=command.identity || if matches!(command.op.as_str(),"deny"|"revoke"|"retry_cleanup"|"query") {command.revision.parse::<u64>().ok()>status.revision.parse::<u64>().ok()}else{status.revision!=command.revision} {bail!("camera_command_stale");}
+        client.tx.send(Data::NikoCameraCommand(command)).map_err(|_|hbb_common::anyhow::anyhow!("cm_connection_channel_closed"))?;Ok(())
+    })();
+    match result {
+        Ok(())=>serde_json::json!({"ok":true,"status":"queued","identity":identity,"revision":revision,"reason":"camera_command_queued"}).to_string(),
+        Err(error)=>serde_json::json!({"ok":false,"status":"error","identity":identity,"revision":revision,"reason":error.to_string()}).to_string()
+    }
+}
+
+#[cfg(all(test,feature="nikodesk",not(target_os="ios")))]
+impl Client {
+    pub(crate) fn camera_cleanup_fixture(status: crate::nikodesk::camera_flow::Status) -> Self {
+        let (tx,_) = mpsc::unbounded_channel();
+        Self { id: status.identity.connection_id, authorized:true, disconnected:false,
+            is_file_transfer:false,is_view_camera:true,is_terminal:false,port_forward:String::new(),
+            name:String::new(),avatar:String::new(),peer_id:status.identity.peer_id.clone(),keyboard:false,
+            clipboard:false,audio:false,file:false,restart:false,recording:false,block_input:false,
+            privacy_mode:false,from_switch:false,in_voice_call:false,incoming_voice_call:false,
+            niko_capability:None,niko_camera:Some(status),niko_camera_cleanup:false,
+            niko_voice:None,niko_voice_context:None,niko_voice_prepare_error:None,niko_voice_prepare_deadline:None,niko_voice_catalog:None,niko_voice_cleanup:false,niko_voice_peer_supported:false,niko_voice_peer_requests_allowed:false,niko_tunnel:None,niko_tunnel_cleanup:false,tx }
+    }
+}
+
+#[cfg(all(test,feature="nikodesk",not(target_os="ios")))]
+mod camera_cleanup_tests {
+    use super::*;
+    use crate::nikodesk::{camera_flow::{Command,Status},connection_capabilities::Identity};
+    fn status() -> Status {
+        Status { identity:Identity {connection_id:12,namespace:"a".repeat(64),peer_id:"123456789".into(),connection_nonce:"b".repeat(32),request_nonce:"c".repeat(32),epoch:"1".into()}, kind:"camera".into(),phase:"Running".into(),reason:"first_encoded_packet_sent".into(),resource_epoch:"1".into(),revision:"1".into(),selection:None }
+    }
+    #[test]
+    fn camera_cleanup_cm_requires_existing_anchor_and_never_reauthenticates_closed_peer() {
+        let old=status(); let mut client=Client::camera_cleanup_fixture(old.clone());
+        let mut retired=old.clone();retired.phase="RecoveryRequired".into();retired.revision="2".into();
+        assert!(!client.apply_camera_cleanup(&retired,false));
+        assert!(client.apply_camera_cleanup(&retired,true));
+        assert!(client.disconnected && !client.authorized && client.niko_camera_cleanup);
+        let recovery_fixture=serde_json::to_value(&client).unwrap();
+        for op in ["enumerate","probe","request_permission","approve","revoke","deny"] {
+            let command=Command{identity:old.identity.clone(),revision:"2".into(),op:op.into(),uid:None,roster_revision:None,format_token:None,fps:None};
+            assert!(!client.accepts_cleanup_dispatch(&Data::NikoCameraCommand(command)));
+        }
+        for op in ["retry_cleanup","query"] {
+            let command=Command{identity:old.identity.clone(),revision:"2".into(),op:op.into(),uid:None,roster_revision:None,format_token:None,fps:None};
+            assert!(client.accepts_cleanup_dispatch(&Data::NikoCameraCommand(command)));
+        }
+        assert!(!client.accepts_cleanup_dispatch(&Data::Authorize));
+        assert!(!client.accepts_cleanup_dispatch(&Data::Close));
+        let mut stopped=retired.clone();stopped.phase="Stopped".into();stopped.revision="3".into();
+        assert!(client.apply_camera_cleanup(&stopped,false));
+        assert!(client.accepts_cleanup_dispatch(&Data::Close));
+        assert!(!client.apply_camera_cleanup(&retired,false));
+        println!("NIKO_CAMERA_CLEANUP_FIXTURE:{}",serde_json::json!({"recovery":recovery_fixture,"stopped":serde_json::to_value(&client).unwrap()}));
+    }
+    #[test]
+    fn camera_cleanup_late_ack_cannot_close_id_reused_with_new_nonce_or_namespace() {
+        for change in 0..3 {
+            let mut old=status();old.phase="Stopped".into();old.revision="10".into();
+            let mut replacement=status();
+            match change {0=>replacement.identity.namespace="f".repeat(64),1=>replacement.identity.connection_nonce="f".repeat(32),_=>replacement.identity.request_nonce="f".repeat(32)};
+            let mut client=Client::camera_cleanup_fixture(replacement.clone());
+            assert!(!client.apply_camera_cleanup(&old,true));
+            assert!(!client.apply_camera_cleanup(&old,false));
+            assert!(client.authorized && !client.disconnected && !client.niko_camera_cleanup);
+            assert_eq!(client.niko_camera.unwrap().identity,replacement.identity);
+        }
+    }
 }

@@ -23,6 +23,7 @@ class FileManagerPage extends StatefulWidget {
       {Key? key,
       required this.id,
       this.password,
+      this.connToken,
       this.isSharedPassword,
       this.serverNamespace,
       this.forceRelay})
@@ -30,6 +31,7 @@ class FileManagerPage extends StatefulWidget {
   final String id;
   final String? serverNamespace;
   final String? password;
+  final String? connToken;
   final bool? isSharedPassword;
   final bool? forceRelay;
 
@@ -403,6 +405,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
     _ffi.start(widget.id,
         isFileTransfer: true,
         password: widget.password,
+        connToken: widget.connToken,
         serverNamespace: widget.serverNamespace,
         isSharedPassword: widget.isSharedPassword,
         forceRelay: widget.forceRelay);

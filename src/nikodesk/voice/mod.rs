@@ -8,6 +8,8 @@ mod sealed { pub trait Sealed {} }
 pub mod macos;
 #[cfg(target_os = "windows")]
 pub mod windows;
+#[cfg(target_os="android")]
+pub mod android;
 
 pub use codec::{VoiceDecoder, VoiceEncoder};
 pub use owner::{MediaIo, VoiceBackend, VoiceDriver, VoiceOwner};

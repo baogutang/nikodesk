@@ -305,6 +305,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     ));
     final List<AbstractSettingsTile> enhancementsTiles = [];
     final enable2fa = bind.mainHasValid2FaSync();
+    final isNiko = bind.mainGetAppNameSync() == 'NikoDesk';
     final List<AbstractSettingsTile> tfaTiles = [
       SettingsTile.switchTile(
         title: Text(translate('enable-2fa-title')),
@@ -324,7 +325,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
           }
         },
       ),
-      if (enable2fa)
+      if (enable2fa && !isNiko)
         SettingsTile.switchTile(
           title: Text(translate('Telegram bot')),
           initialValue: bind.mainHasValidBotSync(),
@@ -343,7 +344,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             }
           },
         ),
-      if (enable2fa)
+      if (enable2fa && !isNiko)
         SettingsTile.switchTile(
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -363,7 +364,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                   });
                 },
         ),
-      if (enable2fa && _enableTrustedDevices)
+      if (enable2fa && _enableTrustedDevices && !isNiko)
         SettingsTile(
             title: Text(translate('Manage trusted devices')),
             trailing: Icon(Icons.arrow_forward_ios),

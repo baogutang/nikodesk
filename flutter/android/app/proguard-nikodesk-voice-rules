@@ -1,0 +1,15 @@
+# Niko flavor only. Rust caches the bridge class and invokes these five ABI
+# classes through literal JNI method names/descriptors. The sixth class is the
+# exact manifest microphone Service. Keep their members to preserve all 22
+# verified JNI/runtime methods and the directly called Activity/service hooks.
+# Internal device/route/policy helpers remain eligible for R8 optimization.
+# Final APK verification checks defined DEX classes, prototypes and JNI exports;
+# a successful Kotlin compile or this keep rule alone is not ABI evidence.
+-keep class io.nikodesk.android.voice.NikoVoiceBridge { *; }
+-keep class io.nikodesk.android.voice.NikoVoicePreparation { *; }
+-keep class io.nikodesk.android.voice.NikoVoiceSession { *; }
+-keep class io.nikodesk.android.voice.NikoVoicePermissionJob { *; }
+-keep class io.nikodesk.android.voice.NikoVoiceApprovalJob { *; }
+-keep class io.nikodesk.android.voice.NikoVoiceService { *; }
+# Credential operations are called from native code through literal JNI names.
+-keep class io.nikodesk.android.credentials.NikoCredentialBridge { *; }

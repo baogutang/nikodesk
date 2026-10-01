@@ -8,6 +8,24 @@ use super::login_failure_check::{
     evaluate_os_credential_policy, record_os_credential_failure, FailureScope,
 };
 use super::{input_service::*, *};
+#[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+#[path="nikodesk_voice.rs"]
+mod nikodesk_voice;
+#[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+#[path="nikodesk_voice_policy.rs"]
+mod nikodesk_voice_policy;
+#[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+#[path="nikodesk_tunnel.rs"]
+mod nikodesk_tunnel;
+#[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+#[path="nikodesk_tunnel_retired.rs"]
+mod nikodesk_tunnel_retired;
+#[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+#[path="nikodesk_power.rs"]
+mod nikodesk_power;
+#[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+#[path="nikodesk_virtual_display.rs"]
+mod nikodesk_virtual_display;
 #[cfg(feature = "unix-file-copy-paste")]
 use crate::clipboard::try_empty_clipboard_files;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -419,6 +437,8 @@ pub struct Connection {
     server_audit_file: String,
     controlled_context: Option<ControlledContext>,
     lr: LoginRequest,
+    #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
+    niko_audit: Option<crate::nikodesk::session_audit::SessionAudit>,
     // Authentication retries may update credentials, but not the requested session scope.
     // A digest, so no peer-controlled strings are retained.
     login_scope: Option<[u8; 32]>,
@@ -472,6 +492,32 @@ pub struct Connection {
     terminal_generic_service: Option<Box<GenericService>>,
     #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
     niko_terminal: crate::nikodesk::connection_capabilities::TerminalFlow,
+    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+    niko_camera: crate::nikodesk::camera_flow::Flow,
+    #[cfg(feature="nikodesk")]
+    niko_camera_probe_seen: bool,
+    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+    niko_voice: Option<crate::nikodesk::voice_call::Call>,
+    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+    niko_voice_policy: nikodesk_voice_policy::Publisher,
+    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+    niko_voice_namespace: Option<String>,
+    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+    niko_voice_nonce: Option<String>,
+    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+    niko_voice_ready_sent: Option<bool>,
+    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+    niko_virtual_owner: Option<crate::nikodesk::virtual_display::Owner>,
+    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+    niko_voice_fence: crate::nikodesk::voice_wire::IncomingCallFence,
+    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+    niko_voice_totp_required: bool,
+    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+    niko_voice_totp_verified: bool,
+    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+    niko_voice_retiring: Arc<std::sync::atomic::AtomicBool>,
+    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+    niko_tunnel: nikodesk_tunnel::State,
 }
 
 impl ConnInner {
@@ -571,7 +617,29 @@ impl Connection {
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let tx_cloned = tx.clone();
+        #[cfg(feature="nikodesk")]
+        let require_2fa = match crate::auth_2fa::get_2fa_checked(None) {
+            Ok(value) => value,
+            Err(_) => {
+                let mut stream = stream;
+                let mut message = Message::new();
+                let mut response = LoginResponse::new();
+                response.set_error("Two-factor configuration is invalid. Repair it on the controlled device before connecting.".into());
+                message.set_login_response(response);
+                let _ = stream.send(&message).await;
+                log::warn!("NikoDesk rejected a new connection with invalid two-factor configuration");
+                return;
+            }
+        };
+        #[cfg(not(feature="nikodesk"))]
         let require_2fa = crate::auth_2fa::get_2fa(None);
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        let niko_voice_namespace=tokio::task::spawn_blocking(|| {
+            crate::nikodesk::server_settings::read_verified_options().ok()
+                .and_then(|options|crate::nikodesk::server_scope::namespace_from_options(&options))
+        }).await.ok().flatten();
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        let niko_tunnel = nikodesk_tunnel::State::new(niko_voice_namespace.clone(), require_2fa.is_some());
         let mut conn = Self {
             inner: ConnInner {
                 id,
@@ -580,6 +648,32 @@ impl Connection {
             },
             #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
             niko_terminal: crate::nikodesk::connection_capabilities::TerminalFlow::new(require_2fa.is_some()),
+            #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+            niko_camera: crate::nikodesk::camera_flow::Flow::new(require_2fa.is_some()),
+            #[cfg(feature="nikodesk")]
+            niko_camera_probe_seen: false,
+            #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+            niko_voice:None,
+            #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+            niko_voice_policy:Default::default(),
+            #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+            niko_voice_namespace,
+            #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+            niko_voice_nonce:crate::nikodesk::voice_call::nonce().ok(),
+            #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+            niko_voice_ready_sent:None,
+            #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+            niko_virtual_owner:None,
+            #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+            niko_voice_fence:Default::default(),
+            #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+            niko_voice_totp_required:require_2fa.is_some(),
+            #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+            niko_voice_totp_verified:false,
+            #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+            niko_voice_retiring:Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+            niko_tunnel,
             require_2fa,
             awaiting_2fa: false,
             // Defer display enumeration until login succeeds. Monitor login replaces this
@@ -633,6 +727,8 @@ impl Connection {
             server_audit_file: "".to_owned(),
             controlled_context,
             lr: Default::default(),
+            #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
+            niko_audit: None,
             login_scope: None,
             peer_argb: 0u32,
             session_last_recv_time: None,
@@ -753,8 +849,47 @@ impl Connection {
 
         #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
         let mut niko_terminal_timer=time::interval(Duration::from_millis(30));
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        let mut niko_camera_pending_cm=None;
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        let mut niko_voice_timer=time::interval(Duration::from_millis(10));
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        let mut niko_tunnel_timer=time::interval(Duration::from_millis(50));
         loop {
+            #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+            if conn.view_camera && niko_camera_pending_cm.is_none() {
+                let mut closed=false;
+                // CM decisions already queued are processed before another camera
+                // packet, while other sessions retain the original select order.
+                for _ in 0..32 {
+                    match rx_from_cm.try_recv() {
+                        Ok(Data::NikoCameraCommand(command))=>{if !conn.handle_nikodesk_camera_command(command).await {closed=true;break;}},
+                        Ok(Data::Close)=>{conn.on_close("connection manager",false).await;closed=true;break;},
+                        Ok(data)=>{niko_camera_pending_cm=Some(data);break;},
+                        Err(_)=>break,
+                    }
+                }
+                if closed {break;}
+            }
             tokio::select! {
+                _ = async {
+                    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+                    {niko_tunnel_timer.tick().await;}
+                    #[cfg(not(all(feature="nikodesk",any(target_os="macos",target_os="windows"))))]
+                    {std::future::pending::<()>().await;}
+                } => {
+                    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+                    if !conn.poll_nikodesk_tunnel().await { conn.on_close("tunnel_writer_failed",false).await; break; }
+                }
+                _ = async {
+                    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+                    {niko_voice_timer.tick().await;}
+                    #[cfg(not(all(feature="nikodesk",any(target_os="macos",target_os="windows"))))]
+                    {std::future::pending::<()>().await;}
+                } => {
+                    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+                    {conn.poll_nikodesk_voice().await;conn.poll_nikodesk_voice_policy().await;}
+                }
                 // biased; // video has higher priority // causing test_delay_timer failed while transferring big file
 
                 // Both end an unauthorized connection at once, not on the next timer tick:
@@ -768,14 +903,18 @@ impl Connection {
                     conn.on_close("Timeout", true).await;
                     break;
                 }
-                Some(data) = rx_from_cm.recv() => {
+                Some(data) = async {
+                    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+                    if let Some(data)=niko_camera_pending_cm.take(){return Some(data);}
+                    rx_from_cm.recv().await
+                } => {
                     match data {
                         ipc::Data::Authorize => {
                             conn.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::Click);
                             #[cfg(not(feature = "nikodesk"))]
                             conn.require_2fa.take();
                             #[cfg(feature = "nikodesk")]
-                            if !conn.terminal { conn.require_2fa.take(); }
+                            if !conn.terminal && !conn.view_camera && !conn.is_nikodesk_tunnel() { conn.require_2fa.take(); }
                             if !conn.send_logon_response_and_keep_alive().await {
                                 break;
                             }
@@ -787,9 +926,25 @@ impl Connection {
                         ipc::Data::NikoCapabilityDecision(decision) => { conn.decide_nikodesk_terminal(decision).await; }
                         #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
                         ipc::Data::NikoCapabilityRevoke(identity) => { conn.revoke_nikodesk_terminal(Some(&identity),"Revoked locally").await; }
+                        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+                        ipc::Data::NikoCameraCommand(command) => {
+                            if !conn.handle_nikodesk_camera_command(command).await {break;}
+                        }
+                        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+                        ipc::Data::NikoVoiceCommand(command)=>{conn.handle_nikodesk_voice_command(command);}
+                        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+                        ipc::Data::NikoVoicePrepare(request)=>{conn.prepare_nikodesk_outgoing_voice(request).await;}
+                        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+                        ipc::Data::NikoTunnelCommand(command)=>{conn.handle_nikodesk_tunnel_command(command);}
                         ipc::Data::Close => {
                             conn.chat_unanswered = false; // seen
                             conn.file_transferred = false; //seen
+                            #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+                            if conn.view_camera {
+                                conn.on_close("connection manager",false).await;
+                                let _=tokio::time::timeout(Duration::from_millis(100),conn.send_close_reason_no_retry("")).await;
+                                break;
+                            }
                             conn.send_close_reason_no_retry("").await;
                             conn.on_close("connection manager", true).await;
                             break;
@@ -825,6 +980,8 @@ impl Connection {
                             conn.chat_unanswered = false;
                         }
                         ipc::Data::SwitchPermission{name, enabled} => {
+                            #[cfg(feature="nikodesk")]
+                            if conn.view_camera {continue;}
                             log::info!("Change permission {} -> {}", name, enabled);
                             if &name == "keyboard" {
                                 conn.keyboard = enabled;
@@ -1141,6 +1298,12 @@ impl Connection {
                         Some(message::Union::Misc(m)) => {
                             match &m.union {
                                 Some(misc::Union::StopService(_)) => {
+                                    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+                                    if conn.view_camera {
+                                        conn.on_close("stop service",false).await;
+                                        let _=tokio::time::timeout(Duration::from_millis(100),conn.send_close_reason_no_retry("")).await;
+                                        break;
+                                    }
                                     conn.send_close_reason_no_retry("").await;
                                     conn.on_close("stop service", false).await;
                                     break;
@@ -1199,13 +1362,33 @@ impl Connection {
                 }
                 _ = async {
                     #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
-                    if conn.terminal {niko_terminal_timer.tick().await;return;}
+                    if conn.terminal || conn.view_camera {niko_terminal_timer.tick().await;return;}
                     std::future::pending::<()>().await;
                 } => {
                     #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
-                    conn.poll_nikodesk_terminal().await;
+                    if conn.terminal {conn.poll_nikodesk_terminal().await;}
+                    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+                    if conn.view_camera && !conn.poll_nikodesk_camera().await {break;}
                 }
                 _ = second_timer.tick() => {
+                    #[cfg(all(feature="nikodesk",target_os="macos"))]
+                    if crate::nikodesk::mac_background::selected() && !crate::nikodesk::mac_background::active_user() {
+                        conn.on_close("Local login session changed", false).await;
+                        break;
+                    }
+                    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+                    conn.publish_nikodesk_voice_ready();
+                    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+                    conn.check_nikodesk_virtual_display_permission();
+                    #[cfg(all(feature = "nikodesk", any(target_os="windows",target_os="macos")))]
+                    if privacy_mode::nikodesk_heartbeat(conn.inner.id(),
+                        conn.authorized && !conn.closed && conn.stream.is_secured() && conn.privacy_mode && conn.peer_keyboard_enabled()
+                        && Config::get_option(keys::OPTION_ENABLE_PRIVACY_MODE) == "Y") {
+                        let notice = crate::common::make_privacy_mode_msg(
+                            back_notification::PrivacyModeState::PrvOffByPeer,
+                            privacy_mode::get_cur_impl_key().unwrap_or_default());
+                        conn.send(notice).await;
+                    }
                     #[cfg(windows)]
                     conn.portable_check();
                     raii::AuthedConnID::check_wake_lock_on_setting_changed();
@@ -1231,12 +1414,12 @@ impl Connection {
                         let mut msg_out = Message::new();
                         msg_out.set_test_delay(TestDelay{
                             last_delay: conn.network_delay,
-                            target_bitrate: video_service::VIDEO_QOS.lock().unwrap().bitrate(),
+                            target_bitrate: if cfg!(feature="nikodesk") && conn.view_camera {0}else{video_service::VIDEO_QOS.lock().unwrap().bitrate()},
                             ..Default::default()
                         });
                         conn.send(msg_out.into()).await;
                     }
-                    if conn.is_authed_remote_conn() || conn.view_camera {
+                    if conn.is_authed_remote_conn() || !cfg!(feature="nikodesk") && conn.view_camera {
                         if let Some(last_test_delay) = conn.last_test_delay {
                             video_service::VIDEO_QOS.lock().unwrap().user_delay_response_elapsed(id, last_test_delay.elapsed().as_millis());
                         }
@@ -1283,6 +1466,22 @@ impl Connection {
             try_stop_record_cursor_pos();
         }
         conn.on_close("End", true).await;
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        if let Some(cleanup) = conn.niko_tunnel.take_cleanup() {
+            let sender = conn.tx_to_cm.clone();
+            drop(rx); drop(rx_video); drop(conn);
+            tokio::spawn(nikodesk_tunnel::retired_cleanup(cleanup, rx_from_cm, sender));
+            log::info!("#{} connection loop exited", id);
+            return;
+        }
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        {
+            if let Some(call)=conn.niko_voice.take().filter(|_|conn.niko_voice_retiring.load(Ordering::Acquire)) {
+                tokio::spawn(nikodesk_voice::retired_cleanup(call,rx_from_cm,conn.tx_to_cm.clone()));
+            } else if let Some(cleanup) = conn.niko_camera.take_cleanup() {
+                tokio::spawn(cleanup.run(rx_from_cm, conn.tx_to_cm.clone()));
+            }
+        }
         log::info!("#{} connection loop exited", id);
     }
 
@@ -1442,6 +1641,10 @@ impl Connection {
     }
 
     async fn send_permission(&mut self, permission: Permission, enabled: bool) {
+        #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
+        if permission == Permission::Keyboard && self.authorized {
+            crate::nikodesk::auto_lock::permission(self.inner.id(), self.peer_keyboard_enabled());
+        }
         let mut misc = Misc::new();
         misc.set_permission_info(PermissionInfo {
             permission: permission.into(),
@@ -1901,8 +2104,9 @@ impl Connection {
             return true;
         }
         if self.require_2fa.is_some()
-            && (!self.is_recent_session(true) || cfg!(feature="nikodesk") && self.terminal)
-            && (!self.from_switch || cfg!(feature="nikodesk") && self.terminal) {
+            && (!self.is_recent_session(true) || cfg!(feature="nikodesk") && (self.terminal || self.view_camera || self.is_nikodesk_tunnel()))
+            && (!self.from_switch || cfg!(feature="nikodesk") && (self.terminal || self.view_camera || self.is_nikodesk_tunnel())) {
+            #[cfg(not(feature="nikodesk"))]
             self.require_2fa.as_ref().map(|totp| {
                 let bot = crate::auth_2fa::TelegramBot::get();
                 let bot = match bot {
@@ -1949,6 +2153,10 @@ impl Connection {
             return false;
         }
         self.authorized = true;
+        #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
+        if let Some(audit) = self.niko_audit.as_mut() { audit.authenticated(); }
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        if let Err(error) = self.activate_nikodesk_tunnel().await { self.send_login_error(error).await; return false; }
         self.unauthorized_id = None;
         // One-time means gone once it has let a peer in, not once that peer
         // leaves. This session's later logins come in on the password the
@@ -1975,6 +2183,10 @@ impl Connection {
             self.tx_from_authed.clone(),
             self.lr.clone(),
         ));
+        #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
+        if auth_conn_type == AuthConnType::Remote {
+            crate::nikodesk::auto_lock::register(self.inner.id(), self.peer_keyboard_enabled());
+        }
         self.session_last_recv_time = SESSIONS
             .lock()
             .unwrap()
@@ -2028,7 +2240,7 @@ impl Connection {
                 "is_installed".into(),
                 json!(crate::platform::is_installed()),
             );
-            if crate::platform::is_installed() {
+            if !cfg!(feature="nikodesk") && crate::platform::is_installed() {
                 platform_additions.extend(virtual_display_manager::get_platform_additions());
             }
             platform_additions.insert(
@@ -2043,6 +2255,8 @@ impl Connection {
                 json!(privacy_mode::get_supported_privacy_mode_impl()),
             );
         }
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        platform_additions.extend(crate::nikodesk::virtual_display::additions());
 
         #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
         {
@@ -2064,7 +2278,15 @@ impl Connection {
 
         #[cfg(any(target_os = "windows", target_os = "linux"))]
         {
+            #[cfg(not(feature="nikodesk"))]
             platform_additions.insert("support_view_camera".into(), json!(true));
+        }
+
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        {
+            platform_additions.insert("support_view_camera".into(),json!(true));
+            platform_additions.insert("nikodesk_camera_protocol".into(),json!(1));
+            if self.view_camera {platform_additions.insert("nikodesk_camera_pending".into(),json!(true));}
         }
 
         #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
@@ -2078,6 +2300,8 @@ impl Connection {
                 ..Default::default()
             })
             .into();
+            #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+            if self.is_nikodesk_tunnel() { pi.features = Some(self.nikodesk_tunnel_features()).into(); }
             let mut msg_out = Message::new();
             res.set_peer_info(pi);
             msg_out.set_login_response(res);
@@ -2139,16 +2363,28 @@ impl Connection {
         })
         .into();
 
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        self.populate_nikodesk_voice_features(&mut pi).await;
+
         let mut sub_service = false;
         #[allow(unused_mut)]
         let mut wait_session_id_confirm = false;
         #[cfg(windows)]
-        if !self.terminal {
+        if !self.terminal && !(cfg!(feature="nikodesk") && self.view_camera) {
             self.handle_windows_specific_session(&mut pi, &mut wait_session_id_confirm);
         }
         if self.file_transfer.is_some() || self.terminal {
             res.set_peer_info(pi);
         } else if self.view_camera {
+            #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+            {
+                if self.niko_camera.authenticated(self.inner.id(),self.lr.my_id.clone(),self.stream.is_secured(),self.authorized).await.is_err() {self.send_login_error("camera_authentication_incomplete").await;return false;}
+                pi.encoding=Some(SupportedEncoding::default()).into();
+                self.niko_camera.capture_peer_info(&pi);
+                res.set_peer_info(pi.clone());
+            }
+            #[cfg(not(feature="nikodesk"))]
+            {
             let supported_encoding = scrap::codec::Encoder::supported_encoding();
             self.last_supported_encoding = Some(supported_encoding.clone());
             log::info!("peer info supported_encoding: {:?}", supported_encoding);
@@ -2171,6 +2407,7 @@ impl Connection {
             }
             res.set_peer_info(pi);
             self.update_codec_on_login();
+            }
         } else {
             let supported_encoding = scrap::codec::Encoder::supported_encoding();
             self.last_supported_encoding = Some(supported_encoding.clone());
@@ -2264,6 +2501,8 @@ impl Connection {
     }
 
     fn try_sub_camera_displays(&mut self) {
+        #[cfg(feature="nikodesk")]
+        { return; }
         if let Some(s) = self.server.upgrade() {
             let mut s = s.write().unwrap();
 
@@ -2282,7 +2521,14 @@ impl Connection {
 
     #[inline]
     fn is_port_forward(&self) -> bool {
-        self.port_forward_socket.is_some() || self.port_forward_mux.is_some()
+        self.is_nikodesk_tunnel() || self.port_forward_socket.is_some() || self.port_forward_mux.is_some()
+    }
+
+    fn is_nikodesk_tunnel(&self) -> bool {
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        { self.niko_tunnel.typed() }
+        #[cfg(not(all(feature="nikodesk",any(target_os="macos",target_os="windows"))))]
+        { false }
     }
 
     fn try_sub_monitor_services(&mut self) {
@@ -2423,10 +2669,14 @@ impl Connection {
         });
         #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
         if authorized { if let Some(adapter)=self.niko_terminal.adapter.as_ref() {self.send_to_cm(Data::NikoCapabilityStatus(adapter.status("Waiting for local terminal approval")));} }
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        if authorized && self.view_camera {if let Ok(status)=self.niko_camera.status("local_approval_required"){self.send_to_cm(Data::NikoCameraStatus(status));}}
     }
 
     #[inline]
     fn send_to_cm(&mut self, data: ipc::Data) {
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        if let Some(audit)=self.niko_audit.as_ref() {crate::nikodesk::capability_audit::cm(&audit.capability_context(),&data);}
         self.tx_to_cm.send(data).ok();
     }
 
@@ -2688,7 +2938,7 @@ impl Connection {
 
     fn is_recent_session(&mut self, tfa: bool) -> bool {
         #[cfg(feature = "nikodesk")]
-        if crate::nikodesk::background::is_system_worker() { return false; }
+        if tfa || crate::nikodesk::background::is_system_worker() { return false; }
         SESSIONS
             .lock()
             .unwrap()
@@ -2718,9 +2968,14 @@ impl Connection {
 
     #[inline]
     pub fn is_permission_enabled_locally(enable_prefix_option: &str) -> bool {
-        #[cfg(feature = "nikodesk")]
-        if crate::nikodesk::background::is_system_worker()
-            && enable_prefix_option != keys::OPTION_ENABLE_KEYBOARD { return false; }
+        #[cfg(feature="nikodesk")]
+        if crate::nikodesk::background::is_system_worker() {
+            return crate::nikodesk::background::machine_permission(enable_prefix_option);
+        }
+        #[cfg(all(feature = "nikodesk", any(target_os="windows",target_os="macos")))]
+        if enable_prefix_option == keys::OPTION_ENABLE_PRIVACY_MODE {
+            return Config::get_option(keys::OPTION_ENABLE_PRIVACY_MODE) == "Y";
+        }
         #[cfg(feature = "nikodesk")]
         if matches!(enable_prefix_option,
             keys::OPTION_ENABLE_TERMINAL | keys::OPTION_ENABLE_TUNNEL |
@@ -2795,6 +3050,11 @@ impl Connection {
 
     #[inline]
     fn enable_trusted_devices() -> bool {
+        // A peer-supplied hardware identifier is not proof of possession of
+        // a separately enrolled credential. Keep NikoDesk TOTP mandatory.
+        #[cfg(feature="nikodesk")]
+        return false;
+        #[cfg(not(feature="nikodesk"))]
         config::option2bool(
             keys::OPTION_ENABLE_TRUSTED_DEVICES,
             &Config::get_option(keys::OPTION_ENABLE_TRUSTED_DEVICES),
@@ -2833,8 +3093,9 @@ impl Connection {
                 push(&[*show_hidden as u8]);
             }
             Some(login_request::Union::ViewCamera(vc)) => {
-                let ViewCamera { special_fields: _ } = vc;
+                let ViewCamera { nikodesk_protocol, special_fields: _ } = vc;
                 push(b"view_camera");
+                push(&nikodesk_protocol.to_be_bytes());
             }
             Some(login_request::Union::Terminal(t)) => {
                 let Terminal {
@@ -2849,12 +3110,27 @@ impl Connection {
                     host,
                     port,
                     multiplex,
+                    nikodesk_protocol,
+                    nikodesk_binding,
                     special_fields: _,
                 } = pf;
                 push(b"port_forward");
                 push(host.as_bytes());
                 push(&port.to_le_bytes());
                 push(&[*multiplex as u8]);
+                if *nikodesk_protocol != 0 || nikodesk_binding.is_some() {
+                    push(b"nikodesk_tunnel");
+                    push(&nikodesk_protocol.to_be_bytes());
+                    if let Some(binding) = nikodesk_binding.as_ref() {
+                        let NikoTunnelBinding { protocol, nonce, epoch, special_fields: _ } = binding;
+                        push(&[1]);
+                        push(&protocol.to_be_bytes());
+                        push(nonce);
+                        push(&epoch.to_be_bytes());
+                    } else {
+                        push(&[0]);
+                    }
+                }
             }
             // Variants this build does not know execute as remote, so they latch as remote.
             None | Some(_) => push(b"remote"),
@@ -2874,6 +3150,8 @@ impl Connection {
     }
 
     async fn check_login_scope(&mut self, lr: &LoginRequest) -> bool {
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        if let Err(error) = self.check_nikodesk_tunnel_login(lr) { self.send_login_error(error).await; return false; }
         #[cfg(feature = "nikodesk")]
         if !crate::nikodesk_security::allows_login(lr) {
             self.send_login_error("NikoDesk does not permit this connection scope").await;
@@ -2902,12 +3180,24 @@ impl Connection {
 
     async fn handle_login_request_without_validation(&mut self, lr: &LoginRequest) {
         self.lr = lr.clone();
+        #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
+        if self.niko_audit.is_none() {
+            if let Some(namespace) = self.niko_voice_namespace.as_deref() {
+                use crate::nikodesk::session_audit::{Kind, Role, SessionAudit};
+                self.niko_audit = SessionAudit::begin(namespace, &lr.my_id, Role::Receiver, Kind::from_login_kind(Self::login_scope_kind(lr)));
+                if let Some(audit)=self.niko_audit.as_ref() {
+                    let context=audit.capability_context();
+                    self.niko_terminal.set_audit(context.clone());
+                    self.niko_camera.set_audit(context);
+                }
+            }
+        }
         self.peer_argb = crate::str2color(&format!("{}{}", &lr.my_id, &lr.my_platform), 0xff);
         if let Some(o) = lr.option.as_ref() {
             self.options_in_login = Some(o.clone());
         }
         if self.require_2fa.is_some() && !lr.hwid.is_empty() && Self::enable_trusted_devices()
-            && !(cfg!(feature="nikodesk") && matches!(lr.union.as_ref(),Some(login_request::Union::Terminal(_)))) {
+            && !(cfg!(feature="nikodesk") && (matches!(lr.union.as_ref(),Some(login_request::Union::Terminal(_))) || self.is_nikodesk_tunnel())) {
             let devices = Config::get_trusted_devices();
             if let Some(device) = devices.iter().find(|d| d.hwid == lr.hwid) {
                 if !device.outdate()
@@ -2954,8 +3244,33 @@ impl Connection {
     }
 
     async fn on_message(&mut self, msg: Message) -> bool {
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        if let Some(result) = self.handle_nikodesk_tunnel_message(&msg).await { return result; }
+        #[cfg(feature="nikodesk")]
+        if let Some(message::Union::NikodeskCameraProbe(probe))=msg.union.as_ref() {
+            if self.authorized || self.niko_camera_probe_seen || !self.stream.is_secured() || !crate::nikodesk::camera_probe::valid_request(probe) {return false;}
+            self.niko_camera_probe_seen=true;
+            let requests_allowed=crate::nikodesk::camera_flow::requests_allowed().await;
+            let mut reply=Message::new();reply.set_nikodesk_camera_probe_reply(NikoCameraProbeReply{nonce:probe.nonce.clone(),protocol:1,requests_allowed,..Default::default()});
+            return matches!(tokio::time::timeout(Duration::from_secs(2),self.stream.send(&reply)).await,Ok(Ok(())));
+        }
+
         #[cfg(feature = "nikodesk")]
         {
+            #[cfg(any(target_os="macos",target_os="windows"))]
+            if let Some(policy)=crate::nikodesk::voice_policy::extract(&msg) {
+                let current=self.voice_role();
+                if crate::nikodesk::voice_policy::apply(self.lr.nikodesk_features.as_mut(),policy,current) {
+                    if let Some(call)=self.niko_voice.as_mut() {call.peer_requests_policy(policy.requests_allowed);}
+                    self.publish_nikodesk_voice_ready();
+                }
+                return true;
+            }
+            #[cfg(any(target_os="macos",target_os="windows"))]
+            if crate::nikodesk::voice_wire::is_voice_candidate(&msg) {
+                self.handle_nikodesk_voice_message(&msg).await;
+                return true;
+            }
             #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
             let file_clipboard = self.file_transfer_enabled();
             #[cfg(not(any(target_os = "windows", feature = "unix-file-copy-paste")))]
@@ -2975,6 +3290,11 @@ impl Connection {
                 raii::AuthedConnID::check_remove_session(self.inner.id(), self.session_key());
                 return false;
             }
+        }
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        if self.authorized && self.view_camera {
+            if !crate::nikodesk::camera_flow::allows_camera_message(&msg) {self.on_close("camera_scope_violation",false).await;return false;}
+            if crate::nikodesk::camera_flow::is_camera_noop(&msg) {return true;}
         }
         if self.authorized {
             if matches!(msg.union.as_ref(), Some(message::Union::LoginRequest(_))) {
@@ -3012,7 +3332,11 @@ impl Connection {
                     self.file_transfer = Some((ft.dir, ft.show_hidden));
                 }
                 Some(login_request::Union::ViewCamera(_vc)) => {
-                    if !Self::permission(keys::OPTION_ENABLE_CAMERA, &self.control_permissions) {
+                    #[cfg(feature="nikodesk")]
+                    if !self.niko_camera_probe_seen {self.send_login_error("camera_protocol_probe_required").await;return false;}
+                    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+                    if let Err(error)=self.niko_camera.prepare().await {self.send_login_error(&error.to_string()).await;return false;}
+                    if !cfg!(feature="nikodesk") && !Self::permission(keys::OPTION_ENABLE_CAMERA, &self.control_permissions) {
                         self.send_login_error("No permission of viewing camera")
                             .await;
                         sleep(1.).await;
@@ -3051,13 +3375,15 @@ impl Connection {
                     self.terminal_service_id = terminal.service_id;
                 }
                 Some(login_request::Union::PortForward(mut pf)) => {
-                    if !Self::permission(keys::OPTION_ENABLE_TUNNEL, &self.control_permissions) {
+                    if !self.is_nikodesk_tunnel() && !Self::permission(keys::OPTION_ENABLE_TUNNEL, &self.control_permissions) {
                         self.send_login_error("No permission of IP tunneling").await;
                         sleep(1.).await;
                         return false;
                     }
                     let (addr, _is_rdp) = Self::normalize_port_forward_target(&mut pf);
                     self.port_forward_address = addr;
+                    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+                    if let Some(target) = self.nikodesk_tunnel_target_label() { self.port_forward_address = target; }
                 }
                 _ => {
                     if !self.check_privacy_mode_on().await {
@@ -3188,10 +3514,25 @@ impl Connection {
                 return true;
             }
             if let Some(totp) = self.require_2fa.as_ref() {
-                if let Ok(res) = totp.check_current(&tfa.code) {
+                #[cfg(feature="nikodesk")]
+                let checked = crate::nikodesk::totp_replay::check_login(totp, &tfa.code).await;
+                #[cfg(not(feature="nikodesk"))]
+                let checked = totp.check_current(&tfa.code);
+                #[cfg(feature="nikodesk")]
+                if checked.is_err() {
+                    self.send_login_error("Two-factor verification is unavailable or its settings changed. Reconnect after checking the controlled device.").await;
+                    return true;
+                }
+                if let Ok(res) = checked {
                     if res {
                         #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
                         self.niko_terminal.record_verified_totp();
+                        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+                        self.niko_camera.record_verified_totp();
+                        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+                        {self.niko_voice_totp_verified=true;}
+                        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+                        {self.niko_tunnel.totp_verified();}
                         self.update_failure(failure, true, 1);
                         self.require_2fa.take();
                         self.set_conn_audit_two_factor(ConnAuditTwoFactor::Totp);
@@ -3229,10 +3570,12 @@ impl Connection {
                 if let Some(tm) = self.last_test_delay {
                     self.last_test_delay = None;
                     let new_delay = tm.elapsed().as_millis() as u32;
+                    if !cfg!(feature="nikodesk") || !self.view_camera {
                     video_service::VIDEO_QOS
                         .lock()
                         .unwrap()
                         .user_network_delay(self.inner.id(), new_delay);
+                    }
                     self.network_delay = new_delay;
                 }
             }
@@ -3975,9 +4318,12 @@ impl Connection {
                         let set = displays.set.iter().map(|d| *d as usize).collect::<Vec<_>>();
                         self.capture_displays(&add, &sub, &set).await;
                     }
-                    #[cfg(windows)]
+                    #[cfg(any(windows,all(feature="nikodesk",target_os="macos")))]
                     Some(misc::Union::ToggleVirtualDisplay(t)) => {
                         if !self.view_camera {
+                            #[cfg(feature="nikodesk")]
+                            self.toggle_nikodesk_virtual_display(t).await;
+                            #[cfg(not(feature="nikodesk"))]
                             self.toggle_virtual_display(t).await;
                         }
                     }
@@ -4020,9 +4366,18 @@ impl Connection {
                             Some(Instant::now().into()),
                         );
                     }
-                    Some(misc::Union::RestartRemoteDevice(_)) => {
+                    Some(misc::Union::RestartRemoteDevice(requested)) => {
+                        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+                        self.restart_nikodesk_device(requested).await;
+                        #[cfg(not(all(feature="nikodesk",any(target_os="macos",target_os="windows"))))]
+                        {
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                        if self.restart {
+                        if self.restart && {
+                            #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+                            { requested && self.nikodesk_restart_allowed() }
+                            #[cfg(not(all(feature="nikodesk",any(target_os="macos",target_os="windows"))))]
+                            { true }
+                        } {
                             // force_reboot, not work on linux vm and macos 14
                             #[cfg(any(target_os = "linux", target_os = "windows"))]
                             match system_shutdown::force_reboot() {
@@ -4034,6 +4389,7 @@ impl Connection {
                                 Ok(_) => log::info!("Restart by the peer"),
                                 Err(e) => log::error!("Failed to restart: {}", e),
                             }
+                        }
                         }
                     }
                     #[cfg(windows)]
@@ -4850,7 +5206,7 @@ impl Connection {
         }
     }
 
-    #[cfg(windows)]
+    #[cfg(all(windows,not(feature="nikodesk")))]
     async fn toggle_virtual_display(&mut self, t: ToggleVirtualDisplay) {
         let make_msg = |text: String| {
             let mut msg_out = Message::new();
@@ -4907,7 +5263,7 @@ impl Connection {
                 let display_idx = d.unwrap_or(self.display_idx);
                 if let Some(display) = displays.get(display_idx) {
                     let name = display.name();
-                    #[cfg(windows)]
+                    #[cfg(all(windows,not(feature="nikodesk")))]
                     if let Some(_ok) =
                         virtual_display_manager::rustdesk_idd::change_resolution_if_is_virtual_display(
                             &name,
@@ -4919,7 +5275,7 @@ impl Connection {
                     }
                     #[allow(unused_mut)]
                     let mut record_changed = true;
-                    #[cfg(windows)]
+                    #[cfg(all(windows,not(feature="nikodesk")))]
                     if virtual_display_manager::amyuni_idd::is_my_display(&name) {
                         record_changed = false;
                     }
@@ -5135,6 +5491,8 @@ impl Connection {
             if q != BoolOption::NotSet {
                 self.disable_keyboard = q == BoolOption::Yes;
                 #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
+                crate::nikodesk::auto_lock::permission(self.inner.id(), self.peer_keyboard_enabled());
+                #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
                 self.niko_input.set_enabled(self.peer_keyboard_enabled());
                 if let Some(s) = self.server.upgrade() {
                     s.write().unwrap().subscribe(
@@ -5251,7 +5609,8 @@ impl Connection {
     }
 
     async fn turn_on_privacy(&mut self, impl_key: String) {
-        if !self.is_authed_remote_conn() || !self.privacy_mode {
+        if !self.is_authed_remote_conn() || !self.privacy_mode
+            || cfg!(feature = "nikodesk") && (!self.stream.is_secured() || !self.peer_keyboard_enabled()) {
             let msg_out = crate::common::make_privacy_mode_msg(
                 back_notification::PrivacyModeState::PrvOnFailedDenied,
                 impl_key,
@@ -5390,8 +5749,22 @@ impl Connection {
             return;
         }
         self.closed = true;
+        #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
+        if let Some(audit) = self.niko_audit.as_mut() { audit.finish(); }
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        self.revoke_nikodesk_virtual_displays();
+        #[cfg(feature = "nikodesk")]
+        if privacy_mode::get_privacy_mode_conn_id() == Some(self.inner.id()) {
+            let _ = privacy_mode::turn_off_privacy(self.inner.id(), None);
+        }
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        self.retire_nikodesk_voice();
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        self.retire_nikodesk_tunnel();
         #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
         self.revoke_nikodesk_terminal(None,"Connection closed").await;
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        if let Ok(status)=self.niko_camera.begin_cleanup() {self.send_to_cm(Data::NikoCameraRetired(status));}
         #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
         self.niko_input.close();
         // If voice A,B -> C, and A,B has voice call
@@ -5406,6 +5779,9 @@ impl Connection {
         #[cfg(not(feature = "nikodesk"))]
         crate::audio_service::set_voice_call_input_device(None, true);
         log::info!("#{} Connection closed: {}", self.inner.id(), reason);
+        #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
+        crate::nikodesk::auto_lock::disconnected(self.inner.id(), lock, self.lock_after_session_end);
+        #[cfg(not(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows"))))]
         if lock
             && self.lock_after_session_end
             && self.keyboard
@@ -5422,7 +5798,19 @@ impl Connection {
         };
         #[cfg(any(target_os = "android", target_os = "ios"))]
         let data = ipc::Data::Close;
-        self.tx_to_cm.send(data).ok();
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        let camera_retired = self.niko_camera.identity.is_some();
+        #[cfg(not(all(feature="nikodesk",any(target_os="macos",target_os="windows"))))]
+        let camera_retired = false;
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        let voice_retired=self.niko_voice_retiring.load(Ordering::Acquire);
+        #[cfg(not(all(feature="nikodesk",any(target_os="macos",target_os="windows"))))]
+        let voice_retired=false;
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        let tunnel_retired = self.niko_tunnel.needs_cleanup();
+        #[cfg(not(all(feature="nikodesk",any(target_os="macos",target_os="windows"))))]
+        let tunnel_retired = false;
+        if !camera_retired && !voice_retired && !tunnel_retired { self.tx_to_cm.send(data).ok(); }
         self.port_forward_socket.take();
         if let Some(mut mux) = self.port_forward_mux.take() {
             mux.close_all();
@@ -5816,6 +6204,8 @@ impl Connection {
 
     #[cfg(feature = "hwcodec")]
     fn update_supported_encoding(&mut self) {
+        #[cfg(feature="nikodesk")]
+        if self.view_camera {return;}
         let Some(last) = &self.last_supported_encoding else {
             return;
         };
@@ -6357,6 +6747,49 @@ impl Connection {
         self.send(msg_out).await;
     }
 
+    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+    async fn handle_nikodesk_camera_command(&mut self,command:crate::nikodesk::camera_flow::Command)->bool {
+        match self.niko_camera.command(command).await {
+            Ok((status,catalog,close))=>{
+                self.send_to_cm(Data::NikoCameraStatus(status));
+                if let Some(catalog)=catalog {self.send_to_cm(Data::NikoCameraCatalog(catalog));}
+                if close {self.on_close("camera_grant_revoked",false).await;let _=tokio::time::timeout(Duration::from_millis(100),self.send_close_reason_no_retry("camera_grant_revoked")).await;return false;}
+            }
+            Err(_)=>{if let Ok(status)=self.niko_camera.rejected_status(){self.send_to_cm(Data::NikoCameraStatus(status));}}
+        }
+        true
+    }
+    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+    async fn poll_nikodesk_camera(&mut self)->bool {
+        match self.niko_camera.poll().await {
+            Ok((status,catalog,packet,close))=>{
+                if let Some(status)=status {self.send_to_cm(Data::NikoCameraStatus(status));}
+                if let Some(catalog)=catalog {self.send_to_cm(Data::NikoCameraCatalog(catalog));}
+                if close {self.on_close("camera_grant_revoked",false).await;let _=tokio::time::timeout(Duration::from_millis(100),self.send_close_reason_no_retry("camera_grant_revoked")).await;return false;}
+                if let Some(packet)=packet {
+                    if self.niko_camera.status("").map_or(false,|status|status.phase=="Starting") {
+                        if let Some(selection)=self.niko_camera.selection_info().cloned() {
+                            let approved=match self.niko_camera.approved_peer_info(){Ok(info)=>info,Err(_)=>{self.on_close("camera_metadata_unavailable",false).await;return false;}};
+                            let mut info=Message::new();info.set_peer_info(approved);
+                            if !matches!(tokio::time::timeout(Duration::from_secs(2),self.stream.send(&info)).await,Ok(Ok(()))) {self.on_close("camera_metadata_send_failed",false).await;return false;}
+                            let mut misc=Misc::new();misc.set_switch_display(SwitchDisplay{display:0,width:selection.width as i32,height:selection.height as i32,..Default::default()});
+                            let mut dimensions=Message::new();dimensions.set_misc(misc);
+                            if !matches!(tokio::time::timeout(Duration::from_secs(2),self.stream.send(&dimensions)).await,Ok(Ok(()))) {self.on_close("camera_dimensions_send_failed",false).await;return false;}
+                        }
+                    }
+                    if !matches!(tokio::time::timeout(Duration::from_secs(2),self.stream.send(&packet)).await,Ok(Ok(()))) {self.on_close("camera_packet_send_failed",false).await;return false;}
+                    match self.niko_camera.packet_sent().await {
+                        Ok(Some(status))=>self.send_to_cm(Data::NikoCameraStatus(status)),
+                        Ok(None)=>{},
+                        Err(_)=>{self.on_close("camera_send_ack_stale",false).await;return false;}
+                    }
+                }
+            }
+            Err(_)=>{self.on_close("camera_poll_failed",false).await;return false;}
+        }
+        true
+    }
+
     #[cfg(all(feature="nikodesk",not(any(target_os="android",target_os="ios"))))]
     async fn prepare_nikodesk_terminal_request(&mut self)->ResultType<()> { self.niko_terminal.prepare().await }
 
@@ -6884,6 +7317,10 @@ impl Default for PortableState {
 
 impl Drop for Connection {
     fn drop(&mut self) {
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        self.revoke_nikodesk_virtual_displays();
+        #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
+        crate::nikodesk::auto_lock::forget(self.inner.id());
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         self.release_pressed_modifiers();
 
@@ -7074,7 +7511,7 @@ mod raii {
             _ONCE.call_once(|| {
                 shutdown_hooks::add_shutdown_hook(connection_shutdown_hook);
             });
-            if conn_type == AuthConnType::Remote || conn_type == AuthConnType::ViewCamera {
+            if conn_type == AuthConnType::Remote || !cfg!(feature="nikodesk") && conn_type == AuthConnType::ViewCamera {
                 video_service::VIDEO_QOS
                     .lock()
                     .unwrap()
@@ -7195,7 +7632,7 @@ mod raii {
 
     impl Drop for AuthedConnID {
         fn drop(&mut self) {
-            if self.1 == AuthConnType::Remote || self.1 == AuthConnType::ViewCamera {
+            if self.1 == AuthConnType::Remote || !cfg!(feature="nikodesk") && self.1 == AuthConnType::ViewCamera {
                 scrap::codec::Encoder::update(scrap::codec::EncodingUpdate::Remove(self.0));
                 video_service::VIDEO_QOS
                     .lock()
@@ -7212,14 +7649,14 @@ mod raii {
                 .iter()
                 .filter(|c| c.conn_type == AuthConnType::Remote)
                 .count();
-            if remote_count == 0 {
+            if remote_count == 0 && (!cfg!(feature="nikodesk") || self.1 == AuthConnType::Remote) {
                 #[cfg(any(target_os = "windows", target_os = "linux"))]
                 {
                     *WALLPAPER_REMOVER.lock().unwrap() = None;
                 }
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 display_service::restore_resolutions();
-                #[cfg(windows)]
+                #[cfg(all(windows,not(feature="nikodesk")))]
                 let _ = virtual_display_manager::reset_all();
                 #[cfg(target_os = "linux")]
                 scrap::wayland::pipewire::try_close_session();
@@ -7593,6 +8030,34 @@ mod test {
         let mut moved_port = port_forward("localhost");
         moved_port.mut_port_forward().port = 22;
         assert_ne!(scope(&first), scope(&moved_port));
+        let mut typed = first.clone();
+        typed.mut_port_forward().multiplex = true;
+        typed.mut_port_forward().nikodesk_protocol = 1;
+        typed.mut_port_forward().nikodesk_binding = Some(NikoTunnelBinding {
+            protocol: 1,
+            nonce: vec![1; 16].into(),
+            epoch: 1,
+            ..Default::default()
+        }).into();
+        let typed_scope = scope(&typed);
+        assert_ne!(scope(&first), typed_scope);
+        let mut changed = typed.clone();
+        changed.password = "new-credential".into();
+        assert_eq!(typed_scope, scope(&changed));
+        changed.mut_port_forward().nikodesk_protocol = 2;
+        assert_ne!(typed_scope, scope(&changed));
+        changed = typed.clone();
+        changed.mut_port_forward().nikodesk_binding.mut_or_insert_default().nonce = vec![2; 16].into();
+        assert_ne!(typed_scope, scope(&changed));
+        changed = typed.clone();
+        changed.mut_port_forward().nikodesk_binding.mut_or_insert_default().epoch = 2;
+        assert_ne!(typed_scope, scope(&changed));
+        changed = typed.clone();
+        changed.mut_port_forward().nikodesk_binding.mut_or_insert_default().protocol = 2;
+        assert_ne!(typed_scope, scope(&changed));
+        changed = typed;
+        changed.mut_port_forward().nikodesk_binding = None.into();
+        assert_ne!(typed_scope, scope(&changed));
         let terminal = |service_id: &str| {
             let mut lr = LoginRequest::new();
             lr.my_id = "peer".to_owned();

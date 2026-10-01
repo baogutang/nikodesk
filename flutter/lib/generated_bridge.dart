@@ -1102,6 +1102,25 @@ abstract class Rustdesk {
 
   FlutterRustBridgeTaskConstMeta get kSessionAddPortForwardConstMeta;
 
+  Future<String> sessionNikoTunnelCommand(
+      {required UuidValue sessionId, required String json, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kSessionNikoTunnelCommandConstMeta;
+
+  Future<String> sessionNikoTunnelClose(
+      {required UuidValue sessionId, required String json, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kSessionNikoTunnelCloseConstMeta;
+
+  Future<String> sessionNikoTunnelQuery(
+      {required UuidValue sessionId, required String json, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kSessionNikoTunnelQueryConstMeta;
+
+  Future<String> sessionNikoTunnelRetired({dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kSessionNikoTunnelRetiredConstMeta;
+
   Future<void> sessionRemovePortForward(
       {required UuidValue sessionId, required int localPort, dynamic hint});
 
@@ -1814,6 +1833,76 @@ abstract class Rustdesk {
       {required String json, dynamic hint});
 
   FlutterRustBridgeTaskConstMeta get kCmNikodeskCapabilityRevokeConstMeta;
+
+  /// Queue an identity-bound local camera action; native status events report completion.
+  String cmNikodeskCameraCommand({required String json, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kCmNikodeskCameraCommandConstMeta;
+
+  Future<String> sessionVoicePrepare(
+      {required UuidValue sessionId, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kSessionVoicePrepareConstMeta;
+
+  Future<String> sessionVoiceCommand(
+      {required UuidValue sessionId, required String json, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kSessionVoiceCommandConstMeta;
+
+  Future<String> sessionVoiceAvailability(
+      {required UuidValue sessionId, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kSessionVoiceAvailabilityConstMeta;
+
+  Future<String> cmVoiceCommand({required String json, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kCmVoiceCommandConstMeta;
+
+  Future<String> cmTunnelCommand({required String json, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kCmTunnelCommandConstMeta;
+
+  Future<String> cmVoiceAvailability(
+      {required String jsonIdentity, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kCmVoiceAvailabilityConstMeta;
+
+  Future<String> voicePendingCleanup({dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kVoicePendingCleanupConstMeta;
+
+  Future<String> mainNikoUnattendedInstallBegin(
+      {required String json, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kMainNikoUnattendedInstallBeginConstMeta;
+
+  Future<String> mainNikoUnattendedInstallStatus(
+      {required String jobId, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kMainNikoUnattendedInstallStatusConstMeta;
+
+  Future<String> mainNikoUnattendedInstallCurrent({dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kMainNikoUnattendedInstallCurrentConstMeta;
+
+  Future<String> mainNikoUnattendedInstallCancel(
+      {required String jobId, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kMainNikoUnattendedInstallCancelConstMeta;
+
+  Future<String> mainNikoSessionAudit(
+      {required String namespace, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kMainNikoSessionAuditConstMeta;
+
+  Future<String> mainNikoSessionAuditClear(
+      {required String namespace, required String revision, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kMainNikoSessionAuditClearConstMeta;
+
+  Future<String> mainNikoVirtualDriver({required String json, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kMainNikoVirtualDriverConstMeta;
 }
 
 class CursorShape {
@@ -5743,6 +5832,83 @@ class RustdeskImpl implements Rustdesk {
         argNames: ["sessionId", "localPort", "remoteHost", "remotePort"],
       );
 
+  Future<String> sessionNikoTunnelCommand(
+      {required UuidValue sessionId, required String json, dynamic hint}) {
+    var arg0 = _platform.api2wire_Uuid(sessionId);
+    var arg1 = _platform.api2wire_String(json);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_session_niko_tunnel_command(port_, arg0, arg1),
+      parseSuccessData: _wire2api_String,
+      constMeta: kSessionNikoTunnelCommandConstMeta,
+      argValues: [sessionId, json],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kSessionNikoTunnelCommandConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "session_niko_tunnel_command",
+        argNames: ["sessionId", "json"],
+      );
+
+  Future<String> sessionNikoTunnelClose(
+      {required UuidValue sessionId, required String json, dynamic hint}) {
+    var arg0 = _platform.api2wire_Uuid(sessionId);
+    var arg1 = _platform.api2wire_String(json);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_session_niko_tunnel_close(port_, arg0, arg1),
+      parseSuccessData: _wire2api_String,
+      constMeta: kSessionNikoTunnelCloseConstMeta,
+      argValues: [sessionId, json],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kSessionNikoTunnelCloseConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "session_niko_tunnel_close",
+        argNames: ["sessionId", "json"],
+      );
+
+  Future<String> sessionNikoTunnelQuery(
+      {required UuidValue sessionId, required String json, dynamic hint}) {
+    var arg0 = _platform.api2wire_Uuid(sessionId);
+    var arg1 = _platform.api2wire_String(json);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_session_niko_tunnel_query(port_, arg0, arg1),
+      parseSuccessData: _wire2api_String,
+      constMeta: kSessionNikoTunnelQueryConstMeta,
+      argValues: [sessionId, json],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kSessionNikoTunnelQueryConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "session_niko_tunnel_query",
+        argNames: ["sessionId", "json"],
+      );
+
+  Future<String> sessionNikoTunnelRetired({dynamic hint}) {
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_session_niko_tunnel_retired(port_),
+      parseSuccessData: _wire2api_String,
+      constMeta: kSessionNikoTunnelRetiredConstMeta,
+      argValues: [],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kSessionNikoTunnelRetiredConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "session_niko_tunnel_retired",
+        argNames: [],
+      );
+
   Future<void> sessionRemovePortForward(
       {required UuidValue sessionId, required int localPort, dynamic hint}) {
     var arg0 = _platform.api2wire_Uuid(sessionId);
@@ -8397,6 +8563,284 @@ class RustdeskImpl implements Rustdesk {
         argNames: ["json"],
       );
 
+  String cmNikodeskCameraCommand({required String json, dynamic hint}) {
+    var arg0 = _platform.api2wire_String(json);
+    return _platform.executeSync(FlutterRustBridgeSyncTask(
+      callFfi: () => _platform.inner.wire_cm_nikodesk_camera_command(arg0),
+      parseSuccessData: _wire2api_String,
+      constMeta: kCmNikodeskCameraCommandConstMeta,
+      argValues: [json],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kCmNikodeskCameraCommandConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "cm_nikodesk_camera_command",
+        argNames: ["json"],
+      );
+
+  Future<String> sessionVoicePrepare(
+      {required UuidValue sessionId, dynamic hint}) {
+    var arg0 = _platform.api2wire_Uuid(sessionId);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_session_voice_prepare(port_, arg0),
+      parseSuccessData: _wire2api_String,
+      constMeta: kSessionVoicePrepareConstMeta,
+      argValues: [sessionId],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kSessionVoicePrepareConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "session_voice_prepare",
+        argNames: ["sessionId"],
+      );
+
+  Future<String> sessionVoiceCommand(
+      {required UuidValue sessionId, required String json, dynamic hint}) {
+    var arg0 = _platform.api2wire_Uuid(sessionId);
+    var arg1 = _platform.api2wire_String(json);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_session_voice_command(port_, arg0, arg1),
+      parseSuccessData: _wire2api_String,
+      constMeta: kSessionVoiceCommandConstMeta,
+      argValues: [sessionId, json],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kSessionVoiceCommandConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "session_voice_command",
+        argNames: ["sessionId", "json"],
+      );
+
+  Future<String> sessionVoiceAvailability(
+      {required UuidValue sessionId, dynamic hint}) {
+    var arg0 = _platform.api2wire_Uuid(sessionId);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_session_voice_availability(port_, arg0),
+      parseSuccessData: _wire2api_String,
+      constMeta: kSessionVoiceAvailabilityConstMeta,
+      argValues: [sessionId],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kSessionVoiceAvailabilityConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "session_voice_availability",
+        argNames: ["sessionId"],
+      );
+
+  Future<String> cmVoiceCommand({required String json, dynamic hint}) {
+    var arg0 = _platform.api2wire_String(json);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) => _platform.inner.wire_cm_voice_command(port_, arg0),
+      parseSuccessData: _wire2api_String,
+      constMeta: kCmVoiceCommandConstMeta,
+      argValues: [json],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kCmVoiceCommandConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "cm_voice_command",
+        argNames: ["json"],
+      );
+
+  Future<String> cmTunnelCommand({required String json, dynamic hint}) {
+    var arg0 = _platform.api2wire_String(json);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) => _platform.inner.wire_cm_tunnel_command(port_, arg0),
+      parseSuccessData: _wire2api_String,
+      constMeta: kCmTunnelCommandConstMeta,
+      argValues: [json],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kCmTunnelCommandConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "cm_tunnel_command",
+        argNames: ["json"],
+      );
+
+  Future<String> cmVoiceAvailability(
+      {required String jsonIdentity, dynamic hint}) {
+    var arg0 = _platform.api2wire_String(jsonIdentity);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_cm_voice_availability(port_, arg0),
+      parseSuccessData: _wire2api_String,
+      constMeta: kCmVoiceAvailabilityConstMeta,
+      argValues: [jsonIdentity],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kCmVoiceAvailabilityConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "cm_voice_availability",
+        argNames: ["jsonIdentity"],
+      );
+
+  Future<String> voicePendingCleanup({dynamic hint}) {
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) => _platform.inner.wire_voice_pending_cleanup(port_),
+      parseSuccessData: _wire2api_String,
+      constMeta: kVoicePendingCleanupConstMeta,
+      argValues: [],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kVoicePendingCleanupConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "voice_pending_cleanup",
+        argNames: [],
+      );
+
+  Future<String> mainNikoUnattendedInstallBegin(
+      {required String json, dynamic hint}) {
+    var arg0 = _platform.api2wire_String(json);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_main_niko_unattended_install_begin(port_, arg0),
+      parseSuccessData: _wire2api_String,
+      constMeta: kMainNikoUnattendedInstallBeginConstMeta,
+      argValues: [json],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kMainNikoUnattendedInstallBeginConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "main_niko_unattended_install_begin",
+        argNames: ["json"],
+      );
+
+  Future<String> mainNikoUnattendedInstallStatus(
+      {required String jobId, dynamic hint}) {
+    var arg0 = _platform.api2wire_String(jobId);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_main_niko_unattended_install_status(port_, arg0),
+      parseSuccessData: _wire2api_String,
+      constMeta: kMainNikoUnattendedInstallStatusConstMeta,
+      argValues: [jobId],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta
+      get kMainNikoUnattendedInstallStatusConstMeta =>
+          const FlutterRustBridgeTaskConstMeta(
+            debugName: "main_niko_unattended_install_status",
+            argNames: ["jobId"],
+          );
+
+  Future<String> mainNikoUnattendedInstallCurrent({dynamic hint}) {
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_main_niko_unattended_install_current(port_),
+      parseSuccessData: _wire2api_String,
+      constMeta: kMainNikoUnattendedInstallCurrentConstMeta,
+      argValues: [],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta
+      get kMainNikoUnattendedInstallCurrentConstMeta =>
+          const FlutterRustBridgeTaskConstMeta(
+            debugName: "main_niko_unattended_install_current",
+            argNames: [],
+          );
+
+  Future<String> mainNikoUnattendedInstallCancel(
+      {required String jobId, dynamic hint}) {
+    var arg0 = _platform.api2wire_String(jobId);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_main_niko_unattended_install_cancel(port_, arg0),
+      parseSuccessData: _wire2api_String,
+      constMeta: kMainNikoUnattendedInstallCancelConstMeta,
+      argValues: [jobId],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta
+      get kMainNikoUnattendedInstallCancelConstMeta =>
+          const FlutterRustBridgeTaskConstMeta(
+            debugName: "main_niko_unattended_install_cancel",
+            argNames: ["jobId"],
+          );
+
+  Future<String> mainNikoSessionAudit(
+      {required String namespace, dynamic hint}) {
+    var arg0 = _platform.api2wire_String(namespace);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_main_niko_session_audit(port_, arg0),
+      parseSuccessData: _wire2api_String,
+      constMeta: kMainNikoSessionAuditConstMeta,
+      argValues: [namespace],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kMainNikoSessionAuditConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "main_niko_session_audit",
+        argNames: ["namespace"],
+      );
+
+  Future<String> mainNikoSessionAuditClear(
+      {required String namespace, required String revision, dynamic hint}) {
+    var arg0 = _platform.api2wire_String(namespace);
+    var arg1 = _platform.api2wire_String(revision);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_main_niko_session_audit_clear(port_, arg0, arg1),
+      parseSuccessData: _wire2api_String,
+      constMeta: kMainNikoSessionAuditClearConstMeta,
+      argValues: [namespace, revision],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kMainNikoSessionAuditClearConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "main_niko_session_audit_clear",
+        argNames: ["namespace", "revision"],
+      );
+
+  Future<String> mainNikoVirtualDriver({required String json, dynamic hint}) {
+    var arg0 = _platform.api2wire_String(json);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_main_niko_virtual_driver(port_, arg0),
+      parseSuccessData: _wire2api_String,
+      constMeta: kMainNikoVirtualDriverConstMeta,
+      argValues: [json],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kMainNikoVirtualDriverConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "main_niko_virtual_driver",
+        argNames: ["json"],
+      );
+
   void dispose() {
     _platform.dispose();
   }
@@ -8627,6 +9071,192 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
       ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
           lookup)
       : _lookup = lookup;
+
+  bool NikoMacVirtualDisplaySupported() {
+    return _NikoMacVirtualDisplaySupported();
+  }
+
+  late final _NikoMacVirtualDisplaySupportedPtr =
+      _lookup<ffi.NativeFunction<ffi.Bool Function()>>(
+          'NikoMacVirtualDisplaySupported');
+  late final _NikoMacVirtualDisplaySupported =
+      _NikoMacVirtualDisplaySupportedPtr.asFunction<bool Function()>();
+
+  ffi.Pointer<ffi.Void> NikoMacVirtualDisplayCreate(
+    int slot,
+    ffi.Pointer<ffi.Uint32> display_id,
+    ffi.Pointer<ffi.Uint32> serial,
+    ffi.Pointer<ffi.Bool> applied,
+  ) {
+    return _NikoMacVirtualDisplayCreate(
+      slot,
+      display_id,
+      serial,
+      applied,
+    );
+  }
+
+  late final _NikoMacVirtualDisplayCreatePtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Pointer<ffi.Void> Function(
+              ffi.Uint32,
+              ffi.Pointer<ffi.Uint32>,
+              ffi.Pointer<ffi.Uint32>,
+              ffi.Pointer<ffi.Bool>)>>('NikoMacVirtualDisplayCreate');
+  late final _NikoMacVirtualDisplayCreate =
+      _NikoMacVirtualDisplayCreatePtr.asFunction<
+          ffi.Pointer<ffi.Void> Function(int, ffi.Pointer<ffi.Uint32>,
+              ffi.Pointer<ffi.Uint32>, ffi.Pointer<ffi.Bool>)>();
+
+  bool NikoMacVirtualDisplayOnline(
+    int display_id,
+    int serial,
+  ) {
+    return _NikoMacVirtualDisplayOnline(
+      display_id,
+      serial,
+    );
+  }
+
+  late final _NikoMacVirtualDisplayOnlinePtr =
+      _lookup<ffi.NativeFunction<ffi.Bool Function(ffi.Uint32, ffi.Uint32)>>(
+          'NikoMacVirtualDisplayOnline');
+  late final _NikoMacVirtualDisplayOnline =
+      _NikoMacVirtualDisplayOnlinePtr.asFunction<bool Function(int, int)>();
+
+  void NikoMacVirtualDisplayRelease(
+    ffi.Pointer<ffi.Void> display,
+  ) {
+    return _NikoMacVirtualDisplayRelease(
+      display,
+    );
+  }
+
+  late final _NikoMacVirtualDisplayReleasePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>(
+          'NikoMacVirtualDisplayRelease');
+  late final _NikoMacVirtualDisplayRelease = _NikoMacVirtualDisplayReleasePtr
+      .asFunction<void Function(ffi.Pointer<ffi.Void>)>();
+
+  bool NikoMacBackgroundEnvironment() {
+    return _NikoMacBackgroundEnvironment();
+  }
+
+  late final _NikoMacBackgroundEnvironmentPtr =
+      _lookup<ffi.NativeFunction<ffi.Bool Function()>>(
+          'NikoMacBackgroundEnvironment');
+  late final _NikoMacBackgroundEnvironment =
+      _NikoMacBackgroundEnvironmentPtr.asFunction<bool Function()>();
+
+  void NikoMacBackgroundRunLoop() {
+    return _NikoMacBackgroundRunLoop();
+  }
+
+  late final _NikoMacBackgroundRunLoopPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function()>>(
+          'NikoMacBackgroundRunLoop');
+  late final _NikoMacBackgroundRunLoop =
+      _NikoMacBackgroundRunLoopPtr.asFunction<void Function()>();
+
+  int NKVoiceMicrophoneAuthorization() {
+    return _NKVoiceMicrophoneAuthorization();
+  }
+
+  late final _NKVoiceMicrophoneAuthorizationPtr =
+      _lookup<ffi.NativeFunction<ffi.Int32 Function()>>(
+          'NKVoiceMicrophoneAuthorization');
+  late final _NKVoiceMicrophoneAuthorization =
+      _NKVoiceMicrophoneAuthorizationPtr.asFunction<int Function()>();
+
+  int NKVoiceRequestMicrophoneAuthorization(
+    ffi.Pointer<
+            ffi.NativeFunction<
+                ffi.Void Function(ffi.Pointer<ffi.Void>, ffi.Int32)>>
+        completion,
+    ffi.Pointer<ffi.Void> context,
+  ) {
+    return _NKVoiceRequestMicrophoneAuthorization(
+      completion,
+      context,
+    );
+  }
+
+  late final _NKVoiceRequestMicrophoneAuthorizationPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Int32 Function(
+              ffi.Pointer<
+                  ffi.NativeFunction<
+                      ffi.Void Function(ffi.Pointer<ffi.Void>, ffi.Int32)>>,
+              ffi.Pointer<ffi.Void>)>>('NKVoiceRequestMicrophoneAuthorization');
+  late final _NKVoiceRequestMicrophoneAuthorization =
+      _NKVoiceRequestMicrophoneAuthorizationPtr.asFunction<
+          int Function(
+              ffi.Pointer<
+                  ffi.NativeFunction<
+                      ffi.Void Function(ffi.Pointer<ffi.Void>, ffi.Int32)>>,
+              ffi.Pointer<ffi.Void>)>();
+
+  int NKVoiceReadDeviceUID(
+    int device,
+    ffi.Pointer<ffi.Char> output,
+    int capacity,
+  ) {
+    return _NKVoiceReadDeviceUID(
+      device,
+      output,
+      capacity,
+    );
+  }
+
+  late final _NKVoiceReadDeviceUIDPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Int32 Function(ffi.Uint32, ffi.Pointer<ffi.Char>,
+              ffi.Uint32)>>('NKVoiceReadDeviceUID');
+  late final _NKVoiceReadDeviceUID = _NKVoiceReadDeviceUIDPtr.asFunction<
+      int Function(int, ffi.Pointer<ffi.Char>, int)>();
+
+  int NKVoiceReadDeviceMetadata(
+    int device,
+    ffi.Pointer<ffi.Uint32> capture,
+    ffi.Pointer<ffi.Uint32> playback,
+    ffi.Pointer<ffi.Double> rate,
+  ) {
+    return _NKVoiceReadDeviceMetadata(
+      device,
+      capture,
+      playback,
+      rate,
+    );
+  }
+
+  late final _NKVoiceReadDeviceMetadataPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Int32 Function(
+              ffi.Uint32,
+              ffi.Pointer<ffi.Uint32>,
+              ffi.Pointer<ffi.Uint32>,
+              ffi.Pointer<ffi.Double>)>>('NKVoiceReadDeviceMetadata');
+  late final _NKVoiceReadDeviceMetadata =
+      _NKVoiceReadDeviceMetadataPtr.asFunction<
+          int Function(int, ffi.Pointer<ffi.Uint32>, ffi.Pointer<ffi.Uint32>,
+              ffi.Pointer<ffi.Double>)>();
+
+  int NKVoiceDeviceMatches(
+    int device,
+    ffi.Pointer<ffi.Char> expected_uid,
+  ) {
+    return _NKVoiceDeviceMatches(
+      device,
+      expected_uid,
+    );
+  }
+
+  late final _NKVoiceDeviceMatchesPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Int32 Function(
+              ffi.Uint32, ffi.Pointer<ffi.Char>)>>('NKVoiceDeviceMatches');
+  late final _NKVoiceDeviceMatches = _NKVoiceDeviceMatchesPtr.asFunction<
+      int Function(int, ffi.Pointer<ffi.Char>)>();
 
   void store_dart_post_cobject(
     DartPostCObjectFnType ptr,
@@ -12427,6 +13057,86 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
           void Function(int, ffi.Pointer<wire_uint_8_list>, int,
               ffi.Pointer<wire_uint_8_list>, int)>();
 
+  void wire_session_niko_tunnel_command(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> session_id,
+    ffi.Pointer<wire_uint_8_list> json,
+  ) {
+    return _wire_session_niko_tunnel_command(
+      port_,
+      session_id,
+      json,
+    );
+  }
+
+  late final _wire_session_niko_tunnel_commandPtr = _lookup<
+          ffi.NativeFunction<
+              ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_session_niko_tunnel_command');
+  late final _wire_session_niko_tunnel_command =
+      _wire_session_niko_tunnel_commandPtr.asFunction<
+          void Function(int, ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>)>();
+
+  void wire_session_niko_tunnel_close(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> session_id,
+    ffi.Pointer<wire_uint_8_list> json,
+  ) {
+    return _wire_session_niko_tunnel_close(
+      port_,
+      session_id,
+      json,
+    );
+  }
+
+  late final _wire_session_niko_tunnel_closePtr = _lookup<
+          ffi.NativeFunction<
+              ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_session_niko_tunnel_close');
+  late final _wire_session_niko_tunnel_close =
+      _wire_session_niko_tunnel_closePtr.asFunction<
+          void Function(int, ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>)>();
+
+  void wire_session_niko_tunnel_query(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> session_id,
+    ffi.Pointer<wire_uint_8_list> json,
+  ) {
+    return _wire_session_niko_tunnel_query(
+      port_,
+      session_id,
+      json,
+    );
+  }
+
+  late final _wire_session_niko_tunnel_queryPtr = _lookup<
+          ffi.NativeFunction<
+              ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_session_niko_tunnel_query');
+  late final _wire_session_niko_tunnel_query =
+      _wire_session_niko_tunnel_queryPtr.asFunction<
+          void Function(int, ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>)>();
+
+  void wire_session_niko_tunnel_retired(
+    int port_,
+  ) {
+    return _wire_session_niko_tunnel_retired(
+      port_,
+    );
+  }
+
+  late final _wire_session_niko_tunnel_retiredPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int64)>>(
+          'wire_session_niko_tunnel_retired');
+  late final _wire_session_niko_tunnel_retired =
+      _wire_session_niko_tunnel_retiredPtr.asFunction<void Function(int)>();
+
   void wire_session_remove_port_forward(
     int port_,
     ffi.Pointer<wire_uint_8_list> session_id,
@@ -14709,6 +15419,268 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
       _wire_cm_nikodesk_capability_revokePtr
           .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>)>();
 
+  WireSyncReturn wire_cm_nikodesk_camera_command(
+    ffi.Pointer<wire_uint_8_list> json,
+  ) {
+    return _wire_cm_nikodesk_camera_command(
+      json,
+    );
+  }
+
+  late final _wire_cm_nikodesk_camera_commandPtr = _lookup<
+          ffi.NativeFunction<
+              WireSyncReturn Function(ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_cm_nikodesk_camera_command');
+  late final _wire_cm_nikodesk_camera_command =
+      _wire_cm_nikodesk_camera_commandPtr
+          .asFunction<WireSyncReturn Function(ffi.Pointer<wire_uint_8_list>)>();
+
+  void wire_session_voice_prepare(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> session_id,
+  ) {
+    return _wire_session_voice_prepare(
+      port_,
+      session_id,
+    );
+  }
+
+  late final _wire_session_voice_preparePtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(ffi.Int64,
+              ffi.Pointer<wire_uint_8_list>)>>('wire_session_voice_prepare');
+  late final _wire_session_voice_prepare = _wire_session_voice_preparePtr
+      .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>)>();
+
+  void wire_session_voice_command(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> session_id,
+    ffi.Pointer<wire_uint_8_list> json,
+  ) {
+    return _wire_session_voice_command(
+      port_,
+      session_id,
+      json,
+    );
+  }
+
+  late final _wire_session_voice_commandPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>)>>('wire_session_voice_command');
+  late final _wire_session_voice_command =
+      _wire_session_voice_commandPtr.asFunction<
+          void Function(int, ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>)>();
+
+  void wire_session_voice_availability(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> session_id,
+  ) {
+    return _wire_session_voice_availability(
+      port_,
+      session_id,
+    );
+  }
+
+  late final _wire_session_voice_availabilityPtr = _lookup<
+          ffi.NativeFunction<
+              ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_session_voice_availability');
+  late final _wire_session_voice_availability =
+      _wire_session_voice_availabilityPtr
+          .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>)>();
+
+  void wire_cm_voice_command(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> json,
+  ) {
+    return _wire_cm_voice_command(
+      port_,
+      json,
+    );
+  }
+
+  late final _wire_cm_voice_commandPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(ffi.Int64,
+              ffi.Pointer<wire_uint_8_list>)>>('wire_cm_voice_command');
+  late final _wire_cm_voice_command = _wire_cm_voice_commandPtr
+      .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>)>();
+
+  void wire_cm_tunnel_command(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> json,
+  ) {
+    return _wire_cm_tunnel_command(
+      port_,
+      json,
+    );
+  }
+
+  late final _wire_cm_tunnel_commandPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(ffi.Int64,
+              ffi.Pointer<wire_uint_8_list>)>>('wire_cm_tunnel_command');
+  late final _wire_cm_tunnel_command = _wire_cm_tunnel_commandPtr
+      .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>)>();
+
+  void wire_cm_voice_availability(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> json_identity,
+  ) {
+    return _wire_cm_voice_availability(
+      port_,
+      json_identity,
+    );
+  }
+
+  late final _wire_cm_voice_availabilityPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(ffi.Int64,
+              ffi.Pointer<wire_uint_8_list>)>>('wire_cm_voice_availability');
+  late final _wire_cm_voice_availability = _wire_cm_voice_availabilityPtr
+      .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>)>();
+
+  void wire_voice_pending_cleanup(
+    int port_,
+  ) {
+    return _wire_voice_pending_cleanup(
+      port_,
+    );
+  }
+
+  late final _wire_voice_pending_cleanupPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int64)>>(
+          'wire_voice_pending_cleanup');
+  late final _wire_voice_pending_cleanup =
+      _wire_voice_pending_cleanupPtr.asFunction<void Function(int)>();
+
+  void wire_main_niko_unattended_install_begin(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> json,
+  ) {
+    return _wire_main_niko_unattended_install_begin(
+      port_,
+      json,
+    );
+  }
+
+  late final _wire_main_niko_unattended_install_beginPtr = _lookup<
+          ffi.NativeFunction<
+              ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_main_niko_unattended_install_begin');
+  late final _wire_main_niko_unattended_install_begin =
+      _wire_main_niko_unattended_install_beginPtr
+          .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>)>();
+
+  void wire_main_niko_unattended_install_status(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> job_id,
+  ) {
+    return _wire_main_niko_unattended_install_status(
+      port_,
+      job_id,
+    );
+  }
+
+  late final _wire_main_niko_unattended_install_statusPtr = _lookup<
+          ffi.NativeFunction<
+              ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_main_niko_unattended_install_status');
+  late final _wire_main_niko_unattended_install_status =
+      _wire_main_niko_unattended_install_statusPtr
+          .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>)>();
+
+  void wire_main_niko_unattended_install_current(
+    int port_,
+  ) {
+    return _wire_main_niko_unattended_install_current(
+      port_,
+    );
+  }
+
+  late final _wire_main_niko_unattended_install_currentPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int64)>>(
+          'wire_main_niko_unattended_install_current');
+  late final _wire_main_niko_unattended_install_current =
+      _wire_main_niko_unattended_install_currentPtr
+          .asFunction<void Function(int)>();
+
+  void wire_main_niko_unattended_install_cancel(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> job_id,
+  ) {
+    return _wire_main_niko_unattended_install_cancel(
+      port_,
+      job_id,
+    );
+  }
+
+  late final _wire_main_niko_unattended_install_cancelPtr = _lookup<
+          ffi.NativeFunction<
+              ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_main_niko_unattended_install_cancel');
+  late final _wire_main_niko_unattended_install_cancel =
+      _wire_main_niko_unattended_install_cancelPtr
+          .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>)>();
+
+  void wire_main_niko_session_audit(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> namespace_,
+  ) {
+    return _wire_main_niko_session_audit(
+      port_,
+      namespace_,
+    );
+  }
+
+  late final _wire_main_niko_session_auditPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(ffi.Int64,
+              ffi.Pointer<wire_uint_8_list>)>>('wire_main_niko_session_audit');
+  late final _wire_main_niko_session_audit = _wire_main_niko_session_auditPtr
+      .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>)>();
+
+  void wire_main_niko_session_audit_clear(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> namespace_,
+    ffi.Pointer<wire_uint_8_list> revision,
+  ) {
+    return _wire_main_niko_session_audit_clear(
+      port_,
+      namespace_,
+      revision,
+    );
+  }
+
+  late final _wire_main_niko_session_audit_clearPtr = _lookup<
+          ffi.NativeFunction<
+              ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_main_niko_session_audit_clear');
+  late final _wire_main_niko_session_audit_clear =
+      _wire_main_niko_session_audit_clearPtr.asFunction<
+          void Function(int, ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>)>();
+
+  void wire_main_niko_virtual_driver(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> json,
+  ) {
+    return _wire_main_niko_virtual_driver(
+      port_,
+      json,
+    );
+  }
+
+  late final _wire_main_niko_virtual_driverPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(ffi.Int64,
+              ffi.Pointer<wire_uint_8_list>)>>('wire_main_niko_virtual_driver');
+  late final _wire_main_niko_virtual_driver = _wire_main_niko_virtual_driverPtr
+      .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>)>();
+
   ffi.Pointer<wire_StringList> new_StringList_0(
     int len,
   ) {
@@ -14938,6 +15910,16 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
           'MacSetPrivacyMode');
   late final _MacSetPrivacyMode =
       _MacSetPrivacyModePtr.asFunction<bool Function(bool)>();
+
+  bool NikoMacPrivacyModeActive() {
+    return _NikoMacPrivacyModeActive();
+  }
+
+  late final _NikoMacPrivacyModeActivePtr =
+      _lookup<ffi.NativeFunction<ffi.Bool Function()>>(
+          'NikoMacPrivacyModeActive');
+  late final _NikoMacPrivacyModeActive =
+      _NikoMacPrivacyModeActivePtr.asFunction<bool Function()>();
 }
 
 final class _Dart_Handle extends ffi.Opaque {}
@@ -14990,6 +15972,22 @@ typedef XID = ffi.UnsignedLong;
 const int VIDEO_QUEUE_SIZE = 120;
 
 const int AUDIO_BUFFER_MS = 3000;
+
+const int MAX_PAYLOAD_BYTES = 536870912;
+
+const int MAX_TOTAL_BYTES = -2147483648;
+
+const int MAX_DISPLAYS = 16;
+
+const int MAX_STAGE_SAMPLES = 8;
+
+const int SAMPLE_RATE = 48000;
+
+const int FRAME_SAMPLES = 480;
+
+const int QUEUE_FRAMES = 10;
+
+const int MAX_OPUS_BYTES = 1275;
 
 const int CLIPBOARD_INTERVAL = 333;
 

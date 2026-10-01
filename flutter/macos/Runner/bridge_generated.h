@@ -7,6 +7,22 @@ typedef struct _Dart_Handle* Dart_Handle;
 
 #define AUDIO_BUFFER_MS 3000
 
+#define MAX_PAYLOAD_BYTES ((512 * 1024) * 1024)
+
+#define MAX_TOTAL_BYTES (((2 * 1024) * 1024) * 1024)
+
+#define MAX_DISPLAYS 16
+
+#define MAX_STAGE_SAMPLES 8
+
+#define SAMPLE_RATE 48000
+
+#define FRAME_SAMPLES 480
+
+#define QUEUE_FRAMES 10
+
+#define MAX_OPUS_BYTES 1275
+
 #define CLIPBOARD_INTERVAL 333
 
 /**
@@ -89,6 +105,35 @@ typedef struct XRectangle {
 #define CONFIG_INPUT_SOURCE_DEFAULT CONFIG_INPUT_SOURCE_1
 
 #define INJECTED_PROCESS_EXE WIN_TOPMOST_INJECTED_PROCESS_EXE
+
+extern bool NikoMacVirtualDisplaySupported(void);
+
+extern void *NikoMacVirtualDisplayCreate(uint32_t slot,
+                                         uint32_t *display_id,
+                                         uint32_t *serial,
+                                         bool *applied);
+
+extern bool NikoMacVirtualDisplayOnline(uint32_t display_id, uint32_t serial);
+
+extern void NikoMacVirtualDisplayRelease(void *display);
+
+extern bool NikoMacBackgroundEnvironment(void);
+
+extern void NikoMacBackgroundRunLoop(void);
+
+extern int32_t NKVoiceMicrophoneAuthorization(void);
+
+extern int32_t NKVoiceRequestMicrophoneAuthorization(void (*completion)(void*, int32_t),
+                                                     void *context);
+
+extern int32_t NKVoiceReadDeviceUID(uint32_t device, char *output, uint32_t capacity);
+
+extern int32_t NKVoiceReadDeviceMetadata(uint32_t device,
+                                         uint32_t *capture,
+                                         uint32_t *playback,
+                                         double *rate);
+
+extern int32_t NKVoiceDeviceMatches(uint32_t device, const char *expected_uid);
 
 void store_dart_post_cobject(DartPostCObjectFnType ptr);
 
@@ -737,6 +782,20 @@ void wire_session_add_port_forward(int64_t port_,
                                    struct wire_uint_8_list *remote_host,
                                    int32_t remote_port);
 
+void wire_session_niko_tunnel_command(int64_t port_,
+                                      struct wire_uint_8_list *session_id,
+                                      struct wire_uint_8_list *json);
+
+void wire_session_niko_tunnel_close(int64_t port_,
+                                    struct wire_uint_8_list *session_id,
+                                    struct wire_uint_8_list *json);
+
+void wire_session_niko_tunnel_query(int64_t port_,
+                                    struct wire_uint_8_list *session_id,
+                                    struct wire_uint_8_list *json);
+
+void wire_session_niko_tunnel_retired(int64_t port_);
+
 void wire_session_remove_port_forward(int64_t port_,
                                       struct wire_uint_8_list *session_id,
                                       int32_t local_port);
@@ -1083,6 +1142,40 @@ void wire_cm_nikodesk_capability_decision(int64_t port_, struct wire_uint_8_list
 
 void wire_cm_nikodesk_capability_revoke(int64_t port_, struct wire_uint_8_list *json);
 
+WireSyncReturn wire_cm_nikodesk_camera_command(struct wire_uint_8_list *json);
+
+void wire_session_voice_prepare(int64_t port_, struct wire_uint_8_list *session_id);
+
+void wire_session_voice_command(int64_t port_,
+                                struct wire_uint_8_list *session_id,
+                                struct wire_uint_8_list *json);
+
+void wire_session_voice_availability(int64_t port_, struct wire_uint_8_list *session_id);
+
+void wire_cm_voice_command(int64_t port_, struct wire_uint_8_list *json);
+
+void wire_cm_tunnel_command(int64_t port_, struct wire_uint_8_list *json);
+
+void wire_cm_voice_availability(int64_t port_, struct wire_uint_8_list *json_identity);
+
+void wire_voice_pending_cleanup(int64_t port_);
+
+void wire_main_niko_unattended_install_begin(int64_t port_, struct wire_uint_8_list *json);
+
+void wire_main_niko_unattended_install_status(int64_t port_, struct wire_uint_8_list *job_id);
+
+void wire_main_niko_unattended_install_current(int64_t port_);
+
+void wire_main_niko_unattended_install_cancel(int64_t port_, struct wire_uint_8_list *job_id);
+
+void wire_main_niko_session_audit(int64_t port_, struct wire_uint_8_list *namespace_);
+
+void wire_main_niko_session_audit_clear(int64_t port_,
+                                        struct wire_uint_8_list *namespace_,
+                                        struct wire_uint_8_list *revision);
+
+void wire_main_niko_virtual_driver(int64_t port_, struct wire_uint_8_list *json);
+
 struct wire_StringList *new_StringList_0(int32_t len);
 
 struct wire_int_32_list *new_int_32_list_0(int32_t len);
@@ -1123,6 +1216,8 @@ extern void XFixesSetWindowShapeRegion(Display *dpy,
                                        XserverRegion region);
 
 extern bool MacSetPrivacyMode(bool on);
+
+extern bool NikoMacPrivacyModeActive(void);
 
 static int64_t dummy_method_to_enforce_bundling(void) {
     int64_t dummy_var = 0;
@@ -1307,6 +1402,10 @@ static int64_t dummy_method_to_enforce_bundling(void) {
     dummy_var ^= ((int64_t) (void*) wire_main_get_main_display);
     dummy_var ^= ((int64_t) (void*) wire_main_get_displays);
     dummy_var ^= ((int64_t) (void*) wire_session_add_port_forward);
+    dummy_var ^= ((int64_t) (void*) wire_session_niko_tunnel_command);
+    dummy_var ^= ((int64_t) (void*) wire_session_niko_tunnel_close);
+    dummy_var ^= ((int64_t) (void*) wire_session_niko_tunnel_query);
+    dummy_var ^= ((int64_t) (void*) wire_session_niko_tunnel_retired);
     dummy_var ^= ((int64_t) (void*) wire_session_remove_port_forward);
     dummy_var ^= ((int64_t) (void*) wire_session_new_rdp);
     dummy_var ^= ((int64_t) (void*) wire_session_request_voice_call);
@@ -1459,6 +1558,21 @@ static int64_t dummy_method_to_enforce_bundling(void) {
     dummy_var ^= ((int64_t) (void*) wire_session_get_common);
     dummy_var ^= ((int64_t) (void*) wire_cm_nikodesk_capability_decision);
     dummy_var ^= ((int64_t) (void*) wire_cm_nikodesk_capability_revoke);
+    dummy_var ^= ((int64_t) (void*) wire_cm_nikodesk_camera_command);
+    dummy_var ^= ((int64_t) (void*) wire_session_voice_prepare);
+    dummy_var ^= ((int64_t) (void*) wire_session_voice_command);
+    dummy_var ^= ((int64_t) (void*) wire_session_voice_availability);
+    dummy_var ^= ((int64_t) (void*) wire_cm_voice_command);
+    dummy_var ^= ((int64_t) (void*) wire_cm_tunnel_command);
+    dummy_var ^= ((int64_t) (void*) wire_cm_voice_availability);
+    dummy_var ^= ((int64_t) (void*) wire_voice_pending_cleanup);
+    dummy_var ^= ((int64_t) (void*) wire_main_niko_unattended_install_begin);
+    dummy_var ^= ((int64_t) (void*) wire_main_niko_unattended_install_status);
+    dummy_var ^= ((int64_t) (void*) wire_main_niko_unattended_install_current);
+    dummy_var ^= ((int64_t) (void*) wire_main_niko_unattended_install_cancel);
+    dummy_var ^= ((int64_t) (void*) wire_main_niko_session_audit);
+    dummy_var ^= ((int64_t) (void*) wire_main_niko_session_audit_clear);
+    dummy_var ^= ((int64_t) (void*) wire_main_niko_virtual_driver);
     dummy_var ^= ((int64_t) (void*) new_StringList_0);
     dummy_var ^= ((int64_t) (void*) new_int_32_list_0);
     dummy_var ^= ((int64_t) (void*) new_uint_8_list_0);

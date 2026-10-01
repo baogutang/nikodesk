@@ -30,6 +30,14 @@ pub mod server_scope;
 
 #[path = "nikodesk/connection_snapshot.rs"]
 pub mod connection_snapshot;
+#[path = "nikodesk/online_status.rs"]
+pub(crate) mod online_status;
+#[path = "nikodesk/online_query.rs"]
+pub(crate) mod online_query;
+pub(crate) mod totp_replay;
+pub(crate) mod session_audit;
+pub(crate) mod capability_audit;
+pub(crate) mod virtual_driver;
 
 #[path = "nikodesk/favorites.rs"]
 pub mod favorites;
@@ -40,6 +48,13 @@ pub mod peer_migration;
 pub(crate) mod cm_peer;
 #[path = "nikodesk/connection_capabilities.rs"]
 pub(crate) mod connection_capabilities;
+#[path = "nikodesk/camera_flow.rs"]
+pub(crate) mod camera_flow;
+#[path = "nikodesk/camera_probe.rs"]
+pub(crate) mod camera_probe;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[path = "nikodesk/owned_camera.rs"]
+pub(crate) mod owned_camera;
 #[cfg(any(target_os = "windows", test))]
 #[path = "nikodesk/windows_compatibility.rs"]
 pub(crate) mod windows_compatibility;
@@ -54,17 +69,64 @@ pub(crate) mod capability_policy;
 pub(crate) mod capability_policy_api;
 #[path = "nikodesk/background/mod.rs"]
 pub mod background;
+#[cfg(feature = "flutter")]
+#[path = "nikodesk/unattended_install.rs"]
+pub(crate) mod unattended_install;
+#[cfg(feature = "flutter")]
+#[path = "nikodesk/session_power.rs"]
+pub(crate) mod session_power;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[path = "nikodesk/auto_lock.rs"]
+pub(crate) mod auto_lock;
+#[path = "nikodesk/wol_proxy.rs"]
+pub(crate) mod wol_proxy;
+#[path = "nikodesk/credentials.rs"]
+pub(crate) mod credentials;
+
+#[cfg(windows)]
+#[path = "nikodesk/privacy_windows.rs"]
+pub(crate) mod privacy_windows;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[path = "nikodesk/virtual_display.rs"]
+pub(crate) mod virtual_display;
+#[cfg(target_os = "macos")]
+#[path = "nikodesk/mac_background.rs"]
+pub(crate) mod mac_background;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[path = "nikodesk/terminal_cleanup.rs"]
 pub(crate) mod terminal_cleanup;
 #[path = "nikodesk/tunnel_endpoint.rs"]
 pub(crate) mod tunnel_endpoint;
+#[path = "nikodesk/tunnel_transport.rs"]
+pub(crate) mod tunnel_transport;
+#[path = "nikodesk/tunnel_flow.rs"]
+pub(crate) mod tunnel_flow;
+#[path = "nikodesk/tunnel_wire.rs"]
+pub(crate) mod tunnel_wire;
+#[path = "nikodesk/tunnel_actor.rs"]
+pub(crate) mod tunnel_actor;
 #[path = "nikodesk/video_metrics.rs"]
 pub(crate) mod video_metrics;
 #[path = "nikodesk/voice/mod.rs"]
 pub(crate) mod voice;
 #[path = "nikodesk/voice_wire.rs"]
 pub(crate) mod voice_wire;
+#[path = "nikodesk/voice_policy.rs"]
+pub(crate) mod voice_policy;
+#[path = "nikodesk/voice_flow.rs"]
+pub(crate) mod voice_flow;
+#[path = "nikodesk/voice_runtime.rs"]
+pub(crate) mod voice_runtime;
+#[path = "nikodesk/voice_call.rs"]
+pub(crate) mod voice_call;
+#[path = "nikodesk/voice_start.rs"]
+pub(crate) mod voice_start;
+#[cfg(feature="flutter")]
+#[path = "nikodesk/voice_session.rs"]
+pub(crate) mod voice_session;
+#[cfg(feature = "flutter")]
+#[path = "nikodesk/voice_bridge.rs"]
+pub(crate) mod voice_bridge;
 
 pub fn initialize() -> ResultType<()> {
     INITIALIZED
@@ -85,7 +147,10 @@ pub fn initialize_or_exit() {
 #[cfg(windows)]
 pub(crate) fn initialize_system_desktop_worker(root: std::path::PathBuf) -> ResultType<()> {
     if !background::is_system_worker() { bail!("Not a granted system desktop worker"); }
-    Config::initialize_trusted_storage_root(root.clone())?;
+    let profile = background::read_machine_runtime(&root)?;
+    let id = profile.public_id().to_owned();
+    let public_key = profile.public_key().to_vec();
+    Config::initialize_trusted_machine_runtime(root, profile)?;
     INITIALIZED.get_or_init(|| (|| -> ResultType<()> {
         *config::APP_NAME.write().unwrap() = "NikoDesk".into();
         sodiumoxide::init().map_err(|_| anyhow!("Cannot initialize machine cryptography"))?;
@@ -102,11 +167,8 @@ pub(crate) fn initialize_system_desktop_worker(root: std::path::PathBuf) -> Resu
             forced.insert("approve-mode".into(), "password".into());
             forced.insert("verification-method".into(), "use-permanent-password".into());
         }
-        let path = root.join("NikoDesk.toml");
-        let identity = identity_file::read(&path)?;
-        let id = identity.validated_id()?;
         let loaded = Config::get();
-        if loaded.id != id || Config::get_key_pair() != identity.key_pair {
+        if loaded.id != id || Config::get_key_pair().1 != public_key {
             bail!("Machine identity did not match the provisioned file");
         }
         if !Config::has_local_permanent_password() { bail!("Machine desktop verifier has not been provisioned"); }
@@ -180,11 +242,11 @@ fn install_policy() {
         "enable-tunnel",
         "enable-camera",
         "enable-remote-restart",
-        "enable-privacy-mode",
         "enable-block-input",
         "allow-remote-config-modification",
         "allow-insecure-tls-fallback",
         "allow-hide-cm",
+        "enable-trusted-devices",
     ] {
         forced.insert(key.into(), "N".into());
     }
@@ -210,6 +272,8 @@ fn install_policy() {
         ("enable-file-transfer", "Y"),
         ("enable-file-copy-paste", "N"),
         ("enable-audio", "N"),
+        ("enable-privacy-mode", "N"),
+        ("nikodesk-allow-virtual-display", "N"),
     ] {
         defaults.insert(key.into(), value.into());
     }
@@ -378,6 +442,7 @@ pub fn prepare_options(options: &mut HashMap<String, String>) -> ResultType<()> 
 
 pub fn set_option(key: String, mut value: String) -> ResultType<()> {
     initialize()?;
+    if key == "nikodesk-two-factor-status" {bail!("Two-factor status is read-only");}
     if key == "stop-service" && value.is_empty() {
         value = "N".into();
     }
@@ -586,6 +651,7 @@ pub fn validate_cli_args(args: impl IntoIterator<Item = String>) -> ResultType<(
                 "--force_relay",
                 "--texture-render",
                 "--cm-no-ui",
+                "--nikodesk-background-agent",
             ]
             .contains(&arg.as_str())
         {

@@ -11,6 +11,132 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+COREAUDIO_SOURCE = Path(__file__).resolve().parents[2] / "libs/nikodesk_coreaudio"
+COREAUDIO_LICENSE_HASHES = {
+    "LICENSE-MIT": "7576269ea71f767b99297934c0b2367532690f8c4badc695edf8e04ab6a1e545",
+    "LICENSE-APACHE": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+}
+
+
+def ordinary_notice(path, description):
+    if path.is_symlink() or not path.is_file() or path.stat().st_nlink != 1 or path.stat().st_size > 262144:
+        raise ValueError(f"Missing or aliased {description}")
+    return path.read_bytes()
+
+
+def coreaudio_notices():
+    """Fixed dual-license bytes, actual source provenance and change notice."""
+    notices = {name: ordinary_notice(COREAUDIO_SOURCE / name, "fixed CoreAudio source notice")
+               for name in (*COREAUDIO_LICENSE_HASHES, "NIKODESK-PROVENANCE.json")}
+    provenance = json.loads(notices["NIKODESK-PROVENANCE.json"])
+    if (not isinstance(provenance, dict) or provenance.get("package") != "coreaudio-rs" or provenance.get("version") != "0.11.3"
+            or provenance.get("upstream") != "https://github.com/RustAudio/coreaudio-rs"
+            or provenance.get("licenses") != ["LICENSE-MIT", "LICENSE-APACHE"]):
+        raise ValueError("CoreAudio provenance is not the fixed private source")
+    if not isinstance(provenance.get("baseline_files"), dict):
+        raise ValueError("CoreAudio provenance must preserve its fixed baseline")
+    for name, expected in COREAUDIO_LICENSE_HASHES.items():
+        if (hashlib.sha256(notices[name]).hexdigest() != expected
+                or provenance.get("baseline_files", {}).get(name) != expected):
+            raise ValueError("CoreAudio license differs from the complete fixed upstream bytes")
+    changes = []
+    for group in ("modified_files", "new_files"):
+        records = provenance.get(group)
+        if not isinstance(records, dict) or not records:
+            raise ValueError("CoreAudio provenance must include its actual modifications")
+        for name, record in sorted(records.items()):
+            relative = Path(name)
+            if (relative.is_absolute() or ".." in relative.parts or str(relative) != name
+                    or not isinstance(record, dict) or not isinstance(record.get("change"), str)
+                    or not record["change"].strip()):
+                raise ValueError("Invalid CoreAudio source modification notice")
+            source = COREAUDIO_SOURCE / relative
+            if (not source.resolve().is_relative_to(COREAUDIO_SOURCE.resolve())
+                    or any(parent.is_symlink() for parent in source.parents if parent != COREAUDIO_SOURCE.parent)):
+                raise ValueError("CoreAudio modification must belong to its fixed source")
+            if hashlib.sha256(ordinary_notice(source, "CoreAudio modification source")).hexdigest() != record.get("sha256"):
+                raise ValueError("CoreAudio modification differs from its provenance")
+            changes.append(f"- {name}: {record['change']} (SHA-256 {record['sha256']})")
+    notices["NIKODESK-PROVENANCE.md"] = (
+        "# NikoDesk private CoreAudio source\n\n"
+        "Package: coreaudio-rs 0.11.3. Upstream: https://github.com/RustAudio/coreaudio-rs\n"
+        "Vendored from the already locked registry package; no network fetch. "
+        "Complete upstream LICENSE-MIT and LICENSE-APACHE are bundled unchanged.\n\n"
+        "Source tree: libs/nikodesk_coreaudio in the corresponding NikoDesk source identified "
+        "by Contents/Resources/NikoDesk-SOURCE.txt. NIKODESK-PROVENANCE.json preserves the "
+        "baseline source hashes and actual private modifications.\n\n"
+        "This private fork is used only by Niko CPAL on macOS, without a global Cargo patch. "
+        "The stock CPAL source and iOS registry dependency are preserved. It retains partial "
+        "AudioUnit creation, native Stop/Uninitialize/Dispose and callback-drain ownership; "
+        "queued pause or Drop is not a cleanup acknowledgement.\n\n"
+        "## Modified and new source files\n\n" + "\n".join(changes) + "\n"
+    ).encode("utf-8")
+    return notices
+
+
+def coreaudio_directory(app, create=False):
+    target = app / "Contents/Resources/NikoDesk/licenses/coreaudio-rs"
+    for directory in reversed((target, *target.parents)):
+        if directory == app or app not in directory.parents:
+            continue
+        if directory.is_symlink() or (directory.exists() and not directory.is_dir()):
+            raise ValueError("CoreAudio license directory must be ordinary and bundled")
+        if create:
+            directory.mkdir(exist_ok=True)
+        if not directory.is_dir() or not directory.resolve(strict=True).is_relative_to(app):
+            raise ValueError("CoreAudio license directory must be ordinary and bundled")
+    return target
+
+
+def prepare_coreaudio_licenses(app):
+    """Explicit pre-signing step. Verification/package never mutates a bundle."""
+    if app.is_symlink():
+        raise ValueError("CoreAudio materials require an ordinary NikoDesk bundle")
+    app = app.resolve(strict=True)
+    if (app / "Contents").is_symlink() or not (app / "Contents").is_dir():
+        raise ValueError("CoreAudio materials require ordinary bundle contents")
+    info = plistlib.loads(ordinary_notice(app / "Contents/Info.plist", "NikoDesk Info.plist"))
+    if info.get("CFBundleIdentifier") != "io.nikodesk.macos" or info.get("CFBundleExecutable") != "NikoDesk":
+        raise ValueError("CoreAudio materials are only prepared for NikoDesk")
+    notices = coreaudio_notices()
+    target = coreaudio_directory(app, create=True)
+    # The virtual-screen ABI declarations have a separate BSD attribution.
+    virtual_notice = ordinary_notice(COREAUDIO_SOURCE.parents[1] / "res/licenses/Chromium-BSD.txt", "virtual-display license")
+    virtual_target = target.parent / "virtual-display"
+    if virtual_target.is_symlink() or (virtual_target.exists() and not virtual_target.is_dir()):
+        raise ValueError("Virtual-display license directory must be ordinary")
+    virtual_target.mkdir(exist_ok=True)
+    destination = virtual_target / "Chromium-BSD.txt"
+    if destination.is_symlink() or (destination.exists() and (not destination.is_file() or destination.stat().st_nlink != 1)):
+        raise ValueError("Virtual-display notice must be ordinary")
+    destination.write_bytes(virtual_notice)
+    for name in notices:
+        destination = target / name
+        if destination.is_symlink() or (destination.exists()
+                and (not destination.is_file() or destination.stat().st_nlink != 1)):
+            raise ValueError("CoreAudio notice must not alias another file")
+    for name, content in notices.items():
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=target, prefix=".coreaudio-notice-", delete=False) as stream:
+                temporary = Path(stream.name)
+                stream.write(content)
+                stream.flush()
+                os.fsync(stream.fileno())
+                os.fchmod(stream.fileno(), 0o644)
+            os.replace(temporary, target / name)
+        finally:
+            if temporary is not None and temporary.exists():
+                temporary.unlink()
+
+
+def verify_coreaudio_licenses(app):
+    notices = coreaudio_notices()
+    target = coreaudio_directory(app)
+    for name, expected in notices.items():
+        if ordinary_notice(target / name, "CoreAudio bundled notice") != expected:
+            raise ValueError("CoreAudio license/provenance differs from the fixed source")
+
 
 def command(*args):
     return subprocess.run(args, check=True, capture_output=True, text=True).stdout
@@ -39,6 +165,7 @@ def verify_voice_metadata(app, info):
     provenance = json.loads((target / "NIKODESK-PROVENANCE.json").read_bytes())
     if provenance.get("commit") != "96d4da121b7d949677ac5b6887413a9185fd7f39" or provenance.get("tracked_files") != 83:
         raise ValueError("Voice-runtime provenance is not the fixed CPAL source")
+    verify_coreaudio_licenses(app)
 
 
 def verify_bundle(app, require_privacy_watchdog=False, require_camera=False, require_voice=False):
@@ -128,6 +255,7 @@ def verify_bundle(app, require_privacy_watchdog=False, require_camera=False, req
         "camera_capture_runtime_verified": False,
         "camera_tcc_runtime_verified": False,
         "voice_metadata_license_and_entitlement_verified": require_voice,
+        "voice_private_coreaudio_license_and_provenance_verified": require_voice,
         "voice_microphone_runtime_verified": False,
         "voice_playback_runtime_verified": False,
         "launch_verified": False,
@@ -191,14 +319,22 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("app", type=Path)
     parser.add_argument("output", type=Path, nargs="?")
-    parser.add_argument("--verify-only", action="store_true")
+    action = parser.add_mutually_exclusive_group()
+    action.add_argument("--verify-only", action="store_true")
+    action.add_argument("--prepare-coreaudio-licenses", action="store_true",
+                        help="Copy complete fixed private CoreAudio notices before signing; never launches a bundle")
     parser.add_argument("--require-privacy-watchdog", action="store_true",
                         help="Require the ordinary-user production helper for this new build; historical packages remain inspectable")
     parser.add_argument("--require-camera", action="store_true",
                         help="Require signed camera metadata for this new build; never opens a camera or requests TCC")
     parser.add_argument("--require-voice", action="store_true",
-                        help="Require signed microphone metadata and fixed CPAL license; never opens audio devices")
+                        help="Require signed microphone metadata and fixed CPAL/CoreAudio notices; never opens audio devices")
     args = parser.parse_args()
+    if args.prepare_coreaudio_licenses:
+        if args.output is not None or args.require_privacy_watchdog or args.require_camera or args.require_voice:
+            parser.error("Preparation takes only an app path and must occur before signing")
+        prepare_coreaudio_licenses(args.app)
+        return
     if args.verify_only:
         print(json.dumps(verify_bundle(args.app, args.require_privacy_watchdog, args.require_camera, args.require_voice), indent=2))
     else:

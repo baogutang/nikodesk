@@ -32,6 +32,7 @@ class _NikoPeerPreferencesViewState extends State<NikoPeerPreferencesView> {
   NikoLegacyPreview? _preview;
   final _selected = <String>{};
   bool _busy = false;
+  bool _addFavorites = false;
   bool _scopeChanged = false;
   String? _message;
   int _generation = 0;
@@ -60,6 +61,7 @@ class _NikoPeerPreferencesViewState extends State<NikoPeerPreferencesView> {
       _busy = false;
       _preview = null;
       _selected.clear();
+      _addFavorites = false;
       _message = nikoText('服务器已变更，请关闭此窗口后重新查看。',
           'The server changed. Close this dialog and open it again.');
     });
@@ -93,6 +95,7 @@ class _NikoPeerPreferencesViewState extends State<NikoPeerPreferencesView> {
       _busy = true;
       _message = message;
       _selected.clear();
+      _addFavorites = false;
     });
     try {
       final preview = await widget.preferences.previewLegacy(widget.namespace);
@@ -114,6 +117,7 @@ class _NikoPeerPreferencesViewState extends State<NikoPeerPreferencesView> {
     if (_busy || _scopeChanged || preview == null || _selected.isEmpty) return;
     final generation = ++_generation;
     final selected = Set<String>.of(_selected);
+    final addFavorites = _addFavorites;
     setState(() {
       _busy = true;
       _message = null;
@@ -127,6 +131,26 @@ class _NikoPeerPreferencesViewState extends State<NikoPeerPreferencesView> {
               '${result.imported.length} imported; ${result.skipped.length} skipped.')
           : nikoText('部分结果尚未确认，请核对新预览。已确认导入 ${result.imported.length} 台，原文件保留。',
               'Some results are unconfirmed. Check the refreshed preview. ${result.imported.length} imports were confirmed; originals are preserved.');
+      if (addFavorites && result.imported.isNotEmpty) {
+        if (!mounted || generation != _generation) return;
+        try {
+          final expected =
+              await widget.preferences.readFavorites(widget.namespace);
+          if (!mounted || generation != _generation) return;
+          final saved = await widget.preferences
+              .patchFavorites(expected, add: result.imported);
+          message += saved.conflict
+              ? nikoText(' 收藏列表已变更，本次未加入收藏。请在设备列表重新选择。',
+                  ' The favorites changed; this addition was not saved. Select the devices again in the device list.')
+              : result.imported.every(saved.ids.contains)
+                  ? nikoText(' 已确认加入收藏。', ' Added to favorites.')
+                  : nikoText(' 收藏结果尚未确认，请刷新收藏列表。',
+                      ' Favorites are unconfirmed. Refresh the favorites list.');
+        } on NikoPeerPreferencesFailure {
+          message += nikoText(' 收藏结果尚未确认，请刷新收藏列表。',
+              ' Favorites are unconfirmed. Refresh the favorites list.');
+        }
+      }
     } on NikoPeerPreferencesFailure catch (error) {
       message = _failure(error.status);
     }
@@ -176,6 +200,7 @@ class _NikoPeerPreferencesViewState extends State<NikoPeerPreferencesView> {
               if (preview != null)
                 for (final item in preview.items)
                   CheckboxListTile(
+                    key: ValueKey('peer-legacy-select-${item.id}'),
                     contentPadding: EdgeInsets.zero,
                     controlAffinity: ListTileControlAffinity.leading,
                     value: _selected.contains(item.id),
@@ -192,10 +217,25 @@ class _NikoPeerPreferencesViewState extends State<NikoPeerPreferencesView> {
                     subtitle: Text(item.targetExists
                         ? nikoText('${item.id} · 已有偏好，跳过',
                             '${item.id} · Already configured; skipped')
-                        : item.alias.isEmpty
-                            ? nikoText('可选择导入', 'Available to import')
-                            : item.id),
+                        : item.fieldCount == 0
+                            ? nikoText(
+                                '可导入设备记录', 'Device record available to import')
+                            : item.alias.isEmpty
+                                ? nikoText('可选择导入', 'Available to import')
+                                : item.id),
                   ),
+              if (preview != null &&
+                  preview.items.any((item) => !item.targetExists))
+                CheckboxListTile(
+                  key: const Key('peer-legacy-add-favorites'),
+                  contentPadding: EdgeInsets.zero,
+                  value: _addFavorites,
+                  onChanged: _busy || _scopeChanged
+                      ? null
+                      : (on) => setState(() => _addFavorites = on == true),
+                  title: Text(nikoText('将本次成功导入的设备加入收藏',
+                      'Add successfully imported devices to favorites')),
+                ),
             ],
           ))),
       actions: [

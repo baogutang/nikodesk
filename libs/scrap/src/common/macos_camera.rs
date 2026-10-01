@@ -21,6 +21,20 @@ struct NativeDevice { unique_id: *const c_char, name: *const c_char, format_coun
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CameraFormat {
     pub width: u32, pub height: u32, pub min_fps_milli: u32, pub max_fps_milli: u32,
+    native_index: u32, range_index: u32, native_fingerprint: [u8; 32],
+}
+impl CameraFormat {
+    /// Canonical grant input; the native key is obtained only from local discovery.
+    pub fn identity_bytes(&self) -> Vec<u8> {
+        let mut bytes = b"nikodesk-mac-camera-format-v2\0".to_vec();
+        for value in [self.width, self.height, self.min_fps_milli, self.max_fps_milli,
+                      self.native_index, self.range_index] {
+            bytes.extend_from_slice(&value.to_be_bytes());
+        }
+        bytes.extend_from_slice(&self.native_fingerprint);
+        bytes
+    }
+    fn has_native_key(&self) -> bool { self.native_fingerprint != [0; 32] }
 }
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -41,12 +55,14 @@ extern "C" {
     fn NKCameraDeviceAt(p: *const NativeDevices, index: usize, value: *mut NativeDevice) -> i32;
     fn NKCameraFormatAt(p: *const NativeDevices, device: usize, format: usize, value: *mut CameraFormat) -> i32;
     fn NKCameraDevicesRelease(p: *mut NativeDevices);
-    fn NKCameraStart(id: *const c_char, selection: NativeSelection, result: *mut i32) -> *mut NativeSession;
+    fn NKCameraStart(id: *const c_char, selection: NativeSelection,
+        approved_format: *const CameraFormat, result: *mut i32) -> *mut NativeSession;
     fn NKCameraWaitRunning(p: *mut NativeSession, timeout: u32) -> i32;
     fn NKCameraTakeLatest(p: *mut NativeSession, epoch: u64, timeout: u32, frame: *mut *mut NativeFrame) -> i32;
     fn NKCameraSessionStatus(p: *mut NativeSession, phase: *mut i32) -> i32;
     fn NKCameraStop(p: *mut NativeSession) -> i32;
     fn NKCameraSessionRelease(p: *mut NativeSession) -> i32;
+    fn NKCameraStopPending(capture_lease: u64) -> i32;
     fn NKCameraFrameDescribe(p: *const NativeFrame, view: *mut NativeFrameView) -> i32;
     fn NKCameraFrameRelease(p: *mut NativeFrame);
 }
@@ -117,6 +133,7 @@ pub fn enumerate() -> io::Result<Vec<CameraDevice>> {
         for j in 0..device.format_count {
             let mut format = CameraFormat::default();
             check(unsafe { NKCameraFormatAt(list.0.as_ptr(), i, j, &mut format) })?;
+            if !format.has_native_key() { return Err(native_error(3)); }
             formats.push(format);
         }
         devices.push(CameraDevice { unique_id, name, formats });
@@ -138,6 +155,7 @@ impl CaptureSelection {
         if self.unique_id.is_empty() || self.unique_id.len() > 1024 || self.unique_id.contains('\0') || self.epoch == 0 ||
             f.width == 0 || f.height == 0 || f.width > MAX_DIMENSION || f.height > MAX_DIMENSION ||
             f.width % 2 != 0 || f.height % 2 != 0 || self.fps == 0 || self.fps > 60 ||
+            !f.has_native_key() || f.native_index > 4095 || f.range_index > 127 ||
             f.min_fps_milli > fps_milli || f.max_fps_milli < fps_milli {
             return Err(native_error(3));
         }
@@ -172,7 +190,7 @@ impl CameraSession {
         let unique = CString::new(selection.unique_id.as_bytes()).map_err(|_| native_error(3))?;
         let mut result = 3;
         let native = unsafe { NKCameraStart(unique.as_ptr(), NativeSelection { width: selection.format.width,
-            height: selection.format.height, fps: selection.fps, epoch: selection.epoch }, &mut result) };
+            height: selection.format.height, fps: selection.fps, epoch: selection.epoch }, &selection.format, &mut result) };
         check(result)?;
         let session = Self { native: NonNull::new(native).ok_or_else(|| native_error(5))?, epoch: selection.epoch };
         // Native start-return plus first valid frame, never a UI timer, establishes readiness.
@@ -197,12 +215,25 @@ impl Drop for CameraSession {
     }
 }
 
+/// A lease is allocated once per construction by the owning connection. This
+/// retries only a failed constructor's retained source, never a live capturer.
+pub fn stop_pending_capture(capture_lease: u64) -> io::Result<()> {
+    if capture_lease == 0 { return Err(native_error(3)); }
+    check(unsafe { NKCameraStopPending(capture_lease) })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn pending_capture_cleanup_requires_a_nonzero_native_lease() {
+        assert_eq!(stop_pending_capture(0).unwrap_err().kind(), io::ErrorKind::InvalidInput);
+        assert!(stop_pending_capture(987654321).is_ok());
+    }
     fn selection() -> CaptureSelection {
         CaptureSelection { unique_id: "approved-device".into(), format: CameraFormat {
-            width: 1920, height: 1080, min_fps_milli: 15000, max_fps_milli: 60000 }, fps: 30, epoch: 8 }
+            width: 1920, height: 1080, min_fps_milli: 15000, max_fps_milli: 60000,
+            native_index: 2, range_index: 0, native_fingerprint: [7; 32] }, fps: 30, epoch: 8 }
     }
     #[test]
     fn camera_selection_requires_identity_and_epoch() {
@@ -226,10 +257,32 @@ mod tests {
         value=selection();value.format.max_fps_milli=29999;assert!(value.validate().is_err());
     }
     #[test]
+    fn missing_or_changed_native_key_cannot_reuse_a_format_grant() {
+        let original = selection().format;
+        let mut value = selection(); value.format.native_fingerprint = [0; 32];
+        assert!(value.validate().is_err());
+        for field in 0..3 {
+            let mut changed = original;
+            match field { 0 => changed.native_index += 1, 1 => changed.range_index += 1,
+                          _ => changed.native_fingerprint[31] ^= 1 }
+            assert_ne!(original.identity_bytes(), changed.identity_bytes());
+        }
+        let mut value = selection(); value.format.native_index = 4096;
+        assert!(value.validate().is_err());
+        value = selection(); value.format.range_index = 128; assert!(value.validate().is_err());
+    }
+    #[test]
     fn camera_authorization_values_are_fail_closed_without_request() {
         assert_eq!(CameraAuthorization::from_native(0).unwrap(),CameraAuthorization::NotDetermined);
         assert_eq!(CameraAuthorization::from_native(3).unwrap(),CameraAuthorization::Authorized);
         assert!(CameraAuthorization::from_native(-1).is_err());assert!(CameraAuthorization::from_native(4).is_err());
+    }
+    #[test]
+    fn fractional_only_range_is_not_an_integer_30fps_grant() {
+        let mut value = selection();
+        value.format.min_fps_milli = 29970; value.format.max_fps_milli = 29970;
+        assert!(value.validate().is_err());
+        value.fps = 29; assert!(value.validate().is_err());
     }
 }
 

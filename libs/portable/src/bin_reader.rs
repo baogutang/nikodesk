@@ -6,8 +6,10 @@ use std::{
 };
 
 // The generic payload, shared by every customer and compiled in once per release.
-#[cfg(windows)]
+#[cfg(all(windows, not(feature = "nikodesk-installer")))]
 const BIN_DATA: &[u8] = include_bytes!("../data.bin");
+#[cfg(all(windows, feature = "nikodesk-installer"))]
+const BIN_DATA: &[u8] = include_bytes!(env!("NIKODESK_INSTALLER_PAYLOAD"));
 
 // The per-customer payload, injected into the RCDATA resource after the template
 // has been built, so that customizing a client needs no recompilation.
@@ -39,6 +41,15 @@ pub(crate) struct BinaryReader {
 }
 
 impl BinaryReader {
+    #[cfg(all(windows, feature = "nikodesk-installer"))]
+    pub(crate) fn installer_embedded() -> Result<Self, String> {
+        if read_resource(PACKAGE_RESOURCE_NAME).is_some() {
+            return Err("The installer cannot use a customized RDPKG payload".to_owned());
+        }
+        let (files, exe) = read_embedded()?;
+        Ok(Self { files, exe, package_paths: Vec::new() })
+    }
+
     pub fn new() -> Result<Self, String> {
         let package = read_package()?;
         let package_paths = package.0.iter().map(|f| f.path.clone()).collect();

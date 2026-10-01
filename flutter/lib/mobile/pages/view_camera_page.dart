@@ -20,6 +20,7 @@ import '../../models/input_model.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../utils/image.dart';
+import '../../nikodesk/mobile_chat_options.dart';
 
 final initText = '1' * 1024;
 
@@ -43,11 +44,13 @@ class ViewCameraPage extends StatefulWidget {
       this.password,
       this.isSharedPassword,
       this.serverNamespace,
+      this.connToken,
       this.forceRelay})
       : super(key: key);
 
   final String id;
   final String? serverNamespace;
+  final String? connToken;
   final String? password;
   final bool? isSharedPassword;
   final bool? forceRelay;
@@ -94,6 +97,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
       isViewCamera: true,
       password: widget.password,
       serverNamespace: widget.serverNamespace,
+      connToken: widget.connToken,
       isSharedPassword: widget.isSharedPassword,
       forceRelay: widget.forceRelay,
     );
@@ -496,6 +500,11 @@ class _ViewCameraPageState extends State<ViewCameraPage>
   }
 
   showChatOptions(String id) async {
+    if (const bool.fromEnvironment('NIKODESK')) {
+      await showNikoMobileChatOptions(context,
+          onTextChat: () => onPressedTextChat(widget.id));
+      return;
+    }
     onPressVoiceCall() => bind.sessionRequestVoiceCall(sessionId: sessionId);
     onPressEndVoiceCall() => bind.sessionCloseVoiceCall(sessionId: sessionId);
 
