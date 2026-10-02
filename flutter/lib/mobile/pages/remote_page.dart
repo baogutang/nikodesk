@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter_hbb/nikodesk/connection_progress_view.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -23,6 +24,7 @@ import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../utils/image.dart';
 import '../../nikodesk/mobile_session_guide.dart';
+import '../../nikodesk/mobile_control_bar.dart';
 import '../../nikodesk/mobile_chat_options.dart';
 import '../../nikodesk/session_tools.dart';
 import '../../nikodesk/ui.dart';
@@ -118,8 +120,13 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       _nikoVoiceOwner = gFFI.nikoVoiceOwner;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
-      gFFI.dialogManager
-          .showLoading(translate('Connecting...'), onCancel: closeConnection);
+      if (const bool.fromEnvironment('NIKODESK')) {
+        showNikoConnectionProgress(gFFI.dialogManager, gFFI.nikoConnectionProgress,
+            tag: '$sessionId-nikodesk-connecting', onCancel: closeConnection);
+      } else {
+        gFFI.dialogManager
+            .showLoading(translate('Connecting...'), onCancel: closeConnection);
+      }
     });
     WakelockManager.enable(_uniqueKey);
     _physicalFocusNode.requestFocus();
@@ -487,6 +494,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     final keyboardIsVisible =
         keyboardVisibilityController.isVisible && _showEdit;
     final showActionButton = !_showBar || keyboardIsVisible || _showGestureHelp;
+    const niko = bool.fromEnvironment('NIKODESK');
 
     return WillPopScope(
       onWillPop: () async {
@@ -501,14 +509,19 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           floatingActionButton: !showActionButton
               ? null
               : FloatingActionButton(
-                  mini: !keyboardIsVisible,
+                  mini: niko ? false : !keyboardIsVisible,
+                  tooltip: niko ? (keyboardIsVisible
+                      ? nikoText('收起键盘', 'Hide keyboard')
+                      : _showGestureHelp
+                          ? nikoText('收起操作说明', 'Hide control guide')
+                          : nikoText('展开工具栏', 'Show controls')) : null,
                   child: Icon(
                     (keyboardIsVisible || _showGestureHelp)
                         ? Icons.expand_more
                         : Icons.expand_less,
-                    color: Colors.white,
+                    color: niko ? Theme.of(context).colorScheme.onPrimary : Colors.white,
                   ),
-                  backgroundColor: MyTheme.accent,
+                  backgroundColor: niko ? Theme.of(context).colorScheme.primary : MyTheme.accent,
                   onPressed: () {
                     setState(() {
                       if (keyboardIsVisible) {
@@ -593,7 +606,87 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     );
   }
 
+  Widget getNikoBottomAppBar() {
+    final ffiModel = Provider.of<FfiModel>(context);
+    final foreground = Theme.of(context).colorScheme.onPrimary;
+    final inputAllowed = !isWebDesktop && !ffiModel.viewOnly && ffiModel.keyboard;
+    return BottomAppBar(
+      elevation: 10,
+      color: Theme.of(context).colorScheme.primary,
+      child: NikoMobileControlBar(
+        actions: Row(children: [
+          IconButton(
+            color: foreground,
+            tooltip: nikoText('画面与显示', 'Display settings'),
+            icon: const Icon(Icons.tv),
+            onPressed: () {
+              setState(() => _showEdit = false);
+              showOptions(context, widget.id, gFFI.dialogManager);
+            },
+          ),
+          if (inputAllowed) ...[
+            IconButton(
+              color: foreground,
+              tooltip: nikoText('打开键盘', 'Open keyboard'),
+              icon: const Icon(Icons.keyboard),
+              onPressed: openKeyboard,
+            ),
+            IconButton(
+              color: foreground,
+              tooltip: gFFI.ffiModel.isPeerAndroid
+                  ? nikoText('远端操作', 'Remote actions')
+                  : nikoText('触控与鼠标操作', 'Touch and mouse controls'),
+              icon: Icon(gFFI.ffiModel.isPeerAndroid ? Icons.build
+                  : gFFI.ffiModel.touchMode ? Icons.touch_app : Icons.mouse),
+              onPressed: gFFI.ffiModel.isPeerAndroid
+                  ? () => gFFI.dialogManager.toggleMobileActionsOverlay(ffi: gFFI)
+                  : () => setState(() => _showGestureHelp = !_showGestureHelp),
+            ),
+          ],
+          if (!isWeb) futureBuilder(
+            future: gFFI.invokeMethod('get_value', 'KEY_IS_SUPPORT_VOICE_CALL'),
+            hasData: (isSupportVoiceCall) => IconButton(
+              color: foreground,
+              tooltip: isAndroid && isSupportVoiceCall
+                  ? nikoText('聊天与语音', 'Chat and voice')
+                  : nikoText('文字聊天', 'Text chat'),
+              icon: isAndroid && isSupportVoiceCall
+                  ? SvgPicture.asset('assets/chat.svg', colorFilter:
+                      ColorFilter.mode(foreground, BlendMode.srcIn))
+                  : const Icon(Icons.message),
+              onPressed: () => isAndroid && isSupportVoiceCall
+                  ? showChatOptions(widget.id) : onPressedTextChat(widget.id),
+            ),
+          ),
+          IconButton(
+            color: foreground,
+            tooltip: nikoText('更多操作', 'More actions'),
+            icon: const Icon(Icons.more_vert),
+            onPressed: () {
+              setState(() => _showEdit = false);
+              showActions(widget.id);
+            },
+          ),
+        ]),
+        collapse: Obx(() => IconButton(
+          color: foreground,
+          tooltip: nikoText('收起工具栏', 'Hide controls'),
+          icon: const Icon(Icons.expand_more),
+          onPressed: gFFI.ffiModel.waitForFirstImage.isTrue ? null
+              : () => setState(() => _showBar = !_showBar),
+        )),
+        endSession: IconButton(
+          color: foreground,
+          tooltip: nikoText('结束会话', 'End session'),
+          icon: const Icon(Icons.close),
+          onPressed: () => clientClose(sessionId, gFFI),
+        ),
+      ),
+    );
+  }
+
   Widget getBottomAppBar() {
+    if (const bool.fromEnvironment('NIKODESK')) return getNikoBottomAppBar();
     final ffiModel = Provider.of<FfiModel>(context);
     return BottomAppBar(
       elevation: 10,

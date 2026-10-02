@@ -200,6 +200,7 @@ ThemeData nikoTheme(Brightness brightness) {
               surfaceContainerHighest: const Color(0xFFEEEAFF))
           : scheme.copyWith(
               primary: NikoPalette.darkSeed,
+              onPrimary: NikoPalette.darkOnPrimary,
               surface: NikoPalette.darkCard,
               onSurface: text,
               onSurfaceVariant: muted,

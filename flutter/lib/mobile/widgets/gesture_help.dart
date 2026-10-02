@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/model.dart';
+import 'package:flutter_hbb/nikodesk/mobile_input_mode.dart';
 import 'package:get/get.dart';
 import 'package:toggle_switch/toggle_switch.dart';
 
@@ -94,7 +95,19 @@ class _GestureHelpState extends State<GestureHelp> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      ToggleSwitch(
+                      if (const bool.fromEnvironment('NIKODESK'))
+                        NikoMobileInputMode(
+                          touchMode: _touchMode,
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedIndex = value ? 1 : 0;
+                              _touchMode = value;
+                              widget.onTouchModeChange(value);
+                              _exitRelativeMouseModeIf(value);
+                            });
+                          },
+                        )
+                      else ToggleSwitch(
                         initialLabelIndex: _selectedIndex,
                         activeFgColor: Colors.white,
                         inactiveFgColor: Colors.white60,

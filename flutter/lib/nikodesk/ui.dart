@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 
 class NikoLanguage {
   static bool english = false;
+
+  static void usePreference(String language) {
+    english = language.isNotEmpty && !language.startsWith('zh');
+  }
 }
 
 String nikoText(String chinese, String english) =>

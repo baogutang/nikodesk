@@ -1,3 +1,4 @@
+import 'package:flutter_hbb/nikodesk/connection_progress_view.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -123,8 +124,13 @@ class _TerminalPageState extends State<TerminalPage>
 
       if (!isExistingConnection) {
         // First terminal - show loading dialog, wait for onReady
-        _ffi.dialogManager
-            .showLoading(translate('Connecting...'), onCancel: closeConnection);
+        if (const bool.fromEnvironment('NIKODESK')) {
+          showNikoConnectionProgress(_ffi.dialogManager, _ffi.nikoConnectionProgress,
+              tag: '${_ffi.sessionId}-nikodesk-connecting', onCancel: closeConnection);
+        } else {
+          _ffi.dialogManager
+              .showLoading(translate('Connecting...'), onCancel: closeConnection);
+        }
       } else {
         // Additional terminal - connection already established
         // Open the terminal directly

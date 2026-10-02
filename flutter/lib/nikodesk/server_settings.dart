@@ -19,8 +19,14 @@ Future<bool?> showNikoServerSettings(BuildContext context,
 class PrivateServerForm extends StatefulWidget {
   final ServerGateway gateway;
   final PrivateServerConfig initial;
+  final VoidCallback? onSaved;
+  final VoidCallback? onCancelled;
   const PrivateServerForm(
-      {super.key, required this.gateway, required this.initial});
+      {super.key,
+      required this.gateway,
+      required this.initial,
+      this.onSaved,
+      this.onCancelled});
   @override
   State<PrivateServerForm> createState() => _PrivateServerFormState();
 }
@@ -42,6 +48,7 @@ class _PrivateServerFormState extends State<PrivateServerForm> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
     if (!_form.currentState!.validate()) return;
     setState(() {
       _saving = true;
@@ -50,7 +57,6 @@ class _PrivateServerFormState extends State<PrivateServerForm> {
     try {
       await widget.gateway.save(PrivateServerConfig(
           _id.text.trim(), _relay.text.trim(), _key.text.trim()));
-      if (mounted) Navigator.of(context).pop(true);
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -62,6 +68,13 @@ class _PrivateServerFormState extends State<PrivateServerForm> {
                   'Save was not confirmed; the stopped state is unknown. Check connection status and pause the client before retrying.');
         });
       }
+      return;
+    }
+    if (!mounted) return;
+    if (widget.onSaved != null) {
+      widget.onSaved!();
+    } else {
+      Navigator.of(context).pop(true);
     }
   }
 
@@ -102,8 +115,8 @@ class _PrivateServerFormState extends State<PrivateServerForm> {
                     style: Theme.of(context).textTheme.headlineSmall),
                 const SizedBox(height: 10),
                 Text(nikoText(
-                    '填写你已有 NAS / OSS 服务端的配置。保存后仅启用当前应用进程内的私服注册；不会安装系统服务或授予系统权限。',
-                    'Use your existing NAS / OSS server settings. Saving enables private registration in this app; it does not install a system service or grant permissions.')),
+                    '填写你已有 NAS / OSS 服务端的配置，远端电脑需要使用相同私服。保存后启用本应用的私服配置，不会安装系统服务或授予系统权限。',
+                    'Use your existing NAS / OSS server settings. The remote computer needs the same server. Saving enables this app’s private-server configuration; it does not install a system service or grant permissions.')),
                 _field(
                     _id,
                     nikoText('ID 服务器', 'ID server'),
@@ -147,8 +160,11 @@ class _PrivateServerFormState extends State<PrivateServerForm> {
                       TextButton(
                           onPressed: _saving
                               ? null
-                              : () => Navigator.of(context).pop(false),
-                          child: Text(nikoText('取消', 'Cancel'))),
+                              : widget.onCancelled ??
+                                  () => Navigator.of(context).pop(false),
+                          child: Text(widget.onCancelled == null
+                              ? nikoText('取消', 'Cancel')
+                              : nikoText('稍后配置', 'Set up later'))),
                       FilledButton.icon(
                           onPressed: _saving ? null : _save,
                           icon: _saving

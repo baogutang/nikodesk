@@ -46,6 +46,7 @@ pub mod peer_migration;
 #[cfg(not(any(target_os="android",target_os="ios")))]
 #[path = "nikodesk/cm_peer.rs"]
 pub(crate) mod cm_peer;
+pub(crate) mod cm_permissions;
 #[path = "nikodesk/connection_capabilities.rs"]
 pub(crate) mod connection_capabilities;
 #[path = "nikodesk/camera_flow.rs"]

@@ -46,6 +46,7 @@ void main() {
   Future<void> load(WidgetTester tester, _ServerDouble gateway,
       {Brightness brightness = Brightness.light,
       double scale = 1,
+      bool deferSetup = true,
       Future<void> Function(BuildContext, String, bool,
               {bool isFileTransfer, String? password})?
           onConnect}) async {
@@ -62,6 +63,11 @@ void main() {
               onConnect: onConnect)));
       for (var i = 0; i < 250; i++) {
         await tester.pump();
+        if (deferSetup && find.text('Set up later').evaluate().isNotEmpty) {
+          await tester.ensureVisible(find.text('Set up later'));
+          await tester.tap(find.text('Set up later'));
+          await tester.pump();
+        }
         await Future<void>.delayed(const Duration(milliseconds: 20));
         if (find
             .byType(CircularProgressIndicator, skipOffstage: false)
@@ -84,6 +90,33 @@ void main() {
     }
     expect(target.hitTestable(), findsOneWidget);
   }
+
+  testWidgets('first Android setup saves then opens the controller workspace',
+      (tester) async {
+    final gateway = _ServerDouble(
+        const ServerSnapshot(PrivateServerConfig('', '', ''), null, false));
+    await load(tester, gateway, deferSetup: false);
+    expect(find.text('Connect to your server'), findsOneWidget);
+    expect(find.text('Devices'), findsNothing);
+    await tester.enterText(find.byType(TextFormField).at(0), 'test.invalid:21116');
+    await tester.enterText(find.byType(TextFormField).at(1), 'test.invalid:21117');
+    await tester.enterText(
+        find.byType(TextFormField).at(2), base64Encode(List.filled(32, 1)));
+    await tester.ensureVisible(find.text('Save and enable private server'));
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Save and enable private server'));
+      for (var i = 0; i < 30; i++) {
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('Controller configuration enabled'), findsOneWidget);
+    expect(find.text('Devices'), findsOneWidget);
+    expect(find.text('Registered'), findsNothing);
+    expect(find.text('Connect to your server'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets('Android settings exposes installed product/build separately',
       (tester) async {

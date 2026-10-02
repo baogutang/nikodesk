@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NikoDesk - Remote desktop on your own server</title>
-<meta name="description" content="A private-server remote desktop built on RustDesk. macOS ARM64 test builds; Windows and Android revisions are under development.">
+<meta name="description" content="A private-server remote desktop built on RustDesk. Local macOS and Android test packages have passed package checks, but remain unpublished and untested on real devices. Windows identity checks remain unresolved.">
 <link rel="icon" href="assets/favicon.png?v=5" type="image/png">
 <link rel="apple-touch-icon" href="assets/logo.png?v=5">
 <link rel="preload" href="assets/fonts/inter-800.woff2?v=5" as="font" type="font/woff2" crossorigin>
@@ -359,7 +359,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
     <span class="dot"></span>v1.0.0 archived test build<span class="arrow">→</span>
   </a>
   <h1>Your machines, your server,<br><span class="accent">your remote desktop.</span></h1>
-  <p class="sub">The native RustDesk core, connected to your own rendezvous and relay services. Windows, macOS and the Android controller are being developed.</p>
+  <p class="sub">The native RustDesk core, connected to your own rendezvous and relay services. Windows and macOS target controller and receiver roles; Android is controller only. Real-session acceptance remains pending.</p>
   <div class="cta-row">
     <a class="btn btn-primary" href="#download">Download NikoDesk</a>
     <a class="btn btn-outline" href="https://github.com/baogutang/nikodesk" target="_blank" rel="noopener">Read the source</a>
@@ -560,7 +560,7 @@ Key:        (id_ed25519.pub)</pre>
   <div class="sec-head reveal">
     <span class="sec-pill">Download</span>
     <h2>Downloads and platform status</h2>
-    <p class="sec-sub">Public downloads remain the historical v1.0.0. Local 1.1.0+4 macOS and Android packages have been built, but are unpublished and have no real-device remote acceptance. A full Windows build remains unverified.</p>
+    <p class="sec-sub">Public downloads remain the historical v1.0.0. Local 1.1.0+6 macOS DMG, complete-app ZIP and Android APK builds and package checks passed, but these packages are unpublished, uninstalled and untested on real devices. The earlier full Windows build passed compilation but failed its application identity checks.</p>
   </div>
   <div class="dl-list">
     <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.0/NikoDesk-macos-arm64.zip">
@@ -572,13 +572,13 @@ Key:        (id_ed25519.pub)</pre>
     <article class="dl unavailable reveal">
       <h3>Windows</h3>
       <span class="arch">x64 · v1.0.0 unavailable</span>
-      <p class="note">v1.0.0 refuses to start. Isolation and portable packaging are implemented in the revision; a full Win10 build and runtime check remain pending. Keep the archived EXE, DLLs and data together.</p>
+      <p class="note">v1.0.0 refuses to start. Earlier validation completed the full MSVC＋Flutter build but failed its application identity checks. Repair validation, Win10 launch and remote sessions remain pending; there is no accepted package for this batch. Keep the archived EXE, DLLs and data together.</p>
       <a class="archive" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.0/NikoDesk-windows-x64.zip">View archive (not for installation)</a>
     </article>
     <article class="dl unavailable reveal">
       <h3>Android</h3>
       <span class="arch">arm64 · v1.0.0 unavailable</span>
-      <p class="note">The v1.0.0 APK refuses to start. Local 1.1.0+4 test APK build, signing and 16KB checks passed; Android 16 launch, upgrade and remote acceptance remain pending. No revised public download is available.</p>
+      <p class="note">The v1.0.0 APK refuses to start. Local 1.1.0+6 test APK build, test signing and 16KB checks passed. Android 16 launch, upgrade, remote sessions and calls remain unverified. No revised public download is available.</p>
       <a class="archive" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.0/NikoDesk-android-arm64.apk">View archive (not for installation)</a>
     </article>
   </div>
@@ -597,7 +597,7 @@ Key:        (id_ed25519.pub)</pre>
     </details>
     <details class="reveal">
       <summary>How secure is it?</summary>
-      <div class="a">Sessions use upstream encryption and authentication; the connection entry requires a password. A server public key verifies the server and is not a remote-control password. Keep the server private key on the server and review session permissions. Builds and unit tests do not replace cross-device security validation.</div>
+      <div class="a">Sessions use upstream encryption and authentication; the connection entry requires a password. A server public key verifies the server and is not a remote-control password. Keep the server private key on the server. Terminal, camera and voice requests are off by default and still require local approval and real-session acceptance. Complete tunnels, full unattended access, privacy screens, virtual displays, wake/restart/automatic locking and receiver-initiated voice are not delivered. Builds and unit tests do not replace cross-device security validation.</div>
     </details>
     <details class="reveal">
       <summary>What is the relationship to RustDesk?</summary>
@@ -605,7 +605,7 @@ Key:        (id_ed25519.pub)</pre>
     </details>
     <details class="reveal">
       <summary>What can the Android build do?</summary>
-      <div class="a">Android is intended to control Windows and macOS, without a phone-receiver role. The local 1.1.0+4 test APK has been built and package-checked; Android 16 operation and real remote sessions remain unverified. The public v1.0.0 APK refuses to start and is not recommended for installation.</div>
+      <div class="a">Android controls Windows and macOS; it does not act as a phone receiver. Local 1.1.0+6 passed package checks and integrates controller-initiated voice, manual device selection and microphone permission in ordinary desktop-control sessions. Real-device operation, remote sessions and calls remain unverified; some Bluetooth combinations are unsupported. The public v1.0.0 APK refuses to start and is not recommended for installation.</div>
     </details>
   </div>
 </section>

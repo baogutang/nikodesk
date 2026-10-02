@@ -1,3 +1,4 @@
+import 'package:flutter_hbb/nikodesk/connection_progress_view.dart';
 import 'dart:async';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -124,8 +125,13 @@ class _ViewCameraPageState extends State<ViewCameraPage>
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
-      _ffi.dialogManager
-          .showLoading(translate('Connecting...'), onCancel: closeConnection);
+      if (const bool.fromEnvironment('NIKODESK')) {
+        showNikoConnectionProgress(_ffi.dialogManager, _ffi.nikoConnectionProgress,
+            tag: '${_ffi.sessionId}-nikodesk-connecting', onCancel: closeConnection);
+      } else {
+        _ffi.dialogManager
+            .showLoading(translate('Connecting...'), onCancel: closeConnection);
+      }
     });
     WakelockManager.enable(_uniqueKey);
 

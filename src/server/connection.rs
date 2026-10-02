@@ -1032,11 +1032,12 @@ impl Connection {
                                 conn.file = enabled;
                                 conn.send_permission(Permission::File, enabled).await;
                                 #[cfg(feature = "nikodesk")]
-                                if !enabled {
+                                if !enabled && conn.file_transfer.is_some() {
                                     // End the channel as well as dropping queued reads so the CM
                                     // cannot continue accepting writes after permission revocation.
                                     conn.read_jobs.clear();
                                     conn.delayed_read_dir = None;
+                                    conn.send_to_cm(ipc::Data::SwitchPermission { name, enabled });
                                     conn.send_close_reason_no_retry("File permission revoked").await;
                                     conn.on_close("File permission revoked", false).await;
                                     break;
@@ -1102,6 +1103,10 @@ impl Connection {
                                 }
                                 conn.privacy_mode = enabled;
                                 conn.send_permission(Permission::PrivacyMode, enabled).await;
+                            }
+                            #[cfg(feature = "nikodesk")]
+                            if crate::nikodesk::cm_permissions::known(&name) {
+                                conn.send_to_cm(ipc::Data::SwitchPermission { name, enabled });
                             }
                         }
                         ipc::Data::RawMessage(bytes) => {

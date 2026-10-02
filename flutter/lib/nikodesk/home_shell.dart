@@ -21,6 +21,7 @@ import 'ui.dart';
 import 'voice_cleanup_panel.dart';
 import 'tunnel_cleanup_view.dart';
 import 'install_assistant.dart';
+import 'first_server_setup.dart';
 
 /// Product shell for the NikoDesk home window: glass sidebar plus the device
 /// workspace. Replaces the stock RustDesk two-pane home while keeping every
@@ -57,10 +58,12 @@ class NikoHomeShell extends StatefulWidget {
   State<NikoHomeShell> createState() => _NikoHomeShellState();
 }
 
+enum _HomeDestination { devices, sessions, settings, advanced }
+
 class _NikoHomeShellState extends State<NikoHomeShell> {
   DeviceStore get _store => widget.store ?? DeviceStore.instance;
   late final _gateway = widget.gateway ?? NativeServerGateway();
-  int _index = 0;
+  _HomeDestination _destination = _HomeDestination.devices;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   ServerSnapshot? _server;
   String? _temporaryPassword;
@@ -99,6 +102,14 @@ class _NikoHomeShellState extends State<NikoHomeShell> {
 
   void _scopeChanged() {
     if (mounted && widget.store == null) setState(() {});
+  }
+
+  Future<void> _setLanguage() async {
+    setState(() => NikoLanguage.english = !NikoLanguage.english);
+    if (!_native) return;
+    final language = NikoLanguage.english ? 'en' : 'zh-cn';
+    await bind.mainSetLocalOption(key: 'lang', value: language);
+    await bind.mainChangeLanguage(lang: language);
   }
 
   Future<void> _refreshStatus() async {
@@ -256,9 +267,45 @@ class _NikoHomeShellState extends State<NikoHomeShell> {
     final light = brightness == Brightness.light;
     return Theme(
         data: shell,
-        child: LayoutBuilder(builder: (context, constraints) {
+        child: NikoFirstServerSetup(
+          gateway: _gateway,
+          onLanguageChanged: _setLanguage,
+          onSaved: () {
+            setState(() => _destination = _HomeDestination.devices);
+            _refreshStatus();
+          },
+          child: LayoutBuilder(builder: (context, constraints) {
           final compact = constraints.maxWidth < 840 ||
               constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1) < 640;
+          final pages = <_HomeDestination, Widget>{
+            _HomeDestination.devices: NikoDevicePage(
+                key: ValueKey('devices-${_store.directory.path}'),
+                store: _store,
+                gateway: _gateway,
+                native: _native,
+                active: _destination == _HomeDestination.devices,
+                sessionLog: widget.sessionLog,
+                onLanguageChanged: () => setState(() {}),
+                onConnect: widget.onConnect,
+                onOpenSettings: () =>
+                    setState(() => _destination = _HomeDestination.settings)),
+            _HomeDestination.sessions: NikoSessionHistoryPage(
+                key: ValueKey(
+                    'history-${widget.sessionLog?.directory.path ?? SessionLogStore.instance.directory.path}'),
+                store: widget.sessionLog,
+                gateway: _gateway,
+                active: _destination == _HomeDestination.sessions,
+                onConnect: widget.onConnect),
+            _HomeDestination.settings: NikoSettingsView(
+                gateway: _gateway,
+                native: _native,
+                active: _destination == _HomeDestination.settings,
+                onServerSaved: _refreshStatus,
+                onLanguageChanged: () => setState(() {}),
+                onOpenAdvanced: () =>
+                    setState(() => _destination = _HomeDestination.advanced)),
+            _HomeDestination.advanced: _advancedPage(shell),
+          };
           return DecoratedBox(
             decoration: BoxDecoration(
                 gradient: light ? NikoPalette.lightCanvas : null,
@@ -285,42 +332,14 @@ class _NikoHomeShellState extends State<NikoHomeShell> {
                               ? Colors.white.withOpacity(.7)
                               : NikoPalette.darkLine),
                       Expanded(
-                          child: IndexedStack(index: _index, children: [
-                        NikoDevicePage(
-                            key: ValueKey('devices-${_store.directory.path}'),
-                            store: _store,
-                            gateway: _gateway,
-                            native: _native,
-                            active: _index == 0,
-                            sessionLog: widget.sessionLog,
-                            onLanguageChanged: () => setState(() {}),
-                            onConnect: widget.onConnect,
-                            onOpenSettings: () =>
-                                setState(() => _index = _settingsIndex)),
-                        NikoSessionHistoryPage(
-                            key: ValueKey(
-                                'history-${widget.sessionLog?.directory.path ?? SessionLogStore.instance.directory.path}'),
-                            store: widget.sessionLog,
-                            gateway: _gateway,
-                            active: _index == 1,
-                            onConnect: widget.onConnect),
-                        NikoSettingsView(
-                            gateway: _gateway,
-                            native: _native,
-                            active: _index == _settingsIndex,
-                            onServerSaved: _refreshStatus,
-                            onLanguageChanged: () => setState(() {}),
-                            onOpenAdvanced: () =>
-                                setState(() => _index = _advancedIndex)),
-                        _advancedPage(shell),
-                      ].asMap().entries.map((entry) => ExcludeFocus(
-                          excluding: _index != entry.key, child: entry.value)).toList())),
+                          child: IndexedStack(
+                              index: pages.keys.toList().indexOf(_destination),
+                              children: pages.entries.map((entry) => ExcludeFocus(
+                                  excluding: _destination != entry.key,
+                                  child: entry.value)).toList())),
                     ])));
-        }));
+        })));
   }
-
-  static const _settingsIndex = 2;
-  static const _advancedIndex = 3;
 
   /// The full upstream settings page, hosted inside the shell instead of a
   /// legacy tab. Widget tests inject a gateway and never build it because
@@ -342,10 +361,14 @@ class _NikoHomeShellState extends State<NikoHomeShell> {
         _server?.config.isValid == true && _server?.enabled == true;
     final registered = serverOk && _server?.registrationStatus == 1;
     final nav = [
-      _NavItem(Icons.devices_rounded, nikoText('设备', 'Devices')),
-      _NavItem(Icons.history_rounded, nikoText('会话', 'Sessions')),
-      _NavItem(Icons.tune_rounded, nikoText('设置', 'Settings')),
-      _NavItem(Icons.settings_suggest_rounded, nikoText('高级设置', 'Advanced')),
+      _NavItem(_HomeDestination.devices, Icons.devices_rounded,
+          nikoText('设备', 'Devices')),
+      _NavItem(_HomeDestination.sessions, Icons.history_rounded,
+          nikoText('会话', 'Sessions')),
+      _NavItem(_HomeDestination.settings, Icons.tune_rounded,
+          nikoText('设置', 'Settings')),
+      _NavItem(_HomeDestination.advanced, Icons.settings_suggest_rounded,
+          nikoText('高级设置', 'Advanced')),
     ];
     final panel = Container(
         width: width,
@@ -380,15 +403,15 @@ class _NikoHomeShellState extends State<NikoHomeShell> {
                         style: shell.textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.w700)),
                   ])),
-              for (var i = 0; i < nav.length; i++)
+              for (final item in nav)
                 Padding(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
                     child: _NavTile(
-                        item: nav[i],
-                        selected: _index == i,
+                        item: item,
+                        selected: _destination == item.destination,
                         onTap: () {
-                          setState(() => _index = i);
+                          setState(() => _destination = item.destination);
                           _scaffoldKey.currentState?.closeDrawer();
                         })),
               const Divider(indent: 16, endIndent: 16),
@@ -442,11 +465,9 @@ class _NikoHomeShellState extends State<NikoHomeShell> {
           const SizedBox(height: 8),
           Builder(builder: (_) {
             final id = _deviceId;
-            return Row(children: [
+            return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Expanded(
                   child: Text(id.isEmpty ? '—' : id,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                       style: nikoIdStyle(context, fontSize: 19))),
               IconButton(
                   tooltip: nikoText('复制本机设备 ID', 'Copy local device ID'),
@@ -551,7 +572,7 @@ class _NikoHomeShellState extends State<NikoHomeShell> {
     return InkWell(
       customBorder: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(NikoShapes.card)),
-      onTap: () => setState(() => _index = _settingsIndex),
+      onTap: () => setState(() => _destination = _HomeDestination.settings),
       child: NikoGlassCard(
         padding: const EdgeInsets.all(12),
         boxShadow: const [],
@@ -607,9 +628,10 @@ class _NikoHomeShellState extends State<NikoHomeShell> {
 }
 
 class _NavItem {
+  final _HomeDestination destination;
   final IconData icon;
   final String label;
-  const _NavItem(this.icon, this.label);
+  const _NavItem(this.destination, this.icon, this.label);
 }
 
 class _NavTile extends StatelessWidget {

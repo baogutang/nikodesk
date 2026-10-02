@@ -1186,7 +1186,8 @@ void msgBox(SessionID sessionId, String type, String title, String text,
     ReconnectHandle? reconnect,
     int? reconnectTimeout,
     VoidCallback? onSubmit,
-    int? submitTimeout}) {
+    int? submitTimeout,
+    Widget? connectionContext}) {
   dialogManager.dismissAll();
   if (type.contains('insecure-connection')) {
     Future<void> closeSession() async {
@@ -1307,7 +1308,10 @@ void msgBox(SessionID sessionId, String type, String title, String text,
   dialogManager.show(
     (setState, close, context) => CustomAlertDialog(
       title: null,
-      content: SelectionArea(child: msgboxContent(type, title, text)),
+      content: SelectionArea(child: connectionContext == null
+          ? msgboxContent(type, title, text)
+          : Column(mainAxisSize: MainAxisSize.min, children: [
+              connectionContext, msgboxContent(type, title, text)])),
       actions: buttons,
       onSubmit: hasOk ? submit : null,
       onCancel: hasCancel == true ? cancel : null,

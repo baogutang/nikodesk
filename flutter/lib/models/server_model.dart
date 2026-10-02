@@ -718,6 +718,10 @@ class ServerModel with ChangeNotifier {
   void addConnection(Map<String, dynamic> evt) {
     try {
       final client = Client.fromJson(jsonDecode(evt["client"]));
+      if (const bool.fromEnvironment('NIKODESK')) {
+        final existing = _clients.where((c) => c.id == client.id);
+        if (existing.isNotEmpty) existing.first.applyNikoPermissions(client);
+      }
       if (!_anchorNikoTunnel(client)) {
         notifyListeners();
         return;
@@ -1092,6 +1096,22 @@ class Client {
 
   Client(this.id, this.authorized, this.isFileTransfer, this.isViewCamera,
       this.name, this.peerId, this.keyboard, this.clipboard, this.audio);
+
+  bool applyNikoPermissions(Client confirmed) {
+    if (!const bool.fromEnvironment('NIKODESK') || id != confirmed.id ||
+        peerId != confirmed.peerId || type_() != confirmed.type_() ||
+        disconnected || confirmed.disconnected || confirmed.nikoCameraCleanup ||
+        confirmed.nikoVoiceCleanup || confirmed.nikoTunnelCleanup) return false;
+    keyboard = confirmed.keyboard;
+    clipboard = confirmed.clipboard;
+    audio = confirmed.audio;
+    file = confirmed.file;
+    restart = confirmed.restart;
+    recording = confirmed.recording;
+    blockInput = confirmed.blockInput;
+    privacyMode = confirmed.privacyMode;
+    return true;
+  }
 
   Client.fromJson(Map<String, dynamic> json) {
     id = json['id'];

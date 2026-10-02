@@ -1,3 +1,4 @@
+import 'package:flutter_hbb/nikodesk/connection_progress_view.dart';
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
@@ -193,8 +194,13 @@ class _TerminalPageState extends State<TerminalPage>
         bind.mainGetLocalOption(key: kOptionShowTerminalCtrlKeys) == 'Y';
     // Initialize terminal connection
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _ffi.dialogManager
-          .showLoading(translate('Connecting...'), onCancel: closeConnection);
+      if (const bool.fromEnvironment('NIKODESK')) {
+        showNikoConnectionProgress(_ffi.dialogManager, _ffi.nikoConnectionProgress,
+            tag: '${_ffi.sessionId}-nikodesk-connecting', onCancel: closeConnection);
+      } else {
+        _ffi.dialogManager
+            .showLoading(translate('Connecting...'), onCancel: closeConnection);
+      }
 
       if (_showTerminalExtraKeys) {
         _updateKeyboardHeight();

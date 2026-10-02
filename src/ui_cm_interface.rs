@@ -552,6 +552,11 @@ pub fn switch_permission(id: i32, name: String, enabled: bool) {
         return;
     }
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
+        #[cfg(feature = "nikodesk")]
+        if client.disconnected || client.niko_camera_cleanup || client.niko_voice_cleanup ||
+            client.niko_tunnel_cleanup || !crate::nikodesk::cm_permissions::known(&name) {
+            return;
+        }
         allow_err!(client.tx.send(Data::SwitchPermission { name, enabled }));
     };
 }
@@ -780,10 +785,23 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                     self.cm.new_message(self.conn_id, text);
                                 }
                                 Data::SwitchPermission { name, enabled } => {
+                                    #[cfg(feature = "nikodesk")]
+                                    {
+                                        let confirmed = CLIENTS.write().ok().and_then(|mut clients| {
+                                            clients.get_mut(&self.conn_id).and_then(|client| {
+                                                crate::nikodesk::cm_permissions::apply(client, &name, enabled)
+                                                    .then(|| client.clone())
+                                            })
+                                        });
+                                        if let Some(client) = confirmed {
+                                            self.cm.ui_handler.add_connection(&client);
+                                        }
+                                    }
                                     // Keep this branch scoped to privacy mode rollback.
                                     // Other CM permission toggles are updated optimistically by the UI itself.
                                     // The backend currently sends SwitchPermission back to CM only when
                                     // privacy-mode turn-off fails and the UI state must be restored.
+                                    #[cfg(not(feature = "nikodesk"))]
                                     if name == "privacy_mode" {
                                         let client = {
                                             let mut clients = CLIENTS.write().unwrap();

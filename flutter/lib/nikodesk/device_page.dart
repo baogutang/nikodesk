@@ -641,6 +641,9 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
             .compareTo(a.lastConnectedAt ?? DateTime(1970));
       }
       if (a.favorite != b.favorite) return a.favorite ? -1 : 1;
+      final recent = (b.lastConnectedAt ?? DateTime(1970))
+          .compareTo(a.lastConnectedAt ?? DateTime(1970));
+      if (recent != 0) return recent;
       return a.title.toLowerCase().compareTo(b.title.toLowerCase());
     });
     return FocusTraversalGroup(
@@ -670,8 +673,8 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
                                                     .headlineMedium)
                                             ?.copyWith(
                                                 fontWeight: FontWeight.w700)),
-                                    if (constraints.maxWidth >= 520 ||
-                                        _devices.isEmpty) ...[
+                                    if (_devices.isEmpty ||
+                                        _server?.config.isValid != true) ...[
                                       const SizedBox(height: 6),
                                       Text(
                                           nikoText('自己的服务器，熟悉的工作空间。',
@@ -1064,8 +1067,8 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
         const SizedBox(height: 8),
         Text(
             _devices.isEmpty
-                ? nikoText('添加设备 ID，设置容易记住的别名。不会保存控制密码。',
-                    'Add a device ID and a memorable alias. No control passwords are stored.')
+                ? nikoText('添加设备 ID 和别名。默认不保存密码；连接时可选择在认证成功后保存到本机系统安全存储。',
+                    'Add a device ID and alias. Passwords are not saved by default; when connecting, you can choose to save them to this device’s secure storage after authentication succeeds.')
                 : nikoText('试试其他关键词或筛选条件。', 'Try another search or filter.'),
             textAlign: TextAlign.center,
             style: TextStyle(color: _muted(context), fontSize: 12.5)),

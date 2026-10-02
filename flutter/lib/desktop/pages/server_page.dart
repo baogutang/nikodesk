@@ -29,6 +29,7 @@ import '../../nikodesk/cm_camera_native.dart';
 import '../../nikodesk/cm_voice_panel.dart';
 import '../../nikodesk/cm_voice_start.dart';
 import '../../nikodesk/cm_tunnel_panel.dart';
+import '../../nikodesk/cm_permissions.dart';
 
 /// Set only by this window's own close control, and only once the user has confirmed. Any other
 /// way the window can go - a session logout closing every window, the window manager, a native
@@ -388,6 +389,15 @@ Widget buildConnectionCard(Client client) {
 }
 
 Widget _buildConnectionCardContents(Client client) {
+  if (const bool.fromEnvironment('NIKODESK')) {
+    return NikoCmSessionLayout(
+      key: ValueKey(client.id),
+      header: _CmHeader(client: client),
+      permissions: client.type_() == ClientType.remote && !client.disconnected
+          ? _PrivilegeBoard(client: client) : null,
+      controls: _CmControlPanel(client: client),
+    );
+  }
   return Column(
       mainAxisAlignment: MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -485,6 +495,42 @@ class _CmHeaderState extends State<_CmHeader>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    if (const bool.fromEnvironment('NIKODESK')) {
+      final action = switch (client.type_()) {
+        ClientType.remote => nikoText('画面与键鼠控制', 'Screen and input control'),
+        ClientType.file => nikoText('文件传输', 'File transfer'),
+        ClientType.camera => nikoText('摄像头访问', 'Camera access'),
+        ClientType.terminal => nikoText('终端访问', 'Terminal access'),
+        ClientType.portForward => '${nikoText('隧道目标', 'Tunnel target')}: '
+            '${client.nikoTunnel?.target.label ?? client.portForward}',
+      };
+      return NikoCmRequestHeader(
+        requester: client.name, peerId: client.peerId, action: action,
+        status: client.disconnected
+            ? client.nikoCameraCleanup || client.nikoVoiceCleanup || client.nikoTunnelCleanup
+                ? nikoText('等待清理确认', 'Waiting for cleanup confirmation')
+                : nikoText('已断开', 'Disconnected')
+            : client.authorized ? nikoText('已连接', 'Connected')
+                : nikoText('等待本机允许', 'Waiting for local approval'),
+        duration: client.authorized && !client.disconnected
+            ? Obx(() => Text(formatDurationToTime(Duration(seconds: _time.value)),
+                style: Theme.of(context).textTheme.bodyMedium)) : null,
+        trailing: client.authorized && !client.disconnected &&
+                {ClientType.remote, ClientType.file, ClientType.camera}.contains(client.type_())
+            ? IconButton(
+                tooltip: client.type_() == ClientType.file
+                    ? nikoText('传输记录', 'Transfer history') : nikoText('聊天', 'Chat'),
+                icon: Icon(client.type_() == ClientType.file
+                    ? Icons.folder_open_rounded : Icons.chat_bubble_outline_rounded),
+                onPressed: () => checkClickTime(client.id, () {
+                  if (client.type_() == ClientType.file) {
+                    gFFI.chatModel.toggleCMFilePage();
+                  } else {
+                    gFFI.chatModel.toggleCMChatPage(MessageKey(client.peerId, client.id));
+                  }
+                })) : null,
+      );
+    }
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10.0),
@@ -709,6 +755,46 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
 
   @override
   Widget build(BuildContext context) {
+    if (const bool.fromEnvironment('NIKODESK')) {
+      final current = widget.client;
+      final canModify = !current.disconnected &&
+          bind.mainGetBuildinOption(key: kOptionEnablePermChangeInAcceptWindow) != 'N';
+      return NikoCmPermissions(
+        canModify: canModify,
+        onChange: (name, enabled) => checkClickTime(current.id, () async {
+          if (!mounted || widget.client.id != current.id || widget.client.disconnected) return;
+          try {
+            await bind.cmSwitchPermission(connId: current.id, name: name, enabled: enabled)
+                .timeout(const Duration(seconds: 5));
+          } catch (_) {
+            if (mounted) {
+              nikoNotice(context, nikoText('权限变更未确认，请检查会话状态。',
+                  'Permission change is unconfirmed. Check the session status.'));
+            }
+          }
+        }),
+        permissions: [
+          NikoCmPermission('keyboard', nikoText('键鼠控制', 'Keyboard and mouse'),
+              Icons.keyboard, current.keyboard),
+          NikoCmPermission('clipboard', nikoText('文字剪贴板', 'Text clipboard'),
+              Icons.content_paste_rounded, current.clipboard),
+          NikoCmPermission('audio', nikoText('设备音频', 'Device audio'),
+              Icons.volume_up_rounded, current.audio),
+          NikoCmPermission('file', nikoText('文件复制粘贴', 'File copy and paste'),
+              Icons.upload_file_rounded, current.file),
+          NikoCmPermission('restart', nikoText('远程重启', 'Remote restart'),
+              Icons.restart_alt_rounded, current.restart),
+          NikoCmPermission('recording', nikoText('会话录制', 'Session recording'),
+              Icons.videocam_rounded, current.recording),
+          if (isWindows)
+            NikoCmPermission('block_input', nikoText('屏蔽本机输入', 'Block local input'),
+                Icons.block, current.blockInput),
+          if (bind.mainSupportedPrivacyModeImpls() != '[]')
+            NikoCmPermission('privacy_mode', nikoText('隐私屏', 'Privacy screen'),
+                Icons.visibility_off, current.privacyMode),
+        ],
+      );
+    }
     final crossAxisCount = 4;
     final spacing = 10.0;
     final canModifyPermission =
@@ -1285,6 +1371,17 @@ class _CmControlPanel extends StatelessWidget {
       GestureTapDownCallback? onTapDown}) {
     assert(!(onClick == null && onTapDown == null));
     final niko = bind.mainGetAppNameSync() == 'NikoDesk';
+    if (niko && onClick != null) {
+      final button = NikoCmActionButton(
+        label: translate(text), icon: icon,
+        outlined: border != null || color == Colors.transparent,
+        danger: color == Colors.red,
+        onPressed: () => checkClickTime(client.id, onClick),
+      );
+      return Padding(padding: const EdgeInsets.all(4),
+        child: tooltip == null ? button
+            : Tooltip(message: translate(tooltip), child: button));
+    }
     Widget textWidget;
     if (icon != null) {
       textWidget = Text(

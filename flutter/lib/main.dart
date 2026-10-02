@@ -31,6 +31,7 @@ import 'mobile/widgets/deploy_dialog.dart';
 import 'models/platform_model.dart';
 import 'nikodesk/mobile_home.dart';
 import 'nikodesk/theme.dart';
+import 'nikodesk/ui.dart';
 
 /// Basic window and launch properties.
 int? kWindowId;
@@ -126,6 +127,9 @@ Future<void> initEnv(String appType) async {
   // for convenience, use global FFI on mobile platform
   // focus on multi-ffi on desktop first
   await initGlobalFFI();
+  if (bind.mainGetAppNameSync() == 'NikoDesk') {
+    NikoLanguage.usePreference(bind.mainGetLocalOption(key: 'lang'));
+  }
   // await Firebase.initializeApp();
   _registerEventHandler();
   // Update the system theme.
@@ -572,6 +576,9 @@ _registerEventHandler() {
       }
     });
     platformFFI.registerEventHandler('language', 'language', (_) async {
+      if (bind.mainGetAppNameSync() == 'NikoDesk') {
+        NikoLanguage.usePreference(bind.mainGetLocalOption(key: 'lang'));
+      }
       reloadAllWindows();
     });
   }

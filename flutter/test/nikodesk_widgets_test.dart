@@ -83,6 +83,36 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('default device order prioritizes favorites then recent authenticated use',
+      (tester) async {
+    await tester.runAsync(() async {
+      for (final entry in [
+        const DeviceEntry(id: '111111', alias: 'A favorite', favorite: true),
+        DeviceEntry(id: '222222', alias: 'Z favorite', favorite: true,
+            lastConnectedAt: DateTime.utc(2026, 9, 29)),
+        DeviceEntry(id: '333333', alias: 'Z office',
+            lastConnectedAt: DateTime.utc(2026, 9, 30)),
+        DeviceEntry(id: '444444', alias: 'A laptop',
+            lastConnectedAt: DateTime.utc(2026, 9, 28)),
+        const DeviceEntry(id: '555555', alias: 'AAA new'),
+      ]) await store.save(entry);
+    });
+    final gateway = _ServerDouble(ServerSnapshot(
+        PrivateServerConfig('test.invalid:21116', 'test.invalid:21117',
+            base64Encode(List.filled(32, 1))), 1, true));
+    await loadPage(tester, NikoDevicePage(store: store, gateway: gateway));
+    final keys = find.byWidgetPredicate((widget) => widget.key is ValueKey<String> &&
+        (widget.key as ValueKey<String>).value.startsWith('nikodesk-device-connect-'));
+    expect(keys.evaluate().map((element) => (element.widget.key as ValueKey<String>).value).toList(), [
+      'nikodesk-device-connect-222222', 'nikodesk-device-connect-111111',
+      'nikodesk-device-connect-333333', 'nikodesk-device-connect-444444',
+      'nikodesk-device-connect-555555',
+    ]);
+    expect(find.text('自己的服务器，熟悉的工作空间。'), findsNothing);
+    expect(find.byKey(const Key('nikodesk-hero-password')), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets(
       'registered server stays distinct from device availability and connection attempts',
       (tester) async {

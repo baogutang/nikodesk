@@ -23,13 +23,13 @@ A private-server remote desktop built on the native RustDesk core.
 
 NikoDesk is under development. **v1.0.0 is an archived test build and does not contain the fixes from the September 30 review.** Build artifacts alone do not establish a working application.
 
-The latest complete local build is **1.1.0+4 (unpublished, September 30, 2026)**. Its product version is separate from the upstream core/protocol version. Development continues; a local build is neither a public download nor runtime acceptance.
+The latest package-checked local test build is **1.1.0+6 (unpublished, October 1, 2026)**. Full builds and package checks passed for the macOS DMG, complete-app update ZIP and Android APK; their common product source files match. Its product version is separate from the upstream core/protocol version. These packages have not been installed, launched or tested in real-device remote sessions; later source changes are not automatically included.
 
-| Platform | v1.0.0 archive | Local 1.1.0+4 validation |
+| Platform | v1.0.0 archive | Current validation (new local packages: 1.1.0+6) |
 |---|---|---|
 | macOS ARM64 | ZIP containing a complete `NikoDesk.app`; local ad-hoc signature, no Developer ID or notarization | Full Rust＋Flutter build, DMG/update ZIP structure and signature integrity verified. This package has not been installed, launched or remote-session tested. |
-| Windows x64 | ZIP containing an EXE, DLLs and `data`; the NikoDesk initialization gate refuses to start | Isolation source, portable build and package checks implemented; full MSVC build, Win10 launch and sessions remain unverified. |
-| Android ARM64 | APK; the NikoDesk initialization gate refuses to start | Full Rust＋Gradle test APK, separate package ID, stable local test certificate and 16KB checks verified. Android 16 launch, upgrade and remote sessions remain unverified. |
+| Windows x64 | ZIP containing an EXE, DLLs and `data`; the NikoDesk initialization gate refuses to start | The earlier build4 validation CI completed the full MSVC＋Flutter build but failed its application identity checks. A second fixed CI repair awaits authorization. There is no accepted Windows package for this batch; Win10 launch and sessions remain unverified. |
+| Android ARM64 | APK; the NikoDesk initialization gate refuses to start | Full Rust＋Gradle test APK, separate package ID, fixed local test certificate, 16KB and voice JNI retention checks verified. Controller only; Android 16 launch, upgrade, remote sessions and voice calls remain unverified. |
 
 The old Windows and Android assets are available for inspection in [the v1.0.0 archive](https://github.com/baogutang/nikodesk/releases/tag/v1.0.0), and are not recommended for installation. New artifacts will be linked only after they are published and verified.
 
@@ -43,7 +43,9 @@ The old Windows and Android assets are available for inspection in [the v1.0.0 a
 - **Diagnostics:** source-labelled session samples. Application RTT, successful decode-callback FPS and native submission-call timing are separate observations; they do not establish input-to-screen latency or actual presentation. Unknown measurements stay unknown.
 - **Light and dark themes:** follow the system or choose in the app.
 
-Terminal, port tunnels, camera and voice requests are off by default. Allowing requests does not grant local approval or establish that a resource is running. The terminal connection/local-approval flow is implemented but real remote acceptance remains pending. The other three vertical flows, full unattended access, privacy screens and virtual displays remain in development. Unfinished capabilities stay unavailable; these boundaries are not a complete security audit.
+Terminal, port tunnels, camera and voice requests are off by default. Allowing requests does not grant local approval or establish that a resource is running. Terminal and camera connection/local-approval flows are implemented. Build6 integrates controller-initiated voice in ordinary desktop-control sessions, manual local device selection and microphone permission, the Android voice switch and cleanup after closing a session. Preparing or queuing a call does not establish that it has started; muting does not release the microphone. All these capabilities await real cross-device acceptance, and some Android Bluetooth combinations are unsupported.
+
+Receiver-initiated voice, complete port tunnels, full unattended access, privacy screens, virtual displays, wake, restart and automatic locking are not delivered. Unfinished capabilities stay unavailable; source implementation and package checks are not a complete security audit.
 
 ## Getting started on macOS
 
@@ -85,7 +87,7 @@ The output is `flutter/build/macos/Build/Products/Release/NikoDesk.app`. Packagi
 
 - Uses upstream encryption and authentication; a server public key is not a remote-control password. Device private keys and server private keys have different owners and must not be copied between them.
 - Session confirmation and permission controls must be tested on the actual controlled platform. Review the requested capabilities rather than granting everything for convenience.
-- macOS artifacts use local ad-hoc signatures, without Apple Developer ID signing or notarization. Windows distribution signing and Android release-signing continuity still need verification.
+- macOS artifacts use local ad-hoc signatures, without Apple Developer ID signing or notarization. Android uses a fixed local test certificate; formal release signing and real-device upgrades remain unverified. Windows distribution signing remains unverified.
 - Full cross-device testing, file/clipboard behavior, permission revocation and performance comparisons are separate acceptance work. No unmeasured speed or latency improvement is claimed.
 
 ## Project and license

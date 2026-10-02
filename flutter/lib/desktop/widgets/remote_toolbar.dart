@@ -9,6 +9,9 @@ import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/nikodesk/session_tools.dart';
+import 'package:flutter_hbb/nikodesk/session_toolbar.dart';
+import 'package:flutter_hbb/nikodesk/session_capability_connect.dart';
+import 'package:flutter_hbb/nikodesk/ui.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
@@ -801,9 +804,47 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     });
   }
 
+  List<Widget> _nikoToolbarActions(_ToolbarEdge edge) => [
+    _PinMenu(state: widget.state),
+    Obx(() {
+      final privacyModeState = PrivacyModeState.find(widget.id);
+      if ((privacyModeState.isEmpty ||
+              allowDisplaySwitchInPrivacyMode(pi, privacyModeState.value)) &&
+          pi.displaysCount.value > 1 &&
+          mainGetLocalBoolOptionSync(kOptionAllowMonitorSwitchMainToolbar)) {
+        return _MainMonitorSwitchButton(id: widget.id, ffi: widget.ffi);
+      }
+      return const Offstage();
+    }),
+    Obx(() {
+      final privacyModeState = PrivacyModeState.find(widget.id);
+      if ((privacyModeState.isEmpty ||
+              allowDisplaySwitchInPrivacyMode(pi, privacyModeState.value)) &&
+          pi.displaysCount.value > 1) {
+        return _MonitorMenu(id: widget.id, ffi: widget.ffi, edge: edge,
+            setRemoteState: widget.setRemoteState);
+      }
+      return const Offstage();
+    }),
+    _DisplayMenu(id: widget.id, ffi: widget.ffi, state: widget.state,
+        setFullscreen: _setFullscreen),
+    NikoSessionButton(ffi: widget.ffi),
+    if (widget.ffi.connType == ConnType.defaultConn) ...[
+      _KeyboardMenu(id: widget.id, ffi: widget.ffi),
+      _NikoClipboardMenu(ffi: widget.ffi),
+      if (isDesktop) _NikoFileMenu(id: widget.id, ffi: widget.ffi),
+      if (!isWebDesktop) _MobileActionMenu(ffi: widget.ffi),
+    ],
+    NikoSessionButton(ffi: widget.ffi, diagnostics: true),
+    _ControlMenu(id: widget.id, ffi: widget.ffi, state: widget.state),
+    _ChatMenu(id: widget.id, ffi: widget.ffi),
+    if (!isWeb) _RecordMenu(),
+  ];
+
   Widget _buildToolbar(
       BuildContext context, _ToolbarEdge edge, bool isHorizontal) {
     final List<Widget> toolbarItems = [];
+    if (!const bool.fromEnvironment('NIKODESK')) {
     toolbarItems.add(_PinMenu(state: widget.state));
     toolbarItems.add(Obx(() {
       final privacyModeState = PrivacyModeState.find(widget.id);
@@ -857,6 +898,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     }
     if (!isWeb) toolbarItems.add(_RecordMenu());
     toolbarItems.add(_CloseMenu(id: widget.id, ffi: widget.ffi));
+    }
     final toolbarBorderRadius = BorderRadius.all(Radius.circular(4.0));
     // innerAxis: how the toolbar icons themselves flow.
     // outerAxis: how the toolbar block and the handle stack against each other
@@ -875,7 +917,13 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
           .style
           ?.backgroundColor
           ?.resolve(MaterialState.values.toSet()),
-      child: SingleChildScrollView(
+      child: const bool.fromEnvironment('NIKODESK')
+          ? Theme(data: themeData(), child: _ToolbarTheme.borderWrapper(
+              context, NikoSessionToolbar(
+                  direction: innerAxis, actions: _nikoToolbarActions(edge),
+                  endSession: _CloseMenu(id: widget.id, ffi: widget.ffi)),
+              toolbarBorderRadius))
+          : SingleChildScrollView(
         scrollDirection: innerAxis,
         child: Theme(
           data: themeData(),
@@ -947,6 +995,7 @@ class _PinMenu extends StatelessWidget {
       () => _IconMenuButton(
         assetName: state.pin ? "assets/pinned.svg" : "assets/unpinned.svg",
         tooltip: state.pin ? 'Unpin Toolbar' : 'Pin Toolbar',
+        selected: const bool.fromEnvironment('NIKODESK') ? state.pin : null,
         onPressed: state.switchPin,
         color:
             state.pin ? _ToolbarTheme.blueColor : _ToolbarTheme.inactiveColor,
@@ -1167,7 +1216,7 @@ class _MonitorMenu extends StatelessWidget {
                 width, Colors.white, _ToolbarTheme.blueColor);
           }
           return _IconMenuButton(
-            tooltip: isMulti
+            tooltip: isMulti && !const bool.fromEnvironment('NIKODESK')
                 ? ''
                 : isAllMonitors
                     ? 'All monitors'
@@ -1175,6 +1224,7 @@ class _MonitorMenu extends StatelessWidget {
             hMargin: isMulti ? null : 6,
             vMargin: isMulti ? null : 12,
             topLevel: false,
+            selected: const bool.fromEnvironment('NIKODESK') ? i == display.value : null,
             color: i == display.value
                 ? _ToolbarTheme.blueColor
                 : _ToolbarTheme.inactiveColor,
@@ -1315,7 +1365,8 @@ class _ControlMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _IconSubmenuButton(
-        tooltip: 'Control Actions',
+        tooltip: const bool.fromEnvironment('NIKODESK')
+            ? nikoText('高级操作', 'Advanced actions') : 'Control Actions',
         svg: "assets/actions.svg",
         color: _ToolbarTheme.blueColor,
         hoverColor: _ToolbarTheme.hoverBlueColor,
@@ -1331,6 +1382,90 @@ class _ControlMenu extends StatelessWidget {
                     trailingIcon: e.trailingIcon);
               }
             }).toList());
+  }
+}
+
+class _NikoFileMenu extends StatelessWidget {
+  final String id;
+  final FFI ffi;
+  const _NikoFileMenu({required this.id, required this.ffi});
+
+  @override
+  Widget build(BuildContext context) => _IconMenuButton(
+    icon: const Icon(Icons.folder_open),
+    tooltip: nikoText('文件传输', 'File transfer'),
+    color: _ToolbarTheme.blueColor,
+    hoverColor: _ToolbarTheme.hoverBlueColor,
+    onPressed: () {
+      _menuDismissCallback(ffi);
+      connectNikoSessionCapability(context, id, ffi, fileTransfer: true);
+    },
+  );
+}
+
+class _NikoClipboardMenu extends StatelessWidget {
+  final FFI ffi;
+  const _NikoClipboardMenu({required this.ffi});
+
+  bool get _supportsFiles => versionCmp(ffi.ffiModel.pi.version, '1.2.4') < 0
+      ? isWindows && ffi.ffiModel.pi.platform == kPeerPlatformWindows
+      : bind.mainHasFileClipboard() &&
+          ffi.ffiModel.pi.platformAdditions.containsKey(kPlatformAdditionsHasFileClipboard);
+
+  bool _allowed(String option) => !ffi.closed && !ffi.ffiModel.viewOnly &&
+      ffi.ffiModel.keyboard && ffi.connType == ConnType.defaultConn &&
+      (option == 'disable-clipboard'
+          ? ffi.ffiModel.permissions['clipboard'] != false
+          : ffi.ffiModel.permissions['file'] != false && _supportsFiles);
+
+  @override
+  Widget build(BuildContext context) {
+    Provider.of<FfiModel>(context);
+    final session = ffi.sessionId;
+    if (!_allowed('disable-clipboard') && !_allowed(kOptionEnableFileCopyPaste)) {
+      return const Offstage();
+    }
+    return _IconSubmenuButton(
+      icon: const Icon(Icons.content_paste),
+      tooltip: nikoText('剪贴板', 'Clipboard'),
+      color: _ToolbarTheme.blueColor,
+      hoverColor: _ToolbarTheme.hoverBlueColor,
+      ffi: ffi,
+      menuChildrenGetter: (state) {
+        Widget toggle(String option, String title, {bool inverse = false}) {
+          final observed = bind.sessionGetToggleOptionSync(sessionId: session, arg: option);
+          return CkbMenuButton(
+            ffi: ffi, child: Text(title), value: inverse ? !observed : observed,
+            onChanged: (value) async {
+              if (value == null || ffi.sessionId != session || !_allowed(option)) return;
+              final desired = inverse ? !value : value;
+              try {
+                if (bind.sessionGetToggleOptionSync(sessionId: session, arg: option) != desired) {
+                  await bind.sessionToggleOption(sessionId: session, value: option);
+                }
+                if (ffi.closed || ffi.sessionId != session || !context.mounted) return;
+                if (bind.sessionGetToggleOptionSync(sessionId: session, arg: option) != desired) {
+                  nikoNotice(context, nikoText('未能确认剪贴板设置，请重新打开菜单。',
+                      'Clipboard settings could not be confirmed. Reopen the menu.'));
+                }
+                if (state.mounted) state.setState(() {});
+              } catch (_) {
+                if (context.mounted && !ffi.closed && ffi.sessionId == session) {
+                  nikoNotice(context, nikoText('修改剪贴板设置失败，请重试。',
+                      'Could not change clipboard settings. Try again.'));
+                }
+              }
+            },
+          );
+        }
+        return [
+          if (_allowed('disable-clipboard'))
+            toggle('disable-clipboard', nikoText('同步文字剪贴板', 'Sync text clipboard'), inverse: true),
+          if (_allowed(kOptionEnableFileCopyPaste))
+            toggle(kOptionEnableFileCopyPaste, nikoText('允许文件复制与粘贴', 'Allow file copy and paste')),
+        ];
+      },
+    );
   }
 }
 
@@ -2991,7 +3126,8 @@ class _CloseMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     return _IconMenuButton(
       assetName: 'assets/close.svg',
-      tooltip: 'Close',
+      tooltip: const bool.fromEnvironment('NIKODESK')
+          ? nikoText('结束会话', 'End session') : 'Close',
       onPressed: () async {
         if (await showConnEndAuditDialogCloseCanceled(ffi: ffi)) {
           return;
@@ -3004,12 +3140,19 @@ class _CloseMenu extends StatelessWidget {
   }
 }
 
+NikoToolbarTone _nikoToolbarTone(Color color) {
+  if (color == _ToolbarTheme.redColor) return NikoToolbarTone.danger;
+  if (color == _ToolbarTheme.inactiveColor) return NikoToolbarTone.inactive;
+  return NikoToolbarTone.action;
+}
+
 class _IconMenuButton extends StatefulWidget {
   final String? assetName;
   final Widget? icon;
   final String tooltip;
   final Color color;
   final Color hoverColor;
+  final bool? selected;
   final VoidCallback? onPressed;
   final double? hMargin;
   final double? vMargin;
@@ -3023,6 +3166,7 @@ class _IconMenuButton extends StatefulWidget {
     required this.color,
     required this.hoverColor,
     required this.onPressed,
+    this.selected,
     this.hMargin,
     this.vMargin,
     this.topLevel = true,
@@ -3046,6 +3190,11 @@ class _IconMenuButtonState extends State<_IconMenuButton> {
           width: _ToolbarTheme.buttonSize,
           height: _ToolbarTheme.buttonSize,
         );
+    if (const bool.fromEnvironment('NIKODESK')) {
+      return NikoToolbarButton(icon: icon, label: translate(widget.tooltip),
+          onPressed: widget.onPressed, tone: _nikoToolbarTone(widget.color),
+          selected: widget.selected, topLevel: widget.topLevel, width: widget.width);
+    }
     var button = SizedBox(
       width: widget.width ?? _ToolbarTheme.buttonSize,
       height: _ToolbarTheme.buttonSize,
@@ -3131,6 +3280,13 @@ class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
           width: _ToolbarTheme.buttonSize,
           height: _ToolbarTheme.buttonSize,
         );
+    if (const bool.fromEnvironment('NIKODESK')) {
+      return NikoToolbarMenu(icon: icon, label: translate(widget.tooltip),
+          tone: _nikoToolbarTone(widget.color), width: widget.width,
+          menuStyle: widget.menuStyle ?? _ToolbarTheme.defaultMenuStyle(context),
+          children: widget.menuChildrenGetter(this)
+              .map((entry) => _buildPointerTrackWidget(entry, widget.ffi)).toList());
+    }
     final button = SizedBox(
         width: widget.width ?? _ToolbarTheme.buttonSize,
         height: _ToolbarTheme.buttonSize,

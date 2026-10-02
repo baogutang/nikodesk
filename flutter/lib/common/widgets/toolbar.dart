@@ -11,8 +11,7 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
-import 'package:flutter_hbb/nikodesk/connect_dialog.dart';
-import 'package:flutter_hbb/nikodesk/server_scope.dart';
+import 'package:flutter_hbb/nikodesk/session_capability_connect.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
 import 'package:flutter_hbb/nikodesk/virtual_display.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
@@ -452,30 +451,9 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
       bool isTcpTunneling = false,
       bool isTerminal = false}) async {
     if (const bool.fromEnvironment('NIKODESK')) {
-      final namespace = ffi.serverNamespace;
-      if (NikoServerScope.validate(namespace) == null) {
-        nikoNotice(context, nikoText('无法确认本会话所属私服，请重新连接。',
-            'The session server identity is unavailable. Connect again.'));
-        return;
-      }
-      final password = await nikoAskConnectPassword(context, id, '',
-          fileTransfer: isFileTransfer);
-      if (password == null || password.trim().isEmpty || !context.mounted) return;
-      try {
-        await connect(context, id,
-            serverNamespace: namespace,
-            password: password,
-            isFileTransfer: isFileTransfer,
-            isViewCamera: isViewCamera,
-            isTerminal: isTerminal,
-            isTcpTunneling: isTcpTunneling);
-      } catch (_) {
-        if (context.mounted) {
-          nikoNotice(context, nikoText('无法连接。请确认私服未变化且已启用此能力。',
-              'Could not connect. Check the server identity and enable this capability.'));
-        }
-      }
-      return;
+      return connectNikoSessionCapability(context, id, ffi,
+          fileTransfer: isFileTransfer, viewCamera: isViewCamera,
+          terminal: isTerminal, tcpTunneling: isTcpTunneling);
     }
     final connToken = bind.sessionGetConnToken(sessionId: ffi.sessionId);
     connect(context, id,
@@ -487,11 +465,13 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
   }
 
   if (isDefaultConn && isDesktop) {
-    v.add(
-      TTextMenu(
-          child: Text(translate('Transfer file')),
-          onPressed: () => connectWithToken(isFileTransfer: true)),
-    );
+    if (!const bool.fromEnvironment('NIKODESK')) {
+      v.add(
+        TTextMenu(
+            child: Text(translate('Transfer file')),
+            onPressed: () => connectWithToken(isFileTransfer: true)),
+      );
+    }
     v.add(
       TTextMenu(
           child: Text(translate('View camera')),

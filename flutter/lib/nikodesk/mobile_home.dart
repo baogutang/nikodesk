@@ -19,6 +19,7 @@ import 'product_build_info.dart';
 import 'voice_cleanup_panel.dart';
 import 'tunnel_cleanup_view.dart';
 import 'capability_policy_view.dart';
+import 'first_server_setup.dart';
 
 /// Android controller home. Sessions keep the upstream mobile canvas and input.
 class NikoMobileHome extends StatefulWidget {
@@ -35,8 +36,11 @@ class NikoMobileHome extends StatefulWidget {
   State<NikoMobileHome> createState() => _NikoMobileHomeState();
 }
 
+enum _MobileDestination { devices, sessions, settings }
+
 class _NikoMobileHomeState extends State<NikoMobileHome> {
-  int _index = 0;
+  _MobileDestination _destination = _MobileDestination.devices;
+  late final _gateway = widget.gateway ?? NativeServerGateway();
   StreamSubscription? _links;
   bool get _native =>
       widget.gateway == null || widget.gateway is NativeServerGateway;
@@ -81,8 +85,38 @@ class _NikoMobileHomeState extends State<NikoMobileHome> {
   @override
   Widget build(BuildContext context) => Theme(
       data: nikoTheme(Theme.of(context).brightness),
-      child: Builder(builder: (context) {
+      child: NikoFirstServerSetup(
+        gateway: _gateway,
+        onLanguageChanged: _setLanguage,
+        onSaved: () =>
+            setState(() => _destination = _MobileDestination.devices),
+        child: Builder(builder: (context) {
         final light = nikoIsLight(context);
+        final pages = <_MobileDestination, Widget>{
+          _MobileDestination.devices: NikoDevicePage(
+              key: ValueKey(
+                  'devices-${widget.store?.directory.path ?? DeviceStore.instance.directory.path}'),
+              controllerOnly: true,
+              native: _native,
+              active: _destination == _MobileDestination.devices,
+              store: widget.store,
+              gateway: _gateway,
+              sessionLog: widget.sessionLog,
+              onConnect: widget.onConnect,
+              onOpenSettings: () =>
+                  setState(() => _destination = _MobileDestination.settings),
+              onLanguageChanged: () => setState(() {})),
+          _MobileDestination.sessions: NikoSessionHistoryPage(
+              key: ValueKey(
+                  'history-${widget.sessionLog?.directory.path ?? SessionLogStore.instance.directory.path}'),
+              store: widget.sessionLog,
+              gateway: _gateway,
+              active: _destination == _MobileDestination.sessions,
+              onConnect: widget.onConnect),
+          _MobileDestination.settings: _MobileServerSettings(
+              gateway: _gateway,
+              active: _destination == _MobileDestination.settings),
+        };
         return Scaffold(
           appBar: AppBar(
             title: const Text('NikoDesk'),
@@ -105,52 +139,35 @@ class _NikoMobileHomeState extends State<NikoMobileHome> {
               decoration: BoxDecoration(
                   gradient: light ? NikoPalette.lightCanvas : null,
                   color: light ? null : NikoPalette.darkScaffold),
-              child: IndexedStack(index: _index, children: [
-                NikoDevicePage(
-                    key: ValueKey(
-                        'devices-${widget.store?.directory.path ?? DeviceStore.instance.directory.path}'),
-                    controllerOnly: true,
-                    native: _native,
-                    active: _index == 0,
-                    store: widget.store,
-                    gateway: widget.gateway,
-                    sessionLog: widget.sessionLog,
-                    onConnect: widget.onConnect,
-                    onOpenSettings: () => setState(() => _index = 2),
-                    onLanguageChanged: () => setState(() {})),
-                NikoSessionHistoryPage(
-                    key: ValueKey(
-                        'history-${widget.sessionLog?.directory.path ?? SessionLogStore.instance.directory.path}'),
-                    store: widget.sessionLog,
-                    gateway: widget.gateway,
-                    active: _index == 1,
-                    onConnect: widget.onConnect),
-                _MobileServerSettings(
-                    gateway: widget.gateway, active: _index == 2),
-              ].asMap().entries.map((entry) => ExcludeFocus(
-                  excluding: _index != entry.key, child: entry.value)).toList()),
+              child: IndexedStack(
+                  index: pages.keys.toList().indexOf(_destination),
+                  children: pages.entries.map((entry) => ExcludeFocus(
+                      excluding: _destination != entry.key,
+                      child: entry.value)).toList()),
               )),
             ]),
           ),
           bottomNavigationBar: NavigationBar(
-            selectedIndex: _index,
-            onDestinationSelected: (value) => setState(() => _index = value),
+            selectedIndex: pages.keys.toList().indexOf(_destination),
+            onDestinationSelected: (value) =>
+                setState(() => _destination = pages.keys.elementAt(value)),
             destinations: [
-              NavigationDestination(
+              for (final destination in pages.keys)
+              if (destination == _MobileDestination.devices) NavigationDestination(
                   icon: const Icon(Icons.devices_outlined),
                   selectedIcon: const Icon(Icons.devices_rounded),
-                  label: nikoText('设备', 'Devices')),
-              NavigationDestination(
+                  label: nikoText('设备', 'Devices'))
+              else if (destination == _MobileDestination.sessions) NavigationDestination(
                   icon: const Icon(Icons.history_rounded),
-                  label: nikoText('会话', 'Sessions')),
-              NavigationDestination(
+                  label: nikoText('会话', 'Sessions'))
+              else NavigationDestination(
                   icon: const Icon(Icons.settings_outlined),
                   selectedIcon: const Icon(Icons.settings_rounded),
                   label: nikoText('设置', 'Settings')),
             ],
           ),
         );
-      }));
+      })));
 }
 
 class _MobileServerSettings extends StatefulWidget {

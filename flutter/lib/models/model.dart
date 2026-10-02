@@ -5,6 +5,8 @@ import 'package:flutter_hbb/nikodesk/voice_session_owner.dart';
 import 'package:flutter_hbb/nikodesk/tunnel_controller.dart';
 import 'package:flutter_hbb/nikodesk/tunnel_cleanup.dart';
 import 'package:flutter_hbb/nikodesk/tunnel_cleanup_view.dart';
+import 'package:flutter_hbb/nikodesk/connection_progress.dart';
+import 'package:flutter_hbb/nikodesk/connection_progress_view.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -373,6 +375,7 @@ class FfiModel with ChangeNotifier {
           if (parent.target?.closed != false ||
               !parent.target!.qualityMonitorModel.nikoMetrics.connectionFromNative(evt, parent.target!.serverNamespace)) return;
           _nikoMetricsActive = true;
+          parent.target?.nikoConnectionProgress.transportReady();
         }
         setConnectionType(peerId, evt['secure'] == 'true',
             evt['direct'] == 'true', evt['stream_type'] ?? '');
@@ -946,6 +949,10 @@ class FfiModel with ChangeNotifier {
     final text = evt['text'];
     final link = evt['link'];
     if (const bool.fromEnvironment('NIKODESK') &&
+        parent.target?.sessionId == sessionId && parent.target?.closed == false) {
+      parent.target!.nikoConnectionProgress.message(type, title);
+    }
+    if (const bool.fromEnvironment('NIKODESK') &&
         (title == 'Connection Error' || title == 'Connection Failed' ||
           title == 'Disconnected' || type == 'restarting-show' || type == 'restarting')) {
       parent.target?.fileModel.nikoConnectionLost();
@@ -1014,7 +1021,14 @@ class FfiModel with ChangeNotifier {
       _restartReconnectDelayTimer = null;
       reconnect(dialogManager, sessionId, false);
     } else if (type == 'wait-remote-accept-nook') {
-      showWaitAcceptDialog(sessionId, type, title, text, dialogManager);
+      if (const bool.fromEnvironment('NIKODESK') &&
+          parent.target!.nikoConnectionProgress.value.phase == NikoConnectionPhase.waitingForApproval) {
+        dialogManager.dismissAll();
+        showNikoConnectionProgress(dialogManager, parent.target!.nikoConnectionProgress,
+            tag: '$sessionId-nikodesk-connecting', onCancel: closeConnection);
+      } else {
+        showWaitAcceptDialog(sessionId, type, title, text, dialogManager);
+      }
     } else if (type == 'on-uac' || type == 'on-foreground-elevated') {
       showOnBlockDialog(sessionId, type, title, text, dialogManager);
     } else if (type == 'wait-uac') {
@@ -1148,6 +1162,11 @@ class FfiModel with ChangeNotifier {
         };
       }
       msgBox(sessionId, type, title, text, link, dialogManager,
+          connectionContext: const bool.fromEnvironment('NIKODESK') &&
+                  (title == 'Connection Error' || title == 'Connection Failed' || title == 'Disconnected') &&
+                  parent.target?.nikoConnectionProgress.value.phase == NikoConnectionPhase.failed
+              ? NikoConnectionFailureContext(state: parent.target!.nikoConnectionProgress.value)
+              : null,
           hasCancel: hasCancel,
           reconnect: hasRetry ? reconnect : null,
           reconnectTimeout: hasRetry ? _reconnects : null,
@@ -1180,14 +1199,19 @@ class FfiModel with ChangeNotifier {
       bool forceRelay) {
     if (const bool.fromEnvironment('NIKODESK')) parent.target?.fileModel.nikoConnectionLost();
     if (_nikoMetricsActive) parent.target?.qualityMonitorModel.nikoMetrics.clear();
+    if (const bool.fromEnvironment('NIKODESK')) parent.target?.nikoConnectionProgress.begin(reconnecting: true);
     // Disable relative mouse mode before reconnecting to ensure cursor is released.
     parent.target?.inputModel.setRelativeMouseMode(false);
     _cancelPendingMonitorRestore();
     bind.sessionReconnect(sessionId: sessionId, forceRelay: forceRelay);
     clearPermissions();
     dialogManager.dismissAll();
-    dialogManager.showLoading(translate('Connecting...'),
-        onCancel: closeConnection);
+    if (const bool.fromEnvironment('NIKODESK') && parent.target != null) {
+      showNikoConnectionProgress(dialogManager, parent.target!.nikoConnectionProgress,
+          tag: '$sessionId-nikodesk-connecting', onCancel: closeConnection);
+    } else {
+      dialogManager.showLoading(translate('Connecting...'), onCancel: closeConnection);
+    }
   }
 
   Future<void> showRelayHintDialog(
@@ -1252,7 +1276,12 @@ class FfiModel with ChangeNotifier {
     }
 
     if (waitForFirstImage.isFalse) return;
-    dialogManager.show(
+    if (const bool.fromEnvironment('NIKODESK') && parent.target != null &&
+        parent.target!.nikoConnectionProgress.value.pending) {
+      dialogManager.dismissByTag('$sessionId-nikodesk-connecting');
+      showNikoConnectionProgress(dialogManager, parent.target!.nikoConnectionProgress,
+          tag: '$sessionId-waiting-for-image', onCancel: onClose);
+    } else dialogManager.show(
       (setState, close, context) => CustomAlertDialog(
           title: null,
           content: SelectionArea(child: msgboxContent(type, title, text)),
@@ -1404,6 +1433,11 @@ class FfiModel with ChangeNotifier {
 
   /// Handle the peer info event based on [evt].
   handlePeerInfo(Map<String, dynamic> evt, String peerId, bool isCache) async {
+    if (const bool.fromEnvironment('NIKODESK') && parent.target?.closed == false) {
+      parent.target!.nikoConnectionProgress.authenticated(
+          expectsFrame: parent.target!.connType == ConnType.defaultConn ||
+              parent.target!.connType == ConnType.viewCamera, fromCache: isCache);
+    }
     parent.target?.chatModel.voiceCallStatus.value = VoiceCallStatus.notStarted;
 
     _queryAuditGuid(peerId);
@@ -4130,6 +4164,7 @@ enum ConnType {
 
 /// Flutter state manager and data communication with the Rust core.
 class FFI {
+  late final nikoConnectionProgress = NikoConnectionProgress();
   String? _serverNamespace;
   String? get serverNamespace => _serverNamespace;
   NikoVoiceSessionOwner? _nikoVoiceOwner;
@@ -4288,6 +4323,7 @@ class FFI {
 
   /// Start with the given [id]. Only transfer file if [isFileTransfer], only view camera if [isViewCamera], only port forward if [isPortForward].
   void _nikoStartFailure() {
+    nikoConnectionProgress.fail();
     disposeNikoVoiceOwner();
     _invalidateNikoTunnelController();
     closed = true;
@@ -4329,6 +4365,7 @@ class FFI {
       _serverNamespace = namespace;
     }
     closed = false;
+    if (const bool.fromEnvironment('NIKODESK')) nikoConnectionProgress.begin();
     if (isMobile) mobileReset();
     assert(
         (!(isPortForward && isViewCamera)) &&
@@ -4559,6 +4596,7 @@ class FFI {
   }
 
   Future<void> onEvent2UIRgba() async {
+    if (const bool.fromEnvironment('NIKODESK') && !closed) nikoConnectionProgress.frameReceived();
     if (ffiModel.waitForImageDialogShow.isTrue) {
       ffiModel.waitForImageDialogShow.value = false;
       ffiModel.waitForImageTimer?.cancel();
@@ -4598,6 +4636,7 @@ class FFI {
   /// Login with [password], choose if the client should [remember] it.
   void login(String osUsername, String osPassword, SessionID sessionId,
       String password, bool remember) {
+    if (const bool.fromEnvironment('NIKODESK')) nikoConnectionProgress.credentialsSubmitted();
     bind.sessionLogin(
         sessionId: sessionId,
         osUsername: osUsername,
@@ -4607,6 +4646,7 @@ class FFI {
   }
 
   void send2FA(SessionID sessionId, String code, bool trustThisDevice) {
+    if (const bool.fromEnvironment('NIKODESK')) nikoConnectionProgress.credentialsSubmitted();
     bind.sessionSend2Fa(
         sessionId: sessionId, code: code, trustThisDevice: trustThisDevice);
   }
@@ -4625,6 +4665,7 @@ class FFI {
     }
     closed = true;
     if (const bool.fromEnvironment('NIKODESK')) {
+      nikoConnectionProgress.close();
       disposeNikoVoiceOwner();
       _invalidateNikoTunnelController();
     }

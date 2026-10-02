@@ -1,3 +1,4 @@
+import 'package:flutter_hbb/nikodesk/connection_progress_view.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -411,8 +412,13 @@ class _FileManagerPageState extends State<FileManagerPage> {
         forceRelay: widget.forceRelay);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (const bool.fromEnvironment('NIKODESK') && (!mounted || _ffi.closed)) return;
-      _ffi.dialogManager
-          .showLoading(translate('Connecting...'), onCancel: closeConnection);
+      if (const bool.fromEnvironment('NIKODESK')) {
+        showNikoConnectionProgress(_ffi.dialogManager, _ffi.nikoConnectionProgress,
+            tag: '${_ffi.sessionId}-nikodesk-connecting', onCancel: closeConnection);
+      } else {
+        _ffi.dialogManager
+            .showLoading(translate('Connecting...'), onCancel: closeConnection);
+      }
     });
     _ffi.ffiModel.updateEventListener(_ffi.sessionId, widget.id);
     WakelockManager.enable(_uniqueKey);
