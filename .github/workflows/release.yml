@@ -296,6 +296,13 @@ jobs:
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         shell: pwsh
         run: |
+          # The build step gets rc.exe through build-windows-product.py's own
+          # lookup; this fresh shell does not, and build.rs refuses to produce
+          # unversioned host/setup binaries without it.
+          $rc = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\rc.exe' -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $rc) { throw 'Windows SDK rc.exe not found for the version-resource build' }
+          $env:NIKODESK_WINDOWS_RC = $rc.FullName
           cargo test --locked --lib --features flutter,hwcodec,nikodesk nikodesk_windows_
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test --locked -p rustdesk-portable-packer --features nikodesk
