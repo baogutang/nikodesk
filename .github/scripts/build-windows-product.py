@@ -19,6 +19,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import traceback
 import zipfile
 
 
@@ -76,9 +77,10 @@ def import_names(data, dll=False):
             else:
                 raise ValueError('Excessive PE import name')
             value = name.decode('ascii')
-            if ('/' in value or not value.casefold().endswith('.dll') or
+            # The print spooler's system module is imported as winspool.drv.
+            if ('/' in value or not value.casefold().endswith(('.dll', '.drv')) or
                     not value or PACKAGE.windows_path(value) != value.casefold()):
-                raise ValueError('Unsafe PE import name')
+                raise ValueError('Unsafe PE import name: ' + value)
             names.add(value.casefold())
         else:
             raise ValueError('Unterminated or excessive PE import table')
@@ -124,6 +126,18 @@ def native_exe(data, parts, name):
     declared, = PACKAGE.unpack('<I', data, offset)
     if declared < 80 or declared > size or PACKAGE.unpack('<H', data, offset + 78)[0] != 0xA00:
         raise ValueError('Native imports must restrict loader search to app/System32')
+
+
+def system_library(path):
+    """A Windows system module is only identified as an x64 DLL.
+
+    It is never shipped, and its resources follow Windows' own layouts rather
+    than the limits set for NikoDesk's files.
+    """
+    try:
+        PACKAGE.PE(path.read_bytes(), dll=True, resources=False)
+    except ValueError as error:
+        raise ValueError('{}: {}'.format(path.name, error)) from error
 
 
 def cargo_artifact(path, staging):
@@ -178,7 +192,7 @@ def service_payload(host, gui, output, system_directory):
                 if not path.is_file():
                     raise ValueError('Missing HOST dependency: ' + dependency)
                 # Windows system files can have WinSxS hardlinks; none are copied.
-                PACKAGE.PE(path.read_bytes(), dll=True)
+                system_library(path)
                 system.add(dependency)
     return sorted(system)
 
@@ -242,7 +256,7 @@ def verify_setup_imports(tree, document, system_directory):
                 dependency = system_directory / name
                 if not dependency.is_file():
                     raise ValueError('Missing setup dependency: ' + name)
-                PACKAGE.PE(dependency.read_bytes(), dll=True)
+                system_library(dependency)
                 system.add(name)
     return sorted(system)
 
@@ -278,7 +292,8 @@ def installer_bootstrap(tree, records, parts, env, system_directory):
     packer = ROOT / 'libs/portable'
     subprocess.run(['cargo', '+1.88.0', 'build', '--locked', '--release', '--features',
                     'nikodesk-installer'], cwd=packer, env=build_env, check=True)
-    source = cargo_artifact(packer / 'target/release/rustdesk-portable-packer.exe',
+    # The packer is a workspace member, so Cargo writes it to the workspace target.
+    source = cargo_artifact(ROOT / 'target/release/rustdesk-portable-packer.exe',
                             tree.parent / (tree.name + '-cargo-artifacts'))
     _, data = PREPARE.read_file(source)
     pe = PACKAGE.product_exe(data, parts)
@@ -309,7 +324,7 @@ def installer_bootstrap(tree, records, parts, env, system_directory):
         dependency = system_directory / name
         if not dependency.is_file():
             raise ValueError('Installer bootstrap requires an unavailable DLL: ' + name)
-        PACKAGE.PE(dependency.read_bytes(), dll=True)
+        system_library(dependency)
     destination = tree.with_suffix('.exe')
     PREPARE.read_file(source, destination=destination)
     return {'path': str(destination), **PREPARE.read_file(destination)[0],
@@ -345,10 +360,12 @@ def windows_tools():
     return rc, Path(buffer.value)
 
 
-def build(version_name, build_number, output=None, trust_mode=None):
+def build(version_name, build_number, output=None, trust_mode=None, reuse_client=False):
     rc, system_directory = windows_tools()
     if bool(output) != bool(trust_mode):
         raise ValueError('Setup requires both an output directory and explicit trust mode')
+    if reuse_client and not output:
+        raise ValueError('Only a setup build can reuse an existing client build')
     if trust_mode and trust_mode != VALIDATION_MODE:
         raise ValueError('Only explicit local unsigned validation is configured; production signing is not configured')
     parts = PACKAGE.version_parts(version_name, build_number)
@@ -370,9 +387,10 @@ def build(version_name, build_number, output=None, trust_mode=None):
     cargo = ['cargo', '+1.88.0', 'build', '--locked', '--release', '--features', FEATURES]
     if output:
         subprocess.run(cargo + ['--bin', 'nikodesk-host'], cwd=ROOT, env=env, check=True)
-    subprocess.run([sys.executable, str(ROOT / 'build.py'), '--flutter', '--hwcodec', '--nikodesk',
-                    '--build-name', version_name, '--build-number', str(build_number)],
-                   cwd=ROOT, env=env, check=True)
+    if not reuse_client:
+        subprocess.run([sys.executable, str(ROOT / 'build.py'), '--flutter', '--hwcodec', '--nikodesk',
+                        '--build-name', version_name, '--build-number', str(build_number)],
+                       cwd=ROOT, env=env, check=True)
     if not output:
         return {'setup_requested': False, 'client_build_exit': 0, 'client_run_verified': False}
     gui = ROOT / 'flutter/build/windows/x64/runner/Release'
@@ -425,10 +443,14 @@ def main(argv=None):
     parser.add_argument('--build-number', type=int, required=True)
     parser.add_argument('--setup-output', type=Path)
     parser.add_argument('--setup-trust-mode', choices=PREPARE.TRUST_MODES)
+    parser.add_argument('--reuse-client-build', action='store_true',
+                        help='build the setup tree from the client bundle already in flutter/build')
     args = parser.parse_args(argv)
     try:
-        report = build(args.build_name, args.build_number, args.setup_output, args.setup_trust_mode)
+        report = build(args.build_name, args.build_number, args.setup_output, args.setup_trust_mode,
+                       args.reuse_client_build)
     except (OSError, ValueError, subprocess.CalledProcessError, UnicodeError, PACKAGE.ET.ParseError) as error:
+        traceback.print_exc()
         parser.exit(1, 'Windows product build failed: {}\n'.format(error))
     print(json.dumps({key: report[key] for key in ('product_version', 'product_build', 'installation_verified')
                       if key in report} or report, sort_keys=True))

@@ -222,8 +222,8 @@ pub fn session_add_nikodesk_sync(
             crate::nikodesk::connection_snapshot::validate_namespace(&expected_server_namespace)?;
             crate::nikodesk::validate_remote_id(&id)?;
             crate::nikodesk::validate_connection_credentials(&password)?;
-            if is_port_forward || is_rdp || (is_terminal && is_file_transfer) || (is_view_camera && (is_file_transfer || is_terminal)) || !switch_uuid.is_empty() {
-                hbb_common::bail!("NikoDesk supports private-server desktop, file and locally approved terminal requests");
+            if is_rdp || [is_file_transfer, is_view_camera, is_port_forward, is_terminal].iter().filter(|kind| **kind).count() > 1 || !switch_uuid.is_empty() {
+                hbb_common::bail!("NikoDesk supports one of desktop, file, camera, tunnel or terminal per session, without RDP");
             }
             let snapshot = crate::nikodesk::connection_snapshot::ConnectionSnapshot::capture(&expected_server_namespace)?;
             flutter::session_add_with_snapshot(&session_id, &id, is_file_transfer, is_view_camera, is_port_forward,

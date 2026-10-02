@@ -34,6 +34,9 @@ class ProductVersionTests(unittest.TestCase):
                 (root / 'target/release/deps/dylib_virtual_display.dll').write_bytes(b'fixture')
                 (root / 'target/release/rustdesk-portable-packer.exe').write_bytes(b'fixture')
                 (root / 'LICENCE').write_text('license fixture')
+                (root / 'libs/nikodesk_cpal').mkdir()
+                for notice in ('LICENSE', 'NIKODESK-PROVENANCE.md', 'NIKODESK-PROVENANCE.json'):
+                    (root / 'libs/nikodesk_cpal' / notice).write_text('notice fixture')
                 (root / 'Cargo.toml').write_text('[package]\nversion = "1.5.0"\n')
                 os.chdir(root)
                 with patch.object(BUILD, 'skip_cargo', True), \
@@ -48,6 +51,11 @@ class ProductVersionTests(unittest.TestCase):
                     generator_command = run.call_args_list[-1].args[0]
                     self.assertIn('--nikodesk', generator_command)
                     self.assertEqual(generator_command[-4:], ['--product-version', '1.1.0', '--build-number', '2'])
+                    # The pinned display driver joins the bundle before it is packed.
+                    driver_command = run.call_args_list[0].args[0]
+                    self.assertEqual(driver_command[1:], ['.github/scripts/fetch-windows-display-driver.py',
+                                                          '--destination', 'flutter/build/windows/x64/runner/Release'])
+                self.assertEqual((bundle / 'data/NikoDesk/licenses/cpal/LICENSE').read_text(), 'notice fixture')
                 self.assertEqual((bundle / 'NikoDesk-LICENCE.txt').read_text(), 'license fixture')
                 self.assertIn('Product 1.1.0+2; upstream native/protocol 1.5.0', (bundle / 'NikoDesk-source.txt').read_text())
                 self.assertTrue((root / 'NikoDesk-windows-x64.exe').is_file())

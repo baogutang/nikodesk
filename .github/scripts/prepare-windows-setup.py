@@ -54,6 +54,16 @@ def stamp(info):
     return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
 
 
+def handle_stamp(info):
+    """The part of a stamp an open handle and its path agree on.
+
+    On Windows os.stat and os.fstat come from different system calls and
+    report different device numbers, file IDs and change times for the same
+    file, so only size and modification time can be compared across them.
+    """
+    return stamp(info) if os.name != 'nt' else (info.st_size, info.st_mtime_ns)
+
+
 def inventory(root, flat=False):
     ordinary_parents(root)
     ordinary(root, directory=True)
@@ -97,7 +107,7 @@ def read_file(path, expected=None, destination=None):
     digest, length = hashlib.sha256(), 0
     contents = bytearray() if destination is None else None
     with os.fdopen(descriptor, 'rb') as stream:
-        if stamp(os.fstat(stream.fileno())) != stamp(info):
+        if handle_stamp(os.fstat(stream.fileno())) != handle_stamp(info):
             raise ValueError('Setup input identity changed while opening')
         output = destination.open('xb') if destination is not None else None
         try:
@@ -110,7 +120,8 @@ def read_file(path, expected=None, destination=None):
                     contents.extend(chunk)
                 else:
                     output.write(chunk)
-            if stamp(os.fstat(stream.fileno())) != stamp(info) or stamp(ordinary(path)) != stamp(info):
+            if (handle_stamp(os.fstat(stream.fileno())) != handle_stamp(info) or
+                    stamp(ordinary(path)) != stamp(info)):
                 raise ValueError('Setup input changed during copying')
         finally:
             if output is not None:

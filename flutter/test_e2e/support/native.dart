@@ -108,6 +108,7 @@ class NikoSession {
       bool fileTransfer = false,
       bool terminal = false,
       bool viewCamera = false,
+      bool tunnel = false,
       bool forceRelay = false}) async {
     final namespace = await native.configureServer();
     final id = const Uuid().v4obj();
@@ -117,7 +118,7 @@ class NikoSession {
         expectedServerNamespace: namespace,
         isFileTransfer: fileTransfer,
         isViewCamera: viewCamera,
-        isPortForward: false,
+        isPortForward: tunnel,
         isRdp: false,
         isTerminal: terminal,
         switchUuid: '',

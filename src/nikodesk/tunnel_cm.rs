@@ -99,7 +99,38 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             self.close = false;
         }
         self.cm.ui_handler.add_connection(&client);
+        #[cfg(all(feature = "nikodesk-dev-profile", any(target_os = "macos", target_os = "windows")))]
+        if retirement.is_none() {
+            if let Some(status) = client.niko_tunnel.as_ref() {
+                dev_answer(status);
+            }
+        }
     }
+}
+
+/// What a person at the controlled side would click for a pending tunnel:
+/// resolve the target, then approve the first resolved address.
+#[cfg(all(feature = "nikodesk-dev-profile", any(target_os = "macos", target_os = "windows")))]
+fn dev_answer(status: &ReadOnlyStatus) {
+    if status.phase != ReadPhase::Pending
+        || !crate::nikodesk::dev_auto_approves(
+            "tunnel",
+            &format!("{}/{}", status.identity.request_nonce, status.revision),
+        )
+    {
+        return;
+    }
+    let command = match status.addresses.first() {
+        None => serde_json::json!({"identity": status.identity, "revision": status.revision, "op": "resolve"}),
+        Some(address) => {
+            let loopback = address
+                .parse::<std::net::SocketAddr>()
+                .is_ok_and(|address| address.ip().is_loopback());
+            serde_json::json!({"identity": status.identity, "revision": status.revision, "op": "approve",
+                "address": address, "access": if loopback { "loopback" } else { "non_loopback" }})
+        }
+    };
+    let _ = nikodesk_tunnel_command(command.to_string());
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]

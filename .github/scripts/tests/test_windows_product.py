@@ -85,20 +85,19 @@ class WindowsProductTests(unittest.TestCase):
             self.cargo_output(self.target / BUILD.SETUP, native(BUILD.SETUP,
                 pins=env['NIKODESK_SETUP_RELEASE_JSON'].encode()))
         if argv[-1] == 'nikodesk-installer':
-            path = self.root / 'libs/portable/target/release/rustdesk-portable-packer.exe'
-            path.parent.mkdir(parents=True, exist_ok=True)
+            path = self.target / 'rustdesk-portable-packer.exe'
             self.cargo_output(path, PE.pe(resources={
                 (16, 1, 1033): PE.version(strings={'FileDescription': 'NikoDesk Installation Assistant'}),
                 (24, 1, 1033): PE.manifest()},
                 blob=Path(env['NIKODESK_INSTALLER_PAYLOAD']).read_bytes()))
         return subprocess.CompletedProcess(argv, 0)
 
-    def build(self, runner=None, output=None, mode=BUILD.VALIDATION_MODE):
+    def build(self, runner=None, output=None, mode=BUILD.VALIDATION_MODE, reuse_client=False):
         with patch.object(BUILD, 'ROOT', self.root), \
              patch.object(BUILD, 'windows_tools', return_value=('fixture/rc.exe', self.system)), \
              patch.object(BUILD.subprocess, 'run', side_effect=runner or self.runner), \
              patch.dict(os.environ, {}, clear=True):
-            return BUILD.build('1.1.0', 2, output or self.output, mode)
+            return BUILD.build('1.1.0', 2, output or self.output, mode, reuse_client)
 
     def test_real_static_gate_build_order_closure_and_complete_archive(self):
         report = self.build()
@@ -115,6 +114,28 @@ class WindowsProductTests(unittest.TestCase):
         self.assertTrue(report['installer_bootstrap']['complete_payload_verified'])
         self.assertNotIn('NIKODESK_SETUP_RELEASE_JSON', self.calls[3][1])
         self.assertEqual((self.output / 'librustdesk.dll').read_bytes(), self.fixture.files['librustdesk.dll'])
+
+    def test_setup_can_be_built_from_the_client_bundle_already_packaged(self):
+        report = self.build(reuse_client=True)
+        self.assertEqual([call[0][-1] for call in self.calls], ['nikodesk-host', 'nikodesk-setup', 'nikodesk-installer'])
+        self.assertTrue(report['installer_bootstrap']['complete_payload_verified'])
+        with patch.object(BUILD, 'windows_tools', return_value=('fixture/rc.exe', self.system)), \
+             self.assertRaisesRegex(ValueError, 'Only a setup build'):
+            BUILD.build('1.1.0', 2, reuse_client=True)
+
+    def test_system_modules_are_identified_without_reading_their_resources(self):
+        # winspool.drv is what a binary that can print imports; its resources
+        # are Windows' own and are not held to NikoDesk's limits.
+        oversized = PE.pe(dll=True, resources={(10, 'SYSTEM', 1033): bytes(2 * 1024 * 1024)})
+        with self.assertRaisesRegex(ValueError, 'Excessive PE resource size'):
+            BUILD.PACKAGE.PE(oversized, dll=True)
+        (self.system / 'winspool.drv').write_bytes(oversized)
+        self.cargo_output(self.target / BUILD.HOST, native(BUILD.HOST, ['WINSPOOL.DRV']))
+        report = self.build()
+        self.assertEqual(report['service_system_imports'], ['winspool.drv'])
+        (self.system / 'winspool.drv').write_bytes(PE.pe(dll=True, machine=0xaa64))
+        with self.assertRaisesRegex(ValueError, 'winspool.drv: Expected x64 PE DLL'):
+            self.build(output=self.root / 'setup-arm')
 
     def test_pins_absent_from_setup_fails_before_any_archive_report(self):
         def runner(argv, **kwargs):

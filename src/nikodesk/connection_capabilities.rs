@@ -541,6 +541,11 @@ impl TerminalFlow {
         if !decision.approve {
             return Ok((self.revoke(None, "Denied locally").await?, Vec::new()));
         }
+        // A repeated approval of the grant already in effect changes nothing;
+        // treating it as a failed decision would revoke a running terminal.
+        if matches!(adapter.phase(), Phase::Starting | Phase::Running) {
+            return Ok((adapter.status("Local terminal grant applied"), Vec::new()));
+        }
         let approve = adapter.clone();
         if let Err(error) = blocking(move || approve.approve(&decision)).await {
             let _ = self
@@ -940,6 +945,22 @@ mod tests {
             .unwrap();
         assert!(flow.pending_open.is_none());
         assert_eq!(adapter.phase(), Phase::Stopped);
+    }
+    #[hbb_common::tokio::test]
+    async fn a_repeated_approval_leaves_the_running_grant_in_place() {
+        let adapter = test_adapter();
+        let mut flow = TerminalFlow::new(false);
+        flow.adapter = Some(adapter.clone());
+        test_approve(&adapter);
+        adapter.started().unwrap();
+        let decision = Decision {
+            identity: adapter.identity.clone(),
+            approve: true,
+        };
+        let (status, responses) = flow.decision(decision).await.unwrap();
+        assert_eq!(status.phase, "Running");
+        assert!(responses.is_empty());
+        assert_eq!(adapter.phase(), Phase::Running);
     }
     #[test]
     fn timed_out_or_cancelled_approval_cannot_become_a_late_grant() {

@@ -6,6 +6,7 @@ import os
 import struct
 import tempfile
 import unittest
+import unittest.mock
 import warnings
 import zipfile
 from pathlib import Path
@@ -229,8 +230,18 @@ class PackageBoundaryTests(unittest.TestCase):
             for name, data in files.items():
                 archive.writestr(name, data)
 
-    def records(self):
-        return PACKAGE.inspect_bundle(self.bundle, (1, 1, 0, 2), self.license, 'a' * 40, False, '1.5.0')
+    def records(self, require_display_driver=False):
+        return PACKAGE.inspect_bundle(self.bundle, (1, 1, 0, 2), self.license, 'a' * 40, False, '1.5.0',
+                                      require_display_driver)
+
+    def bundle_driver(self, pins):
+        """Stand-in driver files; the real pins belong to the upstream archive."""
+        files = {'usbmmidd_v2/' + name: b'fixture ' + name.encode() for name in pins}
+        for name, value in files.items():
+            path = self.bundle / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(value)
+        return files
 
     def verify(self):
         return PACKAGE.verify_package(self.bundle, self.portable, self.archive, self.blob,
@@ -269,6 +280,45 @@ class PackageBoundaryTests(unittest.TestCase):
             return  # Windows ordinary-user CI may not grant symlink creation.
         with self.assertRaises(ValueError):
             self.records()
+
+    def test_accepts_only_the_complete_pinned_display_driver(self):
+        names = ('License.txt', 'usbmmIdd.inf', 'usbmmidd.cat', 'x64/usbmmIdd.dll')
+        pins = {('usbmmidd_v2/' + name).casefold():
+                hashlib.sha256(b'fixture ' + name.encode()).hexdigest() for name in names}
+        with unittest.mock.patch.object(PACKAGE, 'DRIVER_FILES', pins):
+            with self.assertRaisesRegex(ValueError, 'missing or incomplete'):
+                self.records(require_display_driver=True)
+            files = self.bundle_driver(names)
+            records = self.records(require_display_driver=True)
+            self.assertEqual({key for key in records if key.startswith('usbmmidd_v2/')}, set(pins))
+            self.files.update(files)
+            self.write_zip(self.files)
+            self.blob.write_bytes(payload(self.files))
+            self.portable.write_bytes(product_pe(blob=self.blob.read_bytes()))
+            PACKAGE.verify_package(self.bundle, self.portable, self.archive, self.blob, '1.1.0', 2,
+                                   self.license, 'a' * 40, False, '1.5.0', True)
+            changed = self.bundle / 'usbmmidd_v2/usbmmIdd.inf'
+            changed.write_bytes(b'another driver')
+            with self.assertRaisesRegex(ValueError, 'Not a pinned display driver file'):
+                self.records()
+            changed.write_bytes(files['usbmmidd_v2/usbmmIdd.inf'])
+            for extra in ('usbmmidd_v2/deviceinstaller64.exe', 'usbmmidd_v2/extra.sys', 'usbmmidd_v2/notes.txt'):
+                path = self.bundle / extra
+                path.write_bytes(b'not pinned')
+                with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, 'Not a pinned display driver file'):
+                    self.records()
+                path.unlink()
+            (self.bundle / 'usbmmidd_v2/usbmmidd.cat').unlink()
+            for required in (False, True):
+                with self.subTest(required=required), self.assertRaisesRegex(ValueError, 'missing or incomplete'):
+                    self.records(require_display_driver=required)
+
+    def test_the_real_driver_pin_names_only_the_signed_package_files(self):
+        self.assertEqual(set(PACKAGE.DRIVER_FILES), {
+            'usbmmidd_v2/license.txt', 'usbmmidd_v2/idd_instructions.txt', 'usbmmidd_v2/usbmmidd.inf',
+            'usbmmidd_v2/usbmmidd.cat', 'usbmmidd_v2/x64/usbmmidd.dll'})
+        for digest in PACKAGE.DRIVER_FILES.values():
+            self.assertRegex(digest, r'^[0-9a-f]{64}$')
 
     def test_rejects_non_x64_dll_and_non_dart_app_so(self):
         path = self.bundle / 'librustdesk.dll'

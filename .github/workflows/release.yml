@@ -89,6 +89,7 @@ jobs:
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           prefix-key: macos-arm64
+          cache-on-failure: true
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
@@ -157,12 +158,6 @@ jobs:
         id: product-version
         run: python3 .github/scripts/product-version.py --github-output
 
-      - name: Inspect the signed display driver archive
-        shell: pwsh
-        run: |
-          python3 .github/scripts/fetch-windows-display-driver.py --inspect
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
       - name: Install LLVM and NASM
         run: choco install -y llvm nasm
 
@@ -188,6 +183,7 @@ jobs:
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           prefix-key: windows-x64
+          cache-on-failure: true
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
@@ -204,6 +200,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { Get-ChildItem "$env:VCPKG_ROOT\buildtrees" -Recurse -Filter "*.log" | ForEach-Object { Write-Host $_.FullName; Get-Content $_.FullName }; exit 1 }
 
       - name: Build NikoDesk
+        id: client
         shell: pwsh
         env:
           NIKODESK_SOURCE_REVISION: ${{ github.sha }}
@@ -214,28 +211,11 @@ jobs:
           python3 -m pip install --disable-pip-version-check --only-binary=:all: --index-url https://pypi.org/simple --target .tools/package-verifier Brotli==1.2.0
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:PYTHONPATH="$env:GITHUB_WORKSPACE\.tools\package-verifier"
-          $arguments=@('.github/scripts/build-windows-product.py', '--build-name', "$env:PRODUCT_VERSION", '--build-number', "$env:PRODUCT_BUILD_NUMBER")
-          if ($env:NIKODESK_WINDOWS_SETUP_VALIDATION -eq 'true') {
-            New-Item -ItemType Directory -Force dist | Out-Null
-            $arguments+=@('--setup-output', 'dist/NikoDesk-windows-x64-setup-validation', '--setup-trust-mode', 'reviewed-local-unsigned-validation')
-          }
-          python3 @arguments
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Test Windows identity and portable boundaries
-        shell: pwsh
-        run: |
-          $env:PYTHONPATH="$env:GITHUB_WORKSPACE\.tools\package-verifier"
-          cargo test --locked --lib --features flutter,hwcodec,nikodesk nikodesk_windows_
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cargo test --locked -p rustdesk-portable-packer --features nikodesk
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python3 -m unittest discover -s libs/portable/tests -v
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python3 -m unittest discover -s .github/scripts/tests -p test_windows_product.py -v
+          python3 .github/scripts/build-windows-product.py --build-name "$env:PRODUCT_VERSION" --build-number "$env:PRODUCT_BUILD_NUMBER"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Package
+        id: package
         shell: pwsh
         run: |
           $bundle="flutter\build\windows\x64\runner\Release"
@@ -248,6 +228,18 @@ jobs:
           Copy-Item "$bundle\EXPERIMENTAL.txt" NikoDesk-windows-x64-experimental.txt
           Compress-Archive -Path "$bundle\*" -DestinationPath NikoDesk-windows-x64-experimental.zip
 
+      # Uploaded before the checks below, none of which had run on a real
+      # Windows build before: the client stays available for target-device
+      # testing while a failing check is being worked on.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NikoDesk-windows-x64-experimental
+          path: |
+            NikoDesk-windows-x64-experimental.exe
+            NikoDesk-windows-x64-experimental.zip
+            NikoDesk-windows-x64-experimental.txt
+          if-no-files-found: error
+
       - name: Verify Windows package contents without launching
         shell: pwsh
         env:
@@ -255,21 +247,34 @@ jobs:
           PRODUCT_VERSION: ${{ steps.product-version.outputs.version_name }}
           PRODUCT_BUILD_NUMBER: ${{ steps.product-version.outputs.build_number }}
         run: |
-          python3 -m pip install --disable-pip-version-check --only-binary=:all: --index-url https://pypi.org/simple --target .tools/package-verifier Brotli==1.2.0
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python3 -m unittest discover -s .github/scripts/tests -p test_package_windows.py -v
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python3 .github/scripts/verify-package-windows.py --bundle flutter/build/windows/x64/runner/Release --portable NikoDesk-windows-x64-experimental.exe --zip NikoDesk-windows-x64-experimental.zip --blob libs/portable/data.bin --version-name "$env:PRODUCT_VERSION" --build-number "$env:PRODUCT_BUILD_NUMBER" --license-file LICENCE --source-revision "$env:GITHUB_SHA" --source-dirty false --native-protocol-version 1.5.0 --report-output NikoDesk-windows-x64-experimental.json
+          python3 .github/scripts/verify-package-windows.py --bundle flutter/build/windows/x64/runner/Release --portable NikoDesk-windows-x64-experimental.exe --zip NikoDesk-windows-x64-experimental.zip --blob libs/portable/data.bin --version-name "$env:PRODUCT_VERSION" --build-number "$env:PRODUCT_BUILD_NUMBER" --license-file LICENCE --source-revision "$env:GITHUB_SHA" --source-dirty false --native-protocol-version 1.5.0 --require-display-driver --report-output NikoDesk-windows-x64-experimental.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - uses: actions/upload-artifact@v4
         with:
-          name: NikoDesk-windows-x64-experimental
-          path: NikoDesk-windows-x64-experimental.*
+          name: NikoDesk-windows-x64-verification
+          path: NikoDesk-windows-x64-experimental.json
           if-no-files-found: error
 
+      - name: Build the unattended setup validation bundle
+        id: setup
+        if: ${{ !cancelled() && steps.package.outcome == 'success' && env.NIKODESK_WINDOWS_SETUP_VALIDATION == 'true' }}
+        shell: pwsh
+        env:
+          NIKODESK_SOURCE_REVISION: ${{ github.sha }}
+          NIKODESK_SOURCE_DIRTY: 'false'
+          PRODUCT_VERSION: ${{ steps.product-version.outputs.version_name }}
+          PRODUCT_BUILD_NUMBER: ${{ steps.product-version.outputs.build_number }}
+        run: |
+          $env:PYTHONPATH="$env:GITHUB_WORKSPACE\.tools\package-verifier"
+          # The notice describes the portable client and is not part of the setup tree.
+          Remove-Item "flutter\build\windows\x64\runner\Release\EXPERIMENTAL.txt"
+          New-Item -ItemType Directory -Force dist | Out-Null
+          python3 .github/scripts/build-windows-product.py --build-name "$env:PRODUCT_VERSION" --build-number "$env:PRODUCT_BUILD_NUMBER" --setup-output dist/NikoDesk-windows-x64-setup-validation --setup-trust-mode reviewed-local-unsigned-validation --reuse-client-build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Upload setup validation artifacts
-        if: env.NIKODESK_WINDOWS_SETUP_VALIDATION == 'true'
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: NikoDesk-windows-x64-setup-validation
@@ -279,6 +284,37 @@ jobs:
             dist/NikoDesk-windows-x64-setup-validation.json
             dist/NikoDesk-windows-x64-setup-validation.txt
           if-no-files-found: error
+
+      - name: Test Windows identity and portable boundaries
+        if: ${{ !cancelled() && steps.client.outcome == 'success' }}
+        shell: pwsh
+        run: |
+          cargo test --locked --lib --features flutter,hwcodec,nikodesk nikodesk_windows_
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --locked -p rustdesk-portable-packer --features nikodesk
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  # Minutes instead of the full build: the packaging scripts are checked
+  # against Windows file semantics on their own.
+  test-windows-packaging:
+    name: Windows packaging script tests
+    if: (github.event_name == 'workflow_dispatch' && (inputs.experimental_platforms || inputs.windows_setup_validation)) || startsWith(github.ref, 'refs/heads/validation/')
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run the packaging script tests
+        shell: pwsh
+        run: |
+          python3 -m pip install --disable-pip-version-check --only-binary=:all: --index-url https://pypi.org/simple --target .tools/package-verifier Brotli==1.2.0
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:PYTHONPATH="$env:GITHUB_WORKSPACE\.tools\package-verifier"
+          python3 -m unittest discover -s .github/scripts/tests -p "test_*windows*.py" -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python3 -m unittest discover -s libs/portable/tests -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   build-android:
     name: Experimental Android ARM64 (build only)
@@ -348,6 +384,7 @@ jobs:
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           prefix-key: android-arm64
+          cache-on-failure: true
 
       # hwcodec's build script unconditionally links the vcpkg-built ffmpeg,
       # so the Android triplet must be installed before the Rust build and

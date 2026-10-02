@@ -27,6 +27,12 @@ CPAL_NOTICES = tuple('data/NikoDesk/licenses/cpal/' + name for name in (
 REQUIRED = ('NikoDesk.exe', 'librustdesk.dll', 'flutter_windows.dll',
             'dylib_virtual_display.dll', 'data/app.so', 'data/icudtl.dat',
             'NikoDesk-LICENCE.txt', 'NikoDesk-source.txt') + CPAL_NOTICES
+# The only driver material a bundle may carry: upstream's signed Amyuni
+# virtual-display driver, file for file as pinned.
+DRIVER_FOLDER = 'usbmmidd_v2/'
+DRIVER_FILES = {(DRIVER_FOLDER + name).casefold(): digest for name, digest in json.loads(
+    (Path(__file__).resolve().parents[2] / 'res/windows-display-driver.json')
+    .read_text(encoding='utf-8'))['files'].items()}
 
 
 def checked(data, offset, length):
@@ -64,7 +70,7 @@ def windows_path(name, portable=False):
 
 
 class PE:
-    def __init__(self, data, dll=False):
+    def __init__(self, data, dll=False, resources=True):
         self.data = data
         if checked(data, 0, 2) != b'MZ':
             raise ValueError('Not a PE image')
@@ -91,7 +97,7 @@ class PE:
                                   'virtual_size': virtual_size, 'flags': characteristics})
         directories, = unpack('<I', data, optional + 108)
         self.resources = {}
-        if directories >= 3:
+        if resources and directories >= 3:
             rva, size = unpack('<II', data, optional + 128)
             if rva and size:
                 self._resources(rva, size)
@@ -247,7 +253,8 @@ def file_hashes(path):
     return {'sha256': sha.hexdigest(), 'md5': md5.hexdigest(), 'size': path.stat().st_size}
 
 
-def inspect_bundle(bundle, parts, license_file, source_revision, source_dirty, native_version):
+def inspect_bundle(bundle, parts, license_file, source_revision, source_dirty, native_version,
+                   require_display_driver=False):
     info = bundle.lstat()
     if not bundle.is_dir() or bundle.is_symlink() or getattr(info, 'st_file_attributes', 0) & 0x400:
         raise ValueError('Expected an ordinary bundle directory without reparse points')
@@ -273,11 +280,17 @@ def inspect_bundle(bundle, parts, license_file, source_revision, source_dirty, n
         if total > MAX_TOTAL or key in records:
             raise ValueError('Excessive bundle size or Windows path collision')
         suffix = path.suffix.casefold()
-        if (suffix == '.exe' and key != 'nikodesk.exe') or suffix in ('.sys', '.inf', '.cat', '.msi'):
+        if key.startswith(DRIVER_FOLDER):
+            if DRIVER_FILES.get(key) != file_hashes(path)['sha256']:
+                raise ValueError(f'Not a pinned display driver file: {relative}')
+        elif (suffix == '.exe' and key != 'nikodesk.exe') or suffix in ('.sys', '.inf', '.cat', '.msi'):
             raise ValueError(f'Unexpected executable, service/helper or driver: {relative}')
-        if suffix == '.dll':
+        elif suffix == '.dll':
             PE(path.read_bytes(), dll=True)
         records[key] = {'path': relative, **file_hashes(path)}
+    bundled_driver = sum(key in records for key in DRIVER_FILES)
+    if bundled_driver not in ((len(DRIVER_FILES),) if require_display_driver else (0, len(DRIVER_FILES))):
+        raise ValueError('The pinned display driver is missing or incomplete')
     for required in REQUIRED:
         if windows_path(required) not in records:
             raise ValueError(f'Missing bundle file: {required}')
@@ -377,11 +390,13 @@ def inspect_payload(blob, records):
 
 
 def verify_package(bundle, portable, archive, blob_path, version_name, build_number,
-                   license_file, source_revision, source_dirty, native_version):
+                   license_file, source_revision, source_dirty, native_version,
+                   require_display_driver=False):
     parts = version_parts(version_name, build_number)
     if not re.fullmatch(r'[0-9a-fA-F]{40}', source_revision):
         raise ValueError('Expected a complete source commit SHA')
-    records = inspect_bundle(bundle, parts, license_file, source_revision, source_dirty, native_version)
+    records = inspect_bundle(bundle, parts, license_file, source_revision, source_dirty, native_version,
+                             require_display_driver)
     inspect_zip(archive, records)
     if portable.stat().st_size > MAX_FILE or blob_path.stat().st_size > MAX_FILE:
         raise ValueError('Excessive portable image/blob size')
@@ -418,12 +433,14 @@ if __name__ == '__main__':
     parser.add_argument('--source-revision', required=True)
     parser.add_argument('--source-dirty', choices=('true', 'false'), required=True)
     parser.add_argument('--native-protocol-version', required=True)
+    parser.add_argument('--require-display-driver', action='store_true')
     parser.add_argument('--report-output', type=Path, required=True)
     args = parser.parse_args()
     try:
         result = verify_package(args.bundle, args.portable, args.zip, args.blob,
                                 args.version_name, args.build_number, args.license_file,
-                                args.source_revision, args.source_dirty == 'true', args.native_protocol_version)
+                                args.source_revision, args.source_dirty == 'true', args.native_protocol_version,
+                                args.require_display_driver)
         args.report_output.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
     except (ValueError, OSError, UnicodeError, ET.ParseError, zipfile.BadZipFile) as error:
         parser.exit(1, f'Windows package verification failed: {error}\n')

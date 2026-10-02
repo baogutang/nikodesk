@@ -1030,6 +1030,10 @@ def build_flutter_windows(version, features, skip_portable_pack, build_number=No
         Path(flutter_build_dir_2, 'NikoDesk-source.txt').write_text(
             f'Product {version}+{build_number}; upstream native/protocol {get_version()}\n'
             f'Source {revision}; dirty={dirty}\n', encoding='utf-8')
+        # The signed virtual-display driver upstream ships; its installer looks
+        # for usbmmidd_v2 beside the executable.
+        subprocess.run([sys.executable, '.github/scripts/fetch-windows-display-driver.py',
+                        '--destination', flutter_build_dir_2], check=True)
     if skip_portable_pack:
         return
     os.chdir('libs/portable')

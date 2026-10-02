@@ -72,7 +72,14 @@ def main(argv=None):
             raise ValueError('Driver archive differs from its pin')
         target = args.destination / FOLDER
         if target.exists():
-            raise ValueError('Refusing to overwrite an existing driver directory')
+            # A rebuild of the same bundle finds its own earlier copy.
+            present = {path.relative_to(target).as_posix():
+                       hashlib.sha256(path.read_bytes()).hexdigest()
+                       for path in target.rglob('*') if path.is_file()}
+            if present != pin['files']:
+                raise ValueError('An existing driver directory differs from the pin')
+            print('Pinned driver files already present in {}'.format(target))
+            return 0
         for name, expected in pin['files'].items():
             content = files.get(FOLDER + '/' + name)
             if content is None or hashlib.sha256(content).hexdigest() != expected:

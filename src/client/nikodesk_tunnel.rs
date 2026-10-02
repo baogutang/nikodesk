@@ -12,7 +12,7 @@ use crate::{
     port_forward_mux::{self as mux, FrameSink, Inbound, RecvWindow, SendCredit},
 };
 use base::message_proto::{
-    login_response, message, port_forward_channel, Features, Hash, LoginRequest, Message,
+    login_response, message, misc, port_forward_channel, Features, Hash, LoginRequest, Message,
     NikoTunnelStatus, PortForward, PortForwardChannel,
 };
 use hbb_common::{
@@ -253,6 +253,12 @@ async fn probe_stream(
                             .map_err(|e| anyhow!(e.code()))?;
                         return Ok((LoginState::new(typed)?, hash, pending_login));
                     }
+                    // The controlled side announces disabled permissions and starts
+                    // measuring delay as soon as the stream opens. Skipping them does
+                    // not let anything stand in for the receipt.
+                    Some(message::Union::Misc(misc))
+                        if matches!(misc.union, Some(misc::Union::PermissionInfo(_))) => {}
+                    Some(message::Union::TestDelay(_)) => {}
                     // No login, raw frame, or legacy capability can substitute for this receipt.
                     _ => bail!("tunnel_protocol_probe_invalid"),
                 }
@@ -1250,6 +1256,52 @@ mod tests {
         let server = tokio::spawn(async move {
             // Protocol fixture, not a RustDesk authentication/CM approval server.
             let request = read_message(&mut peer).await;
+            let mut hash = Message::new();
+            hash.set_hash(Hash {
+                salt: "synthetic".into(),
+                challenge: "synthetic".into(),
+                ..Default::default()
+            });
+            send(&mut peer, &hash).await.unwrap();
+            let receipt = wire::ServerProbeFence::default()
+                .reply(request.nikodesk_tunnel_probe(), true, probe_facts())
+                .unwrap();
+            let mut reply = Message::new();
+            reply.set_nikodesk_tunnel_probe_reply(receipt);
+            send(&mut peer, &reply).await.unwrap();
+        });
+        let (state, hash, _) =
+            probe_stream(&mut client, &mut ui, &target(), binding(), probe_facts())
+                .await
+                .unwrap();
+        assert!(hash.is_some());
+        assert_eq!(
+            wire::parse_login(&state.port_forward).unwrap().binding,
+            binding()
+        );
+        server.await.unwrap();
+        drop(sender);
+    }
+    #[tokio::test]
+    async fn probe_skips_what_the_controlled_side_sends_when_a_stream_opens() {
+        let (mut client, mut peer) = encrypted_pair().await;
+        let (sender, mut ui) = mpsc::unbounded_channel();
+        let server = tokio::spawn(async move {
+            let request = read_message(&mut peer).await;
+            // A real connection announces each disabled permission and starts
+            // its delay probe before it handles anything the peer sent.
+            let mut permission = Message::new();
+            let mut announcement = base::message_proto::Misc::new();
+            announcement.set_permission_info(base::message_proto::PermissionInfo {
+                permission: base::message_proto::permission_info::Permission::Audio.into(),
+                enabled: false,
+                ..Default::default()
+            });
+            permission.set_misc(announcement);
+            send(&mut peer, &permission).await.unwrap();
+            let mut delay = Message::new();
+            delay.set_test_delay(base::message_proto::TestDelay::default());
+            send(&mut peer, &delay).await.unwrap();
             let mut hash = Message::new();
             hash.set_hash(Hash {
                 salt: "synthetic".into(),

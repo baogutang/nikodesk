@@ -730,6 +730,8 @@ fn run(vs: VideoService) -> ResultType<()> {
     let capture_width = c.width;
     let capture_height = c.height;
     let (mut second_instant, mut send_counter) = (Instant::now(), 0);
+    #[cfg(feature = "nikodesk-dev-profile")]
+    let mut dev_stages = crate::nikodesk::DevVideoStages::default();
 
     while sp.ok() {
         #[cfg(windows)]
@@ -796,8 +798,12 @@ fn run(vs: VideoService) -> ResultType<()> {
 
         let time = now - start;
         let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
+        #[cfg(feature = "nikodesk-dev-profile")]
+        let dev_capture = Instant::now();
         let res = match c.frame(spf) {
             Ok(frame) => {
+                #[cfg(feature = "nikodesk-dev-profile")]
+                let dev_capture = dev_capture.elapsed();
                 repeat_encode_counter = 0;
                 if frame.valid() {
                     let screenshot_key = (vs.source, display_idx);
@@ -847,7 +853,11 @@ fn run(vs: VideoService) -> ResultType<()> {
                         }
                     }
 
+                    #[cfg(feature = "nikodesk-dev-profile")]
+                    let dev_convert = Instant::now();
                     let frame = frame.to(encoder.yuvfmt(), &mut yuv, &mut mid_data)?;
+                    #[cfg(feature = "nikodesk-dev-profile")]
+                    let (dev_convert, dev_encode) = (dev_convert.elapsed(), Instant::now());
                     let send_conn_ids = handle_one_frame(
                         display_idx,
                         &sp,
@@ -860,6 +870,8 @@ fn run(vs: VideoService) -> ResultType<()> {
                         capture_width,
                         capture_height,
                     )?;
+                    #[cfg(feature = "nikodesk-dev-profile")]
+                    dev_stages.add(dev_capture, dev_convert, dev_encode.elapsed());
                     frame_controller.set_send(now, send_conn_ids);
                     send_counter += 1;
                 }

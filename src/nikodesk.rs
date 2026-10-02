@@ -198,6 +198,72 @@ pub(crate) fn app_name() -> ResultType<String> {
     Ok("NikoDesk".to_owned())
 }
 
+/// Local end-to-end runs have nobody at the controlled side to click. In a
+/// development profile, NIKODESK_DEV_AUTO_APPROVE names the capabilities the
+/// real connection manager may approve by itself; the decision still travels
+/// its normal verified path. Never compiled into a packaged build.
+#[cfg(feature = "nikodesk-dev-profile")]
+pub(crate) fn dev_auto_approves(kind: &str, request: &str) -> bool {
+    // A request stays pending across several status updates; answer it once,
+    // as a person clicking the button would.
+    static ANSWERED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+    if std::env::var("NIKODESK_DEV_PROFILE").is_err()
+        || !std::env::var("NIKODESK_DEV_AUTO_APPROVE")
+            .is_ok_and(|kinds| kinds.split(',').any(|value| value == kind))
+    {
+        return false;
+    }
+    let Ok(mut answered) = ANSWERED.lock() else {
+        return false;
+    };
+    let key = format!("{kind}/{request}");
+    if answered.contains(&key) {
+        return false;
+    }
+    answered.push(key);
+    true
+}
+
+/// Where the controlled side spends its time per frame, for local measurement
+/// runs. Logged every five seconds while frames flow; development builds only.
+#[cfg(feature = "nikodesk-dev-profile")]
+#[derive(Default)]
+pub(crate) struct DevVideoStages {
+    frames: u32,
+    capture: std::time::Duration,
+    convert: std::time::Duration,
+    encode: std::time::Duration,
+    since: Option<std::time::Instant>,
+}
+#[cfg(feature = "nikodesk-dev-profile")]
+impl DevVideoStages {
+    /// `capture` includes waiting for the screen to change.
+    pub(crate) fn add(
+        &mut self,
+        capture: std::time::Duration,
+        convert: std::time::Duration,
+        encode: std::time::Duration,
+    ) {
+        self.frames += 1;
+        self.capture += capture;
+        self.convert += convert;
+        self.encode += encode;
+        let since = *self.since.get_or_insert_with(std::time::Instant::now);
+        if since.elapsed() >= std::time::Duration::from_secs(5) {
+            let average = |total: std::time::Duration| total.as_secs_f64() * 1000. / self.frames as f64;
+            hbb_common::log::info!(
+                "dev video stages: frames={} in {:.1}s, wait+capture={:.1}ms convert={:.1}ms encode+send={:.1}ms",
+                self.frames,
+                since.elapsed().as_secs_f64(),
+                average(self.capture),
+                average(self.convert),
+                average(self.encode),
+            );
+            *self = Self::default();
+        }
+    }
+}
+
 #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "android")))]
 fn initialize_inner() -> ResultType<()> {
     bail!("NikoDesk isolation is not supported on this platform")

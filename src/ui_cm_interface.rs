@@ -728,6 +728,11 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                                 client.niko_capability=Some(status.clone());
                                             }
                                         }
+                                        #[cfg(feature = "nikodesk-dev-profile")]
+                                        if status.phase == "Pending" && crate::nikodesk::dev_auto_approves("terminal", &status.identity.request_nonce) {
+                                            let _ = nikodesk_capability_decision(
+                                                serde_json::json!({"identity": status.identity, "approve": true}).to_string(), false);
+                                        }
                                         #[cfg(feature="flutter")]
                                         if let Ok(json)=serde_json::to_string(&status) {
                                             let event=serde_json::json!({"name":"nikodesk_capability_status","payload":json}).to_string();
