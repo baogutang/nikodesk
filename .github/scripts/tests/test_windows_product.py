@@ -59,7 +59,7 @@ class WindowsProductTests(unittest.TestCase):
         shutil.copytree(self.fixture.gui, self.gui)
         self.target = self.root / 'target/release'
         self.target.mkdir(parents=True)
-        (self.target / BUILD.HOST).write_bytes(native(BUILD.HOST, ['librustdesk.dll']))
+        self.cargo_output(self.target / BUILD.HOST, native(BUILD.HOST, ['librustdesk.dll']))
         self.output = self.root / 'setup-validation'
         self.system = self.root / 'system32'
         self.system.mkdir()
@@ -68,15 +68,26 @@ class WindowsProductTests(unittest.TestCase):
     def tearDown(self):
         self.fixture.tearDown()
 
+    @staticmethod
+    def cargo_output(path, data):
+        """Cargo's final artifact is a hard link to its file under deps/."""
+        deps = path.parent / 'deps'
+        deps.mkdir(parents=True, exist_ok=True)
+        original = deps / (path.stem + '-0123456789abcdef' + path.suffix)
+        original.write_bytes(data)
+        if path.exists():
+            path.unlink()
+        os.link(original, path)
+
     def runner(self, argv, *, cwd, env, check):
         self.calls.append((argv, env.copy()))
         if argv[-1] == 'nikodesk-setup':
-            (self.target / BUILD.SETUP).write_bytes(native(BUILD.SETUP,
+            self.cargo_output(self.target / BUILD.SETUP, native(BUILD.SETUP,
                 pins=env['NIKODESK_SETUP_RELEASE_JSON'].encode()))
         if argv[-1] == 'nikodesk-installer':
             path = self.root / 'libs/portable/target/release/rustdesk-portable-packer.exe'
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(PE.pe(resources={
+            self.cargo_output(path, PE.pe(resources={
                 (16, 1, 1033): PE.version(strings={'FileDescription': 'NikoDesk Installation Assistant'}),
                 (24, 1, 1033): PE.manifest()},
                 blob=Path(env['NIKODESK_INSTALLER_PAYLOAD']).read_bytes()))

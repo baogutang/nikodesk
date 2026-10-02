@@ -157,6 +157,12 @@ jobs:
         id: product-version
         run: python3 .github/scripts/product-version.py --github-output
 
+      - name: Inspect the signed display driver archive
+        shell: pwsh
+        run: |
+          python3 .github/scripts/fetch-windows-display-driver.py --inspect
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Install LLVM and NASM
         run: choco install -y llvm nasm
 
@@ -411,7 +417,10 @@ jobs:
           PRODUCT_VERSION: ${{ steps.product-version.outputs.version_name }}
           PRODUCT_BUILD_NUMBER: ${{ steps.product-version.outputs.build_number }}
         run: |
-          python3 -m unittest discover -s .github/scripts/tests -v
+          # Only the suites that apply here: the Windows and macOS package tests
+          # need Brotli, a case-insensitive filesystem or Apple's signing tools.
+          python3 -m unittest discover -s .github/scripts/tests -p test_package_android.py -v
+          python3 -m unittest discover -s .github/scripts/tests -p test_product_version.py -v
           python3 .github/scripts/verify-package-android.py NikoDesk-android-arm64-unsigned.apk \
             --application-id io.nikodesk.android.dev --version-name "$PRODUCT_VERSION" --version-code "$PRODUCT_BUILD_NUMBER" --unsigned \
             --require-owned-voice \

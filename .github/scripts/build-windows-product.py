@@ -126,6 +126,23 @@ def native_exe(data, parts, name):
         raise ValueError('Native imports must restrict loader search to app/System32')
 
 
+def cargo_artifact(path, staging):
+    """Give the strict readers a private single-link copy of a Cargo output.
+
+    Cargo publishes target/release/<name> as a hard link to its file under
+    deps/, so the real artifact always has two links and would be refused as
+    an aliased file.
+    """
+    PREPARE.ordinary_parents(staging)
+    staging.mkdir(exist_ok=True)
+    PREPARE.ordinary(staging, directory=True)
+    copy = staging / path.name
+    if copy.exists() or copy.is_symlink():
+        copy.unlink()
+    shutil.copyfile(path, copy)
+    return copy
+
+
 def service_payload(host, gui, output, system_directory):
     """Copy only the real HOST and its transitive app-local DLL dependencies."""
     PREPARE.ordinary_parents(output)
@@ -261,7 +278,8 @@ def installer_bootstrap(tree, records, parts, env, system_directory):
     packer = ROOT / 'libs/portable'
     subprocess.run(['cargo', '+1.88.0', 'build', '--locked', '--release', '--features',
                     'nikodesk-installer'], cwd=packer, env=build_env, check=True)
-    source = packer / 'target/release/rustdesk-portable-packer.exe'
+    source = cargo_artifact(packer / 'target/release/rustdesk-portable-packer.exe',
+                            tree.parent / (tree.name + '-cargo-artifacts'))
     _, data = PREPARE.read_file(source)
     pe = PACKAGE.product_exe(data, parts)
     for key, raw in pe.resources.items():
@@ -360,14 +378,17 @@ def build(version_name, build_number, output=None, trust_mode=None):
     gui = ROOT / 'flutter/build/windows/x64/runner/Release'
     gui_records = PREPARE.gui_records(gui, parts)
     service = output.parent / (output.name + '-service-input')
-    system_imports = service_payload(ROOT / 'target/release' / HOST, gui, service, system_directory)
+    staging = output.parent / (output.name + '-cargo-artifacts')
+    system_imports = service_payload(cargo_artifact(ROOT / 'target/release' / HOST, staging),
+                                     gui, service, system_directory)
     document = PREPARE.prepare(gui, service, output, trust_mode, ROOT / 'flutter/pubspec.yaml')
     serialized = (output / 'setup-release.json').read_text(encoding='utf-8')
     subprocess.run(cargo + ['--bin', 'nikodesk-setup'], cwd=ROOT,
                    env={**env, 'NIKODESK_SETUP_RELEASE_JSON': serialized}, check=True)
-    _, data = PREPARE.read_file(ROOT / 'target/release' / SETUP)
+    setup = cargo_artifact(ROOT / 'target/release' / SETUP, staging)
+    _, data = PREPARE.read_file(setup)
     native_exe(data, parts, SETUP)
-    PREPARE.read_file(ROOT / 'target/release' / SETUP, destination=output / SETUP)
+    PREPARE.read_file(setup, destination=output / SETUP)
     records = verify_frozen(output, document, gui_records, parts, serialized)
     setup_system_imports = verify_setup_imports(output, document, system_directory)
     installer = installer_bootstrap(output, records, parts, env, system_directory)
