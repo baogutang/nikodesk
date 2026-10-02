@@ -5,7 +5,7 @@ use super::super::super::update_policy::{UpdateJournal, COMMIT, JOURNAL};
 use super::*;
 use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_PATH_NOT_FOUND};
 
-fn missing(error: &anyhow::Error) -> bool {
+fn missing(error: &hbb_common::anyhow::Error) -> bool {
     error
         .downcast_ref::<windows::core::Error>()
         .is_some_and(|e| {

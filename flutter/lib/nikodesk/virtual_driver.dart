@@ -103,21 +103,11 @@ class NikoVirtualDriver extends ChangeNotifier {
     if (canBegin) await _call('probe');
   }
 
-  Future<void> install(String infPath) async {
-    if (!canBegin) return;
-    if (utf8.encode(infPath).length >= 260 ||
-        RegExp(r'[\x00-\x1f\x7f-\x9f]').hasMatch(infPath) ||
-        !RegExp(r'^[A-Za-z]:[\\/]').hasMatch(infPath) ||
-        infPath.replaceAll('\\', '/').split('/').last !=
-            'NikoDeskIddDriver.inf') {
-      notice = 'invalid_request';
-      notifyListeners();
-      return;
-    }
-    await _call('install', infPath: infPath);
+  Future<void> install() async {
+    if (canBegin) await _call('install');
   }
 
-  Future<void> _call(String action, {String infPath = ''}) async {
+  Future<void> _call(String action) async {
     if (_disposed || busy) return;
     final namespace = currentNamespace();
     if (namespace == null) {
@@ -130,11 +120,9 @@ class NikoVirtualDriver extends ChangeNotifier {
     notice = null;
     notifyListeners();
     try {
-      final raw = await command(jsonEncode({
-        'action': action,
-        'namespace': namespace,
-        if (infPath.isNotEmpty) 'inf_path': infPath
-      })).timeout(timeout);
+      final raw =
+          await command(jsonEncode({'action': action, 'namespace': namespace}))
+              .timeout(timeout);
       if (_disposed ||
           generation != _generation ||
           namespace != currentNamespace()) return;

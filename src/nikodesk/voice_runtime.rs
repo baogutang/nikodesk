@@ -245,7 +245,7 @@ impl Devices {
                 #[cfg(target_os = "windows")]
                 let channels = {
                     let _ = actual_channels;
-                    vec![1, 2]
+                    vec![1u16, 2]
                 };
                 for channels in channels {
                     let format = hash(&[

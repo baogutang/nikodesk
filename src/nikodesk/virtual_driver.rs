@@ -9,8 +9,6 @@ mod platform;
 pub(super) struct Request {
     pub action: String,
     pub namespace: String,
-    #[serde(default)]
-    pub inf_path: String,
 }
 impl Request {
     fn parse(raw: &str) -> Option<Self> {
@@ -27,29 +25,8 @@ impl Request {
         {
             return None;
         }
-        match value.action.as_str() {
-            "status" | "probe" if value.inf_path.is_empty() => Some(value),
-            "install"
-                if value.inf_path.len() < 260
-                    && value.inf_path.as_bytes().get(1) == Some(&b':')
-                    && value
-                        .inf_path
-                        .as_bytes()
-                        .get(2)
-                        .is_some_and(|b| *b == b'\\' || *b == b'/')
-                    && value
-                        .inf_path
-                        .as_bytes()
-                        .first()
-                        .is_some_and(u8::is_ascii_alphabetic)
-                    && !value.inf_path.chars().any(char::is_control)
-                    && value.inf_path.replace('\\', "/").rsplit('/').next()
-                        == Some("NikoDeskIddDriver.inf") =>
-            {
-                Some(value)
-            }
-            _ => None,
-        }
+        // The driver is the one bundled with this build; a request cannot name a package.
+        matches!(value.action.as_str(), "status" | "probe" | "install").then_some(value)
     }
 }
 #[derive(Clone, Serialize)]
@@ -98,30 +75,24 @@ pub(crate) fn command(raw: &str) -> String {
 mod tests {
     use super::*;
     #[test]
-    fn driver_requests_cannot_select_foreign_packages_or_supply_approval() {
-        let mut raw = serde_json::json!({"action":"install", "namespace":"a".repeat(64),
-            "inf_path":"C:\\selected\\NikoDeskIddDriver.inf"});
+    fn driver_requests_cannot_name_a_package_or_supply_approval() {
+        let mut raw = serde_json::json!({"action":"install", "namespace":"a".repeat(64)});
         assert!(Request::parse(&raw.to_string()).is_some());
-        for path in [
-            "C:\\RustDeskIddDriver.inf",
-            "\\\\nas\\public\\NikoDeskIddDriver.inf",
-            "C:NikoDeskIddDriver.inf",
-            "C:\\selected\\NikoDeskIddDriver.inf\n",
-        ] {
-            raw["inf_path"] = path.into();
-            assert!(Request::parse(&raw.to_string()).is_none());
-        }
-        raw["inf_path"] = "C:\\selected\\NikoDeskIddDriver.inf".into();
+        raw["inf_path"] = "C:\\selected\\usbmmIdd.inf".into();
+        assert!(Request::parse(&raw.to_string()).is_none());
+        let mut raw = serde_json::json!({"action":"install", "namespace":"a".repeat(64)});
         raw["approved"] = true.into();
         assert!(Request::parse(&raw.to_string()).is_none());
     }
     #[test]
-    fn probes_and_status_have_no_installation_payload() {
+    fn only_known_actions_in_a_real_server_scope_are_accepted() {
         let mut raw = serde_json::json!({"action":"probe", "namespace":"a".repeat(64)});
         assert!(Request::parse(&raw.to_string()).is_some());
-        raw["inf_path"] = "C:\\selected\\NikoDeskIddDriver.inf".into();
+        raw["action"] = "status".into();
+        assert!(Request::parse(&raw.to_string()).is_some());
+        raw["action"] = "uninstall".into();
         assert!(Request::parse(&raw.to_string()).is_none());
-        raw["inf_path"] = "".into();
+        raw["action"] = "probe".into();
         raw["namespace"] = "0".repeat(64).into();
         assert!(Request::parse(&raw.to_string()).is_none());
     }

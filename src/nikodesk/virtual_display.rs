@@ -1,4 +1,4 @@
-//! Virtual screens belong to one authenticated connection, never a global driver.
+//! Virtual screens belong to one authenticated connection and are removed with it.
 use std::{collections::BTreeMap, sync::{Arc, Mutex, OnceLock, atomic::{AtomicBool, AtomicU64, Ordering}}, time::{Duration, Instant}};
 #[cfg(target_os = "macos")]
 #[path = "virtual_display/macos.rs"]
@@ -6,10 +6,6 @@ mod platform;
 #[cfg(target_os = "windows")]
 #[path = "virtual_display/windows.rs"]
 mod platform;
-
-#[cfg(any(windows, test))]
-#[path = "virtual_display/protocol.rs"]
-mod protocol;
 
 #[cfg(windows)]
 static DRIVER_MAINTENANCE: AtomicBool = AtomicBool::new(false);

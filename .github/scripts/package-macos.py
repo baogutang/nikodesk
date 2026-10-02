@@ -204,6 +204,8 @@ def verify_bundle(app, require_privacy_watchdog=False, require_camera=False, req
             raise ValueError(f"Expected ARM64 binary: {binary}")
     if "@rpath/liblibrustdesk.dylib" not in command("otool", "-L", str(executable)):
         raise ValueError("The runner does not link the bundled Rust core")
+    if b"NIKODESK_DEV_PROFILE" in core.read_bytes():
+        raise ValueError("A core built with the development-profile switch must never be packaged")
     if (app / "Contents/MacOS/service").exists():
         raise ValueError("This user-mode package must not include a privileged service")
 

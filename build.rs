@@ -45,7 +45,9 @@ fn build_mac() {
         println!("cargo:rustc-link-lib=framework=AppKit");
         println!("cargo:rerun-if-changed=src/platform/macos_background.mm");
         cc::Build::new()
+            .cpp(true)
             .file("src/nikodesk/voice/macos_permission.mm")
+            .flag("-std=c++17")
             .flag("-fobjc-arc")
             .flag("-fblocks")
             .compile("nikodesk_voice_permission");

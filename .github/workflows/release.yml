@@ -18,10 +18,6 @@ on:
         description: Build and upload the unsigned Windows unattended validation bundle (does not install)
         type: boolean
         default: false
-      windows_driver_validation:
-        description: Compile and upload the unsigned independent Windows virtual display driver (does not install)
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -278,24 +274,6 @@ jobs:
             dist/NikoDesk-windows-x64-setup-validation.txt
           if-no-files-found: error
 
-  build-windows-driver:
-    name: Independent Windows x64 virtual display driver (unsigned build only)
-    if: startsWith(github.ref, 'refs/heads/validation/') || (github.event_name == 'workflow_dispatch' && inputs.windows_driver_validation)
-    runs-on: windows-2022
-    steps:
-      - uses: actions/checkout@v4
-      - name: Compile the native driver with pinned private WDK and SDK
-        shell: pwsh
-        run: |
-          python3 .github/scripts/build-windows-idd.py --output dist/NikoDesk-windows-x64-driver-validation
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Upload unsigned driver source validation artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: NikoDesk-windows-x64-driver-validation
-          path: dist/NikoDesk-windows-x64-driver-validation/
-          if-no-files-found: error
-
   build-android:
     name: Experimental Android ARM64 (build only)
     if: (github.event_name == 'workflow_dispatch' && inputs.experimental_platforms) || startsWith(github.ref, 'refs/heads/validation/')
@@ -413,8 +391,9 @@ jobs:
           PRODUCT_VERSION: ${{ steps.product-version.outputs.version_name }}
           PRODUCT_BUILD_NUMBER: ${{ steps.product-version.outputs.build_number }}
         run: |
-          # Gradle's offline metadata also needs unbuilt workspace and dev dependencies.
-          cargo fetch --locked --target aarch64-linux-android
+          # Gradle runs `cargo metadata --offline`, which reads the manifest of every
+          # locked package, other platforms' included. A --target fetch is not enough.
+          cargo fetch --locked
           cargo metadata --locked --offline --format-version 1 --filter-platform aarch64-linux-android > "$RUNNER_TEMP/nikodesk-android-cargo-metadata.json"
           sed -i "s/org.gradle.jvmargs=-Xmx1024M/org.gradle.jvmargs=-Xmx2g/g" ./flutter/android/gradle.properties
           mkdir -p ./flutter/android/app/src/main/jniLibs/arm64-v8a

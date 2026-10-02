@@ -179,6 +179,25 @@ pub(crate) fn initialize_system_desktop_worker(root: std::path::PathBuf) -> Resu
     })().map_err(|error| error.to_string())).clone().map_err(|error| anyhow!(error))
 }
 
+/// Keys the configuration directory, log directory and IPC path.
+pub(crate) fn app_name() -> ResultType<String> {
+    // Local end-to-end tests run extra, fully separate identities on one
+    // machine. Only builds that opt into the feature honour the variable, and
+    // an invalid value stops the process instead of using the real identity.
+    #[cfg(feature = "nikodesk-dev-profile")]
+    if let Ok(profile) = std::env::var("NIKODESK_DEV_PROFILE") {
+        if !(1..=16).contains(&profile.len())
+            || !profile
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+        {
+            bail!("Invalid NIKODESK_DEV_PROFILE");
+        }
+        return Ok(format!("NikoDesk-{profile}"));
+    }
+    Ok("NikoDesk".to_owned())
+}
+
 #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "android")))]
 fn initialize_inner() -> ResultType<()> {
     bail!("NikoDesk isolation is not supported on this platform")
@@ -196,7 +215,8 @@ fn initialize_inner() -> ResultType<()> {
     }
     #[cfg(target_os = "android")]
     validate_android_directory(&config::APP_DIR.read().unwrap())?;
-    *config::APP_NAME.write().unwrap() = "NikoDesk".to_owned();
+    let name = app_name()?;
+    *config::APP_NAME.write().unwrap() = name.clone();
     #[cfg(target_os = "macos")]
     {
         *config::ORG.write().unwrap() = "io.nikodesk".to_owned();
@@ -204,7 +224,9 @@ fn initialize_inner() -> ResultType<()> {
     sodiumoxide::init().map_err(|_| anyhow!("Cannot initialize identity cryptography"))?;
     install_policy();
     let path = Config::file();
-    if !path.is_absolute() || path.file_name().and_then(|x| x.to_str()) != Some("NikoDesk.toml") {
+    if !path.is_absolute()
+        || path.file_name().and_then(|x| x.to_str()) != Some(format!("{name}.toml").as_str())
+    {
         bail!("Cannot resolve the isolated NikoDesk configuration directory");
     }
     // Keep the OS lock until this library's lazy Config and key cache are initialized.

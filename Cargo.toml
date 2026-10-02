@@ -32,6 +32,9 @@ required-features = ["nikodesk"]
 
 [features]
 nikodesk = ["scrap/nikodesk", "dep:nikodesk-cpal", "dep:security-framework", "dep:nikodesk-wol-agent"]
+# Development only: lets NIKODESK_DEV_PROFILE select a second, separate local
+# identity for end-to-end tests. Never enable this in a packaged build.
+nikodesk-dev-profile = ["nikodesk"]
 inline = []
 use_samplerate = ["samplerate", "libsamplerate-sys"]
 use_rubato = ["rubato"]

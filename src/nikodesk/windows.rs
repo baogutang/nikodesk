@@ -112,7 +112,7 @@ fn create_private_file(path: &Path, access: u32, share: FILE_SHARE_MODE) -> Resu
     Ok(unsafe { File::from_raw_handle(handle.0) })
 }
 
-fn win32_error_is(error: &anyhow::Error, code: u32) -> bool {
+fn win32_error_is(error: &hbb_common::anyhow::Error, code: u32) -> bool {
     error
         .downcast_ref::<std::io::Error>()
         .is_some_and(|error| error.raw_os_error() == Some(code as i32))

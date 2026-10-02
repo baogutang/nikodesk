@@ -26,19 +26,21 @@ String reply(
     });
 
 void main() {
-  test('a foreign INF is rejected before native dispatch', () async {
-    var calls = 0;
+  test('installation names no package and waits for confirmed status',
+      () async {
+    final requests = <Map<String, dynamic>>[];
     final model = NikoVirtualDriver(
-        command: (_) async {
-          calls++;
+        command: (raw) async {
+          requests.add(jsonDecode(raw) as Map<String, dynamic>);
           return reply();
         },
         currentNamespace: () => scope);
+    await model.install();
+    expect(requests, isEmpty);
     await model.refresh();
-    await model.install(r'C:\selected\RustDeskIddDriver.inf');
-    expect(calls, 1);
-    expect(model.notice, 'invalid_request');
-    expect(model.uncertain, false);
+    await model.install();
+    expect(requests.map((request) => request['action']), ['status', 'install']);
+    expect(requests.last.keys.toSet(), {'action', 'namespace'});
     model.dispose();
   });
   test('ready requires the native job to finish and join', () async {
@@ -68,9 +70,9 @@ void main() {
         currentNamespace: () => scope,
         timeout: const Duration(milliseconds: 5));
     await model.refresh();
-    await model.install(r'C:\selected\NikoDeskIddDriver.inf');
+    await model.install();
     expect(model.uncertain, true);
-    await model.install(r'C:\selected\NikoDeskIddDriver.inf');
+    await model.install();
     expect(calls, 2);
     pending.complete(reply(job: id, phase: 'ready', ok: true, joined: true));
     model.dispose();
@@ -103,7 +105,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(320, 1000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final model = NikoVirtualDriver(
-        command: (_) async => reply(reason: 'catalog_trust_unconfirmed'),
+        command: (_) async => reply(reason: 'signed_package_missing'),
         currentNamespace: () => scope);
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
@@ -115,8 +117,8 @@ void main() {
                         padding: const EdgeInsets.all(16),
                         child: NikoVirtualDriverSettings(model: model)))))));
     await tester.pumpAndSettle();
-    expect(find.text('安装／修复驱动'), findsOneWidget);
-    expect(find.textContaining('Windows 未确认签名'), findsOneWidget);
+    expect(find.text('安装驱动'), findsOneWidget);
+    expect(find.textContaining('usbmmidd_v2'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     model.dispose();

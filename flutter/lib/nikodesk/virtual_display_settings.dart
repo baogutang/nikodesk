@@ -83,8 +83,8 @@ class _SettingsState extends State<NikoVirtualDisplaySettings> {
         Text(
             Platform.isWindows
                 ? nikoText(
-                    'Windows 需要兼容的签名驱动。可使用独立无人值守服务的机器 ID，或在本机明确以管理员权限运行的客户端；两种方式都需开启被控端的虚拟屏权限。',
-                    'Windows requires a compatible signed driver. Use the separate unattended service’s machine ID, or a client explicitly run with Administrator access locally. Enable virtual display permission for the chosen controlled instance.')
+                    'Windows 使用随附的已签名驱动，首次创建虚拟屏时自动安装。需要通过无人值守服务的机器 ID 连接，或在本机以管理员身份运行客户端。',
+                    'Windows uses the bundled signed driver, installed automatically the first time a virtual display is created. Connect through the unattended service’s machine ID, or run the client as Administrator locally.')
                 : nikoText(
                     'macOS 会检查系统是否支持虚拟屏。可用时支持 1080p、1440p 和 4K；创建失败会显示原因。',
                     'macOS checks virtual display support. Available displays offer 1080p, 1440p and 4K; creation failures are shown.'),

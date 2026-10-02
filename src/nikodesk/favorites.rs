@@ -210,7 +210,9 @@ pub(crate) fn context(namespace: &str) -> ResultType<Repository> {
 pub(crate) fn application_root() -> ResultType<PathBuf> {
     super::initialize()?;
     let path = hbb_common::config::Config::file();
-    if path.file_name().and_then(|v| v.to_str()) != Some("NikoDesk.toml") {
+    if path.file_name().and_then(|v| v.to_str())
+        != Some(format!("{}.toml", super::app_name()?).as_str())
+    {
         bail!("invalid_private_directory");
     }
     Ok(path
