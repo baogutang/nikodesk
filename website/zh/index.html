@@ -355,7 +355,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
 <main id="content" tabindex="-1">
 <header class="hero wrap" id="top" tabindex="-1">
   <a class="badge" href="https://github.com/baogutang/nikodesk/releases" target="_blank" rel="noopener">
-    <span class="dot"></span>v1.0.0 历史测试构建<span class="arrow">→</span>
+    <span class="dot"></span>nightly 预发布 · 三平台<span class="arrow">→</span>
   </a>
   <h1><span class="phrase">你的设备，</span><span class="phrase">你的服务器，</span><br><span class="accent">你的远程桌面。</span></h1>
   <p class="sub">保留 RustDesk 的原生远控内核，连接你自己的注册与中继服务。Windows 与 macOS 面向主控及被控，Android 仅做控制端；新包仍待真实会话验收。</p>
@@ -559,29 +559,29 @@ Key:      (id_ed25519.pub)</pre>
   <div class="sec-head reveal">
     <span class="sec-pill">下载</span>
     <h2>下载与平台状态</h2>
-    <p class="sec-sub">公开下载仍为历史 v1.0.0。本地 1.1.0+6 的 Mac DMG、完整应用 ZIP 与 Android APK 已完成整包构建和检查，尚未发布、安装或真机验收。Windows 此前完整编译通过，但应用身份检查未通过。</p>
+    <p class="sec-sub">每次推送 main 都会重新构建三端并替换滚动更新的 nightly 预发布，请对照其 SHA256SUMS 校验下载文件。核心会话（认证、画面、文件传输、终端、隧道）已在一台 Mac 上经私服中继在两个身份之间完成端到端验证；Windows 与 Android 真机验收仍在进行中，下方说明均如实标注。</p>
   </div>
   <div class="dl-list">
-    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.0/NikoDesk-macos-arm64.zip">
+    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/tag/nightly">
       <h3>macOS</h3>
-      <span class="arch">Apple Silicon, zip, ad-hoc</span>
-      <span class="note">解压后保留完整 NikoDesk.app，不要拆开包内目录。本地签名、未公证；打包修复尚未发布。</span>
-      <span class="go">下载历史 ZIP →</span>
+      <span class="arch">Apple Silicon · DMG · ad-hoc 签名</span>
+      <span class="note">从 DMG 安装完整的 NikoDesk.app。无 Apple Developer ID、未公证：首次启动请右键点按 → 打开。可与现有 RustDesk 并存运行，身份独立。</span>
+      <span class="go">前往 nightly 下载 →</span>
     </a>
-    <article class="dl unavailable reveal">
+    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/tag/nightly">
       <h3>Windows</h3>
-      <span class="arch">x64 · v1.0.0 暂不可用</span>
-      <p class="note">v1.0.0 会拒绝启动。此前验证已完成完整 MSVC＋Flutter 编译，但应用身份检查未通过；修补验证及 Win10 启动、远控仍待完成，尚无本批验收包。旧 ZIP 内 EXE、DLL 与 data 应保持完整。</p>
-      <a class="archive" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.0/NikoDesk-windows-x64.zip">查看归档（不建议安装）</a>
-    </article>
-    <article class="dl unavailable reveal">
+      <span class="arch">x64 · 便携 EXE/ZIP · 未签名</span>
+      <span class="note">用户态便携客户端，无需安装即可与 RustDesk 并存运行；另附用于无人值守访问的安装验证器。未签名：SmartScreen 会询问一次。真机验收仍在进行中——安装器会改动系统，请先在测试机上使用。</span>
+      <span class="go">前往 nightly 下载 →</span>
+    </a>
+    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/tag/nightly">
       <h3>Android</h3>
-      <span class="arch">arm64 · v1.0.0 暂不可用</span>
-      <p class="note">v1.0.0 APK 会拒绝启动。本地 1.1.0+6 测试 APK 已完成构建、测试签名和 16KB 检查；Android 16 真机启动、升级、远控及通话仍待验证，尚无新版公开下载。</p>
-      <a class="archive" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.0/NikoDesk-android-arm64.apk">查看归档（不建议安装）</a>
-    </article>
+      <span class="arch">arm64 · APK · release 签名</span>
+      <span class="note">仅控制端应用（io.nikodesk.android），使用专用 NikoDesk release 密钥签名，并在 CI 中完成加密校验。真机操作、远控会话与通话仍未验证；部分蓝牙组合暂不支持。</span>
+      <span class="go">前往 nightly 下载 →</span>
+    </a>
   </div>
-  <p class="dl-note reveal">ZIP 是应用包归档，不是安装向导。GitHub Actions 的 artifact ZIP 还可能包着一层产物文件；macOS 中的 <code>NikoDesk.app</code> 是完整应用。下载后对照 <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.0">v1.0.0 的 SHA256SUMS 与版本说明</a>，勿关闭系统安全防护。</p>
+  <p class="dl-note reveal">nightly 会在每次推送 main 时被替换——其 SHA256SUMS 见发布页。<a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.0">v1.0.0 归档</a>仅供查阅。请保持系统安全防护开启。</p>
 </section>
 
 <section id="faq" tabindex="-1" class="wrap faq" style="padding-top: 20px;">
@@ -596,7 +596,7 @@ Key:      (id_ed25519.pub)</pre>
     </details>
     <details class="reveal">
       <summary>安全性到底怎么样？</summary>
-      <div class="a">会话使用上游加密与认证实现，连接入口要求密码。服务端公钥用于服务器身份校验，不是远控密码；服务端私钥应留在服务端。终端、摄像头与语音请求默认关闭，仍需本机逐次批准和真实会话验收。完整隧道、完整无人值守、隐私屏、虚拟屏、唤醒/重启/自动锁屏及被控端主动发起语音尚未交付。构建或单元测试不能替代跨设备安全验收。</div>
+      <div class="a">会话使用上游加密与认证实现，连接入口要求密码。服务端公钥用于服务器身份校验，不是远控密码；服务端私钥应留在服务端。终端、摄像头、隧道与语音默认关闭，各自需要本机逐能力策略加上被控端批准，会话中可随时撤销。无人值守、网络唤醒、隐私屏、虚拟屏与断开即锁屏已在源码中实现；真实跨设备验收仍在进行中。构建或单元测试不能替代跨设备安全验收。</div>
     </details>
     <details class="reveal">
       <summary>和 RustDesk 是什么关系？</summary>
@@ -604,7 +604,7 @@ Key:      (id_ed25519.pub)</pre>
     </details>
     <details class="reveal">
       <summary>Android 版能做什么？</summary>
-      <div class="a">Android 仅做控制端连接 Windows 与 macOS，不提供手机被控能力。本地 1.1.0+6 已完成整包检查，并接入普通桌面远控中的主控发起语音、手选设备与麦克风权限流程；真实操作、远控及通话仍待验证，部分蓝牙组合暂不支持。公开 v1.0.0 APK 会拒绝启动，不建议安装。</div>
+      <div class="a">Android 仅做控制端连接 Windows 与 macOS，不提供手机被控能力。nightly APK 使用专用 NikoDesk release 密钥签名，nightly 版本之间可直接覆盖升级；并接入主控发起语音、手选设备与麦克风权限。真机操作、远控会话与通话仍未验证；部分蓝牙组合暂不支持。</div>
     </details>
   </div>
 </section>

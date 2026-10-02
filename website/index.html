@@ -356,7 +356,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
 <main id="content" tabindex="-1">
 <header class="hero wrap" id="top" tabindex="-1">
   <a class="badge" href="https://github.com/baogutang/nikodesk/releases" target="_blank" rel="noopener">
-    <span class="dot"></span>v1.0.0 archived test build<span class="arrow">→</span>
+    <span class="dot"></span>nightly pre-release · three platforms<span class="arrow">→</span>
   </a>
   <h1>Your machines, your server,<br><span class="accent">your remote desktop.</span></h1>
   <p class="sub">The native RustDesk core, connected to your own rendezvous and relay services. Windows and macOS target controller and receiver roles; Android is controller only. Real-session acceptance remains pending.</p>
@@ -560,29 +560,29 @@ Key:        (id_ed25519.pub)</pre>
   <div class="sec-head reveal">
     <span class="sec-pill">Download</span>
     <h2>Downloads and platform status</h2>
-    <p class="sec-sub">Public downloads remain the historical v1.0.0. Local 1.1.0+6 macOS DMG, complete-app ZIP and Android APK builds and package checks passed, but these packages are unpublished, uninstalled and untested on real devices. The earlier full Windows build passed compilation but failed its application identity checks.</p>
+    <p class="sec-sub">Every push to main rebuilds all three platforms and replaces the rolling nightly pre-release. Verify downloads against its SHA256SUMS. Core sessions (authentication, video, file transfer, terminal, tunnels) are verified end to end between two identities on one Mac through a private relay; Windows and Android real-device acceptance is still in progress, and the notes below say so plainly.</p>
   </div>
   <div class="dl-list">
-    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.0/NikoDesk-macos-arm64.zip">
+    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/tag/nightly">
       <h3>macOS</h3>
-      <span class="arch">Apple Silicon, zip, ad-hoc</span>
-      <span class="note">Extract the complete NikoDesk.app; keep its internal folders intact. Locally signed, not notarized. Packaging fixes are not published yet.</span>
-      <span class="go">Download archived ZIP →</span>
+      <span class="arch">Apple Silicon · DMG · ad-hoc signed</span>
+      <span class="note">Install the complete NikoDesk.app from the DMG. No Apple Developer ID or notarization: right-click → Open on the first launch. Runs beside an existing RustDesk with its own identity.</span>
+      <span class="go">Get it from nightly →</span>
     </a>
-    <article class="dl unavailable reveal">
+    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/tag/nightly">
       <h3>Windows</h3>
-      <span class="arch">x64 · v1.0.0 unavailable</span>
-      <p class="note">v1.0.0 refuses to start. Earlier validation completed the full MSVC＋Flutter build but failed its application identity checks. Repair validation, Win10 launch and remote sessions remain pending; there is no accepted package for this batch. Keep the archived EXE, DLLs and data together.</p>
-      <a class="archive" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.0/NikoDesk-windows-x64.zip">View archive (not for installation)</a>
-    </article>
-    <article class="dl unavailable reveal">
+      <span class="arch">x64 · portable EXE/ZIP · unsigned</span>
+      <span class="note">A user-mode portable client that runs beside RustDesk with no installation, plus a setup-validation installer for unattended access. Unsigned: SmartScreen asks once. Real-device acceptance is in progress — the installer changes the system, so use a test machine first.</span>
+      <span class="go">Get it from nightly →</span>
+    </a>
+    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/tag/nightly">
       <h3>Android</h3>
-      <span class="arch">arm64 · v1.0.0 unavailable</span>
-      <p class="note">The v1.0.0 APK refuses to start. Local 1.1.0+6 test APK build, test signing and 16KB checks passed. Android 16 launch, upgrade, remote sessions and calls remain unverified. No revised public download is available.</p>
-      <a class="archive" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.0/NikoDesk-android-arm64.apk">View archive (not for installation)</a>
-    </article>
+      <span class="arch">arm64 · APK · release-signed</span>
+      <span class="note">Controller-only app (io.nikodesk.android), signed with the dedicated NikoDesk release key and cryptographically verified in CI. Real-device operation, remote sessions and calls remain unverified; some Bluetooth combinations are unsupported.</span>
+      <span class="go">Get it from nightly →</span>
+    </a>
   </div>
-  <p class="dl-note reveal">A ZIP is an app archive, not an installer. GitHub Actions artifact ZIPs may contain another archive; <code>NikoDesk.app</code> is the complete macOS application. Check <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.0">v1.0.0 SHA256SUMS and release notes</a>. Keep system security protections enabled.</p>
+  <p class="dl-note reveal">The nightly is replaced on every push to main — its SHA256SUMS lives on the release page. The <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.0">v1.0.0 archive</a> remains for inspection only. Keep system security protections enabled.</p>
 </section>
 
 <section id="faq" tabindex="-1" class="wrap faq" style="padding-top: 20px;">
@@ -597,7 +597,7 @@ Key:        (id_ed25519.pub)</pre>
     </details>
     <details class="reveal">
       <summary>How secure is it?</summary>
-      <div class="a">Sessions use upstream encryption and authentication; the connection entry requires a password. A server public key verifies the server and is not a remote-control password. Keep the server private key on the server. Terminal, camera and voice requests are off by default and still require local approval and real-session acceptance. Complete tunnels, full unattended access, privacy screens, virtual displays, wake/restart/automatic locking and receiver-initiated voice are not delivered. Builds and unit tests do not replace cross-device security validation.</div>
+      <div class="a">Sessions use upstream encryption and authentication; the connection entry requires a password. A server public key verifies the server and is not a remote-control password. Keep the server private key on the server. Terminal, camera, tunnels and voice are off by default and each needs a local per-capability policy plus an approval on the controlled side, revocable mid-session. Unattended access, wake-on-LAN, privacy screens, virtual displays and lock-on-disconnect are implemented in source; real cross-device acceptance is still in progress. Builds and unit tests do not replace cross-device security validation.</div>
     </details>
     <details class="reveal">
       <summary>What is the relationship to RustDesk?</summary>
@@ -605,7 +605,7 @@ Key:        (id_ed25519.pub)</pre>
     </details>
     <details class="reveal">
       <summary>What can the Android build do?</summary>
-      <div class="a">Android controls Windows and macOS; it does not act as a phone receiver. Local 1.1.0+6 passed package checks and integrates controller-initiated voice, manual device selection and microphone permission in ordinary desktop-control sessions. Real-device operation, remote sessions and calls remain unverified; some Bluetooth combinations are unsupported. The public v1.0.0 APK refuses to start and is not recommended for installation.</div>
+      <div class="a">Android controls Windows and macOS; it does not act as a phone receiver. The nightly APK is signed with the dedicated NikoDesk release key, so one nightly upgrades over another, and it integrates controller-initiated voice with manual device selection and microphone permission. Real-device operation, remote sessions and calls remain unverified; some Bluetooth combinations are unsupported.</div>
     </details>
   </div>
 </section>

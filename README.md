@@ -21,41 +21,48 @@ A private-server remote desktop built on the native RustDesk core.
 
 ## Current status
 
-NikoDesk is under development. **v1.0.0 is an archived test build and does not contain the fixes from the September 30 review.** Build artifacts alone do not establish a working application.
+NikoDesk is in active development. Every push to `main` builds all three platforms and replaces the rolling **[nightly pre-release](https://github.com/baogutang/nikodesk/releases/tag/nightly)**; `v*` tags publish formal releases. The [v1.0.0 archive](https://github.com/baogutang/nikodesk/releases/tag/v1.0.0) is a historical test build — only its macOS ZIP remains published.
 
-The latest package-checked local test build is **1.1.0+6 (unpublished, October 1, 2026)**. Full builds and package checks passed for the macOS DMG, complete-app update ZIP and Android APK; their common product source files match. Its product version is separate from the upstream core/protocol version. These packages have not been installed, launched or tested in real-device remote sessions; later source changes are not automatically included.
+| Channel | macOS ARM64 | Windows x64 | Android ARM64 |
+|---|---|---|---|
+| [nightly](https://github.com/baogutang/nikodesk/releases/tag/nightly) | DMG + updater ZIP, ad-hoc signed (no Apple Developer ID or notarization; right-click → Open on first launch) | Portable EXE/ZIP (no installation, runs beside RustDesk) + unattended-access setup-validation installer. Unsigned: SmartScreen asks once. The installer changes the system — use a test machine first. | Controller APK (`io.nikodesk.android`), signed with the dedicated NikoDesk release key and verified against the pinned certificate fingerprint |
+| [v1.0.0](https://github.com/baogutang/nikodesk/releases/tag/v1.0.0) | Archived ZIP only | Removed (refused to start) | Removed (refused to start) |
 
-| Platform | v1.0.0 archive | Current validation (new local packages: 1.1.0+6) |
-|---|---|---|
-| macOS ARM64 | ZIP containing a complete `NikoDesk.app`; local ad-hoc signature, no Developer ID or notarization | Full Rust＋Flutter build, DMG/update ZIP structure and signature integrity verified. This package has not been installed, launched or remote-session tested. |
-| Windows x64 | ZIP containing an EXE, DLLs and `data`; the NikoDesk initialization gate refuses to start | The earlier build4 validation CI completed the full MSVC＋Flutter build but failed its application identity checks. A second fixed CI repair awaits authorization. There is no accepted Windows package for this batch; Win10 launch and sessions remain unverified. |
-| Android ARM64 | APK; the NikoDesk initialization gate refuses to start | Full Rust＋Gradle test APK, separate package ID, fixed local test certificate, 16KB and voice JNI retention checks verified. Controller only; Android 16 launch, upgrade, remote sessions and voice calls remain unverified. |
+**What is actually verified:** on the developer's Mac, two isolated NikoDesk identities ran real sessions through a private RustDesk server relay — password authentication with video, bidirectional file transfer (SHA-256 verified), TOTP two-factor authentication including replay rejection, session audit records on both ends, the remote terminal (request → local approval → command output), port tunnels (data verified through the tunnel), and picture modes (measurable bitrate/framerate changes). These are same-machine, same-user sessions: cross-device, cross-OS, Windows and Android real-device acceptance is still pending, and untested combinations stay unclaimed.
 
-The old Windows and Android assets are available for inspection in [the v1.0.0 archive](https://github.com/baogutang/nikodesk/releases/tag/v1.0.0), and are not recommended for installation. New artifacts will be linked only after they are published and verified.
+**Implementation scope:** all planned capabilities are implemented in the source — unattended access, wake-on-LAN, privacy screen, virtual display, terminal, camera, tunnels, voice, two-factor authentication, session records and diagnostics across macOS, Windows and Android. Implementation and package checks are not a substitute for per-device acceptance.
 
 ## What NikoDesk adds
 
-- **Private-server configuration:** your ID server, relay server and server public key. Missing configuration keeps registration stopped; the NikoDesk feature disables upstream default public-rendezvous fallback.
-- **Device workspace:** local aliases, groups, favorites, search and reconnect controls. Availability comes from server queries; unavailable evidence stays unknown.
-- **Password entry before connecting:** the NikoDesk connection entry requires a remote password and does not save it in the device directory. Authentication and encryption are still checked by the peer.
-- **Local history:** the last 200 connection attempts. An entry records initiation, not remote acceptance.
-- **Native sessions:** preserves RustDesk capture, rendering, input, file transfer, clipboard and multi-display paths. Codec availability depends on both peers and the build; hardware acceleration is not guaranteed.
-- **Diagnostics:** source-labelled session samples. Application RTT, successful decode-callback FPS and native submission-call timing are separate observations; they do not establish input-to-screen latency or actual presentation. Unknown measurements stay unknown.
-- **Light and dark themes:** follow the system or choose in the app.
+**Foundations**
 
-Terminal, port tunnels, camera and voice requests are off by default. Allowing requests does not grant local approval or establish that a resource is running. Terminal and camera connection/local-approval flows are implemented. Build6 integrates controller-initiated voice in ordinary desktop-control sessions, manual local device selection and microphone permission, the Android voice switch and cleanup after closing a session. Preparing or queuing a call does not establish that it has started; muting does not release the microphone. All these capabilities await real cross-device acceptance, and some Android Bluetooth combinations are unsupported.
+- **Private-server first:** your ID server, relay server and server public key. Missing configuration keeps registration stopped; the NikoDesk build disables upstream public-rendezvous fallback.
+- **Isolated identity:** its own application ID, configuration, IPC namespace and device keys. An installed RustDesk keeps working untouched beside it.
+- **Device workspace:** aliases, groups, favorites, search, online status from real server queries, reconnect controls, and per-server session records (last 200 each).
+- **Password before connecting:** the connection entry requires the remote password; saved credentials go to the system secure storage per server scope, never to plain files.
+- **Two-factor authentication:** TOTP with a durable, file-locked replay counter; a used code stays rejected across restarts, and a damaged record disables login instead of downgrading it.
 
-Receiver-initiated voice, complete port tunnels, full unattended access, privacy screens, virtual displays, wake, restart and automatic locking are not delivered. Unfinished capabilities stay unavailable; source implementation and package checks are not a complete security audit.
+**Sessions**
 
-## Getting started on macOS
+- **Native core:** RustDesk capture, codecs, input, file transfer, clipboard and multi-display paths are preserved. Picture modes (office / smooth / weak network) change what the controlled side really sends.
+- **Connection feedback and diagnostics:** per-connection progress, relay route and decode statistics — labelled observations, not latency promises.
+- **Extended capabilities, all off by default:** remote terminal, port tunnels, camera and voice (including receiver-initiated calls) each need a local per-capability policy and an approval from the controlled side's connection manager, which can revoke mid-session.
 
-1. Review the [release notes and SHA256SUMS](https://github.com/baogutang/nikodesk/releases/tag/v1.0.0). The existing ZIP is a historical build; packaging fixes are not published yet.
-2. Extract and retain the complete `NikoDesk.app`. Do not launch a file from `Contents/MacOS` or separate its frameworks. GitHub Actions downloads may add an outer artifact ZIP around the application archive.
-3. Configure your own [RustDesk Server OSS](https://github.com/rustdesk/rustdesk-server) in **Settings → Private server**: ID server, relay and **server public key**. Keep server private keys on the server.
-4. Configure the other endpoint to use the same servers and public key. Check service reachability, registration, then password authentication in a real session; each proves something different.
-5. When using the Mac as a controlled endpoint, grant Screen Recording for capture and Accessibility for remote input through macOS settings. Review individual session permissions before accepting. A control-only workflow should not require every receiver permission.
+**Controlled-endpoint features**
 
-NikoDesk uses its own application identity, configuration and IPC namespace on macOS. Preserve an existing RustDesk installation while evaluating it. System security protections should remain enabled; local signing is not notarization.
+- **Unattended access (Windows):** single-file installer, service lifecycle with recovery, machine-level permissions (virtual display, lock-on-disconnect, privacy screen, remote restart) default-off, and password rotation. The nightly's setup-validation installer is for test machines.
+- **Privacy screen & virtual display:** macOS gamma-based blackout; Windows uses upstream's signed Amyuni display driver, bundled and byte-pinned in the package.
+- **Wake-on-LAN:** wake a whitelisted machine directly, or through an authorized tunnel proxy when the controller is remote.
+- **Lock on disconnect** and **remote restart**, each permission-gated.
+
+Light and dark themes follow the system or your choice; the interface ships in English and 简体中文. Extended capabilities await real cross-device acceptance; some Android Bluetooth combinations are unsupported; unmeasured behavior stays unclaimed.
+
+## Getting started
+
+1. Download from the **[nightly pre-release](https://github.com/baogutang/nikodesk/releases/tag/nightly)** and verify against its `SHA256SUMS`. The macOS DMG installs a complete `NikoDesk.app` (ad-hoc signed: right-click → Open on the first launch). Windows runs the portable EXE beside an existing RustDesk; Android installs the signed APK over any previous nightly.
+2. Configure your own [RustDesk Server OSS](https://github.com/rustdesk/rustdesk-server) in **Settings → Private server**: ID server, relay and **server public key**. Keep server private keys on the server.
+3. Configure the other endpoint with the same servers and public key. Check service reachability, registration, then password authentication in a real session; each proves something different.
+4. When using a Mac as a controlled endpoint, grant Screen Recording for capture and Accessibility for remote input through macOS settings. Review individual session permissions before accepting; each extended capability still asks.
 
 ## Network and updates
 
@@ -87,7 +94,7 @@ The output is `flutter/build/macos/Build/Products/Release/NikoDesk.app`. Packagi
 
 - Uses upstream encryption and authentication; a server public key is not a remote-control password. Device private keys and server private keys have different owners and must not be copied between them.
 - Session confirmation and permission controls must be tested on the actual controlled platform. Review the requested capabilities rather than granting everything for convenience.
-- macOS artifacts use local ad-hoc signatures, without Apple Developer ID signing or notarization. Android uses a fixed local test certificate; formal release signing and real-device upgrades remain unverified. Windows distribution signing remains unverified.
+- macOS artifacts use local ad-hoc signatures, without Apple Developer ID signing or notarization. Android nightly APKs are signed with the dedicated NikoDesk release key; real-device installs and upgrades remain unverified. Windows artifacts are unsigned.
 - Full cross-device testing, file/clipboard behavior, permission revocation and performance comparisons are separate acceptance work. No unmeasured speed or latency improvement is claimed.
 
 ## Project and license
