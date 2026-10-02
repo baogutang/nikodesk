@@ -448,6 +448,10 @@ def verify_zip_library_alignment(apk_stream, entry):
             'zip_data_offset': data_offset, 'zip_16kb_verified': True}
 
 
+SIGNER_CERTIFICATE_DIGEST = re.compile(
+    r'^(?P<label>[^:]*igner[^:]*)[:\s]+certificate SHA-256 digest:\s*(?P<digest>[0-9a-fA-F:]+)\s*$')
+
+
 def signing_certificate(apk):
     sdk = os.environ.get('ANDROID_HOME') or os.environ.get('ANDROID_SDK_ROOT')
     candidates = sorted((Path(sdk) / 'build-tools').glob('*/apksigner')) if sdk else []
@@ -456,11 +460,17 @@ def signing_certificate(apk):
         raise ValueError('Android SDK apksigner is required for signature verification')
     output = subprocess.run([executable, 'verify', '--verbose', '--print-certs', str(apk)],
                             check=True, capture_output=True, text=True, timeout=120).stdout
-    certificates = [line.split(':', 1)[1].strip().lower() for line in output.splitlines()
-                    if 'certificate SHA-256 digest:' in line and line.startswith('Signer #')]
-    if len(certificates) != 1:
-        raise ValueError('APK must have exactly one verified signing certificate')
-    return certificates[0]
+    # build-tools up to 36 label the block "Signer #1"; newer releases qualify it
+    # by scheme ("V2 Signer:", "JAR signer", ...), and every scheme block of one
+    # APK repeats the same certificate, so one distinct digest remains exactly
+    # one verified signing certificate.
+    digests = {match['digest'].replace(':', '').lower()
+               for match in map(SIGNER_CERTIFICATE_DIGEST.match, output.splitlines()) if match}
+    digests.discard('')
+    if len(digests) != 1:
+        raise ValueError(f'APK must have exactly one verified signing certificate '
+                         f'(apksigner {executable}); verify output:\n{output.strip()[:2000]}')
+    return digests.pop()
 
 
 def analyzer_path():

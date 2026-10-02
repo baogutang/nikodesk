@@ -208,6 +208,39 @@ class SigningAndArchiveTests(unittest.TestCase):
             run.return_value.stdout = manifest()
             PACKAGE.verify_apk(self.apk, 'io.nikodesk.android.dev', **kwargs)
 
+    def certificate_of(self, output):
+        with patch.object(PACKAGE.shutil, 'which', return_value='apksigner'), \
+             patch.object(PACKAGE.subprocess, 'run') as run:
+            run.return_value.stdout = output
+            return PACKAGE.signing_certificate(self.apk)
+
+    def test_signing_certificate_reads_both_apksigner_output_generations(self):
+        digest = 'fa45da96' + 'ab' * 28
+        colon_form = ':'.join(digest[i:i + 2] for i in range(0, 64, 2))
+        legacy = ('Verifies\nNumber of signers: 1\n'
+                  'Signer #1 certificate DN: CN=NikoDesk, O=NikoDesk\n'
+                  f'Signer #1 certificate SHA-256 digest: {digest}\n'
+                  'Signer #1 public key SHA-256 digest: ' + 'cd' * 32 + '\n')
+        current = ('Verifies\nNumber of signers: 1\n'
+                   f'V2 Signer: certificate SHA-256 digest: {digest.upper()}\n'
+                   f'V2 Signer: public key SHA-256 digest: {"cd" * 32}\n')
+        colonized = f'JAR signer: certificate SHA-256 digest: {colon_form}\n'
+        for output, expected in ((legacy, digest), (current, digest), (colonized, digest)):
+            with self.subTest(label=next(line for line in output.splitlines() if 'digest' in line)[:14]):
+                self.assertEqual(self.certificate_of(output), expected)
+        repeated = current + f'V3 Signer: certificate SHA-256 digest: {digest}\n'
+        self.assertEqual(self.certificate_of(repeated), digest)
+
+    def test_signing_certificate_rejects_missing_or_conflicting_certificates(self):
+        outputs = {
+            'no digest line': 'Verifies\nNumber of signers: 1\n',
+            'two certificates': ('V2 Signer: certificate SHA-256 digest: ' + 'ab' * 32 + '\n'
+                                 'V3 Signer: certificate SHA-256 digest: ' + 'cd' * 32 + '\n'),
+        }
+        for name, output in outputs.items():
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, 'exactly one'):
+                self.certificate_of(output)
+
     def test_rejects_signing_identity_change_even_when_signature_is_valid(self):
         self.write_apk()
         with self.assertRaisesRegex(ValueError, 'signing identity changed'):
