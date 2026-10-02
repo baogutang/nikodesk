@@ -24,8 +24,10 @@ GENERATOR = load('niko_portable_generator', PORTABLE / 'generate.py')
 class ProductVersionTests(unittest.TestCase):
     def test_flutter_and_portable_receive_the_same_product_and_license_record(self):
         original = os.getcwd()
-        try:
-            with tempfile.TemporaryDirectory() as temporary:
+        # Windows cannot delete the working directory, so return to the original
+        # one before the temporary directory is cleaned up.
+        with tempfile.TemporaryDirectory() as temporary:
+            try:
                 root = Path(temporary)
                 bundle = root / 'flutter/build/windows/x64/runner/Release'
                 bundle.mkdir(parents=True)
@@ -60,8 +62,8 @@ class ProductVersionTests(unittest.TestCase):
                 self.assertIn('Product 1.1.0+2; upstream native/protocol 1.5.0', (bundle / 'NikoDesk-source.txt').read_text())
                 self.assertTrue((root / 'NikoDesk-windows-x64.exe').is_file())
                 self.assertFalse((root / 'rustdesk-1.5.0-install.exe').exists())
-        finally:
-            os.chdir(original)
+            finally:
+                os.chdir(original)
 
     def test_product_default_is_flutter_version_and_keeps_native_manifest_untouched(self):
         with tempfile.TemporaryDirectory() as temporary:

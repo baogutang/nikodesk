@@ -369,8 +369,8 @@ def inspect_payload(blob, records):
         md5_record = checked(blob, at, 32)
         at += 32
         decoder, sha, md5, count, offset = brotli.Decompressor(), hashlib.sha256(), hashlib.md5(), 0, 0
-        while offset < len(compressed) or not decoder.can_accept_more_data():
-            chunk = compressed[offset:offset + 65536] if decoder.can_accept_more_data() else b''
+        while True:
+            chunk = compressed[offset:offset + 65536] if (offset < len(compressed) and decoder.can_accept_more_data()) else b''
             offset += len(chunk)
             try:
                 output = decoder.process(chunk, output_buffer_limit=65536)
@@ -381,6 +381,14 @@ def inspect_payload(blob, records):
                 raise ValueError('Portable decompression exceeds inspected file size')
             sha.update(output)
             md5.update(output)
+            # The decoder can hold a full output buffer past the last input chunk,
+            # and can_accept_more_data() only reports its input window, so keep
+            # draining on empty input. An empty chunk producing no output can then
+            # only mean the stream ended or is truncated.
+            if not chunk and not output:
+                if decoder.is_finished() and offset >= len(compressed):
+                    break
+                raise ValueError(f'Truncated portable Brotli stream: {key}')
         if (not decoder.is_finished() or count != records[key]['size'] or
                 sha.hexdigest() != records[key]['sha256'] or md5.hexdigest().encode() != md5_record):
             raise ValueError(f'Portable payload differs from inspected bundle: {key}')

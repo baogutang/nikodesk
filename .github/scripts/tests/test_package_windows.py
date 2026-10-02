@@ -379,6 +379,16 @@ class PackageBoundaryTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 PACKAGE.inspect_payload(blob, self.records())
 
+    def test_accepts_payload_whose_tail_expands_beyond_one_output_buffer(self):
+        # A valid stream can end with a whole output buffer still inside the
+        # decoder when its input runs out; the drain loop must keep pumping on
+        # empty input. The real build 9 bundle failed verification on 19 of 105
+        # files (every plugin DLL and the large data files) through this exit.
+        expanding = bytes((i * 31 ^ i >> 6) & 0xff for i in range(131072)) + bytes(393216)
+        name = 'data/flutter_assets/AssetManifest.bin'
+        (self.bundle / name).write_bytes(expanding)
+        PACKAGE.inspect_payload(payload({**self.files, name: expanding}), self.records())
+
     def test_rejects_portable_launch_path_truncation_bad_md5_and_decompression_overflow(self):
         bad_md5 = bytearray(self.blob.read_bytes())
         path_length = struct.unpack_from('>I', bad_md5, 8)[0]
