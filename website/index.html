@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NikoDesk - Remote desktop on your own server</title>
-<meta name="description" content="A private-server remote desktop built on RustDesk. Local macOS and Android test packages have passed package checks, but remain unpublished and untested on real devices. Windows identity checks remain unresolved.">
+<meta name="description" content="A private-server remote desktop built on RustDesk. Every push builds macOS, Windows and Android into a rolling nightly pre-release; platform status is stated openly.">
 <link rel="icon" href="assets/favicon.png?v=5" type="image/png">
 <link rel="apple-touch-icon" href="assets/logo.png?v=5">
 <link rel="preload" href="assets/fonts/inter-800.woff2?v=5" as="font" type="font/woff2" crossorigin>
@@ -359,7 +359,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
     <span class="dot"></span>nightly pre-release · three platforms<span class="arrow">→</span>
   </a>
   <h1>Your machines, your server,<br><span class="accent">your remote desktop.</span></h1>
-  <p class="sub">The native RustDesk core, connected to your own rendezvous and relay services. Windows and macOS target controller and receiver roles; Android is controller only. Real-session acceptance remains pending.</p>
+  <p class="sub">The native RustDesk core, connected to your own rendezvous and relay services. Windows and macOS target controller and receiver roles; Android is controller only. Cross-device acceptance remains pending.</p>
   <div class="cta-row">
     <a class="btn btn-primary" href="#download">Download NikoDesk</a>
     <a class="btn btn-outline" href="https://github.com/baogutang/nikodesk" target="_blank" rel="noopener">Read the source</a>
@@ -560,7 +560,7 @@ Key:        (id_ed25519.pub)</pre>
   <div class="sec-head reveal">
     <span class="sec-pill">Download</span>
     <h2>Downloads and platform status</h2>
-    <p class="sec-sub">Every push to main rebuilds all three platforms and replaces the rolling nightly pre-release. Verify downloads against its SHA256SUMS. Core sessions (authentication, video, file transfer, terminal, tunnels) are verified end to end between two identities on one Mac through a private relay; Windows and Android real-device acceptance is still in progress, and the notes below say so plainly.</p>
+    <p class="sec-sub">Every push to main rebuilds all three platforms and replaces the rolling nightly pre-release. Verify downloads against its SHA256SUMS. Core sessions — password authentication with video, bidirectional file transfer, TOTP two-factor with replay rejection, session records on both ends, remote terminal, port tunnels and picture modes — are verified end to end between two identities of one user on one Mac through a private relay; cross-device, Windows and Android real-device acceptance is still in progress, and the notes below say so plainly.</p>
   </div>
   <div class="dl-list">
     <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/tag/nightly">
