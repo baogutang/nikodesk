@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -13,9 +14,15 @@ import 'package:flutter_hbb/nikodesk/ui.dart';
 
 class _ServerDouble implements ServerGateway {
   ServerSnapshot snapshot;
+  bool failRead = false;
+  Future<ServerSnapshot> Function()? onRead;
   _ServerDouble(this.snapshot);
   @override
-  Future<ServerSnapshot> read() async => snapshot;
+  Future<ServerSnapshot> read() async {
+    if (onRead != null) return onRead!();
+    if (failRead) throw const FormatException('Unconfirmed native settings');
+    return snapshot;
+  }
   @override
   Future<void> save(PrivateServerConfig config) async {
     snapshot = ServerSnapshot(config, null, true);
@@ -84,6 +91,63 @@ void main() {
     expect(find.text('设置永久密码'), findsOneWidget);
     expect(find.text('已就绪'), findsOneWidget);
     expect(find.byType(BackdropFilter, skipOffstage: false), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('failed settings read stays unknown rather than unconfigured',
+      (tester) async {
+    final gateway = _ServerDouble(ServerSnapshot(
+        PrivateServerConfig('private.example', 'private.example:21117',
+            base64Encode(List.filled(32, 1))),
+        1,
+        true))..failRead = true;
+    await loadShell(tester, shell(gateway));
+    await tester.runAsync(() async {
+      await tester.tap(find.text('进入首页'));
+      for (var i = 0; i < 30; i++) {
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('配置状态未知'), findsOneWidget);
+    expect(find.text('未配置'), findsNothing);
+    expect(find.text('已就绪'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('late status read cannot replace a newer server observation',
+      (tester) async {
+    final oldRead = Completer<ServerSnapshot>();
+    final old = ServerSnapshot(
+        PrivateServerConfig('old.example', 'old.example:21117',
+            base64Encode(List.filled(32, 1))), 1, true);
+    final current = ServerSnapshot(
+        PrivateServerConfig('current.example', 'current.example:21117',
+            base64Encode(List.filled(32, 2))), 1, true);
+    var blockNextRead = false;
+    final gateway = _ServerDouble(old);
+    gateway.onRead = () {
+      if (blockNextRead) {
+        blockNextRead = false;
+        return oldRead.future;
+      }
+      return Future.value(gateway.snapshot);
+    };
+    await loadShell(tester, shell(gateway));
+    blockNextRead = true;
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 3100));
+      gateway.snapshot = current;
+      await Future<void>.delayed(const Duration(milliseconds: 3100));
+      await tester.pump();
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('current.example'), findsOneWidget);
+    oldRead.complete(old);
+    await tester.pumpAndSettle();
+    expect(find.text('current.example'), findsOneWidget);
+    expect(find.text('old.example'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 

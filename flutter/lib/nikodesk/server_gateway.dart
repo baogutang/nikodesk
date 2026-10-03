@@ -103,16 +103,35 @@ class NativeServerGateway implements ServerGateway {
   @override
   Future<ServerSnapshot> read() async {
     final native = _bridge ?? bind;
-    final options =
-        jsonDecode(await native.mainGetOptions()) as Map<String, dynamic>;
-    final status =
-        jsonDecode(await native.mainGetConnectStatus()) as Map<String, dynamic>;
+    int? registrationStatus;
+    // Registration is a separate IPC observation. A missing status must not
+    // turn readable local settings into an empty or inaccessible configuration.
+    try {
+      final status = jsonDecode(await native
+          .mainGetConnectStatus()
+          .timeout(const Duration(seconds: 2)));
+      if (status is Map<String, dynamic> && status['status_num'] is int) {
+        registrationStatus = status['status_num'] as int;
+      }
+    } catch (_) {}
+    // Read current settings after the optional status observation. A delayed
+    // IPC response must not reactivate a namespace captured before a change.
+    final options = jsonDecode(await native.mainGetOptions());
+    if (options is! Map<String, dynamic> ||
+        [
+          'custom-rendezvous-server',
+          'relay-server',
+          'key',
+          'stop-service'
+        ].any((key) => options.containsKey(key) && options[key] is! String)) {
+      throw const FormatException('Private server settings are unavailable');
+    }
     final namespace =
         NikoServerScope.validate(options['nikodesk-server-namespace']);
     if (_bridge == null) NikoServerScope.activate(namespace);
     return ServerSnapshot(
         PrivateServerConfig.fromOptions(options),
-        status['status_num'] is int ? status['status_num'] : null,
+        registrationStatus,
         options['stop-service'] == 'N' &&
             (_bridge != null || namespace != null),
         namespace: namespace);

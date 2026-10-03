@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NikoDesk - Remote desktop on your own server</title>
-<meta name="description" content="A private-server remote desktop built on RustDesk. Version 1.0.2 delivers macOS, Windows and Android through checked builds; platform status is stated openly.">
+<meta name="description" content="A private-server remote desktop built on RustDesk. Version 1.0.3 delivers macOS, Windows and Android through checked builds; platform status is stated openly.">
 <link rel="icon" href="assets/favicon.png?v=5" type="image/png">
 <link rel="apple-touch-icon" href="assets/logo.png?v=5">
 <link rel="preload" href="assets/fonts/inter-800.woff2?v=5" as="font" type="font/woff2" crossorigin>
@@ -359,7 +359,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
 <main id="content" tabindex="-1">
 <header class="hero wrap" id="top" tabindex="-1">
   <a class="badge" href="https://github.com/baogutang/nikodesk/releases" target="_blank" rel="noopener">
-    <span class="dot"></span>v1.0.2 · three platforms<span class="arrow">→</span>
+    <span class="dot"></span>v1.0.3 · three platforms<span class="arrow">→</span>
   </a>
   <h1>Your machines, your server,<br><span class="accent">your remote desktop.</span></h1>
   <p class="sub">The native RustDesk core, connected to your own rendezvous and relay services. Windows and macOS target controller and receiver roles; Android is controller only. Cross-device acceptance remains pending.</p>
@@ -379,7 +379,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
   <div class="sec-head reveal">
     <span class="sec-pill">Features</span>
     <h2>Made for daily driving</h2>
-    <p class="sec-sub">Version 1.0.2 adds a warm light theme, Windows-to-Mac editing shortcuts and one-click access to remote Spaces and Mission Control, alongside desktop and mobile session tools. Video overload recovery now preserves reference-frame order; real-codec regression tests verify the decoded picture. Cross-device latency remains unmeasured.</p>
+    <p class="sec-sub">Version 1.0.3 fixes configuration reads after macOS background-access setup, adds same-page retry and corrects update-package selection. The warm light theme, Windows-to-Mac editing shortcuts and remote Spaces controls remain available. Real-codec tests verify picture recovery; cross-device latency remains unmeasured.</p>
   </div>
   <div class="grid">
     <div class="card reveal">
@@ -555,29 +555,29 @@ Key:        (id_ed25519.pub)</pre>
   <div class="sec-head reveal">
     <span class="sec-pill">Download</span>
     <h2>Downloads and platform status</h2>
-    <p class="sec-sub">The v1.0.2 tag builds macOS, Windows and Android, and publishes their packages together after all checks pass. Verify downloads against its SHA256SUMS. Nightly remains a separate rolling preview. Core sessions — password authentication with video, bidirectional file transfer, TOTP two-factor with replay rejection, session records on both ends, remote terminal, port tunnels and picture modes — are verified end to end between two identities of one user on one Mac through a private relay; cross-device, Windows and Android real-device acceptance is still in progress, and the notes below say so plainly.</p>
+    <p class="sec-sub">The v1.0.3 tag builds macOS, Windows and Android, and publishes their packages together after all checks pass. Verify downloads against its SHA256SUMS. Nightly remains a separate rolling preview. Core sessions — password authentication with video, bidirectional file transfer, TOTP two-factor with replay rejection, session records on both ends, remote terminal, port tunnels and picture modes — are verified end to end between two identities of one user on one Mac through a private relay; cross-device, Windows and Android real-device acceptance is still in progress, and the notes below say so plainly.</p>
   </div>
   <div class="dl-list">
-    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.2/NikoDesk-macos-arm64.dmg">
+    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.3/NikoDesk-macos-arm64.dmg">
       <h3>macOS</h3>
       <span class="arch">Apple Silicon · DMG · ad-hoc signed</span>
       <span class="note">Install the complete NikoDesk.app from the DMG. No Apple Developer ID or notarization: right-click → Open on the first launch. Runs beside an existing RustDesk with its own identity.</span>
-      <span class="go">Download v1.0.2 →</span>
+      <span class="go">Download v1.0.3 →</span>
     </a>
-    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.2/NikoDesk-windows-x64.exe">
+    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.3/NikoDesk-windows-x64.exe">
       <h3>Windows</h3>
       <span class="arch">x64 · portable EXE/ZIP · unsigned</span>
       <span class="note">A user-mode portable client that runs beside RustDesk with no installation, plus a setup-validation installer for unattended access. Unsigned: SmartScreen asks once. Real-device acceptance is in progress — the installer changes the system, so use a test machine first.</span>
-      <span class="go">Download v1.0.2 →</span>
+      <span class="go">Download v1.0.3 →</span>
     </a>
-    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.2/NikoDesk-android-arm64.apk">
+    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.3/NikoDesk-android-arm64.apk">
       <h3>Android</h3>
       <span class="arch">arm64 · APK · release-signed</span>
       <span class="note">Controller-only app (io.nikodesk.android), signed with the dedicated NikoDesk release key and cryptographically verified in CI. Real-device operation, remote sessions and calls remain unverified; some Bluetooth combinations are unsupported.</span>
-      <span class="go">Download v1.0.2 →</span>
+      <span class="go">Download v1.0.3 →</span>
     </a>
   </div>
-  <p class="dl-note reveal">Use the <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.2">v1.0.2 release page</a> for checksums and the Windows unattended setup-validation installer. The <a href="https://github.com/baogutang/nikodesk/releases/tag/nightly">nightly preview</a> is replaced on every push to main. The <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.0">v1.0.0 archive</a> remains for inspection only. Keep system security protections enabled.</p>
+  <p class="dl-note reveal">Use the <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.3">v1.0.3 release page</a> for checksums and the Windows unattended setup-validation installer. The <a href="https://github.com/baogutang/nikodesk/releases/tag/nightly">nightly preview</a> is replaced on every push to main. The <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.0">v1.0.0 archive</a> remains for inspection only. Keep system security protections enabled.</p>
 </section>
 
 <section id="faq" tabindex="-1" class="wrap faq" style="padding-top: 20px;">
@@ -600,7 +600,7 @@ Key:        (id_ed25519.pub)</pre>
     </details>
     <details class="reveal">
       <summary>What can the Android build do?</summary>
-      <div class="a">Android controls Windows and macOS; it does not act as a phone receiver. The APK is signed with the dedicated NikoDesk release key; build 10 follows build 9 on the same application ID, and it integrates controller-initiated voice with manual device selection and microphone permission. Real-device operation, remote sessions and calls remain unverified; some Bluetooth combinations are unsupported.</div>
+      <div class="a">Android controls Windows and macOS; it does not act as a phone receiver. The APK is signed with the dedicated NikoDesk release key; build 12 follows build 11 on the same application ID, and it integrates controller-initiated voice with manual device selection and microphone permission. Real-device operation, remote sessions and calls remain unverified; some Bluetooth combinations are unsupported.</div>
     </details>
   </div>
 </section>

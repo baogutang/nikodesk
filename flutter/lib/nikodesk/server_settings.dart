@@ -183,16 +183,30 @@ class _PrivateServerFormState extends State<PrivateServerForm> {
 }
 
 class NikoNetworkSettings extends StatefulWidget {
-  const NikoNetworkSettings({super.key});
+  final ServerGateway? gateway;
+  const NikoNetworkSettings({super.key, this.gateway});
   @override
   State<NikoNetworkSettings> createState() => _NikoNetworkSettingsState();
 }
 
 class _NikoNetworkSettingsState extends State<NikoNetworkSettings> {
-  final _gateway = NativeServerGateway();
+  late final _gateway = widget.gateway ?? NativeServerGateway();
+  late Future<ServerSnapshot> _snapshot = _read();
+
+  Future<ServerSnapshot> _read() =>
+      _gateway.read().timeout(const Duration(seconds: 8));
+
+  void _reload() {
+    final snapshot = _read();
+    setState(() {
+      _snapshot = snapshot;
+    });
+  }
+
   @override
-  Widget build(BuildContext context) =>
-      ListView(padding: const EdgeInsets.all(24), children: [
+  Widget build(BuildContext context) => SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Text(nikoText('私有网络', 'Private network'),
             style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: 16),
@@ -201,14 +215,26 @@ class _NikoNetworkSettingsState extends State<NikoNetworkSettings> {
             'NikoDesk uses your configured OSS ID / relay servers. Sessions still require authentication and encryption. Grant operating-system permissions in System Settings.')),
         const SizedBox(height: 24),
         FutureBuilder<ServerSnapshot>(
-            future: _gateway.read(),
+            future: _snapshot,
             builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return Text(nikoText('无法读取配置，请返回首页重试。',
-                    'Cannot read settings. Return to Devices and retry.'));
-              }
-              if (!snapshot.hasData) {
+              if (snapshot.connectionState != ConnectionState.done) {
                 return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return NikoCard(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                      Text(nikoText('无法读取配置', 'Cannot read settings')),
+                      const SizedBox(height: 12),
+                      Text(nikoText('现有配置状态未知，未进行更改。请重试读取。',
+                          'The existing configuration is unknown and has not been changed. Retry reading it.')),
+                      const SizedBox(height: 12),
+                      FilledButton.icon(
+                          onPressed: _reload,
+                          icon: const Icon(Icons.refresh),
+                          label: Text(nikoText('重试', 'Retry'))),
+                    ]));
               }
               final value = snapshot.data!;
               return NikoCard(
@@ -218,15 +244,21 @@ class _NikoNetworkSettingsState extends State<NikoNetworkSettings> {
                     Text(value.config.isValid
                         ? nikoText('配置完整', 'Configuration complete')
                         : nikoText('尚未配置', 'Setup required')),
+                    if (value.config.isValid &&
+                        value.registrationStatus == null) ...[
+                      const SizedBox(height: 12),
+                      Text(nikoText('注册状态未知。配置完整不代表远端在线。',
+                          'Registration status is unknown. Valid settings do not prove remote availability.')),
+                    ],
                     const SizedBox(height: 12),
                     FilledButton(
                         onPressed: () async {
-                          await showNikoServerSettings(
+                          final saved = await showNikoServerSettings(
                               context, _gateway, value.config);
-                          if (mounted) setState(() {});
+                          if (mounted && saved == true) _reload();
                         },
                         child: Text(nikoText('配置服务器', 'Configure server'))),
                   ]));
             }),
-      ]);
+      ]));
 }

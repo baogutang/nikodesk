@@ -188,6 +188,24 @@ void main() {
         same(zip));
   });
 
+  test('release selection excludes setup-validation and similarly named assets',
+      () {
+    final validation = NikoReleaseAsset(
+        'NikoDesk-windows-x64-setup-validation.exe',
+        Uri.parse('https://github.com/validation.exe'));
+    final other = NikoReleaseAsset('NikoDesk-windows-x64-other.exe',
+        Uri.parse('https://github.com/other.exe'));
+    final portable = NikoReleaseAsset('NikoDesk-windows-x64.exe',
+        Uri.parse('https://github.com/portable.exe'));
+    final release = NikoReleaseInfo(
+        tag: 'v1.0.3', notes: '', assets: [validation, other, portable]);
+    expect(release.assetFor('windows-x64'), same(portable));
+    expect(
+        NikoReleaseInfo(tag: 'v1.0.3', notes: '', assets: [validation, other])
+            .assetFor('windows-x64'),
+        isNull);
+  });
+
   test('release selection accepts Android APK and keeps macOS ZIP only', () {
     final apk = NikoReleaseAsset('NikoDesk-android-arm64.apk',
         Uri.parse('https://github.com/mobile.apk'));
@@ -268,6 +286,22 @@ void main() {
         throwsA(isA<HttpException>()));
     expect(client.closed, isTrue);
   });
+
+  for (final metadata in [
+    '[]',
+    '{}',
+    '{"tag_name":42,"assets":[]}',
+    '{"tag_name":"invalid","assets":[]}',
+    '{"tag_name":"v1.0.3","assets":{}}'
+  ]) {
+    test('malformed successful metadata is a failed check: $metadata',
+        () async {
+      final client = _Client([_Response(utf8.encode(metadata))]);
+      await expectLater(_http(client, () => const NikoUpdater().checkLatest()),
+          throwsFormatException);
+      expect(client.closed, isTrue);
+    });
+  }
 
   for (final entry in [
     (NikoUpdateChannel.stable, 'nightly', false, false),

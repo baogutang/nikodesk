@@ -146,14 +146,22 @@ class NikoUpdater {
       rethrow;
     }
     final json = jsonDecode(body);
-    if (json is! Map<String, dynamic>) return null;
+    if (json is! Map<String, dynamic>) {
+      throw const FormatException('Invalid update release metadata');
+    }
     final tag = json['tag_name'];
-    if (tag is! String || tag.isEmpty) return null;
+    if (tag is! String || tag.isEmpty) {
+      throw const FormatException('Invalid update release tag');
+    }
     if (json['draft'] == true ||
         (channel == NikoUpdateChannel.nightly && tag != 'nightly') ||
         (channel == NikoUpdateChannel.stable &&
             (tag == 'nightly' || json['prerelease'] == true))) {
       return null;
+    }
+    if (channel == NikoUpdateChannel.stable &&
+        !RegExp(r'^[vV]?\d+\.\d+\.\d+$').hasMatch(tag)) {
+      throw const FormatException('Invalid stable update version');
     }
     final assets = <NikoReleaseAsset>[];
     final rawAssets = json['assets'];
@@ -170,6 +178,8 @@ class NikoUpdater {
           }
         }
       }
+    } else {
+      throw const FormatException('Invalid update release assets');
     }
     return NikoReleaseInfo(
       tag: tag,
@@ -593,7 +603,7 @@ class NikoReleaseInfo {
             : ['.zip'];
     for (final extension in extensions) {
       for (final asset in assets) {
-        if (asset.name.startsWith(prefix) && asset.name.endsWith(extension)) {
+        if (asset.name == '$prefix$extension') {
           return asset;
         }
       }

@@ -1,18 +1,23 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'mac_background_agent.dart';
-import 'policy.dart';
+import 'unattended_policy.dart';
 import 'ui.dart';
 
 class NikoMacBackgroundSettings extends StatefulWidget {
-  const NikoMacBackgroundSettings({super.key});
+  final NikoMacBackgroundAgent? agent;
+  final NativeUnattendedPolicyGateway? policyGateway;
+  final bool Function()? permissionsGranted;
+  const NikoMacBackgroundSettings(
+      {super.key, this.agent, this.policyGateway, this.permissionsGranted});
   @override
   State<NikoMacBackgroundSettings> createState() => _SettingsState();
 }
 
 class _SettingsState extends State<NikoMacBackgroundSettings> {
-  final _agent = NikoMacBackgroundAgent();
+  late final _agent = widget.agent ?? NikoMacBackgroundAgent();
+  late final _policyGateway =
+      widget.policyGateway ?? NativeUnattendedPolicyGateway();
   final _password = TextEditingController();
   bool _configured = false, _owned = false, _busy = true;
   String? _notice;
@@ -43,36 +48,14 @@ class _SettingsState extends State<NikoMacBackgroundSettings> {
       _notice = null;
     });
     try {
-      final raw =
-          jsonDecode(await bind.mainGetOptions()) as Map<String, dynamic>;
-      final server = PrivateServerConfig.fromOptions(raw);
-      if (!server.isValid) throw StateError('private_server_unavailable');
-      if (!bind.mainIsCanScreenRecording(prompt: false) ||
-          !bind.mainIsProcessTrusted(prompt: false)) {
+      final permitted = widget.permissionsGranted?.call() ??
+          (bind.mainIsCanScreenRecording(prompt: false) &&
+              bind.mainIsProcessTrusted(prompt: false));
+      if (!permitted) {
         throw StateError('local_system_permissions_required');
       }
-      if (!await bind.mainSetPermanentPasswordWithResult(password: password)) {
-        throw StateError('password_not_saved');
-      }
-      // Refresh the source before writing; never apply a stale options map.
-      final current =
-          jsonDecode(await bind.mainGetOptions()) as Map<String, dynamic>;
-      final actual = PrivateServerConfig.fromOptions(current);
-      if (!actual.isValid ||
-          actual.idServer != server.idServer ||
-          actual.relayServer != server.relayServer ||
-          actual.publicKey != server.publicKey) {
-        throw StateError('private_server_changed');
-      }
-      current['approve-mode'] = 'password';
-      current['verification-method'] = 'use-permanent-password';
-      await bind.mainSetOptions(json: jsonEncode(current));
-      final confirmed =
-          jsonDecode(await bind.mainGetOptions()) as Map<String, dynamic>;
-      if (confirmed['approve-mode'] != 'password' ||
-          confirmed['verification-method'] != 'use-permanent-password') {
-        throw StateError('policy_not_confirmed');
-      }
+      await _policyGateway.save(password);
+      if (!mounted) return;
       if (!await _agent.enable()) {
         throw StateError('agent_bootstrap_unconfirmed');
       }
@@ -93,8 +76,8 @@ class _SettingsState extends State<NikoMacBackgroundSettings> {
               'Bad state: private_server_changed' =>
                 nikoText('私服配置不可用或已变化，请重新确认。',
                     'Private server settings are unavailable or changed. Confirm them again.'),
-              _ => nikoText('后台设置未完成，请更新状态后重试。已经保存的服务密码和设置仍有效。',
-                  'Background setup is incomplete. Refresh and retry. Saved password and policies remain in effect.')
+              _ => nikoText('后台设置未完成。已完成的保存步骤不会自动撤销，请核对认证设置后重试。',
+                  'Background setup is incomplete. Completed saves are not automatically reverted. Check authentication settings and retry.')
             });
       }
     } finally {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_hbb/generated_bridge.dart';
@@ -11,6 +12,12 @@ class _BridgeDouble implements Rustdesk {
   final operations = <String>[];
   String Function(Map<String, String>)? finalRead;
   int reads = 0;
+  String? optionsResult;
+  Object? optionsError;
+  String statusResult = '{"status_num":1}';
+  Object? statusError;
+  Completer<String>? pendingStatus;
+  int statusReads = 0;
   bool failStopRead = false;
   String transactionResult =
       '{"ok":true,"state":"enabled","stoppedVerified":false}';
@@ -27,10 +34,20 @@ class _BridgeDouble implements Rustdesk {
   Future<String> mainGetOptions({dynamic hint}) async {
     reads++;
     operations.add('read:$reads');
+    if (optionsError != null) throw optionsError!;
+    if (optionsResult != null) return optionsResult!;
     if (failStopRead && reads >= 3) return '';
     return reads == 2 && finalRead != null
         ? finalRead!(Map.of(options))
         : jsonEncode(options);
+  }
+
+  @override
+  Future<String> mainGetConnectStatus({dynamic hint}) async {
+    statusReads++;
+    if (statusError != null) throw statusError!;
+    if (pendingStatus != null) return pendingStatus!.future;
+    return statusResult;
   }
 
   @override
@@ -62,6 +79,162 @@ void main() {
   setUp(() {
     bridge = _BridgeDouble();
     gateway = OptionsServerGateway(bridge: bridge);
+  });
+
+  for (final status in ['', '[]', 'null', '{broken']) {
+    test('registration read failure preserves valid settings ($status)',
+        () async {
+      bridge.options.addAll({
+        'custom-rendezvous-server': config.idServer,
+        'relay-server': config.relayServer,
+        'key': config.publicKey,
+        'stop-service': 'N',
+      });
+      bridge.statusResult = status;
+      final snapshot = await NativeServerGateway(bridge: bridge).read();
+      expect(snapshot.config.idServer, config.idServer);
+      expect(snapshot.config.relayServer, config.relayServer);
+      expect(snapshot.config.publicKey, config.publicKey);
+      expect(snapshot.registrationStatus, isNull);
+      expect(bridge.operations, ['read:1']);
+    });
+  }
+
+  test('IPC status failure does not erase readable paused settings', () async {
+    bridge.options.addAll({
+      'custom-rendezvous-server': config.idServer,
+      'relay-server': config.relayServer,
+      'key': config.publicKey,
+      'stop-service': 'Y',
+    });
+    bridge.statusError = StateError('synthetic IPC unavailable');
+    final snapshot = await NativeServerGateway(bridge: bridge).read();
+    expect(snapshot.config.isValid, isTrue);
+    expect(snapshot.enabled, isFalse);
+    expect(snapshot.registrationStatus, isNull);
+    expect(bridge.operations, ['read:1']);
+  });
+
+  testWidgets('pending IPC observation times out without losing settings',
+      (tester) async {
+    bridge.options.addAll({
+      'custom-rendezvous-server': config.idServer,
+      'relay-server': config.relayServer,
+      'key': config.publicKey,
+      'stop-service': 'N',
+    });
+    bridge.pendingStatus = Completer<String>();
+    ServerSnapshot? snapshot;
+    final read = NativeServerGateway(bridge: bridge).read();
+    read.then((value) => snapshot = value);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    expect(snapshot?.config.isValid, isTrue);
+    expect(snapshot?.registrationStatus, isNull);
+    bridge.pendingStatus!.complete('{"status_num":1}');
+    await tester.pump();
+    expect(snapshot?.registrationStatus, isNull);
+    expect(bridge.operations, ['read:1']);
+  });
+
+  testWidgets('a late status read uses the current server namespace',
+      (tester) async {
+    bridge.options.addAll({
+      'custom-rendezvous-server': config.idServer,
+      'relay-server': config.relayServer,
+      'key': config.publicKey,
+      'stop-service': 'N',
+      'nikodesk-server-namespace': 'a' * 64,
+    });
+    final firstStatus = Completer<String>();
+    bridge.pendingStatus = firstStatus;
+    final native = NativeServerGateway(bridge: bridge);
+    final firstRead = native.read();
+    await tester.pump();
+    bridge.options['custom-rendezvous-server'] = 'current.test.invalid:21116';
+    bridge.options['nikodesk-server-namespace'] = 'b' * 64;
+    bridge.pendingStatus = null;
+    final current = await native.read();
+    expect(current.namespace, 'b' * 64);
+    firstStatus.complete('{"status_num":1}');
+    await tester.pump();
+    final late = await firstRead;
+    expect(late.namespace, 'b' * 64);
+    expect(late.config.idServer, 'current.test.invalid:21116');
+    expect(bridge.operations, ['read:1', 'read:2']);
+  });
+
+  for (final status in [
+    '{}',
+    '{"status_num":"1"}',
+    '{"status_num":true}',
+    '{"status_num":1.0}'
+  ]) {
+    test('missing or noninteger registration remains unknown ($status)',
+        () async {
+      bridge.statusResult = status;
+      final snapshot = await NativeServerGateway(bridge: bridge).read();
+      expect(snapshot.registrationStatus, isNull);
+      expect(snapshot.config.isValid, isFalse);
+      expect(snapshot.enabled, isFalse);
+      expect(bridge.operations, ['read:1']);
+    });
+  }
+
+  for (final status in [-1, 0, 1]) {
+    test('registration status $status is preserved from the real contract',
+        () async {
+      bridge.statusResult = jsonEncode({'status_num': status});
+      final snapshot = await NativeServerGateway(bridge: bridge).read();
+      expect(snapshot.registrationStatus, status);
+      expect(snapshot.enabled, isFalse);
+      expect(snapshot.config.isValid, isFalse);
+    });
+  }
+
+  for (final result in ['', '[]', 'null', '{broken', '"unknown"']) {
+    test('unreadable settings never become an empty editable config ($result)',
+        () async {
+      bridge.optionsResult = result;
+      await expectLater(
+          NativeServerGateway(bridge: bridge).read(), throwsFormatException);
+      expect(bridge.statusReads, 1);
+      expect(bridge.operations, ['read:1']);
+    });
+  }
+
+  for (final key in [
+    'custom-rendezvous-server',
+    'relay-server',
+    'key',
+    'stop-service'
+  ]) {
+    test('malformed settings value for $key fails before any write', () async {
+      bridge.optionsResult = jsonEncode({key: 1});
+      await expectLater(
+          NativeServerGateway(bridge: bridge).read(), throwsFormatException);
+      expect(bridge.statusReads, 1);
+      expect(bridge.operations, ['read:1']);
+    });
+  }
+
+  test('a failed settings read is recoverable on the next explicit read',
+      () async {
+    bridge.optionsError = StateError('synthetic options unavailable');
+    final native = NativeServerGateway(bridge: bridge);
+    await expectLater(native.read(), throwsStateError);
+    bridge.optionsError = null;
+    bridge.options.addAll({
+      'custom-rendezvous-server': config.idServer,
+      'relay-server': config.relayServer,
+      'key': config.publicKey,
+      'stop-service': 'Y',
+    });
+    final snapshot = await native.read();
+    expect(snapshot.config.idServer, config.idServer);
+    expect(snapshot.config.publicKey, config.publicKey);
+    expect(snapshot.enabled, isFalse);
+    expect(bridge.operations, ['read:1', 'read:2']);
   });
 
   test('success requires a final read after explicit enable', () async {

@@ -70,6 +70,7 @@ class _NikoHomeShellState extends State<NikoHomeShell> {
   bool _canScreen = true;
   bool _canAccessibility = true;
   Timer? _timer;
+  int _statusReadGeneration = 0;
 
   bool get _native =>
       widget.gateway == null || widget.gateway is NativeServerGateway;
@@ -112,6 +113,7 @@ class _NikoHomeShellState extends State<NikoHomeShell> {
   }
 
   Future<void> _refreshStatus() async {
+    final generation = ++_statusReadGeneration;
     bool canScreen = !Platform.isMacOS;
     bool canAccessibility = !Platform.isMacOS;
     String? password;
@@ -138,7 +140,7 @@ class _NikoHomeShellState extends State<NikoHomeShell> {
     try {
       server = await _gateway.read();
     } catch (_) {}
-    if (!mounted) return;
+    if (!mounted || generation != _statusReadGeneration) return;
     setState(() {
       _canScreen = canScreen;
       _canAccessibility = canAccessibility;
@@ -578,7 +580,9 @@ class _NikoHomeShellState extends State<NikoHomeShell> {
                     style: shell.textTheme.labelMedium
                         ?.copyWith(color: shell.colorScheme.onSurfaceVariant)),
                 const SizedBox(height: 2),
-                Text(host.isEmpty ? nikoText('未配置', 'Not configured') : host,
+                Text(_server == null
+                        ? nikoText('配置状态未知', 'Configuration status unknown')
+                        : host.isEmpty ? nikoText('未配置', 'Not configured') : host,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: shell.textTheme.bodySmall),

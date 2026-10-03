@@ -131,6 +131,49 @@ void main() {
     await tester.pump();
   }
 
+  testWidgets('1.0.2 offers 1.0.3 independently of the 1.5.0 protocol',
+      (tester) async {
+    await settings(
+        tester,
+        NikoSettingsView(
+            native: false,
+            gateway: _Gateway(),
+            buildInfoLoader: () async => const ProductBuildInfo(
+                version: '1.0.2', buildNumber: '11', nativeVersion: '1.5.0'),
+            updateChecker: (_) async =>
+                const NikoReleaseInfo(tag: 'v1.0.3', notes: '', assets: [])));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Check for updates'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Update available'), findsOneWidget);
+    expect(find.text('Installed 1.0.2+11 → published v1.0.3'), findsOneWidget);
+    await tester.tap(find.text('Later'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('malformed release check is visibly failed rather than no update',
+      (tester) async {
+    await settings(
+        tester,
+        NikoSettingsView(
+            native: false,
+            gateway: _Gateway(),
+            buildInfoLoader: () async => _fixture,
+            updateChecker: (_) async => throw const FormatException(
+                'Invalid update release metadata')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Check for updates'));
+    await tester.pumpAndSettle();
+    expect(find.text('Update check failed. Retry later.'), findsOneWidget);
+    expect(find.text('No published release yet.'), findsNothing);
+    expect(find.text('Update available'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('nightly is an explicit preview with manual download',
       (tester) async {
     final nightly = NikoReleaseInfo(
