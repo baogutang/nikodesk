@@ -1040,6 +1040,35 @@ class InputModel {
         command: command);
   }
 
+  Future<void> inputNikoShortcutKey(SessionID expectedSession, String name,
+      {required bool press}) async {
+    if (!{'VK_C', 'VK_V', 'VK_A', 'VK_Z', 'VK_S', 'VK_TAB'}.contains(name)) {
+      throw StateError('Shortcut unavailable');
+    }
+    final ffi = parent.target;
+    if (press &&
+        (ffi == null ||
+            ffi.closed ||
+            sessionId != expectedSession ||
+            ffi.connType != ConnType.defaultConn ||
+            isViewOnly ||
+            !keyboardPerm ||
+            ffi.ffiModel.permissions['keyboard'] == false)) {
+      throw StateError('Remote input unavailable');
+    }
+    // Key-up belongs to the original session even if it disconnects or loses
+    // permission while submission is pending; it never targets a new session.
+    await bind.sessionInputKey(
+        sessionId: expectedSession,
+        name: name,
+        down: false,
+        press: press,
+        alt: press && alt,
+        ctrl: press && ctrl,
+        shift: false,
+        command: press && command);
+  }
+
   static Map<String, dynamic> getMouseEventMove() => {
         'type': _kMouseEventMove,
         'buttons': 0,

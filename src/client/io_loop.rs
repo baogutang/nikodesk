@@ -77,6 +77,9 @@ mod nikodesk_voice;
 #[cfg(all(feature="nikodesk",feature="flutter"))]
 #[path="nikodesk_voice_policy.rs"]
 mod nikodesk_voice_policy;
+#[cfg(feature = "nikodesk")]
+#[path = "nikodesk_video.rs"]
+mod nikodesk_video;
 
 pub struct Remote<T: InvokeUiSession> {
     #[cfg(feature = "nikodesk")]
@@ -882,11 +885,15 @@ impl<T: InvokeUiSession> Remote<T> {
                     Some(message::Union::Misc(misc)) => match misc.union {
                         Some(misc::Union::RefreshVideo(_)) => {
                             self.video_threads.iter().for_each(|(_, v)| {
+                                #[cfg(feature = "nikodesk")]
+                                v.niko_queue.await_keyframe();
                                 *v.discard_queue.write().unwrap() = true;
                             });
                         }
                         Some(misc::Union::RefreshVideoDisplay(display)) => {
                             if let Some(v) = self.video_threads.get_mut(&(display as usize)) {
+                                #[cfg(feature = "nikodesk")]
+                                v.niko_queue.await_keyframe();
                                 *v.discard_queue.write().unwrap() = true;
                             }
                         }
@@ -1306,11 +1313,17 @@ impl<T: InvokeUiSession> Remote<T> {
             Data::ResetDecoder(display) => match display {
                 Some(display) => {
                     if let Some(v) = self.video_threads.get_mut(&display) {
+                        #[cfg(feature = "nikodesk")]
+                        v.niko_queue.reset();
+                        #[cfg(not(feature = "nikodesk"))]
                         v.video_sender.send(MediaData::Reset).ok();
                     }
                 }
                 None => {
                     for (_, v) in self.video_threads.iter_mut() {
+                        #[cfg(feature = "nikodesk")]
+                        v.niko_queue.reset();
+                        #[cfg(not(feature = "nikodesk"))]
                         v.video_sender.send(MediaData::Reset).ok();
                     }
                 }
@@ -1464,6 +1477,7 @@ impl<T: InvokeUiSession> Remote<T> {
         }
     }
 
+    #[cfg(not(feature = "nikodesk"))]
     fn contains_key_frame(vf: &VideoFrame) -> bool {
         use video_frame::Union::*;
         match &vf.union {
@@ -1478,6 +1492,7 @@ impl<T: InvokeUiSession> Remote<T> {
     // Currently, this function only considers decoding speed and queue length, not network delay.
     // The controlled end can consider auto fps as the maximum decoding fps.
     #[inline]
+    #[cfg(not(feature = "nikodesk"))]
     fn fps_control(&mut self, direct: bool, real_fps_map: HashMap<usize, i32>) {
         self.video_threads.iter_mut().for_each(|(k, v)| {
             let real_fps = real_fps_map.get(k).cloned().unwrap_or_default();
@@ -1652,6 +1667,9 @@ impl<T: InvokeUiSession> Remote<T> {
                     let Some(thread) = self.video_threads.get_mut(&display) else {
                         return true;
                     };
+                    #[cfg(feature = "nikodesk")]
+                    nikodesk_video::enqueue(&self.handler, thread, vf);
+                    #[cfg(not(feature = "nikodesk"))]
                     if Self::contains_key_frame(&vf) {
                         thread
                             .video_sender
@@ -2237,6 +2255,9 @@ impl<T: InvokeUiSession> Remote<T> {
                     Some(misc::Union::SwitchDisplay(s)) => {
                         self.handler.handle_peer_switch_display(&s);
                         if let Some(thread) = self.video_threads.get_mut(&(s.display as usize)) {
+                            #[cfg(feature = "nikodesk")]
+                            thread.niko_queue.reset();
+                            #[cfg(not(feature = "nikodesk"))]
                             thread.video_sender.send(MediaData::Reset).ok();
                         }
 
@@ -2815,10 +2836,16 @@ impl<T: InvokeUiSession> Remote<T> {
     fn new_video_thread(&mut self, display: usize) {
         let video_queue = Arc::new(RwLock::new(ArrayQueue::new(client::VIDEO_QUEUE_SIZE)));
         let (video_sender, video_receiver) = std::sync::mpsc::channel::<MediaData>();
+        #[cfg(feature = "nikodesk")]
+        let niko_queue = Arc::new(crate::nikodesk::video_queue::VideoQueue::new(
+            client::VIDEO_QUEUE_SIZE, video_sender.clone(),
+        ));
         let decode_fps = Arc::new(RwLock::new(None));
         let frame_count = Arc::new(RwLock::new(0));
         let discard_queue = Arc::new(RwLock::new(false));
         let video_thread = VideoThread {
+            #[cfg(feature = "nikodesk")]
+            niko_queue: niko_queue.clone(),
             #[cfg(feature = "nikodesk")]
             video_metrics: self.video_metrics.display(display),
             video_queue: video_queue.clone(),
@@ -2839,6 +2866,8 @@ impl<T: InvokeUiSession> Remote<T> {
             discard_queue,
             #[cfg(feature = "nikodesk")]
             self.video_metrics.display(display),
+            #[cfg(feature = "nikodesk")]
+            niko_queue,
             move |display: usize,
                   data: &mut scrap::ImageRgb,
                   _texture: *mut c_void,
@@ -3079,6 +3108,8 @@ impl<T: InvokeUiSession> Drop for Remote<T> {
 
 struct VideoThread {
     #[cfg(feature = "nikodesk")]
+    niko_queue: Arc<crate::nikodesk::video_queue::VideoQueue>,
+    #[cfg(feature = "nikodesk")]
     video_metrics: Option<Arc<crate::nikodesk::video_metrics::DisplayTelemetry>>,
     video_queue: Arc<RwLock<ArrayQueue<VideoFrame>>>,
     video_sender: MediaSender,
@@ -3090,6 +3121,8 @@ struct VideoThread {
 
 impl Drop for VideoThread {
     fn drop(&mut self) {
+        #[cfg(feature = "nikodesk")]
+        self.niko_queue.close();
         // since channels are buffered, messages sent before the disconnect will still be properly received.
         *self.discard_queue.write().unwrap() = true;
     }

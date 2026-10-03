@@ -213,6 +213,98 @@ void main() {
       await Directory.systemTemp.createTemp('nikodesk-updater-test-'));
   tearDown(() async => directory.delete(recursive: true));
 
+  test('stable checks keep using the latest formal release', () async {
+    final client = _Client([
+      _Response(utf8.encode('{"tag_name":"v1.2.0","assets":[]}')),
+    ]);
+    final release =
+        await _http(client, () => const NikoUpdater().checkLatest());
+    expect(release!.tag, 'v1.2.0');
+    expect(client.requested.single.path,
+        '/repos/baogutang/nikodesk/releases/latest');
+    expect(release.isNightly, isFalse);
+  });
+
+  test('nightly checks use its tag and retain release identity and time',
+      () async {
+    final client = _Client([
+      _Response(utf8.encode(jsonEncode({
+        'tag_name': 'nightly',
+        'name': 'NikoDesk nightly (abcdef0)',
+        'prerelease': true,
+        'published_at': '2026-10-02T18:34:00Z',
+        'assets': [],
+      }))),
+    ]);
+    final updater = const NikoUpdater();
+    final release = await _http(
+        client, () => updater.checkLatest(channel: NikoUpdateChannel.nightly));
+    expect(client.requested.single.path,
+        '/repos/baogutang/nikodesk/releases/tags/nightly');
+    expect(release!.isNightly, isTrue);
+    expect(release.displayName, 'NikoDesk nightly (abcdef0)');
+    expect(release.publishedAt, DateTime.utc(2026, 10, 2, 18, 34));
+    expect(updater.releasePage(release).toString(),
+        'https://github.com/baogutang/nikodesk/releases/tag/nightly');
+    expect(client.closed, isTrue);
+  });
+
+  for (final channel in NikoUpdateChannel.values) {
+    test('missing $channel release returns no release and closes client',
+        () async {
+      final client = _Client([_Response([], statusCode: 404)]);
+      expect(
+          await _http(
+              client, () => const NikoUpdater().checkLatest(channel: channel)),
+          isNull);
+      expect(client.closed, isTrue);
+    });
+  }
+
+  test('a server failure remains a failed check rather than no release',
+      () async {
+    final client = _Client([_Response([], statusCode: 503)]);
+    await expectLater(_http(client, () => const NikoUpdater().checkLatest()),
+        throwsA(isA<HttpException>()));
+    expect(client.closed, isTrue);
+  });
+
+  for (final entry in [
+    (NikoUpdateChannel.stable, 'nightly', false, false),
+    (NikoUpdateChannel.stable, 'v1.2.0', true, false),
+    (NikoUpdateChannel.nightly, 'v1.2.0', true, false),
+    (NikoUpdateChannel.nightly, 'nightly', true, true),
+  ]) {
+    test('rejects wrong channel or unpublished metadata $entry', () async {
+      final client = _Client([
+        _Response(utf8.encode(jsonEncode({
+          'tag_name': entry.$2,
+          'prerelease': entry.$3,
+          'draft': entry.$4,
+          'assets': [],
+        }))),
+      ]);
+      expect(
+          await _http(
+              client, () => const NikoUpdater().checkLatest(channel: entry.$1)),
+          isNull);
+    });
+  }
+
+  test('release download links use the checked tag rather than latest', () {
+    final updater = const NikoUpdater();
+    expect(
+        updater
+            .releasePage(
+                const NikoReleaseInfo(tag: 'v1.2.0', notes: '', assets: []))
+            .path,
+        '/baogutang/nikodesk/releases/tag/v1.2.0');
+    expect(
+        const NikoReleaseInfo(tag: 'nightly', notes: '', assets: [])
+            .displayName,
+        'nightly');
+  });
+
   test(
       'update checks disable implicit redirects and resolve relative locations',
       () async {

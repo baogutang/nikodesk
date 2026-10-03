@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NikoDesk - Remote desktop on your own server</title>
-<meta name="description" content="A private-server remote desktop built on RustDesk. Every push builds macOS, Windows and Android into a rolling nightly pre-release; platform status is stated openly.">
+<meta name="description" content="A private-server remote desktop built on RustDesk. Version 1.0.1 delivers macOS, Windows and Android through checked builds; platform status is stated openly.">
 <link rel="icon" href="assets/favicon.png?v=5" type="image/png">
 <link rel="apple-touch-icon" href="assets/logo.png?v=5">
 <link rel="preload" href="assets/fonts/inter-800.woff2?v=5" as="font" type="font/woff2" crossorigin>
@@ -356,7 +356,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
 <main id="content" tabindex="-1">
 <header class="hero wrap" id="top" tabindex="-1">
   <a class="badge" href="https://github.com/baogutang/nikodesk/releases" target="_blank" rel="noopener">
-    <span class="dot"></span>nightly pre-release · three platforms<span class="arrow">→</span>
+    <span class="dot"></span>v1.0.1 · three platforms<span class="arrow">→</span>
   </a>
   <h1>Your machines, your server,<br><span class="accent">your remote desktop.</span></h1>
   <p class="sub">The native RustDesk core, connected to your own rendezvous and relay services. Windows and macOS target controller and receiver roles; Android is controller only. Cross-device acceptance remains pending.</p>
@@ -384,7 +384,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
   <div class="sec-head reveal">
     <span class="sec-pill">Features</span>
     <h2>Made for daily driving</h2>
-    <p class="sec-sub">Device management, connection controls and diagnostics use the native core. A successful build, a working UI and a verified remote session are separate milestones.</p>
+    <p class="sec-sub">Version 1.0.1 adds desktop and mobile shortcuts for copying, pasting, switching apps and adjusting the view. Video overload recovery now preserves reference-frame order; real-codec regression tests verify the decoded picture. Cross-device latency remains unmeasured.</p>
   </div>
   <div class="grid">
     <div class="card reveal">
@@ -409,8 +409,8 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
     </div>
     <div class="card reveal" style="--d:.06s">
       <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg></div>
-      <h3>Downloads and manual upgrades</h3>
-      <p>Downloads come from GitHub Releases. Check SHA256, keep the previous app and install manually. A checksum does not authenticate the publisher.</p>
+      <h3>Stable or preview, your choice</h3>
+      <p>Choose stable releases or nightly in the app. See the checked release name and time, then download from its page. Mac stable packages are verified before manual installation; a checksum does not authenticate the publisher.</p>
     </div>
     <div class="card reveal" style="--d:.12s">
       <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></div>
@@ -560,29 +560,29 @@ Key:        (id_ed25519.pub)</pre>
   <div class="sec-head reveal">
     <span class="sec-pill">Download</span>
     <h2>Downloads and platform status</h2>
-    <p class="sec-sub">Every push to main rebuilds all three platforms and replaces the rolling nightly pre-release. Verify downloads against its SHA256SUMS. Core sessions — password authentication with video, bidirectional file transfer, TOTP two-factor with replay rejection, session records on both ends, remote terminal, port tunnels and picture modes — are verified end to end between two identities of one user on one Mac through a private relay; cross-device, Windows and Android real-device acceptance is still in progress, and the notes below say so plainly.</p>
+    <p class="sec-sub">The v1.0.1 tag builds macOS, Windows and Android, and publishes their packages together after all checks pass. Verify downloads against its SHA256SUMS. Nightly remains a separate rolling preview. Core sessions — password authentication with video, bidirectional file transfer, TOTP two-factor with replay rejection, session records on both ends, remote terminal, port tunnels and picture modes — are verified end to end between two identities of one user on one Mac through a private relay; cross-device, Windows and Android real-device acceptance is still in progress, and the notes below say so plainly.</p>
   </div>
   <div class="dl-list">
-    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/tag/nightly">
+    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.1/NikoDesk-macos-arm64.dmg">
       <h3>macOS</h3>
       <span class="arch">Apple Silicon · DMG · ad-hoc signed</span>
       <span class="note">Install the complete NikoDesk.app from the DMG. No Apple Developer ID or notarization: right-click → Open on the first launch. Runs beside an existing RustDesk with its own identity.</span>
-      <span class="go">Get it from nightly →</span>
+      <span class="go">Download v1.0.1 →</span>
     </a>
-    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/tag/nightly">
+    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.1/NikoDesk-windows-x64.exe">
       <h3>Windows</h3>
       <span class="arch">x64 · portable EXE/ZIP · unsigned</span>
       <span class="note">A user-mode portable client that runs beside RustDesk with no installation, plus a setup-validation installer for unattended access. Unsigned: SmartScreen asks once. Real-device acceptance is in progress — the installer changes the system, so use a test machine first.</span>
-      <span class="go">Get it from nightly →</span>
+      <span class="go">Download v1.0.1 →</span>
     </a>
-    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/tag/nightly">
+    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.1/NikoDesk-android-arm64.apk">
       <h3>Android</h3>
       <span class="arch">arm64 · APK · release-signed</span>
       <span class="note">Controller-only app (io.nikodesk.android), signed with the dedicated NikoDesk release key and cryptographically verified in CI. Real-device operation, remote sessions and calls remain unverified; some Bluetooth combinations are unsupported.</span>
-      <span class="go">Get it from nightly →</span>
+      <span class="go">Download v1.0.1 →</span>
     </a>
   </div>
-  <p class="dl-note reveal">The nightly is replaced on every push to main — its SHA256SUMS lives on the release page. The <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.0">v1.0.0 archive</a> remains for inspection only. Keep system security protections enabled.</p>
+  <p class="dl-note reveal">Use the <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.1">v1.0.1 release page</a> for checksums and the Windows unattended setup-validation installer. The <a href="https://github.com/baogutang/nikodesk/releases/tag/nightly">nightly preview</a> is replaced on every push to main. The <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.0">v1.0.0 archive</a> remains for inspection only. Keep system security protections enabled.</p>
 </section>
 
 <section id="faq" tabindex="-1" class="wrap faq" style="padding-top: 20px;">
@@ -605,7 +605,7 @@ Key:        (id_ed25519.pub)</pre>
     </details>
     <details class="reveal">
       <summary>What can the Android build do?</summary>
-      <div class="a">Android controls Windows and macOS; it does not act as a phone receiver. The nightly APK is signed with the dedicated NikoDesk release key, so one nightly upgrades over another, and it integrates controller-initiated voice with manual device selection and microphone permission. Real-device operation, remote sessions and calls remain unverified; some Bluetooth combinations are unsupported.</div>
+      <div class="a">Android controls Windows and macOS; it does not act as a phone receiver. The APK is signed with the dedicated NikoDesk release key; build 10 follows build 9 on the same application ID, and it integrates controller-initiated voice with manual device selection and microphone permission. Real-device operation, remote sessions and calls remain unverified; some Bluetooth combinations are unsupported.</div>
     </details>
   </div>
 </section>

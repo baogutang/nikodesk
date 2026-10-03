@@ -131,6 +131,79 @@ void main() {
     await tester.pump();
   }
 
+  testWidgets('nightly is an explicit preview with manual download',
+      (tester) async {
+    final nightly = NikoReleaseInfo(
+        tag: 'nightly',
+        name: 'NikoDesk nightly (abcdef0)',
+        notes: 'Preview fixture',
+        publishedAt: DateTime.utc(2026, 10, 2, 18, 34),
+        assets: [
+          NikoReleaseAsset('NikoDesk-macos-arm64.zip',
+              Uri.parse('https://github.com/preview.zip'))
+        ]);
+    await settings(
+        tester,
+        NikoSettingsView(
+            native: false,
+            gateway: _Gateway(),
+            buildInfoLoader: () async => _fixture,
+            updateChecker: (_) async => nightly));
+    await tester.pumpAndSettle();
+    final channel = find.byKey(const Key('nikodesk-update-channel'));
+    expect(
+        tester
+            .widget<DropdownButtonFormField<NikoUpdateChannel>>(channel)
+            .initialValue,
+        NikoUpdateChannel.stable);
+    await tester.tap(channel);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Nightly preview').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Check for updates'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('NikoDesk nightly (abcdef0)'), findsOneWidget);
+    expect(find.textContaining('Published:'), findsOneWidget);
+    expect(find.textContaining('cannot establish whether it is newer'),
+        findsOneWidget);
+    expect(find.text('Update available'), findsNothing);
+    expect(find.text('Download'), findsOneWidget);
+    expect(find.text('Download and verify'), findsNothing);
+    await tester.tap(find.text('Later'));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('channel cannot change while a check is pending', (tester) async {
+    final pending = Completer<NikoReleaseInfo?>();
+    await settings(
+        tester,
+        NikoSettingsView(
+            native: false,
+            gateway: _Gateway(),
+            buildInfoLoader: () async => _fixture,
+            updateChecker: (_) => pending.future));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Check for updates'));
+    await tester.pump();
+    final channel = find.byKey(const Key('nikodesk-update-channel'));
+    expect(
+        tester
+            .widget<DropdownButtonFormField<NikoUpdateChannel>>(channel)
+            .onChanged,
+        isNull);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<DropdownButtonFormField<NikoUpdateChannel>>(channel)
+            .onChanged,
+        isNotNull);
+    pending.complete(null);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('a synchronous retry failure remains unknown and can retry again',
       (tester) async {
     var reads = 0;

@@ -1,17 +1,16 @@
 # Building and packaging NikoDesk
 
-macOS ARM64 has the existing local build evidence. Windows user-mode support and the Android controller are under validation; the public `v1.0.0` Windows and Android binaries predate their identity initialization fixes. A successful compilation does not establish that a client launches, connects, captures the screen, or accepts input.
+The versioned product is `1.0.1+10`; the native protocol remains `1.5.0`. The three-platform pipeline has passed for the previous build. Windows user-mode support and the Android controller still need target-device acceptance; the broken public `v1.0.0` Windows and Android binaries were removed. A successful compilation does not establish that a client launches, connects, captures the screen, or accepts input.
 
 ## Clean-clone macOS build
 
 Use an Apple Silicon Mac with Xcode and its command-line tools already configured. The build requires Rust 1.88.0, Flutter 3.24.5, Python 3.9 or newer, CMake, Ninja, pkg-config, LLVM/libclang and CocoaPods. Keep private dependencies in `.tools/`; do not change the installed RustDesk app or its services. Installing system tools or obtaining signing credentials is a separate prerequisite, not something these commands perform.
 
-Clone with the native submodules. Use a path without spaces: upstream FFmpeg's configure script does not support spaces in its build path.
+The public repository is a flat source export: the pinned hbb_common sources are included as ordinary files. Clone it without a submodule initialization step; the private upstream-preserving development tree still records its submodule pin. Use a path without spaces: upstream FFmpeg's configure script does not support spaces in its build path.
 
 ```sh
-git clone --recurse-submodules https://github.com/baogutang/nikodesk.git
+git clone https://github.com/baogutang/nikodesk.git
 cd nikodesk
-git submodule update --init --recursive
 mkdir -p .tools
 ```
 
@@ -123,35 +122,35 @@ $env:VCPKG_DISABLE_METRICS='1'
 & "$env:VCPKG_ROOT\vcpkg.exe" install --triplet x64-windows-static `
   --overlay-ports="$PWD\res\vcpkg-nikodesk" `
   --x-install-root="$env:VCPKG_ROOT\installed"
-python3 .\build.py --flutter --hwcodec --nikodesk --build-name 1.1.0 --build-number 2
+python3 .\build.py --flutter --hwcodec --nikodesk --build-name 1.0.1 --build-number 10
 ```
 
-NikoDesk defaults to the product version in `flutter/pubspec.yaml`, currently `1.1.0+2`; explicit parameters pass that same version into both Flutter and the portable packer. The executable resources use numeric version `1.1.0.2` and product string `1.1.0+2`. The inherited Cargo/native protocol version remains `1.5.0`. Do not change the protocol version to repair product metadata. Invalid Windows version components fail before compilation or packaging. The packer records the product/build alongside its extraction timestamp and includes the license and source revision before compressing the bundle.
+NikoDesk defaults to the product version in `flutter/pubspec.yaml`, currently `1.0.1+10`; explicit parameters pass that same version into both Flutter and the portable packer. The executable resources use numeric version `1.0.1.10` and product string `1.0.1+10`. The inherited Cargo/native protocol version remains `1.5.0`. Do not change the protocol version to repair product metadata. Invalid Windows version components fail before compilation or packaging. The packer records the product/build alongside its extraction timestamp and includes the license and source revision before compressing the bundle.
 
 In the outer local development workspace, `scripts/build-windows.ps1` performs the actual Windows x64 build in an isolated source snapshot. Prepare the official Flutter 3.24.5 Windows SDK at `.tools/windows/flutter`, LLVM including `libclang.dll` at `.tools/windows/llvm/bin`, and NASM 2.16.03 at `.tools/windows/native/bin`. Existing Visual Studio C++/Windows SDK tools, Python 3.9 or newer and Git are prerequisites; the script installs no system tools. Run it from an ordinary, unelevated Visual Studio developer PowerShell where `cl.exe`, `rc.exe`, `mt.exe`, CMake and Ninja are available. It uses private Rust/Cargo/Python/vcpkg directories under `.tools/windows`, pins Rust 1.88.0 and the vcpkg revision above, applies the two CI Flutter patches only in the private SDK, and runs the real native/Flutter/packer builds and Windows-specific regression tests. It does not launch the app or install services, drivers or autostart entries.
 
 ```powershell
-.\scripts\build-windows.ps1 -ProductVersion 1.1.0 -BuildNumber 2 -PreflightOnly
-.\scripts\build-windows.ps1 -ProductVersion 1.1.0 -BuildNumber 2
+.\scripts\build-windows.ps1 -ProductVersion 1.0.1 -BuildNumber 10 -PreflightOnly
+.\scripts\build-windows.ps1 -ProductVersion 1.0.1 -BuildNumber 10
 ```
 
 The script requires an existing `rustup` bootstrap executable, but keeps the selected toolchain and proxies in this workspace's private directories. `-PreflightOnly` records prerequisites and host information; it does not compile the client. A completed build records the exact Windows build, source hashes/revision/dirty state, ordinary-user `asInvoker` manifests, x64 PE payloads, product versions, package hashes and test output under `artifacts/windows/`. Both the Flutter runner and portable wrapper explicitly request `asInvoker` with `uiAccess=false`; this common Windows runner declaration also applies to feature-off builds. That declaration grants no elevated/UAC-screen capability. The core/library/plugin names inherited from upstream remain internal dependencies, while the product executable and runtime identity are NikoDesk.
 
-CI uploads the portable EXE and a ZIP of the complete Flutter bundle (`NikoDesk-windows-x64.exe`/`.zip`) for inspection. Current Windows full MSVC compilation, executable-resource inspection and real startup/session acceptance remain pending until these commands run on an actual Windows host; macOS-host portable tests and API cross-compilation do not establish Windows usability. The default build creates no Authenticode signature or system installer. The unmodified public `v1.0.0` ZIP is the old raw Flutter bundle and is not evidence of this repaired portable build.
+CI uploads the portable EXE and a ZIP of the complete Flutter bundle (`NikoDesk-windows-x64.exe`/`.zip`) for inspection. The prior three-platform CI completed native Windows MSVC compilation and executable-resource/package inspection. Real Windows startup, installation and remote-session acceptance remain pending; macOS-host tests and API cross-compilation do not establish those runtime behaviors. The default build creates no Authenticode signature or system installer. The old public `v1.0.0` Windows ZIP was removed and is not evidence of this repaired portable build.
 
 The optional unattended validation path uses `.github/scripts/build-windows-product.py`, shared by the outer PowerShell script and CI. Use the version/build from this checkout's `flutter/pubspec.yaml`; setup rejects overrides that differ from the snapshot. On the configured native Windows x64 host:
 
 ```powershell
-python3 .github/scripts/build-windows-product.py --build-name 1.1.0 --build-number 7 `
+python3 .github/scripts/build-windows-product.py --build-name 1.0.1 --build-number 10 `
   --setup-output dist/NikoDesk-windows-x64-setup-validation `
   --setup-trust-mode reviewed-local-unsigned-validation
 ```
 
-This builds the actual HOST, GUI and setup binaries, freezes the GUI and flat service dependency closure before compiling setup, and verifies versions, manifests, import dependencies, compiled pins and the complete archive. Output paths must be new. The source pipeline now also builds a single installation-assistant EXE containing the complete frozen bundle, alongside the inspection ZIP and JSON/text. The assistant extracts into a new per-user directory and starts the ordinary GUI, where the user configures the private server and explicitly confirms installation. Setup requires the original GUI authorization and visible native/UAC confirmation; directly double-clicking setup is unsupported. The EXE has not yet been built on Windows or passed installation acceptance. Building does not run setup or install/start a service.
+This builds the actual HOST, GUI and setup binaries, freezes the GUI and flat service dependency closure before compiling setup, and verifies versions, manifests, import dependencies, compiled pins and the complete archive. Output paths must be new. The source pipeline now also builds a single installation-assistant EXE containing the complete frozen bundle, alongside the inspection ZIP and JSON/text. The assistant extracts into a new per-user directory and starts the ordinary GUI, where the user configures the private server and explicitly confirms installation. Setup requires the original GUI authorization and visible native/UAC confirmation; directly double-clicking setup is unsupported. The EXE has been built and package-verified in native Windows CI; its actual installation/service acceptance remains pending. Building does not run setup or install/start a service.
 
-The outer script opts in with `-BuildSetupValidation`. A manual CI run opts in with `windows_setup_validation` (default false); this defines a separate validation-artifact upload. Merely editing the workflow executes no CI or upload, and validation-branch pushes do not opt in to the setup bundle.
+The outer script opts in with `-BuildSetupValidation`. A manual CI run opts in with `windows_setup_validation` (default false); this defines a separate validation-artifact upload. Merely editing the workflow executes no CI or upload. Main, version-tag and validation-branch pushes include the setup-validation bundle; it is uploaded as a separate artifact.
 
-The next Windows CI build also runs `.github/scripts/verify-package-windows.py` before uploading an artifact. This host-independent gate reads PE resources directly: the runner and portable wrapper must be x64 EXEs with product version `1.1.0+2`, numeric version `1.1.0.2`, `NikoDesk` identity and default manifests requesting `asInvoker` with `uiAccess=false`. Bundled DLLs must be x64 DLLs; the Dart AOT library must be x64 ELF. The gate requires the real core, Flutter and virtual-display libraries, Dart/ICU/assets, original license and matching source revision/dirty record. It rejects extra executables, service helpers, drivers, reparse points and ambiguous Windows paths. Every ZIP file must match the inspected bundle's SHA256 and size.
+Windows CI runs `.github/scripts/verify-package-windows.py` before uploading an artifact. This host-independent gate reads PE resources directly: the runner and portable wrapper must be x64 EXEs with product version `1.0.1+10`, numeric version `1.0.1.10`, `NikoDesk` identity and default manifests requesting `asInvoker` with `uiAccess=false`. Bundled DLLs must be x64 DLLs; the Dart AOT library must be x64 ELF. The gate requires the real core, Flutter and virtual-display libraries, Dart/ICU/assets, original license and matching source revision/dirty record. It rejects extra executables, service helpers, reparse points and ambiguous Windows paths. The reviewed, digest-pinned Amyuni display-driver files are allowed only in their dedicated usbmmidd_v2 directory; bundling does not install that driver. Every ZIP file must match the inspected bundle's SHA256 and size.
 
 Portable inspection requires pinned [Brotli 1.2.0](https://pypi.org/project/Brotli/1.2.0/), installed only in a private dependency directory. The gate checks every `libs/portable/data.bin` entry using bounded decompression, legacy MD5 and SHA256, then verifies that this complete blob occurs exactly once in initialized readable PE data. It rejects an `RDPKG` resource that could override the inspected payload. CI adds `EXPERIMENTAL.txt` after building the portable EXE; this companion notice is the only bundle file excluded from the portable comparison. Neither executable loading nor client execution is performed. The JSON report keeps launch, remote sessions, unattended access and production signing explicitly unverified. Parser fixtures and the cached old public PE's expected version rejection do not establish that a newly built Windows client is usable.
 
@@ -162,12 +161,12 @@ python3 .github/scripts/verify-package-windows.py `
   --bundle flutter/build/windows/x64/runner/Release `
   --portable NikoDesk-windows-x64.exe `
   --zip NikoDesk-windows-x64.zip --blob libs/portable/data.bin `
-  --version-name 1.1.0 --build-number 2 --license-file LICENCE `
+  --version-name 1.0.1 --build-number 10 --license-file LICENCE `
   --source-revision $env:GITHUB_SHA --source-dirty false `
   --native-protocol-version 1.5.0 --report-output windows-package-report.json
 ```
 
-Android uses the `nikodesk` flavor and a separate `io.nikodesk.android` application ID; the upstream `rustdesk` flavor retains its own platform manifest. The NikoDesk manifest is controller-only. The current development validation version is `1.1.0`, with Android versionCode `2`; this product version is separate from the inherited native protocol version and does not assert that all planned features are complete.
+Android uses the `nikodesk` flavor and a separate `io.nikodesk.android` application ID; the upstream `rustdesk` flavor retains its own platform manifest. The NikoDesk manifest is controller-only. The current development validation version is `1.0.1`, with Android versionCode `10`; this product version is separate from the inherited native protocol version and does not assert that all planned features are complete.
 
 Use JDK 17, Rust 1.88.0, cargo-ndk 3.1.2, Flutter 3.24.5, SDK 36, Build Tools 36.0.0 and NDK r28c (`28.2.13676358`). Older pinned Flutter plugins also require SDK platforms 31–34 and Build Tools 35.0.0. The Gradle wrapper pins 8.11.1 and its distribution checksum. Keep the SDK, caches and signing material outside tracked source. After preparing those tools, build the real ARM64 native dependencies and core before Gradle; Gradle resolves the Android rustls Maven artifact from locked, offline Cargo metadata.
 
@@ -211,25 +210,25 @@ cd flutter
 flutter pub get --enforce-lockfile
 NIKODESK_TEST_SIGNING=1 flutter build apk --release --flavor nikodesk \
   --target-platform android-arm64 --no-pub --dart-define=NIKODESK=true \
-  --build-name 1.1.0 --build-number 2
+  --build-name 1.0.1 --build-number 10
 ```
 
-The output is `flutter/build/app/outputs/flutter-apk/app-nikodesk-release.apk`, with application ID `io.nikodesk.android.dev`. Do not add `--split-per-abi` for this single ARM64 target: Flutter 3.24.5 changes versionCode `2` to `2002` when ABI splitting is enabled. Verify the expected public certificate fingerprint, exact versions and all native libraries before copying it to `NikoDesk-android-arm64-test.apk`:
+The output is `flutter/build/app/outputs/flutter-apk/app-nikodesk-release.apk`, with application ID `io.nikodesk.android.dev`. Do not add `--split-per-abi` for this single ARM64 target: Flutter 3.24.5 changes versionCode `10` to `2010` when ABI splitting is enabled. Verify the expected public certificate fingerprint, exact versions and all native libraries before copying it to `NikoDesk-android-arm64-test.apk`:
 
 ```sh
 cd ..
 python3 .github/scripts/verify-package-android.py \
   flutter/build/app/outputs/flutter-apk/app-nikodesk-release.apk \
-  --application-id io.nikodesk.android.dev --version-name 1.1.0 --version-code 2 \
+  --application-id io.nikodesk.android.dev --version-name 1.0.1 --version-code 10 \
   --certificate-sha256 "$NIKODESK_TEST_CERTIFICATE_SHA256" \
   --manifest-output android-manifest.xml --report-output android-package-report.json
 ```
 
-`NIKODESK_TEST_CERTIFICATE_SHA256` is the expected public certificate digest, not a secret. Keep an encrypted private backup of the original keystore, its password/properties and the recorded certificate digest together. Reuse that same identity and increase versionCode for future upgrades of `.dev`. A replacement key cannot upgrade existing installations signed by the lost key. The `.dev` channel can coexist with a future `io.nikodesk.android` release; it is not a production release signer. Never commit or upload private signing material.
+`NIKODESK_TEST_CERTIFICATE_SHA256` is the expected public certificate digest, not a secret. Keep an encrypted private backup of the original keystore, its password/properties and the recorded certificate digest together. Reuse that same identity and increase versionCode for future upgrades of `.dev`. A replacement key cannot upgrade existing installations signed by the lost key. The `.dev` channel can coexist with the `io.nikodesk.android` release; it is not a production release signer. Never commit or upload private signing material.
 
-In the local NikoDesk development workspace, the outer `scripts/setup-android-tools.py`, `scripts/setup-android-signing.py --initialize` and `scripts/build-android.sh` automate the same path on Apple Silicon. Signing initialization is explicit and runs once; subsequent builds reuse it. Run `NIKO_VERSION=1.1.0 NIKO_BUILD_NUMBER=2 bash scripts/build-android.sh` from that workspace. The build records an immutable source snapshot, its dirty state, tool hashes and package verification under `artifacts/android/`. These outer workspace helpers are separate from this published source checkout.
+In the local NikoDesk development workspace, the outer `scripts/setup-android-tools.py`, `scripts/setup-android-signing.py --initialize` and `scripts/build-android.sh` automate the same path on Apple Silicon. Signing initialization is explicit and runs once; subsequent builds reuse it. Run `NIKO_VERSION=1.0.1 NIKO_BUILD_NUMBER=10 bash scripts/build-android.sh` from that workspace. The build records an immutable source snapshot, its dirty state, tool hashes and package verification under `artifacts/android/`. These outer workspace helpers are separate from this published source checkout.
 
-CI holds the release key in its `ANDROID_RELEASE_KEYSTORE_BASE64`/`ANDROID_RELEASE_KEYSTORE_PASSWORD` secrets; the workflow pins the key's public certificate SHA-256. With the secrets present it decodes them into `flutter/android/key.properties`, builds `io.nikodesk.android` as `NikoDesk-android-arm64.apk`, and verifies that APK against the pinned fingerprint. Forks or secret-less runs fall back to `NIKODESK_UNSIGNED_BUILD=1` and the unsigned `.dev` structure build `NikoDesk-android-arm64-unsigned.apk`, which cannot be installed or used to prove upgrades. Release signing and unsigned mode are mutually exclusive. A real device installation/startup/connection test remains required before Android publication.
+CI holds the release key in its `ANDROID_RELEASE_KEYSTORE_BASE64`/`ANDROID_RELEASE_KEYSTORE_PASSWORD` secrets; the workflow pins the key's public certificate SHA-256. With the secrets present it decodes them into `flutter/android/key.properties`, builds `io.nikodesk.android` as `NikoDesk-android-arm64.apk`, and verifies that APK against the pinned fingerprint. Forks or secret-less runs fall back to `NIKODESK_UNSIGNED_BUILD=1` and the unsigned `.dev` structure build `NikoDesk-android-arm64-unsigned.apk`, which cannot be installed or used to prove upgrades. Release signing and unsigned mode are mutually exclusive. Actual device installation/startup/connection and two-version upgrade acceptance remain pending; publishing the signed package does not establish those behaviors.
 
 The final APK gate inspects the merged manifest using the SDK's [`apkanalyzer manifest print`](https://developer.android.com/tools/apkanalyzer). It checks the exact application ID/versionCode, `nikodesk` URI scheme, launcher, removal of receiving services/BootReceiver/permissions, ZIP integrity, ARM64 ELF headers and every native library's 16KB LOAD alignment. Uncompressed libraries must also have 16KB ZIP data offsets; compressed libraries require `extractNativeLibs=true`. The actual pinned Flutter engine is checked along with the Rust, C++ and Dart libraries. The gate preserves the upstream Kotlin/JNI class namespace, which is separate from application identity. Signed test builds also require verified signatures and the expected certificate fingerprint. These are package checks, not installation or connection tests.
 

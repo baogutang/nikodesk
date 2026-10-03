@@ -20,16 +20,17 @@ Widget _host(Widget child, {Brightness brightness = Brightness.light, double sca
 void main() {
   tearDown(() => NikoLanguage.english = false);
 
-  test('native snapshot updates all permissions without replacing chat or authorization', () {
+  test('native snapshot respects feature flag and preserves chat and authorization', () {
+    const nikoEnabled = bool.fromEnvironment('NIKODESK');
     final shown = _client();
     shown.unreadChatMessageCount.value = 3;
     final confirmed = Client.fromJson(shown.toJson()
       ..addAll({'keyboard': false, 'clipboard': false, 'audio': false, 'file': false,
         'restart': false, 'recording': false, 'block_input': false, 'privacy_mode': false}));
-    expect(shown.applyNikoPermissions(confirmed), isTrue);
+    expect(shown.applyNikoPermissions(confirmed), nikoEnabled);
     for (final name in ['keyboard', 'clipboard', 'audio', 'file', 'restart',
         'recording', 'block_input', 'privacy_mode']) {
-      expect(shown.toJson()[name], isFalse, reason: name);
+      expect(shown.toJson()[name], !nikoEnabled, reason: name);
     }
     expect(shown.authorized, isTrue);
     expect(shown.disconnected, isFalse);

@@ -9,6 +9,7 @@ import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/nikodesk/session_tools.dart';
+import 'package:flutter_hbb/nikodesk/session_quick_actions.dart';
 import 'package:flutter_hbb/nikodesk/session_toolbar.dart';
 import 'package:flutter_hbb/nikodesk/session_capability_connect.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
@@ -830,6 +831,11 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
         setFullscreen: _setFullscreen),
     NikoSessionButton(ffi: widget.ffi),
     if (widget.ffi.connType == ConnType.defaultConn) ...[
+      NikoToolbarButton(
+        icon: const Icon(Icons.bolt_outlined),
+        label: nikoText('快捷操作', 'Quick actions'),
+        onPressed: () => showNikoSessionQuickActions(widget.ffi),
+      ),
       _KeyboardMenu(id: widget.id, ffi: widget.ffi),
       _NikoClipboardMenu(ffi: widget.ffi),
       if (isDesktop) _NikoFileMenu(id: widget.id, ffi: widget.ffi),

@@ -12,6 +12,13 @@ import 'update_transfer.dart';
 export 'update_transfer.dart'
     show NikoUpdateCancellation, NikoUpdateCancelled, NikoUpdateLimits;
 
+enum NikoUpdateChannel { stable, nightly }
+
+class _UpdateHttpException extends HttpException {
+  final int statusCode;
+  _UpdateHttpException(this.statusCode) : super('HTTP $statusCode');
+}
+
 /// GitHub-Releases-based update check for NikoDesk.
 ///
 /// Security rules (fail closed):
@@ -93,7 +100,7 @@ class NikoUpdater {
       final response = await task.wait(request.close());
       if (!response.isRedirect) {
         if (response.statusCode != 200) {
-          throw HttpException('HTTP ${response.statusCode}');
+          throw _UpdateHttpException(response.statusCode);
         }
         return response;
       }
@@ -125,14 +132,29 @@ class NikoUpdater {
 
   /// Latest release info, or null when there is no published release.
   Future<NikoReleaseInfo?> checkLatest(
-      {NikoUpdateCancellation? cancellation}) async {
+      {NikoUpdateChannel channel = NikoUpdateChannel.stable,
+      NikoUpdateCancellation? cancellation}) async {
     final task = NikoUpdateTask(limits, cancellation);
-    final body =
-        await _getString(_api('/repos/$owner/$repo/releases/latest'), task);
+    final endpoint =
+        channel == NikoUpdateChannel.nightly ? 'tags/nightly' : 'latest';
+    final String body;
+    try {
+      body = await _getString(
+          _api('/repos/$owner/$repo/releases/$endpoint'), task);
+    } on _UpdateHttpException catch (error) {
+      if (error.statusCode == 404) return null;
+      rethrow;
+    }
     final json = jsonDecode(body);
     if (json is! Map<String, dynamic>) return null;
     final tag = json['tag_name'];
     if (tag is! String || tag.isEmpty) return null;
+    if (json['draft'] == true ||
+        (channel == NikoUpdateChannel.nightly && tag != 'nightly') ||
+        (channel == NikoUpdateChannel.stable &&
+            (tag == 'nightly' || json['prerelease'] == true))) {
+      return null;
+    }
     final assets = <NikoReleaseAsset>[];
     final rawAssets = json['assets'];
     if (rawAssets is List) {
@@ -153,8 +175,17 @@ class NikoUpdater {
       tag: tag,
       notes: json['body'] is String ? json['body'] as String : '',
       assets: assets,
+      name: json['name'] is String ? json['name'] as String : null,
+      publishedAt: json['published_at'] is String
+          ? DateTime.tryParse(json['published_at'] as String)
+          : null,
     );
   }
+
+  Uri releasePage(NikoReleaseInfo release) => Uri(
+      scheme: 'https',
+      host: 'github.com',
+      pathSegments: [owner, repo, 'releases', 'tag', release.tag]);
 
   /// Numeric-aware comparison of dotted versions; tags may carry a v prefix.
   bool isNewer(String currentVersion, String tag) {
@@ -541,8 +572,17 @@ class NikoReleaseInfo {
   final String tag;
   final String notes;
   final List<NikoReleaseAsset> assets;
+  final String? name;
+  final DateTime? publishedAt;
   const NikoReleaseInfo(
-      {required this.tag, required this.notes, required this.assets});
+      {required this.tag,
+      required this.notes,
+      required this.assets,
+      this.name,
+      this.publishedAt});
+
+  bool get isNightly => tag == 'nightly';
+  String get displayName => name?.trim().isNotEmpty == true ? name! : tag;
 
   NikoReleaseAsset? assetFor(String platform) {
     final prefix = 'NikoDesk-$platform';

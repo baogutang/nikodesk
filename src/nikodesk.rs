@@ -108,6 +108,8 @@ pub(crate) mod tunnel_wire;
 pub(crate) mod tunnel_actor;
 #[path = "nikodesk/video_metrics.rs"]
 pub(crate) mod video_metrics;
+#[path = "nikodesk/video_queue.rs"]
+pub(crate) mod video_queue;
 #[path = "nikodesk/voice/mod.rs"]
 pub(crate) mod voice;
 #[path = "nikodesk/voice_wire.rs"]

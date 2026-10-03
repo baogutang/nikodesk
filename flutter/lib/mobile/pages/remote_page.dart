@@ -27,6 +27,7 @@ import '../../nikodesk/mobile_session_guide.dart';
 import '../../nikodesk/mobile_control_bar.dart';
 import '../../nikodesk/mobile_chat_options.dart';
 import '../../nikodesk/session_tools.dart';
+import '../../nikodesk/session_quick_actions.dart';
 import '../../nikodesk/ui.dart';
 import '../../nikodesk/voice_session_native.dart';
 import '../../nikodesk/voice_session_owner.dart';
@@ -615,6 +616,15 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       color: Theme.of(context).colorScheme.primary,
       child: NikoMobileControlBar(
         actions: Row(children: [
+          IconButton(
+            color: foreground,
+            tooltip: nikoText('快捷操作', 'Quick actions'),
+            icon: const Icon(Icons.bolt_outlined),
+            onPressed: () {
+              setState(() => _showEdit = false);
+              showNikoSessionQuickActions(gFFI);
+            },
+          ),
           IconButton(
             color: foreground,
             tooltip: nikoText('画面与显示', 'Display settings'),

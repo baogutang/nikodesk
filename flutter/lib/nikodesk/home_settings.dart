@@ -63,6 +63,7 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
   int _buildInfoRequest = 0;
   int _settingsRequest = 0;
   bool _checkingUpdate = false;
+  NikoUpdateChannel _updateChannel = NikoUpdateChannel.stable;
   bool _downloadingUpdate = false;
   double? _updateProgress;
   NikoUpdateCancellation? _updateCancellation;
@@ -214,7 +215,8 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
     try {
       final checker = widget.updateChecker;
       final release = await task.wait(checker == null
-          ? _updater.checkLatest(cancellation: cancellation)
+          ? _updater.checkLatest(
+              channel: _updateChannel, cancellation: cancellation)
           : Future<NikoReleaseInfo?>.sync(() => checker(cancellation)));
       if (!_ownsUpdate(cancellation)) return;
       if (release == null) {
@@ -233,17 +235,21 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
         _buildInfo = info;
         _buildInfoLoading = false;
       });
-      if (info.relationTo(release.tag) !=
-          PublishedVersionRelation.newerRelease) {
+      if (!release.isNightly &&
+          info.relationTo(release.tag) !=
+              PublishedVersionRelation.newerRelease) {
         nikoNotice(context, info.updateStatus(release.tag));
         return;
       }
-      final macAsset =
-          Platform.isMacOS ? release.assetFor('macos-arm64') : null;
+      final macAsset = Platform.isMacOS && !release.isNightly
+          ? release.assetFor('macos-arm64')
+          : null;
       final confirmed = await showDialog<bool>(
           context: context,
           builder: (dialog) => AlertDialog(
-                title: Text(nikoText('发现新版本', 'Update available')),
+                title: Text(release.isNightly
+                    ? nikoText('预览版本', 'Nightly preview')
+                    : nikoText('发现新版本', 'Update available')),
                 content: SizedBox(
                     width: 420,
                     child: SingleChildScrollView(
@@ -251,13 +257,25 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                          Text(release.tag,
+                          Text(release.displayName,
                               style:
                                   const TextStyle(fontWeight: FontWeight.w700)),
                           const SizedBox(height: 6),
                           Text(nikoText(
                               '当前本机 ${info.fullVersion} → 公开版本 ${release.tag}',
                               'Installed ${info.fullVersion} → published ${release.tag}')),
+                          if (release.publishedAt != null) ...[
+                            const SizedBox(height: 6),
+                            Text(nikoText(
+                                '发布时间：${release.publishedAt!.toLocal()}',
+                                'Published: ${release.publishedAt!.toLocal()}')),
+                          ],
+                          if (release.isNightly) ...[
+                            const SizedBox(height: 10),
+                            Text(nikoText(
+                                '预览版随 main 更新，可能尚未完成真机验收。相同版本号不能判断是否比本机构建更新；请核对发布名称和时间后手动下载。',
+                                'Nightly follows main and may still be awaiting device acceptance. Matching version numbers cannot establish whether it is newer than your installed build; review the release name and time before downloading manually.')),
+                          ],
                           const SizedBox(height: 10),
                           if (release.notes.isNotEmpty)
                             Text(release.notes,
@@ -296,8 +314,7 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
               ));
       if (confirmed != true || !_ownsUpdate(cancellation)) return;
       if (macAsset == null) {
-        await launchUrl(Uri.https('github.com',
-            '/${_updater.owner}/${_updater.repo}/releases/latest'));
+        await launchUrl(_updater.releasePage(release));
         return;
       }
       await _prepareMacUpdate(release, macAsset, cancellation);
@@ -519,6 +536,27 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
             ]),
           const SizedBox(height: 16),
           _section(context, nikoText('软件更新', 'Software update'), [
+            DropdownButtonFormField<NikoUpdateChannel>(
+                key: const Key('nikodesk-update-channel'),
+                value: _updateChannel,
+                decoration: InputDecoration(
+                    labelText: nikoText('更新渠道', 'Update channel')),
+                items: [
+                  DropdownMenuItem(
+                      value: NikoUpdateChannel.stable,
+                      child: Text(nikoText('正式版', 'Stable'))),
+                  DropdownMenuItem(
+                      value: NikoUpdateChannel.nightly,
+                      child: Text(nikoText('预览版（nightly）', 'Nightly preview'))),
+                ],
+                onChanged: _checkingUpdate
+                    ? null
+                    : (channel) {
+                        if (channel != null) {
+                          setState(() => _updateChannel = channel);
+                        }
+                      }),
+            const SizedBox(height: 10),
             Row(children: [
               Icon(Icons.system_update_rounded, color: muted),
               const SizedBox(width: 10),

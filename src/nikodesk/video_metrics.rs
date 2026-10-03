@@ -240,6 +240,7 @@ impl SessionTelemetry {
                 && (old.decoder_backend.is_some()
                     || old.decoded_callbacks > 0
                     || old.decode_errors > 0
+                    || old.delta_queue_max > 0
                     || old.delta_overflow > 0
                     || old.refresh_discard > 0
                     || old.native_calls > 0
@@ -539,6 +540,40 @@ mod tests {
         assert_eq!(snapshot.displays[0].counters.decode_convert.samples, 8);
         assert_eq!(snapshot.displays[0].counters.delta_queue_max, 120);
         assert!(session.snapshot(1000).unwrap().displays.is_empty());
+    }
+
+    #[test]
+    fn queue_peak_is_reported_without_decoder_output_or_overflow() {
+        let (session, _) = session(true);
+        let display = session.display(0).unwrap();
+        display.queue_depth(5);
+        let snapshot = session.snapshot(1000).unwrap();
+        assert_eq!(snapshot.displays.len(), 1);
+        assert_eq!(snapshot.displays[0].display, 0);
+        let counters = &snapshot.displays[0].counters;
+        assert_eq!(counters.delta_queue_max, 5);
+        assert_eq!(counters.decoder_backend, None);
+        assert_eq!(counters.decoded_callbacks, 0);
+        assert_eq!(counters.delta_overflow, 0);
+    }
+
+    #[test]
+    fn zero_queue_depth_stays_unknown_and_peaks_reset_per_window() {
+        let (session, _) = session(true);
+        let display = session.display(0).unwrap();
+        display.queue_depth(0);
+        assert!(session.snapshot(1000).unwrap().displays.is_empty());
+        display.queue_depth(5);
+        assert_eq!(
+            session.snapshot(1000).unwrap().displays[0].counters.delta_queue_max,
+            5
+        );
+        assert!(session.snapshot(1000).unwrap().displays.is_empty());
+        display.queue_depth(2);
+        assert_eq!(
+            session.snapshot(1000).unwrap().displays[0].counters.delta_queue_max,
+            2
+        );
     }
 
     #[test]

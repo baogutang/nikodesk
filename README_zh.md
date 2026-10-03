@@ -21,11 +21,11 @@
 
 ## 当前状态
 
-NikoDesk 正在活跃开发。每次推送到 `main` 都会构建全部三个平台，并替换滚动更新的 **[nightly 预发布](https://github.com/baogutang/nikodesk/releases/tag/nightly)**；`v*` 标签发布正式版本。[v1.0.0 归档](https://github.com/baogutang/nikodesk/releases/tag/v1.0.0) 是历史测试构建，其中仅 macOS ZIP 仍保留发布。
+版本交付入口为 **[NikoDesk v1.0.1](https://github.com/baogutang/nikodesk/releases/tag/v1.0.1)**（产品版本 `1.0.1`、构建号 `10`）。标签触发 macOS ARM64、Windows x64 与 Android ARM64 自动构建，构建和打包检查全部通过后发布产物。每次推送到 `main` 都会构建全部三个平台，并替换滚动更新的 **[nightly 预发布](https://github.com/baogutang/nikodesk/releases/tag/nightly)**；`v*` 标签发布正式版本。[v1.0.0 归档](https://github.com/baogutang/nikodesk/releases/tag/v1.0.0) 是历史测试构建，其中仅 macOS ZIP 仍保留发布。
 
 | 渠道 | macOS ARM64 | Windows x64 | Android ARM64 |
 |---|---|---|---|
-| [nightly](https://github.com/baogutang/nikodesk/releases/tag/nightly) | DMG + 更新 ZIP，ad-hoc 签名（无 Apple Developer ID 签名与公证；首次启动时右键 → 打开） | 便携 EXE/ZIP（免安装，可与 RustDesk 并存运行）＋用于验证安装流程的无人值守安装器。未签名：SmartScreen 会询问一次。安装器会改动系统，请先在测试机上使用。 | 控制端 APK（`io.nikodesk.android`），使用专用 NikoDesk 发行密钥签名，并对照固定证书指纹校验 |
+| [v1.0.1](https://github.com/baogutang/nikodesk/releases/tag/v1.0.1) / [nightly 预览](https://github.com/baogutang/nikodesk/releases/tag/nightly) | DMG + 更新 ZIP，ad-hoc 签名（无 Apple Developer ID 签名与公证；首次启动时右键 → 打开） | 便携 EXE/ZIP（免安装，可与 RustDesk 并存运行）＋用于验证安装流程的无人值守安装器。未签名：SmartScreen 会询问一次。安装器会改动系统，请先在测试机上使用。 | 控制端 APK（`io.nikodesk.android`），使用专用 NikoDesk 发行密钥签名，并对照固定证书指纹校验 |
 | [v1.0.0](https://github.com/baogutang/nikodesk/releases/tag/v1.0.0) | 仅保留归档 ZIP | 已移除（拒绝启动） | 已移除（拒绝启动） |
 
 **实际验证过的内容：** 在开发者的 Mac 上，两个相互隔离的 NikoDesk 身份经由自建 RustDesk 服务器中继运行过真实会话——带视频的密码认证、双向文件传输（经 SHA-256 校验）、含重放拒绝的 TOTP 双重验证、两端的会话审计记录、远程终端（请求 → 本机批准 → 命令输出）、端口隧道（数据经隧道验证）、画质模式（可测量的码率/帧率变化）。这些都是同机、同用户会话：跨设备、跨操作系统、Windows 与 Android 真机验收仍待完成，未测试的组合保持不作宣称。
@@ -45,12 +45,16 @@ NikoDesk 正在活跃开发。每次推送到 `main` 都会构建全部三个平
 **会话**
 
 - **原生内核**：保留 RustDesk 的采集、编解码、输入、文件传输、剪贴板与多屏路径。画质模式（办公 / 流畅 / 弱网）改变被控端实际发送的内容。
+- **视频恢复**：逐显示器有界队列保留编码参考帧顺序，合并出帧通知，积压时从关键帧恢复；某块屏幕没有解码帧率样本时，不再关闭其他屏幕的帧率反馈。真实 VP8、VP9、AV1 回归夹具已验证解码画面一致性；真实网络延迟仍未测量。
+- **快捷操作**：桌面与手机会话共用复制、粘贴、全选、撤销、保存、切换应用、适应窗口和原始大小入口。组合键按远端系统选择，复查当前会话和输入权限，异常后释放按键。
 - **连接反馈与诊断**：逐连接展示进度、中继路由与解码统计——是注明来源的观测，不是延迟承诺。
 - **扩展能力默认全部关闭**：远程终端、端口隧道、摄像头与语音（含接收方发起的通话）各自需要本机对应的能力策略，并需被控端连接管理器批准；批准可在会话中途撤回。
 
+- **更新渠道选择**：正式版与显式 nightly 预览分开选择，显示发布名称和时间，下载入口指向刚检查的发布页。预览版手动下载，不用滚动标签宣称本机构建已经过期。
+
 **被控端功能**
 
-- **无人值守（Windows）**：单文件安装器、带恢复的服务生命周期、机器级权限（虚拟屏、断开时锁定、隐私屏、远程重启）默认关闭，以及密码轮换。nightly 中用于验证安装流程的安装器面向测试机。
+- **无人值守（Windows）**：单文件安装器、带恢复的服务生命周期、机器级权限（虚拟屏、断开时锁定、隐私屏、远程重启）默认关闭，以及密码轮换。用于验证安装流程的安装器面向测试机。
 - **隐私屏与虚拟屏**：macOS 采用基于 gamma 的黑屏；Windows 使用上游签名的 Amyuni 显示驱动，随包捆绑并按字节固定。
 - **网络唤醒**：可直接唤醒白名单内的机器；主控端位于远端时，可经授权的隧道代理唤醒。
 - **断开时锁定**与**远程重启**，各自受权限门禁控制。
@@ -59,7 +63,7 @@ NikoDesk 正在活跃开发。每次推送到 `main` 都会构建全部三个平
 
 ## 快速开始
 
-1. 从 **[nightly 预发布](https://github.com/baogutang/nikodesk/releases/tag/nightly)** 下载，并对照其 `SHA256SUMS` 校验。macOS DMG 安装完整的 `NikoDesk.app`（ad-hoc 签名：首次启动时右键 → 打开）。Windows 便携 EXE 可与现有 RustDesk 并存运行；Android 在此前任意 nightly 之上覆盖安装已签名 APK。
+1. 从 **[v1.0.1](https://github.com/baogutang/nikodesk/releases/tag/v1.0.1)** 下载，并对照其 `SHA256SUMS` 校验。macOS DMG 安装完整的 `NikoDesk.app`（ad-hoc 签名：首次启动时右键 → 打开）。Windows 便携 EXE 可与现有 RustDesk 并存运行；Android 沿用相同发行包名和证书，构建号从 9 递增到 10；实际设备升级仍待验收。
 2. 在 **设置 → 私有服务器** 中配置自己的 [RustDesk Server OSS](https://github.com/rustdesk/rustdesk-server)：ID 服务器、中继与**服务器公钥**。服务器私钥只保留在服务端。
 3. 另一端使用相同服务器与公钥。分别确认服务可达、本机注册，再通过真实会话验证密码认证；三者证明的是不同事情。
 4. Mac 作为被控端时，通过 macOS 系统设置授予用于采集的屏幕录制权限、用于远端输入的辅助功能权限。接受会话前逐项审核会话权限；各扩展能力仍会单独请求批准。
@@ -68,7 +72,9 @@ NikoDesk 正在活跃开发。每次推送到 `main` 都会构建全部三个平
 
 注册与中继使用你配置的服务。认证后的点对点会话还会访问协商得到的对端地址，更新检查与下载会访问 GitHub 的 API 和产物域名。“私服模式”不等于所有网络请求都只到 NAS。
 
-修订后的 macOS 更新流程会核对发布摘要、校验并暂存应用归档，再打开文件位置供你**手动安装**，不会自动覆盖已安装应用。v1.0.0 不包含此修复。确认新版本可用前保留旧应用。Windows 与 Android 尚无已验证的应用内安装流程。
+**设置 → 软件更新**可选择正式版或 nightly 预览。正式版按公开版本号比较，预览版提供发布名称、时间和手动下载。此前 `1.1.0+9` 开发版的数字版本高于 `1.0.1+10`，该次切换请从 v1.0.1 发布页手动下载；Android 沿用发行证书，按递增构建号升级。
+
+macOS 更新流程会核对发布摘要、校验并暂存应用归档，再打开文件位置供你**手动安装**，不会自动覆盖已安装应用。v1.0.0 不包含此修复。确认新版本可用前保留旧应用。Windows 与 Android 尚无已验证的应用内安装流程。
 
 SHA256 用于对照发布摘要检查文件一致性，不证明发布者身份，也不能替代可信的平台签名。
 
@@ -77,7 +83,7 @@ SHA256 用于对照发布摘要检查文件一致性，不证明发布者身份�
 必须先构建原生内核，再构建 Flutter。macOS ARM64 需要按 [构建工作流](.github/workflows/release.yml) 准备固定的 Rust、Flutter、Xcode 与 vcpkg 原生依赖，并将 `VCPKG_ROOT` 指向准备好的目录。建议使用项目专用工具链，不修改全局 SDK。
 
 ```bash
-git clone --recurse-submodules https://github.com/baogutang/nikodesk.git
+git clone https://github.com/baogutang/nikodesk.git
 cd nikodesk
 cargo build --locked --lib --release \
   --features flutter,hwcodec,unix-file-copy-paste,screencapturekit,nikodesk
@@ -94,7 +100,7 @@ FLUTTER_XCODE_ARCHS=arm64 FLUTTER_XCODE_ONLY_ACTIVE_ARCH=YES \
 
 - 沿用上游加密与认证。服务器公钥不是远控密码；设备私钥与服务器私钥分别属于客户端、服务端，不能相互复制。
 - 会话确认与权限开关需要在真实被控平台验证。按实际需求审核能力，不为方便一次授予全部权限。
-- macOS 产物为本地 ad-hoc 签名，无 Apple Developer ID 签名或公证。Android nightly APK 使用专用 NikoDesk 发行密钥签名；真机安装与升级仍未验证。Windows 产物未签名。
+- macOS 产物为本地 ad-hoc 签名，无 Apple Developer ID 签名或公证。Android APK 使用专用 NikoDesk 发行密钥签名；真机安装与升级仍未验证。Windows 产物未签名。
 - 跨设备远控、文件与剪贴板、撤权以及性能对比都是独立验收项。未测量的速度和延迟提升不作承诺。
 
 ## 项目与许可

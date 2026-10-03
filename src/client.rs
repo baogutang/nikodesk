@@ -4306,6 +4306,8 @@ pub fn start_video_thread<F, T>(
     discard_queue: Arc<RwLock<bool>>,
     #[cfg(feature = "nikodesk")]
     video_metrics: Option<Arc<crate::nikodesk::video_metrics::DisplayTelemetry>>,
+    #[cfg(feature = "nikodesk")]
+    niko_queue: Arc<crate::nikodesk::video_queue::VideoQueue>,
     video_callback: F,
 ) where
     F: 'static + FnMut(usize, &mut scrap::ImageRgb, *mut c_void, bool) + Send,
@@ -4321,7 +4323,7 @@ pub fn start_video_thread<F, T>(
         #[cfg(windows)]
         sync_cpu_usage();
         get_hwcodec_config();
-        let mut video_handler = None;
+        let mut video_handler: Option<VideoHandler> = None;
         let mut count = 0;
         let mut duration = std::time::Duration::ZERO;
         let mut skip_beginning = 0;
@@ -4335,6 +4337,19 @@ pub fn start_video_thread<F, T>(
                                 *vf
                             }
                             MediaData::VideoQueue => {
+                                #[cfg(feature = "nikodesk")]
+                                {
+                                    let Some((vf, reset)) = niko_queue.pop() else { continue; };
+                                    if reset {
+                                        crate::nikodesk::video_metrics::clear_decoder();
+                                        if let Some(handler) = video_handler.as_mut() {
+                                            handler.reset(None);
+                                        }
+                                    }
+                                    vf
+                                }
+                                #[cfg(not(feature = "nikodesk"))]
+                                {
                                 if let Some(vf) = video_queue.read().unwrap().pop() {
                                     if discard_queue.read().unwrap().clone() {
                                         #[cfg(feature = "nikodesk")]
@@ -4344,6 +4359,7 @@ pub fn start_video_thread<F, T>(
                                     vf
                                 } else {
                                     continue;
+                                }
                                 }
                             }
                             _ => {
@@ -4408,6 +4424,8 @@ pub fn start_video_thread<F, T>(
                                     //
                                     // to-do: fix the error
                                     log::error!("handle video frame error, {}", e);
+                                    #[cfg(feature = "nikodesk")]
+                                    niko_queue.await_keyframe();
                                     session.refresh_video(display as _);
                                 }
                                 _ => {}
