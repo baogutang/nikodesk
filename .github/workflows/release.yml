@@ -559,7 +559,9 @@ jobs:
           find . -type f ! -name '*.dmg' ! -name '*.zip' ! -name '*.exe' ! -name '*.apk' -delete
           ls -la
           test -f NikoDesk-macos-arm64.dmg
+          test -f NikoDesk-macos-arm64.zip
           test -f NikoDesk-windows-x64.exe
+          test -f NikoDesk-windows-x64.zip
           test -f NikoDesk-windows-x64-setup-validation.exe
           test -f NikoDesk-windows-x64-setup-validation.zip
           test -f NikoDesk-android-arm64.apk
@@ -613,6 +615,7 @@ jobs:
           test -f NikoDesk-windows-x64.exe
           test -f NikoDesk-windows-x64.zip
           test -f NikoDesk-windows-x64-setup-validation.exe
+          test -f NikoDesk-windows-x64-setup-validation.zip
           test -f NikoDesk-android-arm64.apk
           sha256sum * | tee SHA256SUMS
 
