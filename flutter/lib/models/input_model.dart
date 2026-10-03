@@ -20,6 +20,8 @@ import 'input_modifier_utils.dart';
 import 'relative_mouse_model.dart';
 import '../common.dart';
 import '../consts.dart';
+import '../nikodesk/session_shortcuts.dart';
+import '../generated_bridge.dart' show Rustdesk;
 
 /// Mouse button enum.
 enum MouseButtons { left, right, wheel, back, forward }
@@ -406,6 +408,11 @@ class InputModel {
   }
 
   final WeakReference<FFI> parent;
+  final Rustdesk? _keyboardBridgeOverride;
+  Rustdesk get _keyboardBridge => _keyboardBridgeOverride ?? bind;
+  bool get _isFlutterKeyboardSource => _keyboardBridgeOverride == null
+      ? isInputSourceFlutter
+      : _keyboardBridge.mainGetInputSource() == 'Input source 2';
   String keyboardMode = '';
 
   // keyboard
@@ -493,7 +500,8 @@ class InputModel {
   /// Check if the connected server supports relative mouse mode.
   bool get isRelativeMouseModeSupported => _relativeMouse.isSupported;
 
-  InputModel(this.parent) {
+  InputModel(this.parent, {Rustdesk? keyboardBridge})
+      : _keyboardBridgeOverride = keyboardBridge {
     initSideButtonChannel();
     sessionId = parent.target!.sessionId;
     _relativeMouse = RelativeMouseModel(
@@ -738,7 +746,7 @@ class InputModel {
   KeyEventResult handleRawKeyEvent(RawKeyEvent e) {
     if (isViewOnly) return KeyEventResult.handled;
     if (isViewCamera) return KeyEventResult.handled;
-    if (!isInputSourceFlutter) {
+    if (!_isFlutterKeyboardSource) {
       if (isDesktop) {
         return KeyEventResult.handled;
       } else if (isWeb) {
@@ -823,7 +831,7 @@ class InputModel {
   KeyEventResult handleKeyEvent(KeyEvent e) {
     if (isViewOnly) return KeyEventResult.handled;
     if (isViewCamera) return KeyEventResult.handled;
-    if (!isInputSourceFlutter) {
+    if (!_isFlutterKeyboardSource) {
       if (isDesktop) {
         return KeyEventResult.handled;
       } else if (isWeb) {
@@ -928,7 +936,7 @@ class InputModel {
   void newKeyboardMode(
       String character, int usbHid, bool down, bool iosCapsLock) {
     final lockModes = _buildLockModes(iosCapsLock);
-    bind.sessionHandleFlutterKeyEvent(
+    _keyboardBridge.sessionHandleFlutterKeyEvent(
         sessionId: sessionId,
         character: character,
         usbHid: usbHid,
@@ -975,7 +983,7 @@ class InputModel {
   void inputRawKey(String name, int platformCode, int positionCode, bool down,
       bool iosCapsLock) {
     final lockModes = _buildLockModes(iosCapsLock);
-    bind.sessionHandleFlutterRawKeyEvent(
+    _keyboardBridge.sessionHandleFlutterRawKeyEvent(
         sessionId: sessionId,
         name: name,
         platformCode: platformCode,
@@ -1029,7 +1037,7 @@ class InputModel {
   void inputKey(String name, {bool? down, bool? press}) {
     if (!keyboardPerm) return;
     if (isViewCamera) return;
-    bind.sessionInputKey(
+    _keyboardBridge.sessionInputKey(
         sessionId: sessionId,
         name: name,
         down: down ?? false,
@@ -1042,7 +1050,10 @@ class InputModel {
 
   Future<void> inputNikoShortcutKey(SessionID expectedSession, String name,
       {required bool press}) async {
-    if (!{'VK_C', 'VK_V', 'VK_A', 'VK_Z', 'VK_S', 'VK_TAB'}.contains(name)) {
+    if (!(const bool.fromEnvironment('NIKODESK')) ||
+        !{'VK_C', 'VK_V', 'VK_X', 'VK_A', 'VK_Z', 'VK_S', 'VK_F', 'VK_P',
+          'VK_R', 'VK_TAB', 'VK_LEFT', 'VK_RIGHT', 'VK_UP', 'VK_DOWN'}
+            .contains(name)) {
       throw StateError('Shortcut unavailable');
     }
     final ffi = parent.target;
@@ -1050,6 +1061,7 @@ class InputModel {
         (ffi == null ||
             ffi.closed ||
             sessionId != expectedSession ||
+            ffi.sessionId != expectedSession ||
             ffi.connType != ConnType.defaultConn ||
             isViewOnly ||
             !keyboardPerm ||
@@ -1058,15 +1070,44 @@ class InputModel {
     }
     // Key-up belongs to the original session even if it disconnects or loses
     // permission while submission is pending; it never targets a new session.
-    await bind.sessionInputKey(
+    await _keyboardBridge.sessionInputKey(
         sessionId: expectedSession,
-        name: name,
+        name: 'NikoShortcut:$name',
         down: false,
         press: press,
         alt: press && alt,
         ctrl: press && ctrl,
-        shift: false,
+        shift: press && shift,
         command: press && command);
+  }
+
+  Future<NikoMacShortcutMode> readNikoMacShortcutMode() async {
+    final value = await _keyboardBridge.sessionGetOption(
+        sessionId: sessionId, arg: nikoMacShortcutOption);
+    if (value == null) throw StateError('Session unavailable');
+    return value == 'original'
+        ? NikoMacShortcutMode.original
+        : NikoMacShortcutMode.automatic;
+  }
+
+  Future<void> setNikoMacShortcutMode(SessionID expectedSession,
+      NikoMacShortcutMode mode) async {
+    final ffi = parent.target;
+    if (!(const bool.fromEnvironment('NIKODESK')) || ffi == null || ffi.closed ||
+        expectedSession != sessionId || ffi.sessionId != expectedSession ||
+        ffi.connType != ConnType.defaultConn ||
+        peerPlatform != 'Mac OS' || isViewOnly || !keyboardPerm ||
+        ffi.ffiModel.permissions['keyboard'] == false) {
+      throw StateError('Remote input unavailable');
+    }
+    enterOrLeave(false);
+    await _keyboardBridge.sessionPeerOption(sessionId: expectedSession,
+        name: nikoMacShortcutOption, value: mode.name);
+    if (ffi.closed || ffi.sessionId != expectedSession || isViewOnly ||
+        !keyboardPerm || ffi.ffiModel.permissions['keyboard'] == false ||
+        await readNikoMacShortcutMode() != mode) {
+      throw StateError('Shortcut mode unconfirmed');
+    }
   }
 
   static Map<String, dynamic> getMouseEventMove() => {
@@ -1184,11 +1225,12 @@ class InputModel {
     }
     _relativeMouse.onEnterOrLeaveImage(enter);
     _flingTimer?.cancel();
-    if (!isInputSourceFlutter) {
-      bind.sessionEnterOrLeave(sessionId: sessionId, enter: enter);
+    if (!_isFlutterKeyboardSource ||
+        ((const bool.fromEnvironment('NIKODESK')) && !enter)) {
+      _keyboardBridge.sessionEnterOrLeave(sessionId: sessionId, enter: enter);
     }
     if (!isWeb && enter) {
-      bind.setCurSessionId(sessionId: sessionId);
+      _keyboardBridge.setCurSessionId(sessionId: sessionId);
     }
   }
 
@@ -1305,6 +1347,7 @@ class InputModel {
   }
 
   void onWindowBlur() {
+    if (const bool.fromEnvironment('NIKODESK')) enterOrLeave(false);
     _relativeMouse.onWindowBlur();
   }
 

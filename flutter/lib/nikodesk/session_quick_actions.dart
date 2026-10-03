@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart'
-    show CustomAlertDialog, SessionID, isMobile;
+    show CustomAlertDialog, SessionID, isMobile, isDesktop, isWindows, isLinux;
 import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
@@ -45,6 +45,7 @@ class _NativeShortcutInput implements NikoShortcutInput {
     input.ctrl = keys?.control ?? false;
     input.command = keys?.command ?? false;
     input.alt = keys?.alt ?? false;
+    input.shift = keys?.shift ?? false;
   }
 
   @override
@@ -66,6 +67,11 @@ class _NikoSessionQuickActions extends StatefulWidget {
 
 class _NikoSessionQuickActionsState extends State<_NikoSessionQuickActions> {
   String? _viewStyle;
+  NikoMacShortcutMode? _macShortcutMode;
+  bool get _macMappingAvailable =>
+      isDesktop &&
+      (isWindows || isLinux) &&
+      widget.ffi.ffiModel.pi.platform == 'Mac OS';
   bool get _sessionCurrent =>
       !widget.ffi.closed &&
       widget.ffi.sessionId == widget.session &&
@@ -90,6 +96,25 @@ class _NikoSessionQuickActionsState extends State<_NikoSessionQuickActions> {
   void initState() {
     super.initState();
     unawaited(_readViewStyle());
+    if (_macMappingAvailable) unawaited(_readMacShortcutMode());
+  }
+
+  Future<void> _readMacShortcutMode() async {
+    try {
+      final mode = await widget.ffi.inputModel.readNikoMacShortcutMode();
+      if (mounted && _sessionCurrent) setState(() => _macShortcutMode = mode);
+    } catch (_) {
+      if (mounted) setState(() => _macShortcutMode = null);
+    }
+  }
+
+  Future<void> _setMacShortcutMode(NikoMacShortcutMode mode) async {
+    if (!_keyboardAllowed || !_macMappingAvailable) {
+      throw StateError('Remote input unavailable');
+    }
+    await widget.ffi.inputModel.setNikoMacShortcutMode(widget.session, mode);
+    if (!_keyboardAllowed) throw StateError('Remote input unavailable');
+    if (mounted) setState(() => _macShortcutMode = mode);
   }
 
   Future<void> _readViewStyle() async {
@@ -142,6 +167,8 @@ class _NikoSessionQuickActionsState extends State<_NikoSessionQuickActions> {
           keyboardAllowed: _keyboardAllowed,
           canvasAllowed: _canvasAllowed,
           viewStyle: _viewStyle,
+          macShortcutMode: _macShortcutMode,
+          onMacShortcutMode: _macMappingAvailable ? _setMacShortcutMode : null,
           onShortcut: _shortcut,
           onViewStyle: _setViewStyle,
           onResetCanvas: isMobile ? _resetCanvas : null,

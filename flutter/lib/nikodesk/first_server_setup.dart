@@ -89,8 +89,7 @@ class _NikoFirstServerSetupState extends State<NikoFirstServerSetup> {
         final light = nikoIsLight(context);
         return DecoratedBox(
           decoration: BoxDecoration(
-              gradient: light ? NikoPalette.lightCanvas : null,
-              color: light ? null : NikoPalette.darkScaffold),
+              color: light ? NikoPalette.lightScaffold : NikoPalette.darkScaffold),
           child: Scaffold(
             backgroundColor: Colors.transparent,
             appBar: AppBar(

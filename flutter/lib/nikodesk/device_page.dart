@@ -1050,7 +1050,8 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-                gradient: LinearGradient(
+                color: nikoIsLight(context) ? NikoPalette.lightAction : null,
+                gradient: nikoIsLight(context) ? null : LinearGradient(
                     colors: NikoPalette.deviceAvatarGradient('nikodesk-empty')),
                 borderRadius: BorderRadius.circular(NikoShapes.avatar)),
             child: const Icon(Icons.devices_rounded,
@@ -1096,7 +1097,8 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
                             width: 42,
                             height: 42,
                             decoration: BoxDecoration(
-                                gradient: LinearGradient(
+                                color: nikoIsLight(context) ? NikoPalette.lightAction : null,
+                                gradient: nikoIsLight(context) ? null : LinearGradient(
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
                                     colors: NikoPalette.deviceAvatarGradient(
@@ -1182,7 +1184,7 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
                             PopupMenuButton<String>(
                                 tooltip: nikoText('更多', 'More'),
                                 color: nikoIsLight(context)
-                                    ? Colors.white
+                                    ? NikoPalette.lightField
                                     : NikoPalette.darkCard,
                                 onSelected: (value) => value == 'tunnel'
                                     ? _connectWithDialog(device, tunnel: true)
@@ -1274,7 +1276,7 @@ class _IconAction extends StatelessWidget {
             height: 32,
             decoration: BoxDecoration(
               color: light
-                  ? Colors.white.withOpacity(.85)
+                  ? NikoPalette.lightField
                   : const Color(0xFF232A38),
               borderRadius: BorderRadius.circular(9),
             ),

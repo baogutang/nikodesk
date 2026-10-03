@@ -13,19 +13,19 @@
 
 [English](README.md) · **简体中文** · [官网](https://baogutang.github.io/nikodesk/zh/)
 
-<img src="flutter/assets/readme-light.png" width="48%" alt="已遮盖连接信息的 NikoDesk 真实明亮主题工作区" /> <img src="flutter/assets/readme-dark.png" width="48%" alt="已遮盖连接信息的 NikoDesk 真实暗黑主题工作区" />
+<img src="flutter/assets/readme-light.png" width="48%" alt="NikoDesk 暖纸亮色工作区，合成示例数据" /> <img src="flutter/assets/readme-dark.png" width="48%" alt="NikoDesk 暗色工作区，合成示例数据" />
 
-*历史构建的本地真实界面；设备 ID、密码与服务器信息已遮盖。截图展示外观，不代表远控或性能验收通过。*
+*生产 Flutter 工作区组件渲染，使用合成示例数据，不建立远程连接。[官网可直接交互体验](https://baogutang.github.io/nikodesk/zh/#nikodesk-demo)。*
 
 </div>
 
 ## 当前状态
 
-版本交付入口为 **[NikoDesk v1.0.1](https://github.com/baogutang/nikodesk/releases/tag/v1.0.1)**（产品版本 `1.0.1`、构建号 `10`）。标签触发 macOS ARM64、Windows x64 与 Android ARM64 自动构建，构建和打包检查全部通过后发布产物。每次推送到 `main` 都会构建全部三个平台，并替换滚动更新的 **[nightly 预发布](https://github.com/baogutang/nikodesk/releases/tag/nightly)**；`v*` 标签发布正式版本。[v1.0.0 归档](https://github.com/baogutang/nikodesk/releases/tag/v1.0.0) 是历史测试构建，其中仅 macOS ZIP 仍保留发布。
+版本交付入口为 **[NikoDesk v1.0.2](https://github.com/baogutang/nikodesk/releases/tag/v1.0.2)**（产品版本 `1.0.2`、构建号 `11`）。标签触发 macOS ARM64、Windows x64 与 Android ARM64 自动构建，构建和打包检查全部通过后发布产物。每次推送到 `main` 都会构建全部三个平台，并替换滚动更新的 **[nightly 预发布](https://github.com/baogutang/nikodesk/releases/tag/nightly)**；`v*` 标签发布正式版本。[v1.0.0 归档](https://github.com/baogutang/nikodesk/releases/tag/v1.0.0) 是历史测试构建，其中仅 macOS ZIP 仍保留发布。
 
 | 渠道 | macOS ARM64 | Windows x64 | Android ARM64 |
 |---|---|---|---|
-| [v1.0.1](https://github.com/baogutang/nikodesk/releases/tag/v1.0.1) / [nightly 预览](https://github.com/baogutang/nikodesk/releases/tag/nightly) | DMG + 更新 ZIP，ad-hoc 签名（无 Apple Developer ID 签名与公证；首次启动时右键 → 打开） | 便携 EXE/ZIP（免安装，可与 RustDesk 并存运行）＋用于验证安装流程的无人值守安装器。未签名：SmartScreen 会询问一次。安装器会改动系统，请先在测试机上使用。 | 控制端 APK（`io.nikodesk.android`），使用专用 NikoDesk 发行密钥签名，并对照固定证书指纹校验 |
+| [v1.0.2](https://github.com/baogutang/nikodesk/releases/tag/v1.0.2) / [nightly 预览](https://github.com/baogutang/nikodesk/releases/tag/nightly) | DMG + 更新 ZIP，ad-hoc 签名（无 Apple Developer ID 签名与公证；首次启动时右键 → 打开） | 便携 EXE/ZIP（免安装，可与 RustDesk 并存运行）＋用于验证安装流程的无人值守安装器。未签名：SmartScreen 会询问一次。安装器会改动系统，请先在测试机上使用。 | 控制端 APK（`io.nikodesk.android`），使用专用 NikoDesk 发行密钥签名，并对照固定证书指纹校验 |
 | [v1.0.0](https://github.com/baogutang/nikodesk/releases/tag/v1.0.0) | 仅保留归档 ZIP | 已移除（拒绝启动） | 已移除（拒绝启动） |
 
 **实际验证过的内容：** 在开发者的 Mac 上，两个相互隔离的 NikoDesk 身份经由自建 RustDesk 服务器中继运行过真实会话——带视频的密码认证、双向文件传输（经 SHA-256 校验）、含重放拒绝的 TOTP 双重验证、两端的会话审计记录、远程终端（请求 → 本机批准 → 命令输出）、端口隧道（数据经隧道验证）、画质模式（可测量的码率/帧率变化）。这些都是同机、同用户会话：跨设备、跨操作系统、Windows 与 Android 真机验收仍待完成，未测试的组合保持不作宣称。
@@ -47,6 +47,8 @@
 - **原生内核**：保留 RustDesk 的采集、编解码、输入、文件传输、剪贴板与多屏路径。画质模式（办公 / 流畅 / 弱网）改变被控端实际发送的内容。
 - **视频恢复**：逐显示器有界队列保留编码参考帧顺序，合并出帧通知，积压时从关键帧恢复；某块屏幕没有解码帧率样本时，不再关闭其他屏幕的帧率反馈。真实 VP8、VP9、AV1 回归夹具已验证解码画面一致性；真实网络延迟仍未测量。
 - **快捷操作**：桌面与手机会话共用复制、粘贴、全选、撤销、保存、切换应用、适应窗口和原始大小入口。组合键按远端系统选择，复查当前会话和输入权限，异常后释放按键。
+- **跨系统键盘**：Windows/Linux 控 Mac 时，常用 Ctrl+C/V/X/A/Z/S/F/P/R 自动对应 Command；会话中可切回原始按键，保留终端 Ctrl+C 中断。Control+方向键保留 Mac 空间操作含义。
+- **全屏应用与空间**：快捷面板提供上/下一个空间、调度中心、当前应用窗口及前/后一个应用。远端 macOS 自定义快捷键或空间设置可能影响效果；不枚举或承诺直接选中任意全屏窗口。
 - **连接反馈与诊断**：逐连接展示进度、中继路由与解码统计——是注明来源的观测，不是延迟承诺。
 - **扩展能力默认全部关闭**：远程终端、端口隧道、摄像头与语音（含接收方发起的通话）各自需要本机对应的能力策略，并需被控端连接管理器批准；批准可在会话中途撤回。
 
@@ -61,9 +63,22 @@
 
 明暗主题可跟随系统或按你的选择；界面提供英语与简体中文。扩展能力尚待真实跨设备验收；Android 的部分蓝牙组合不受支持；未测量的行为不作宣称。
 
+## Windows 控 Mac 与全屏应用
+
+在会话的**控制中心 → 本地键盘 → Mac**选择自动或原样；默认自动将常用 Ctrl 编辑组合对应为 Command。终端需要 Ctrl+C 中断时切回原样。映射/兼容键盘模式支持此功能；带 Shift、Alt/AltGr 或 Meta 的组合保留原意。
+
+| 想做的事 | 控制中心入口 | Mac 默认组合键 |
+|---|---|---|
+| 在多个全屏应用所在的空间间浏览 | 上一个桌面 / 下一个桌面 | Control+← / → |
+| 查看全部空间与窗口 | 任务总览 | Control+↑ |
+| 查看当前应用的窗口 | 应用窗口 | Control+↓ |
+| 切换应用 | 切换应用 / 反向切换应用 | Command+Tab / Command+Shift+Tab |
+
+这些动作发给远端；“本地画面”中的缩放与本地全屏只改变你的观看方式。Mac 应用切换能否跨空间取决于远端系统设置，修改过的系统快捷键也会影响结果。
+
 ## 快速开始
 
-1. 从 **[v1.0.1](https://github.com/baogutang/nikodesk/releases/tag/v1.0.1)** 下载，并对照其 `SHA256SUMS` 校验。macOS DMG 安装完整的 `NikoDesk.app`（ad-hoc 签名：首次启动时右键 → 打开）。Windows 便携 EXE 可与现有 RustDesk 并存运行；Android 沿用相同发行包名和证书，构建号从 9 递增到 10；实际设备升级仍待验收。
+1. 从 **[v1.0.2](https://github.com/baogutang/nikodesk/releases/tag/v1.0.2)** 下载，并对照其 `SHA256SUMS` 校验。macOS DMG 安装完整的 `NikoDesk.app`（ad-hoc 签名：首次启动时右键 → 打开）。Windows 便携 EXE 可与现有 RustDesk 并存运行；Android 沿用相同发行包名和证书，构建号从 10 递增到 11；实际设备升级仍待验收。
 2. 在 **设置 → 私有服务器** 中配置自己的 [RustDesk Server OSS](https://github.com/rustdesk/rustdesk-server)：ID 服务器、中继与**服务器公钥**。服务器私钥只保留在服务端。
 3. 另一端使用相同服务器与公钥。分别确认服务可达、本机注册，再通过真实会话验证密码认证；三者证明的是不同事情。
 4. Mac 作为被控端时，通过 macOS 系统设置授予用于采集的屏幕录制权限、用于远端输入的辅助功能权限。接受会话前逐项审核会话权限；各扩展能力仍会单独请求批准。
@@ -72,7 +87,7 @@
 
 注册与中继使用你配置的服务。认证后的点对点会话还会访问协商得到的对端地址，更新检查与下载会访问 GitHub 的 API 和产物域名。“私服模式”不等于所有网络请求都只到 NAS。
 
-**设置 → 软件更新**可选择正式版或 nightly 预览。正式版按公开版本号比较，预览版提供发布名称、时间和手动下载。此前 `1.1.0+9` 开发版的数字版本高于 `1.0.1+10`，该次切换请从 v1.0.1 发布页手动下载；Android 沿用发行证书，按递增构建号升级。
+**设置 → 软件更新**可选择正式版或 nightly 预览。正式版按公开版本号比较，预览版提供发布名称、时间和手动下载。此前 `1.1.0+9` 开发版的数字版本高于 `1.0.2+11`，该次切换请从 v1.0.2 发布页手动下载；Android 沿用发行证书，按递增构建号升级。
 
 macOS 更新流程会核对发布摘要、校验并暂存应用归档，再打开文件位置供你**手动安装**，不会自动覆盖已安装应用。v1.0.0 不包含此修复。确认新版本可用前保留旧应用。Windows 与 Android 尚无已验证的应用内安装流程。
 

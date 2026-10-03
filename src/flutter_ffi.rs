@@ -754,6 +754,8 @@ pub fn session_handle_flutter_raw_key_event(
 pub fn session_enter_or_leave(_session_id: SessionID, _enter: bool) -> SyncReturn<()> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Some(session) = sessions::get_session_by_session_id(&_session_id) {
+        #[cfg(feature = "nikodesk")]
+        if !_enter { session.niko_release_mac_shortcuts(); }
         let keyboard_mode = session.get_keyboard_mode();
         // Use the full per-window UUID (not lc.session_id which is per-connection)
         // so that two windows viewing the same peer get distinct grab owners.

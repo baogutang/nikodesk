@@ -38,6 +38,7 @@ pub(crate) mod totp_replay;
 pub(crate) mod session_audit;
 pub(crate) mod capability_audit;
 pub(crate) mod virtual_driver;
+pub(crate) mod mac_shortcuts;
 
 #[path = "nikodesk/favorites.rs"]
 pub mod favorites;

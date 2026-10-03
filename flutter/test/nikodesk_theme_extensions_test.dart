@@ -78,17 +78,15 @@ void main() {
     expect(primary, NikoPalette.darkSeed);
   });
 
-  test('white primary labels remain readable across the action gradient', () {
-    for (final color in NikoPalette.primaryGradient.colors) {
-      final contrast = (Colors.white.computeLuminance() + .05) / (color.computeLuminance() + .05);
-      expect(contrast, greaterThanOrEqualTo(4.5));
-    }
+  test('white primary labels remain readable on the action fill', () {
+    final contrast = (Colors.white.computeLuminance() + .05) / (NikoPalette.lightAction.computeLuminance() + .05);
+    expect(contrast, greaterThanOrEqualTo(4.5));
   });
 
-  test('small status labels remain readable on the light glass surfaces', () {
-    for (final canvas in NikoPalette.lightCanvas.colors) {
-      final surface = Color.alphaBlend(NikoPalette.lightCard, canvas);
-      for (final foreground in [NikoPalette.lightMuted, NikoPalette.lightSuccessText,
+  test('small status and action labels remain readable on light surfaces', () {
+    for (final surface in [NikoPalette.lightCard, NikoPalette.lightScaffold,
+      NikoPalette.lightField]) {
+      for (final foreground in [NikoPalette.lightSeed, NikoPalette.lightMuted, NikoPalette.lightSuccessText,
         NikoPalette.lightWarningText, NikoPalette.lightOfflineText]) {
         final contrast = (surface.computeLuminance() + .05) / (foreground.computeLuminance() + .05);
         expect(contrast, greaterThanOrEqualTo(4.5));

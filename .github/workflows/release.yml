@@ -128,11 +128,14 @@ jobs:
           flutter pub get
           flutter build macos --release --dart-define=NIKODESK=true --build-name "$PRODUCT_VERSION" --build-number "$PRODUCT_BUILD_NUMBER"
 
-      - name: Test video recovery and upstream queue compatibility
+      - name: Test video recovery, Mac key mapping and upstream compatibility
         run: |
           cargo test --locked --release --lib \
             --features flutter,hwcodec,unix-file-copy-paste,screencapturekit,nikodesk \
             nikodesk::video_queue::tests
+          cargo test --locked --release --lib \
+            --features flutter,hwcodec,unix-file-copy-paste,screencapturekit,nikodesk \
+            nikodesk::mac_shortcuts::tests
           cargo check --locked --lib --bins \
             --features flutter,hwcodec,unix-file-copy-paste,screencapturekit
 
@@ -318,6 +321,8 @@ jobs:
           if (-not $rc) { throw 'Windows SDK rc.exe not found for the version-resource build' }
           $env:NIKODESK_WINDOWS_RC = $rc.FullName
           cargo test --locked --lib --features flutter,hwcodec,nikodesk nikodesk_windows_
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --locked --lib --features flutter,hwcodec,nikodesk nikodesk::mac_shortcuts::tests
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test --locked -p rustdesk-portable-packer --features nikodesk
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -4,22 +4,23 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NikoDesk - Remote desktop on your own server</title>
-<meta name="description" content="A private-server remote desktop built on RustDesk. Version 1.0.1 delivers macOS, Windows and Android through checked builds; platform status is stated openly.">
+<meta name="description" content="A private-server remote desktop built on RustDesk. Version 1.0.2 delivers macOS, Windows and Android through checked builds; platform status is stated openly.">
 <link rel="icon" href="assets/favicon.png?v=5" type="image/png">
 <link rel="apple-touch-icon" href="assets/logo.png?v=5">
 <link rel="preload" href="assets/fonts/inter-800.woff2?v=5" as="font" type="font/woff2" crossorigin>
 <meta property="og:title" content="NikoDesk - Remote desktop on your own server">
 <meta property="og:description" content="A RustDesk-powered client for your own rendezvous and relay. Platform limits and downloads are stated openly.">
-<meta property="og:image" content="https://baogutang.github.io/nikodesk/assets/og.jpg?v=6">
+<meta property="og:image" content="https://baogutang.github.io/nikodesk/assets/app-light.png?v=102">
+<meta property="og:image:alt" content="NikoDesk warm light workspace, production Flutter widgets with synthetic example data">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://baogutang.github.io/nikodesk/">
 <link rel="canonical" href="https://baogutang.github.io/nikodesk/">
 <link rel="alternate" hreflang="en" href="https://baogutang.github.io/nikodesk/">
 <link rel="alternate" hreflang="zh-CN" href="https://baogutang.github.io/nikodesk/zh/">
 <style>
-/* NikoDesk site v5, a close replica of the ccswitch.io design language:
+/* NikoDesk site:
    warm cream paper, terracotta primary, warm brown ink, Inter + Fira Code,
-   glass nav, centered hero over a big rounded screenshot card, pill section
+   glass nav, centered hero over an interactive workspace example, pill section
    labels, soft warm cards, Fira code blocks, dark inverted download band.
    Light and dark themes both stay in the same warm family. */
 @font-face { font-family: "Inter"; src: url("assets/fonts/inter-400.woff2?v=5") format("woff2"); font-weight: 400; font-display: swap; }
@@ -33,9 +34,9 @@
   --card-deep: hsl(35 22% 82%);
   --muted-fg: hsl(30 12% 38%);
   --border: hsl(35 18% 78%);
-  --primary: hsl(15 65% 52%);
-  --primary-hover: hsl(15 65% 46%);
-  --primary-fg: hsl(40 30% 96%);
+  --primary: #C24F29;
+  --primary-hover: #A44324;
+  --primary-fg: #FFFFFF;
   --primary-soft: hsl(15 65% 52% / 0.12);
   --code-bg: hsl(30 18% 14%);
   --code-ink: hsl(38 25% 88%);
@@ -142,7 +143,7 @@ p { text-wrap: pretty; }
 .cta-row { margin-top: 34px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 .cta-row .btn { padding: 13px 26px; font-size: 15px; border-radius: 13px; }
 
-/* Hero screenshot */
+/* Hero interface example */
 .shot-zone { position: relative; margin: 56px auto 0; max-width: 900px; }
 .shot-zone::before {
   content: ""; position: absolute; inset: -12% 0;
@@ -334,6 +335,8 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
 .hero .shot-zone { animation-delay: .28s; }
 @media (prefers-reduced-motion: reduce) { .hero > *, .hero .shot-zone { animation: none; } }
 </style>
+<link rel="stylesheet" href="assets/demo.css?v=102">
+<script defer src="assets/demo.js?v=102"></script>
 </head>
 <body>
 <a class="skip-link" href="#content">Skip to content</a>
@@ -356,7 +359,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
 <main id="content" tabindex="-1">
 <header class="hero wrap" id="top" tabindex="-1">
   <a class="badge" href="https://github.com/baogutang/nikodesk/releases" target="_blank" rel="noopener">
-    <span class="dot"></span>v1.0.1 · three platforms<span class="arrow">→</span>
+    <span class="dot"></span>v1.0.2 · three platforms<span class="arrow">→</span>
   </a>
   <h1>Your machines, your server,<br><span class="accent">your remote desktop.</span></h1>
   <p class="sub">The native RustDesk core, connected to your own rendezvous and relay services. Windows and macOS target controller and receiver roles; Android is controller only. Cross-device acceptance remains pending.</p>
@@ -365,26 +368,18 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
     <a class="btn btn-outline" href="https://github.com/baogutang/nikodesk" target="_blank" rel="noopener">Read the source</a>
   </div>
   <div class="shot-zone">
-    <div class="shot-card">
-      <div class="theme-toggle" role="group" aria-label="Preview theme" data-shot="dark" id="shot-toggle">
-        <span class="thumb" aria-hidden="true"></span>
-        <button type="button" data-shot="light" aria-pressed="false">Light</button>
-        <button type="button" data-shot="dark" aria-pressed="true">Dark</button>
-      </div>
-      <div class="shot-stage">
-        <img src="assets/app-light-v4.jpg?v=6" alt="NikoDesk light theme, device workspace with connect card" id="shot-light" class="off" aria-hidden="true">
-        <img src="assets/app-dark-v4.jpg?v=6" alt="NikoDesk dark theme, device workspace with connect card" id="shot-dark">
-      </div>
+    <div id="nikodesk-demo" class="nd-demo" data-lang="en" data-theme="light">
+      <noscript>Enable JavaScript to explore the interface. The app and downloads work independently of this demo.</noscript>
     </div>
   </div>
-  <p class="shot-caption">Real local UI from a previous build, with connection details redacted. Screenshots show appearance, not remote-session or performance acceptance.</p>
+  <p class="shot-caption">Try searching devices, changing themes and switching remote Spaces. This interactive UI example uses invented data, makes no connections and sends no keys. The native app uses the real RustDesk core.</p>
 </header>
 
 <section id="features" tabindex="-1" class="wrap">
   <div class="sec-head reveal">
     <span class="sec-pill">Features</span>
     <h2>Made for daily driving</h2>
-    <p class="sec-sub">Version 1.0.1 adds desktop and mobile shortcuts for copying, pasting, switching apps and adjusting the view. Video overload recovery now preserves reference-frame order; real-codec regression tests verify the decoded picture. Cross-device latency remains unmeasured.</p>
+    <p class="sec-sub">Version 1.0.2 adds a warm light theme, Windows-to-Mac editing shortcuts and one-click access to remote Spaces and Mission Control, alongside desktop and mobile session tools. Video overload recovery now preserves reference-frame order; real-codec regression tests verify the decoded picture. Cross-device latency remains unmeasured.</p>
   </div>
   <div class="grid">
     <div class="card reveal">
@@ -415,7 +410,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
     <div class="card reveal" style="--d:.12s">
       <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></div>
       <h3>Two themes, one workspace</h3>
-      <p>Light and dark themes can follow the system or be selected in the app. The toggle above changes only the real UI screenshot shown on this page.</p>
+      <p>Warm paper surfaces and terracotta controls in light mode; the familiar dark workspace at night. Explore both themes in the interactive example above.</p>
     </div>
   </div>
 </section>
@@ -560,29 +555,29 @@ Key:        (id_ed25519.pub)</pre>
   <div class="sec-head reveal">
     <span class="sec-pill">Download</span>
     <h2>Downloads and platform status</h2>
-    <p class="sec-sub">The v1.0.1 tag builds macOS, Windows and Android, and publishes their packages together after all checks pass. Verify downloads against its SHA256SUMS. Nightly remains a separate rolling preview. Core sessions — password authentication with video, bidirectional file transfer, TOTP two-factor with replay rejection, session records on both ends, remote terminal, port tunnels and picture modes — are verified end to end between two identities of one user on one Mac through a private relay; cross-device, Windows and Android real-device acceptance is still in progress, and the notes below say so plainly.</p>
+    <p class="sec-sub">The v1.0.2 tag builds macOS, Windows and Android, and publishes their packages together after all checks pass. Verify downloads against its SHA256SUMS. Nightly remains a separate rolling preview. Core sessions — password authentication with video, bidirectional file transfer, TOTP two-factor with replay rejection, session records on both ends, remote terminal, port tunnels and picture modes — are verified end to end between two identities of one user on one Mac through a private relay; cross-device, Windows and Android real-device acceptance is still in progress, and the notes below say so plainly.</p>
   </div>
   <div class="dl-list">
-    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.1/NikoDesk-macos-arm64.dmg">
+    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.2/NikoDesk-macos-arm64.dmg">
       <h3>macOS</h3>
       <span class="arch">Apple Silicon · DMG · ad-hoc signed</span>
       <span class="note">Install the complete NikoDesk.app from the DMG. No Apple Developer ID or notarization: right-click → Open on the first launch. Runs beside an existing RustDesk with its own identity.</span>
-      <span class="go">Download v1.0.1 →</span>
+      <span class="go">Download v1.0.2 →</span>
     </a>
-    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.1/NikoDesk-windows-x64.exe">
+    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.2/NikoDesk-windows-x64.exe">
       <h3>Windows</h3>
       <span class="arch">x64 · portable EXE/ZIP · unsigned</span>
       <span class="note">A user-mode portable client that runs beside RustDesk with no installation, plus a setup-validation installer for unattended access. Unsigned: SmartScreen asks once. Real-device acceptance is in progress — the installer changes the system, so use a test machine first.</span>
-      <span class="go">Download v1.0.1 →</span>
+      <span class="go">Download v1.0.2 →</span>
     </a>
-    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.1/NikoDesk-android-arm64.apk">
+    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.2/NikoDesk-android-arm64.apk">
       <h3>Android</h3>
       <span class="arch">arm64 · APK · release-signed</span>
       <span class="note">Controller-only app (io.nikodesk.android), signed with the dedicated NikoDesk release key and cryptographically verified in CI. Real-device operation, remote sessions and calls remain unverified; some Bluetooth combinations are unsupported.</span>
-      <span class="go">Download v1.0.1 →</span>
+      <span class="go">Download v1.0.2 →</span>
     </a>
   </div>
-  <p class="dl-note reveal">Use the <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.1">v1.0.1 release page</a> for checksums and the Windows unattended setup-validation installer. The <a href="https://github.com/baogutang/nikodesk/releases/tag/nightly">nightly preview</a> is replaced on every push to main. The <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.0">v1.0.0 archive</a> remains for inspection only. Keep system security protections enabled.</p>
+  <p class="dl-note reveal">Use the <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.2">v1.0.2 release page</a> for checksums and the Windows unattended setup-validation installer. The <a href="https://github.com/baogutang/nikodesk/releases/tag/nightly">nightly preview</a> is replaced on every push to main. The <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.0">v1.0.0 archive</a> remains for inspection only. Keep system security protections enabled.</p>
 </section>
 
 <section id="faq" tabindex="-1" class="wrap faq" style="padding-top: 20px;">
@@ -641,29 +636,6 @@ Key:        (id_ed25519.pub)</pre>
 
 <script>
 (function () {
-  // Screenshot theme toggle with sliding thumb; page follows system.
-  var light = document.getElementById('shot-light');
-  var dark = document.getElementById('shot-dark');
-  var toggle = document.getElementById('shot-toggle');
-  if (light && dark && toggle) {
-    function show(which) {
-      var toLight = which === 'light';
-      light.classList.toggle('off', !toLight);
-      dark.classList.toggle('off', toLight);
-      light.setAttribute('aria-hidden', String(!toLight));
-      dark.setAttribute('aria-hidden', String(toLight));
-      toggle.dataset.shot = which;
-      toggle.querySelectorAll('button').forEach(function (b) {
-        b.setAttribute('aria-pressed', b.dataset.shot === which ? 'true' : 'false');
-      });
-    }
-    toggle.querySelectorAll('button').forEach(function (b) {
-      b.addEventListener('click', function () { show(b.dataset.shot); });
-    });
-    toggle.classList.add('ready');
-    show(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
-  }
-
   // Scroll reveals via IntersectionObserver, no scroll listeners.
   if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   if (!('IntersectionObserver' in window)) {

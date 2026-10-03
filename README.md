@@ -13,19 +13,19 @@ A private-server remote desktop built on the native RustDesk core.
 
 **English** · [简体中文](README_zh.md) · [Website](https://baogutang.github.io/nikodesk/)
 
-<img src="flutter/assets/readme-light.png" width="48%" alt="Redacted real NikoDesk light-theme workspace" /> <img src="flutter/assets/readme-dark.png" width="48%" alt="Redacted real NikoDesk dark-theme workspace" />
+<img src="flutter/assets/readme-light.png" width="48%" alt="NikoDesk warm light workspace with synthetic example data" /> <img src="flutter/assets/readme-dark.png" width="48%" alt="NikoDesk dark workspace with synthetic example data" />
 
-*Real local UI from an earlier build; device IDs, passwords and server details are redacted. Screenshots show appearance, not remote-session or performance acceptance.*
+*Production Flutter workspace widgets rendered with synthetic example data, without a remote connection. [Explore the interactive website](https://baogutang.github.io/nikodesk/#nikodesk-demo).*
 
 </div>
 
 ## Current status
 
-The versioned delivery channel is **[NikoDesk v1.0.1](https://github.com/baogutang/nikodesk/releases/tag/v1.0.1)** (product `1.0.1`, build `10`). Its tag triggers macOS ARM64, Windows x64 and Android ARM64 builds; packages appear only after the build and packaging checks pass. Every push to `main` builds all three platforms and replaces the rolling **[nightly pre-release](https://github.com/baogutang/nikodesk/releases/tag/nightly)**; `v*` tags publish formal releases. The [v1.0.0 archive](https://github.com/baogutang/nikodesk/releases/tag/v1.0.0) is a historical test build — only its macOS ZIP remains published.
+The versioned delivery channel is **[NikoDesk v1.0.2](https://github.com/baogutang/nikodesk/releases/tag/v1.0.2)** (product `1.0.2`, build `11`). Its tag triggers macOS ARM64, Windows x64 and Android ARM64 builds; packages appear only after the build and packaging checks pass. Every push to `main` builds all three platforms and replaces the rolling **[nightly pre-release](https://github.com/baogutang/nikodesk/releases/tag/nightly)**; `v*` tags publish formal releases. The [v1.0.0 archive](https://github.com/baogutang/nikodesk/releases/tag/v1.0.0) is a historical test build — only its macOS ZIP remains published.
 
 | Channel | macOS ARM64 | Windows x64 | Android ARM64 |
 |---|---|---|---|
-| [v1.0.1](https://github.com/baogutang/nikodesk/releases/tag/v1.0.1) / [nightly preview](https://github.com/baogutang/nikodesk/releases/tag/nightly) | DMG + updater ZIP, ad-hoc signed (no Apple Developer ID or notarization; right-click → Open on first launch) | Portable EXE/ZIP (no installation, runs beside RustDesk) + unattended-access setup-validation installer. Unsigned: SmartScreen asks once. The installer changes the system — use a test machine first. | Controller APK (`io.nikodesk.android`), signed with the dedicated NikoDesk release key and verified against the pinned certificate fingerprint |
+| [v1.0.2](https://github.com/baogutang/nikodesk/releases/tag/v1.0.2) / [nightly preview](https://github.com/baogutang/nikodesk/releases/tag/nightly) | DMG + updater ZIP, ad-hoc signed (no Apple Developer ID or notarization; right-click → Open on first launch) | Portable EXE/ZIP (no installation, runs beside RustDesk) + unattended-access setup-validation installer. Unsigned: SmartScreen asks once. The installer changes the system — use a test machine first. | Controller APK (`io.nikodesk.android`), signed with the dedicated NikoDesk release key and verified against the pinned certificate fingerprint |
 | [v1.0.0](https://github.com/baogutang/nikodesk/releases/tag/v1.0.0) | Archived ZIP only | Removed (refused to start) | Removed (refused to start) |
 
 **What is actually verified:** on the developer's Mac, two isolated NikoDesk identities ran real sessions through a private RustDesk server relay — password authentication with video, bidirectional file transfer (SHA-256 verified), TOTP two-factor authentication including replay rejection, session audit records on both ends, the remote terminal (request → local approval → command output), port tunnels (data verified through the tunnel), and picture modes (measurable bitrate/framerate changes). These are same-machine, same-user sessions: cross-device, cross-OS, Windows and Android real-device acceptance is still pending, and untested combinations stay unclaimed.
@@ -47,6 +47,8 @@ The versioned delivery channel is **[NikoDesk v1.0.1](https://github.com/baoguta
 - **Native core:** RustDesk capture, codecs, input, file transfer, clipboard and multi-display paths are preserved. Picture modes (office / smooth / weak network) change what the controlled side really sends.
 - **Video recovery:** a bounded per-display queue preserves encoded reference order, coalesces frame notifications and recovers from overload at a keyframe. A display without a decode estimate no longer disables the other displays' frame-rate feedback. Real VP8, VP9 and AV1 regression fixtures verify decoded pixels; real-network latency is still unmeasured.
 - **Quick actions:** desktop and mobile sessions share copy, paste, select all, undo, save, switch application, fit-to-window and original-size controls. Keyboard shortcuts follow the remote operating system, recheck the current session and input permission, and release held keys after failure.
+- **Cross-platform keys**: common Ctrl+C/V/X/A/Z/S/F/P/R editing shortcuts from Windows/Linux to Mac use Command automatically. Switch to original keys within the session for terminal Ctrl+C interruption. Control+arrow keeps its Mac Space meaning.
+- **Full-screen apps and Spaces**: quick actions expose previous/next Space, Mission Control, app windows and previous/next app. Custom remote shortcuts and macOS Space settings affect the result; arbitrary full-screen windows are not enumerated or directly selected.
 - **Connection feedback and diagnostics:** per-connection progress, relay route and decode statistics — labelled observations, not latency promises.
 - **Extended capabilities, all off by default:** remote terminal, port tunnels, camera and voice (including receiver-initiated calls) each need a local per-capability policy and an approval from the controlled side's connection manager, which can revoke mid-session.
 
@@ -61,9 +63,22 @@ The versioned delivery channel is **[NikoDesk v1.0.1](https://github.com/baoguta
 
 Light and dark themes follow the system or your choice; the interface ships in English and 简体中文. Extended capabilities await real cross-device acceptance; some Android Bluetooth combinations are unsupported; unmeasured behavior stays unclaimed.
 
+## Windows controlling Mac and full-screen apps
+
+Choose automatic or original keys in **Control center → Local keyboard → Mac**. Automatic maps common Ctrl editing chords to Command; use original keys for terminal Ctrl+C interrupts. Map and Legacy modes support this feature. Combinations containing Shift, Alt/AltGr or Meta retain their meaning.
+
+| Task | Control center action | Default Mac shortcut |
+|---|---|---|
+| Browse Spaces containing full-screen apps | Previous / next desktop | Control+← / → |
+| View Spaces and windows | Task overview | Control+↑ |
+| View the active app’s windows | App windows | Control+↓ |
+| Switch apps | Switch / previous app | Command+Tab / Command+Shift+Tab |
+
+These actions target the remote system. Local zoom and local full screen change only your view. Remote Mac settings determine whether switching an app also changes Space; customized system shortcuts affect the result.
+
 ## Getting started
 
-1. Download from **[v1.0.1](https://github.com/baogutang/nikodesk/releases/tag/v1.0.1)** and verify against its `SHA256SUMS`. The macOS DMG installs a complete `NikoDesk.app` (ad-hoc signed: right-click → Open on the first launch). Windows runs the portable EXE beside an existing RustDesk; Android uses the same release application ID and signing key, with build 10 following build 9; actual device upgrade acceptance remains pending.
+1. Download from **[v1.0.2](https://github.com/baogutang/nikodesk/releases/tag/v1.0.2)** and verify against its `SHA256SUMS`. The macOS DMG installs a complete `NikoDesk.app` (ad-hoc signed: right-click → Open on the first launch). Windows runs the portable EXE beside an existing RustDesk; Android uses the same release application ID and signing key, with build 11 following build 10; actual device upgrade acceptance remains pending.
 2. Configure your own [RustDesk Server OSS](https://github.com/rustdesk/rustdesk-server) in **Settings → Private server**: ID server, relay and **server public key**. Keep server private keys on the server.
 3. Configure the other endpoint with the same servers and public key. Check service reachability, registration, then password authentication in a real session; each proves something different.
 4. When using a Mac as a controlled endpoint, grant Screen Recording for capture and Accessibility for remote input through macOS settings. Review individual session permissions before accepting; each extended capability still asks.
@@ -72,7 +87,7 @@ Light and dark themes follow the system or your choice; the interface ships in E
 
 Registration and relay use your configured infrastructure. Authenticated peer-to-peer sessions also contact the negotiated peer address. Update checks and downloads contact GitHub, including its API and release-asset hosts. “Private server” does not mean every network packet goes to your NAS.
 
-**Settings → Software update** offers Stable and Nightly preview. Stable compares published version numbers; the preview shows its release identity and time for manual download. An earlier `1.1.0+9` development build has a higher numeric version than `1.0.1+10`, so use the v1.0.1 release page for that manual transition. Android upgrades are controlled by the increasing build number and the unchanged release certificate.
+**Settings → Software update** offers Stable and Nightly preview. Stable compares published version numbers; the preview shows its release identity and time for manual download. An earlier `1.1.0+9` development build has a higher numeric version than `1.0.2+11`, so use the v1.0.2 release page for that manual transition. Android upgrades are controlled by the increasing build number and the unchanged release certificate.
 
 The macOS update flow checks a release checksum, validates and stages the application archive, then reveals it for **manual installation**. It does not automatically replace the installed app. This revision is not part of v1.0.0. Keep the previous app until a new version has been verified. Windows and Android do not have a verified in-app installation path.
 

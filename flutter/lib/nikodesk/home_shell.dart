@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -23,7 +22,7 @@ import 'tunnel_cleanup_view.dart';
 import 'install_assistant.dart';
 import 'first_server_setup.dart';
 
-/// Product shell for the NikoDesk home window: glass sidebar plus the device
+/// Product shell for the NikoDesk home window: navigation plus the device
 /// workspace. Replaces the stock RustDesk two-pane home while keeping every
 /// session path native — nothing here mocks connections.
 class NikoHomeShell extends StatefulWidget {
@@ -308,8 +307,7 @@ class _NikoHomeShellState extends State<NikoHomeShell> {
           };
           return DecoratedBox(
             decoration: BoxDecoration(
-                gradient: light ? NikoPalette.lightCanvas : null,
-                color: light ? null : NikoPalette.darkScaffold),
+                color: light ? NikoPalette.lightScaffold : NikoPalette.darkScaffold),
             child: Scaffold(
                 key: _scaffoldKey,
                 backgroundColor: Colors.transparent,
@@ -329,7 +327,7 @@ class _NikoHomeShellState extends State<NikoHomeShell> {
                           width: 1,
                           thickness: 1,
                           color: light
-                              ? Colors.white.withOpacity(.7)
+                              ? NikoPalette.lightLine
                               : NikoPalette.darkLine),
                       Expanded(
                           child: IndexedStack(
@@ -372,7 +370,7 @@ class _NikoHomeShellState extends State<NikoHomeShell> {
     ];
     final panel = Container(
         width: width,
-        color: light ? null : NikoPalette.darkSidebar,
+        color: light ? NikoPalette.lightSidebar : NikoPalette.darkSidebar,
         child: SafeArea(
             child: SingleChildScrollView(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -389,9 +387,9 @@ class _NikoHomeShellState extends State<NikoHomeShell> {
                             boxShadow: light
                                 ? const [
                                     BoxShadow(
-                                        color: Color(0x406C4CF1),
-                                        blurRadius: 12,
-                                        offset: Offset(0, 4))
+                                        color: NikoPalette.lightShadow,
+                                        blurRadius: 8,
+                                        offset: Offset(0, 2))
                                   ]
                                 : null),
                         child: Image.asset('assets/nikodesk.png',
@@ -440,14 +438,7 @@ class _NikoHomeShellState extends State<NikoHomeShell> {
                       style: shell.textTheme.bodySmall?.copyWith(
                           color: shell.colorScheme.onSurfaceVariant))),
             ]))));
-    if (!light) return panel;
-    return ClipRect(
-        child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-            child: Container(
-                width: width,
-                color: Colors.white.withOpacity(.55),
-                child: panel.child)));
+    return panel;
   }
 
   Widget _localCard(ThemeData shell, bool light) => NikoGlassCard(
@@ -647,7 +638,7 @@ class _NavTile extends StatelessWidget {
     final light = nikoIsLight(context);
     return Semantics(button: true, selected: selected, child: Material(
       color: selected
-          ? (light ? Colors.white : NikoPalette.darkSeed.withOpacity(.16))
+          ? (light ? NikoPalette.lightField : NikoPalette.darkSeed.withOpacity(.16))
           : Colors.transparent,
       borderRadius: BorderRadius.circular(NikoShapes.control),
       child: InkWell(

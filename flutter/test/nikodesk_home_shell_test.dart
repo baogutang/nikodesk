@@ -83,6 +83,7 @@ void main() {
     expect(find.text('1000000001'), findsOneWidget);
     expect(find.text('设置永久密码'), findsOneWidget);
     expect(find.text('已就绪'), findsOneWidget);
+    expect(find.byType(BackdropFilter, skipOffstage: false), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 

@@ -1,36 +1,32 @@
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 
-/// NikoDesk design language, confirmed with the user as:
-///  - light mode "渐变轻盈": purple-blue gradient canvas, glass cards,
-///    gradient primary actions;
-///  - dark mode "暗夜控制台": deep navy surfaces, glowing blue accent,
-///    monospaced device ids picked out in the accent color.
+/// Warm paper and terracotta in light mode; navy and blue in dark mode.
 class NikoPalette {
   // shared
   static const success = Color(0xFF22A06B);
   static const warning = Color(0xFFE8930C);
   static const danger = Color(0xFFE5484D);
   static const lightSuccessText = Color(0xFF176B46);
-  static const lightWarningText = Color(0xFF8D5900);
-  static const lightOfflineText = Color(0xFF586477);
+  static const lightWarningText = Color(0xFF825000);
+  static const lightOfflineText = Color(0xFF62574C);
 
-  // light (D)
-  static const lightSeed = Color(0xFF6C4CF1);
-  static const lightText = Color(0xFF241B3E);
-  static const lightMuted = Color(0xFF706493);
-  static const lightCard = Color(0xB8FFFFFF); // 72% white
-  static const lightCardBorder = Color(0xD9FFFFFF); // 85% white
-  static const lightField = Color(0xE6FFFFFF); // 90% white
-  static const lightLine = Color(0x296C4CF1); // 16% brand
-  static const lightShadow = Color(0x14543CA0); // 8% deep purple
-  static const primaryGradient = LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: [Color(0xFF8159F2), Color(0xFF366BEF)]);
+  // Light surfaces follow the website's 38/30/15 HSL color families.
+  // Text accents are deeper than action fills to remain readable on cards.
+  static const lightSeed = Color(0xFFA44324);
+  static const lightAction = Color(0xFFC24F29);
+  static const lightText = Color(0xFF2C2621);
+  static const lightMuted = Color(0xFF65594D);
+  static const lightScaffold = Color(0xFFEEEAE2);
+  static const lightSidebar = Color(0xFFE7E2DA);
+  static const lightCard = Color(0xFFE4DDD3);
+  static const lightCardBorder = Color(0xFFD1C9BD);
+  static const lightField = Color(0xFFF8F6F2);
+  static const lightLine = Color(0xFFD1C9BD);
+  static const lightHighlight = Color(0xFFDCD3C6);
+  static const lightShadow = Color(0x0D2C2621);
 
   // dark (B)
   static const darkSeed = Color(0xFF5B8CFF);
@@ -42,13 +38,6 @@ class NikoPalette {
   static const darkField = Color(0xFF12151D);
   static const darkLine = Color(0xFF2A3140);
   static const darkOnPrimary = Color(0xFF0D1120);
-
-  /// Home canvas: light paints the soft gradient, dark stays flat navy.
-  static const lightCanvas = LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      stops: [0, .55, 1],
-      colors: [Color(0xFFF3EFFF), Color(0xFFEAF1FF), Color(0xFFF7F3FF)]);
 
   /// Deterministic, pleasant avatar gradient for a device id.
   static List<Color> deviceAvatarGradient(String id) {
@@ -74,8 +63,7 @@ class NikoShapes {
 bool nikoIsLight(BuildContext context) =>
     Theme.of(context).brightness == Brightness.light;
 
-/// Glass card: translucent + blurred over the gradient canvas in light mode,
-/// solid bordered navy in dark mode.
+/// Opaque surfaces avoid repeated backdrop blur while scrolling device cards.
 class NikoGlassCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -93,7 +81,7 @@ class NikoGlassCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final light = nikoIsLight(context);
     final radius = BorderRadius.circular(NikoShapes.card);
-    final card = Container(
+    return Container(
       margin: margin,
       padding: padding,
       decoration: BoxDecoration(
@@ -102,20 +90,15 @@ class NikoGlassCard extends StatelessWidget {
         border: Border.all(
             color: light ? NikoPalette.lightCardBorder : NikoPalette.darkLine),
         boxShadow: light
-            ? (boxShadow ?? const [BoxShadow(color: NikoPalette.lightShadow, blurRadius: 24, offset: Offset(0, 8))])
+            ? (boxShadow ?? const [BoxShadow(color: NikoPalette.lightShadow, blurRadius: 10, offset: Offset(0, 2))])
             : null,
       ),
       child: child,
     );
-    if (!light) return card;
-    return ClipRRect(
-        borderRadius: radius,
-        child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14), child: card));
   }
 }
 
-/// Primary action: gradient capsule in light mode, luminous accent in dark.
+/// Primary action uses a solid terracotta fill in light mode.
 class NikoPrimaryButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final Widget child;
@@ -145,13 +128,12 @@ class NikoPrimaryButton extends StatelessWidget {
                 child: Ink(
                     decoration: BoxDecoration(
                       borderRadius: radius,
-                      gradient: light ? NikoPalette.primaryGradient : null,
-                      color: light ? null : NikoPalette.darkSeed,
+                      color: light ? NikoPalette.lightAction : NikoPalette.darkSeed,
                       boxShadow: disabled
                           ? null
                           : (light
-                              ? const [BoxShadow(color: Color(0x4D6C4CF1),
-                                  blurRadius: 16, offset: Offset(0, 6))]
+                              ? const [BoxShadow(color: NikoPalette.lightShadow,
+                                  blurRadius: 8, offset: Offset(0, 2))]
                               : const [BoxShadow(color: Color(0x735B8CFF),
                                   blurRadius: 18, offset: Offset(0, 4))]),
                     ),
@@ -194,10 +176,13 @@ ThemeData nikoTheme(Brightness brightness) {
       colorScheme: brightness == Brightness.light
           ? scheme.copyWith(
               primary: NikoPalette.lightSeed,
-              surface: Colors.white,
+              onPrimary: Colors.white,
+              primaryContainer: NikoPalette.lightHighlight,
+              onPrimaryContainer: NikoPalette.lightText,
+              surface: NikoPalette.lightCard,
               onSurface: text,
               onSurfaceVariant: muted,
-              surfaceContainerHighest: const Color(0xFFEEEAFF))
+              surfaceContainerHighest: NikoPalette.lightHighlight)
           : scheme.copyWith(
               primary: NikoPalette.darkSeed,
               onPrimary: NikoPalette.darkOnPrimary,
@@ -216,7 +201,7 @@ ThemeData nikoTheme(Brightness brightness) {
     extensions: <ThemeExtension<dynamic>>[
       (light ? ColorThemeExtension.light : ColorThemeExtension.dark).copyWith(
           border: line, border2: muted, border3: line, divider: line,
-          highlight: light ? const Color(0xFFEEEAFF) : const Color(0xFF232936),
+          highlight: light ? NikoPalette.lightHighlight : const Color(0xFF232936),
           drag_indicator: light ? NikoPalette.lightSeed : NikoPalette.darkSeed,
           shadow: light ? NikoPalette.lightShadow : Colors.black),
       (light ? TabbarTheme.light : TabbarTheme.dark).copyWith(
@@ -225,11 +210,11 @@ ThemeData nikoTheme(Brightness brightness) {
           selectedIconColor: text, unSelectedIconColor: muted,
           dividerColor: line,
           selectedTabBackgroundColor: field,
-          hoverColor: light ? const Color(0xFFEEEAFF) : const Color(0xFF232936)),
+          hoverColor: light ? NikoPalette.lightHighlight : const Color(0xFF232936)),
     ],
     primaryColor: light ? NikoPalette.lightSeed : NikoPalette.darkSeed,
     scaffoldBackgroundColor:
-        light ? const Color(0xFFF3EFFF) : NikoPalette.darkScaffold,
+        light ? NikoPalette.lightScaffold : NikoPalette.darkScaffold,
     dividerColor: line,
     textTheme: base.textTheme.apply(bodyColor: text, displayColor: text),
     inputDecorationTheme: InputDecorationTheme(
@@ -251,7 +236,7 @@ ThemeData nikoTheme(Brightness brightness) {
       style: FilledButton.styleFrom(
         minimumSize: const Size(48, 48),
         tapTargetSize: MaterialTapTargetSize.padded,
-        backgroundColor: light ? NikoPalette.lightSeed : NikoPalette.darkSeed,
+        backgroundColor: light ? NikoPalette.lightAction : NikoPalette.darkSeed,
         foregroundColor: light ? Colors.white : NikoPalette.darkOnPrimary,
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(NikoShapes.control)),
@@ -312,23 +297,23 @@ ThemeData nikoTheme(Brightness brightness) {
       trackColor: WidgetStateProperty.resolveWith((states) => states
               .contains(WidgetState.selected)
           ? (light ? NikoPalette.lightSeed : NikoPalette.darkSeed)
-          : (light ? const Color(0xFFD9D2F0) : const Color(0xFF333B4E))),
+          : (light ? NikoPalette.lightHighlight : const Color(0xFF333B4E))),
     ),
     dialogTheme: DialogTheme(
-      backgroundColor: light ? Colors.white : NikoPalette.darkCard,
+      backgroundColor: light ? NikoPalette.lightField : NikoPalette.darkCard,
       shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(NikoShapes.card)),
     ),
     tooltipTheme: TooltipThemeData(
       decoration: BoxDecoration(
-        color: light ? const Color(0xFF2A2140) : const Color(0xFFE6E9F0),
+        color: light ? NikoPalette.lightText : const Color(0xFFE6E9F0),
         borderRadius: BorderRadius.circular(8),
       ),
       textStyle: TextStyle(
           color: light ? Colors.white : NikoPalette.darkScaffold),
     ),
     popupMenuTheme: PopupMenuThemeData(
-      color: light ? Colors.white : NikoPalette.darkCard,
+      color: light ? NikoPalette.lightField : NikoPalette.darkCard,
       shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(NikoShapes.control)),
     ),

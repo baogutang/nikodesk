@@ -4,13 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NikoDesk - 跑在自己服务器上的远程桌面</title>
-<meta name="description" content="基于 RustDesk 内核的私服远程桌面。1.0.1 通过自动构建交付 macOS、Windows 与 Android 三端；平台状态如实说明。">
+<meta name="description" content="基于 RustDesk 内核的私服远程桌面。1.0.2 通过自动构建交付 macOS、Windows 与 Android 三端；平台状态如实说明。">
 <link rel="icon" href="../assets/favicon.png?v=5" type="image/png">
 <link rel="apple-touch-icon" href="../assets/logo.png?v=5">
 <link rel="preload" href="../assets/fonts/inter-800.woff2?v=5" as="font" type="font/woff2" crossorigin>
 <meta property="og:title" content="NikoDesk - 跑在自己服务器上的远程桌面">
-<meta property="og:description" content="基于 RustDesk 内核，使用自己的注册与中继服务。1.0.1 三端下载与平台状态如实说明。">
-<meta property="og:image" content="https://baogutang.github.io/nikodesk/assets/og.jpg?v=6">
+<meta property="og:description" content="基于 RustDesk 内核，使用自己的注册与中继服务。1.0.2 三端下载与平台状态如实说明。">
+<meta property="og:image" content="https://baogutang.github.io/nikodesk/assets/app-light.png?v=102">
+<meta property="og:image:alt" content="NikoDesk 暖纸亮色工作区，生产 Flutter 组件与合成示例数据">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://baogutang.github.io/nikodesk/zh/">
 <link rel="canonical" href="https://baogutang.github.io/nikodesk/zh/">
@@ -32,9 +33,9 @@
   --card-deep: hsl(35 22% 82%);
   --muted-fg: hsl(30 12% 38%);
   --border: hsl(35 18% 78%);
-  --primary: hsl(15 65% 52%);
-  --primary-hover: hsl(15 65% 46%);
-  --primary-fg: hsl(40 30% 96%);
+  --primary: #C24F29;
+  --primary-hover: #A44324;
+  --primary-fg: #FFFFFF;
   --primary-soft: hsl(15 65% 52% / 0.12);
   --code-bg: hsl(30 18% 14%);
   --code-ink: hsl(38 25% 88%);
@@ -141,7 +142,7 @@ p { text-wrap: pretty; }
 .cta-row { margin-top: 34px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 .cta-row .btn { padding: 13px 26px; font-size: 15px; border-radius: 13px; }
 
-/* 首屏截图 */
+/* 首屏交互示例 */
 .shot-zone { position: relative; margin: 56px auto 0; max-width: 900px; }
 .shot-zone::before {
   content: ""; position: absolute; inset: -12% 0;
@@ -333,6 +334,8 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
 .hero .shot-zone { animation-delay: .28s; }
 @media (prefers-reduced-motion: reduce) { .hero > *, .hero .shot-zone { animation: none; } }
 </style>
+<link rel="stylesheet" href="../assets/demo.css?v=102">
+<script defer src="../assets/demo.js?v=102"></script>
 </head>
 <body>
 <a class="skip-link" href="#content">跳到主要内容</a>
@@ -355,7 +358,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
 <main id="content" tabindex="-1">
 <header class="hero wrap" id="top" tabindex="-1">
   <a class="badge" href="https://github.com/baogutang/nikodesk/releases" target="_blank" rel="noopener">
-    <span class="dot"></span>v1.0.1 · 三平台<span class="arrow">→</span>
+    <span class="dot"></span>v1.0.2 · 三平台<span class="arrow">→</span>
   </a>
   <h1><span class="phrase">你的设备，</span><span class="phrase">你的服务器，</span><br><span class="accent">你的远程桌面。</span></h1>
   <p class="sub">保留 RustDesk 的原生远控内核，连接你自己的注册与中继服务。Windows 与 macOS 面向主控及被控，Android 仅做控制端；跨设备验收仍在进行中。</p>
@@ -364,26 +367,18 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
     <a class="btn btn-outline" href="https://github.com/baogutang/nikodesk" target="_blank" rel="noopener">阅读源码</a>
   </div>
   <div class="shot-zone">
-    <div class="shot-card">
-      <div class="theme-toggle" role="group" aria-label="预览主题" data-shot="dark" id="shot-toggle">
-        <span class="thumb" aria-hidden="true"></span>
-        <button type="button" data-shot="light" aria-pressed="false">明亮</button>
-        <button type="button" data-shot="dark" aria-pressed="true">暗黑</button>
-      </div>
-      <div class="shot-stage">
-        <img src="../assets/app-light-v4.jpg?v=6" alt="NikoDesk 明亮主题，设备工作区与连接卡片" id="shot-light" class="off" aria-hidden="true">
-        <img src="../assets/app-dark-v4.jpg?v=6" alt="NikoDesk 暗黑主题，设备工作区与连接卡片" id="shot-dark">
-      </div>
+    <div id="nikodesk-demo" class="nd-demo" data-lang="zh" data-theme="light">
+      <noscript>开启 JavaScript 即可操作界面示例。软件及下载不依赖此演示。</noscript>
     </div>
   </div>
-  <p class="shot-caption">历史版本的真实本地界面，连接信息已遮盖。仅展示外观，不代表远控或性能验收通过。</p>
+  <p class="shot-caption">试试设备搜索、主题切换和远端空间操作。这是使用虚构数据的交互界面示例，不建立连接、不发送按键；软件仍使用真实 RustDesk 原生内核。</p>
 </header>
 
 <section id="features" tabindex="-1" class="wrap">
   <div class="sec-head reveal">
     <span class="sec-pill">功能</span>
     <h2>为日常驾驭而生</h2>
-    <p class="sec-sub">1.0.1 为桌面和手机加入复制、粘贴、切换应用与画面缩放快捷入口。视频积压恢复保留参考帧顺序，真实编解码回归已核对画面一致性；跨设备延迟仍未测量。</p>
+    <p class="sec-sub">1.0.2 带来暖纸亮色主题、Windows 控 Mac 的编辑快捷键，以及远端空间、调度中心和应用切换入口。视频积压恢复保留参考帧顺序，真实编解码回归已核对画面一致性；跨设备延迟仍未测量。</p>
   </div>
   <div class="grid">
     <div class="card reveal">
@@ -414,7 +409,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
     <div class="card reveal" style="--d:.12s">
       <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></div>
       <h3>一套界面，两种气质</h3>
-      <p>明亮与暗黑主题可跟随系统或在应用中切换。上方按钮仅切换网页中的真实界面截图。</p>
+      <p>亮色使用暖纸背景、陶土色按钮与棕灰文字，暗色沿用熟悉的工作区。上方交互示例可体验两种主题。</p>
     </div>
   </div>
 </section>
@@ -559,29 +554,29 @@ Key:      (id_ed25519.pub)</pre>
   <div class="sec-head reveal">
     <span class="sec-pill">下载</span>
     <h2>下载与平台状态</h2>
-    <p class="sec-sub">v1.0.1 标签自动构建 macOS、Windows 与 Android，全部检查通过后统一发布安装包；请对照其 SHA256SUMS 校验下载文件。nightly 继续作为独立滚动预览。核心会话——带画面的密码认证、双向文件传输、含重放拒绝的 TOTP 双重验证、两端的会话记录、远程终端、端口隧道与画质模式——已在一台 Mac 上经私服中继在同一用户的两个身份之间完成端到端验证；跨设备与 Windows、Android 真机验收仍在进行中，下方说明均如实标注。</p>
+    <p class="sec-sub">v1.0.2 标签自动构建 macOS、Windows 与 Android，全部检查通过后统一发布安装包；请对照其 SHA256SUMS 校验下载文件。nightly 继续作为独立滚动预览。核心会话——带画面的密码认证、双向文件传输、含重放拒绝的 TOTP 双重验证、两端的会话记录、远程终端、端口隧道与画质模式——已在一台 Mac 上经私服中继在同一用户的两个身份之间完成端到端验证；跨设备与 Windows、Android 真机验收仍在进行中，下方说明均如实标注。</p>
   </div>
   <div class="dl-list">
-    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.1/NikoDesk-macos-arm64.dmg">
+    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.2/NikoDesk-macos-arm64.dmg">
       <h3>macOS</h3>
       <span class="arch">Apple Silicon · DMG · ad-hoc 签名</span>
       <span class="note">从 DMG 安装完整的 NikoDesk.app。无 Apple Developer ID、未公证：首次启动请右键点按 → 打开。可与现有 RustDesk 并存运行，身份独立。</span>
-      <span class="go">下载 v1.0.1 →</span>
+      <span class="go">下载 v1.0.2 →</span>
     </a>
-    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.1/NikoDesk-windows-x64.exe">
+    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.2/NikoDesk-windows-x64.exe">
       <h3>Windows</h3>
       <span class="arch">x64 · 便携 EXE/ZIP · 未签名</span>
       <span class="note">用户态便携客户端，无需安装即可与 RustDesk 并存运行；另附用于验证安装流程的无人值守安装器。未签名：SmartScreen 会询问一次。真机验收仍在进行中——安装器会改动系统，请先在测试机上使用。</span>
-      <span class="go">下载 v1.0.1 →</span>
+      <span class="go">下载 v1.0.2 →</span>
     </a>
-    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.1/NikoDesk-android-arm64.apk">
+    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.2/NikoDesk-android-arm64.apk">
       <h3>Android</h3>
       <span class="arch">arm64 · APK · release 签名</span>
       <span class="note">仅控制端应用（io.nikodesk.android），使用专用 NikoDesk 发行密钥签名，并在 CI 中完成加密校验。真机操作、远控会话与通话仍未验证；部分蓝牙组合暂不支持。</span>
-      <span class="go">下载 v1.0.1 →</span>
+      <span class="go">下载 v1.0.2 →</span>
     </a>
   </div>
-  <p class="dl-note reveal">校验清单与 Windows 无人值守安装验证包见 <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.1">v1.0.1 发布页</a>；<a href="https://github.com/baogutang/nikodesk/releases/tag/nightly">nightly 预览</a>随 main 更新。<a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.0">v1.0.0 归档</a>仅供查阅。请保持系统安全防护开启。</p>
+  <p class="dl-note reveal">校验清单与 Windows 无人值守安装验证包见 <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.2">v1.0.2 发布页</a>；<a href="https://github.com/baogutang/nikodesk/releases/tag/nightly">nightly 预览</a>随 main 更新。<a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.0">v1.0.0 归档</a>仅供查阅。请保持系统安全防护开启。</p>
 </section>
 
 <section id="faq" tabindex="-1" class="wrap faq" style="padding-top: 20px;">
@@ -640,29 +635,6 @@ Key:      (id_ed25519.pub)</pre>
 
 <script>
 (function () {
-  // 首屏截图明暗切换（滑块跟随），页面本身跟随系统外观。
-  var light = document.getElementById('shot-light');
-  var dark = document.getElementById('shot-dark');
-  var toggle = document.getElementById('shot-toggle');
-  if (light && dark && toggle) {
-    function show(which) {
-      var toLight = which === 'light';
-      light.classList.toggle('off', !toLight);
-      dark.classList.toggle('off', toLight);
-      light.setAttribute('aria-hidden', String(!toLight));
-      dark.setAttribute('aria-hidden', String(toLight));
-      toggle.dataset.shot = which;
-      toggle.querySelectorAll('button').forEach(function (b) {
-        b.setAttribute('aria-pressed', b.dataset.shot === which ? 'true' : 'false');
-      });
-    }
-    toggle.querySelectorAll('button').forEach(function (b) {
-      b.addEventListener('click', function () { show(b.dataset.shot); });
-    });
-    toggle.classList.add('ready');
-    show(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
-  }
-
   // 滚动显现用 IntersectionObserver，不挂滚动监听。
   if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   if (!('IntersectionObserver' in window)) {

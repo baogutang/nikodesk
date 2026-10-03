@@ -523,6 +523,8 @@ impl<T: InvokeUiSession> Remote<T> {
             .lock()
             .unwrap()
             .set_disconnected(round);
+        #[cfg(feature = "nikodesk")]
+        if _set_disconnected_ok { self.handler.niko_clear_mac_shortcuts(); }
 
         #[cfg(not(target_os = "ios"))]
         if self.handler.is_default() && _set_disconnected_ok {
@@ -2201,6 +2203,8 @@ impl<T: InvokeUiSession> Remote<T> {
                         match p.permission.enum_value() {
                             Ok(Permission::Keyboard) => {
                                 *self.handler.server_keyboard_enabled.write().unwrap() = p.enabled;
+                                #[cfg(feature = "nikodesk")]
+                                if !p.enabled { self.handler.niko_release_mac_shortcuts(); }
                                 #[cfg(feature = "flutter")]
                                 #[cfg(not(target_os = "ios"))]
                                 crate::flutter::update_text_clipboard_required();

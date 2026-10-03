@@ -534,9 +534,12 @@ class _CmHeaderState extends State<_CmHeader>
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10.0),
+        color: bind.mainGetAppNameSync() == 'NikoDesk' &&
+                Theme.of(context).brightness == Brightness.light
+            ? NikoPalette.lightAction : null,
         gradient: bind.mainGetAppNameSync() == 'NikoDesk'
             ? (Theme.of(context).brightness == Brightness.light
-                ? NikoPalette.primaryGradient
+                ? null
                 : const LinearGradient(colors: [NikoPalette.darkCard, NikoPalette.darkSidebar]))
             : LinearGradient(
           begin: Alignment.topRight,

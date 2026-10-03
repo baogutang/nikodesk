@@ -40,22 +40,29 @@ void main() {
   for (final platform in ['Windows', 'Linux', 'Mac OS']) {
     test('shortcuts use the remote $platform modifier and native key names',
         () {
-      for (final shortcut in NikoSessionShortcut.values) {
+      for (final shortcut in NikoSessionShortcut.values
+          .where((s) => s.index <= NikoSessionShortcut.previousApp.index)) {
         final keys = nikoShortcutKeys(shortcut, platform)!;
-        if (shortcut == NikoSessionShortcut.switchApp) {
+        if (shortcut == NikoSessionShortcut.switchApp ||
+            shortcut == NikoSessionShortcut.previousApp) {
           expect(keys.key, 'VK_TAB');
           expect(keys.command, platform == 'Mac OS');
           expect(keys.alt, platform != 'Mac OS');
           expect(keys.control, isFalse);
+          expect(keys.shift, shortcut == NikoSessionShortcut.previousApp);
         } else {
           expect(
               keys.key,
               {
                 NikoSessionShortcut.copy: 'VK_C',
                 NikoSessionShortcut.paste: 'VK_V',
+                NikoSessionShortcut.cut: 'VK_X',
                 NikoSessionShortcut.selectAll: 'VK_A',
                 NikoSessionShortcut.undo: 'VK_Z',
                 NikoSessionShortcut.save: 'VK_S',
+                NikoSessionShortcut.find: 'VK_F',
+                NikoSessionShortcut.print: 'VK_P',
+                NikoSessionShortcut.reload: 'VK_R',
               }[shortcut]);
           expect(keys.command, platform == 'Mac OS');
           expect(keys.control, platform != 'Mac OS');
@@ -64,6 +71,27 @@ void main() {
       }
     });
   }
+
+  test('Mac Spaces and overview keep Control while app switching uses Command',
+      () {
+    final expected = {
+      NikoSessionShortcut.previousDesktop: 'Ctrl+LEFT',
+      NikoSessionShortcut.nextDesktop: 'Ctrl+RIGHT',
+      NikoSessionShortcut.taskOverview: 'Ctrl+UP',
+      NikoSessionShortcut.appWindows: 'Ctrl+DOWN',
+      NikoSessionShortcut.switchApp: 'Cmd+Tab',
+      NikoSessionShortcut.previousApp: 'Cmd+Shift+Tab',
+    };
+    for (final action in expected.entries) {
+      expect(nikoShortcutKeys(action.key, 'Mac OS')!.label, action.value);
+    }
+    expect(nikoShortcutKeys(NikoSessionShortcut.taskOverview, 'Windows')!.label,
+        'Win+Tab');
+    expect(nikoShortcutKeys(NikoSessionShortcut.nextDesktop, 'Windows')!.label,
+        'Ctrl+Win+RIGHT');
+    expect(nikoShortcutKeys(NikoSessionShortcut.appWindows, 'Windows'), isNull);
+    expect(nikoShortcutKeys(NikoSessionShortcut.nextDesktop, 'Linux'), isNull);
+  });
 
   test('unsupported remote platforms cannot produce a desktop shortcut', () {
     for (final platform in ['', 'Android', 'unknown']) {
@@ -148,6 +176,8 @@ void main() {
           bool canvasAllowed = true,
           String peerPlatform = 'Windows',
           String? viewStyle,
+          NikoMacShortcutMode? macMode,
+          Future<void> Function(NikoMacShortcutMode)? mapping,
           Future<void> Function(NikoSessionShortcut)? shortcut,
           Future<void> Function(String)? view,
           VoidCallback? reset,
@@ -157,11 +187,52 @@ void main() {
         keyboardAllowed: keyboardAllowed,
         canvasAllowed: canvasAllowed,
         viewStyle: viewStyle,
+        macShortcutMode: macMode,
+        onMacShortcutMode: mapping,
         onShortcut: shortcut ?? (_) async {},
         onViewStyle: view ?? (_) async {},
         onResetCanvas: reset,
         onClose: close ?? () {},
       );
+
+  testWidgets(
+      'Control center exposes the physical keyboard mapping and Spaces actions',
+      (tester) async {
+    var mode = NikoMacShortcutMode.automatic;
+    final changes = <NikoMacShortcutMode>[];
+    late StateSetter change;
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: StatefulBuilder(builder: (context, setState) {
+      change = setState;
+      return panel(
+          peerPlatform: 'Mac OS',
+          macMode: mode,
+          mapping: (value) async {
+            changes.add(value);
+            change(() => mode = value);
+          });
+    }))));
+    expect(find.text('本地键盘 → Mac'), findsOneWidget);
+    expect(find.textContaining('Ctrl+C/V/X/A/Z/S/F/P/R → Cmd'), findsOneWidget);
+    for (final shortcut in [
+      NikoSessionShortcut.previousDesktop,
+      NikoSessionShortcut.nextDesktop,
+      NikoSessionShortcut.taskOverview,
+      NikoSessionShortcut.appWindows,
+      NikoSessionShortcut.previousApp
+    ]) {
+      expect(find.byKey(ValueKey('nikodesk-shortcut-${shortcut.name}')),
+          findsOneWidget);
+    }
+    final dropdown = find.byKey(const Key('nikodesk-mac-shortcut-mode'));
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('原样').last);
+    await tester.pumpAndSettle();
+    expect(changes, [NikoMacShortcutMode.original]);
+    expect(find.text('本地 Ctrl → 远端 Control。关闭常用快捷键的自动映射。'), findsOneWidget);
+    expect(find.text('键盘映射已更新，并按设备保存。'), findsOneWidget);
+  });
 
   testWidgets('view-only session keeps local display actions available',
       (tester) async {
@@ -179,6 +250,7 @@ void main() {
         isNull);
     final fit = find.byKey(const ValueKey('nikodesk-view-adaptive'));
     expect(tester.widget<OutlinedButton>(fit).onPressed, isNotNull);
+    await tester.ensureVisible(fit);
     await tester.tap(fit);
     await tester.pumpAndSettle();
     expect(styles, ['adaptive']);
@@ -283,6 +355,8 @@ void main() {
                   padding: const EdgeInsets.all(24),
                   child: panel(
                       peerPlatform: 'Mac OS',
+                      macMode: NikoMacShortcutMode.automatic,
+                      mapping: (_) async {},
                       viewStyle: 'original',
                       reset: () => resets++,
                       close: () => closes++))),

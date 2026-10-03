@@ -1586,6 +1586,10 @@ pub mod input_source {
         if cur_input_source == input_source {
             return;
         }
+        #[cfg(feature = "nikodesk")]
+        if let Some(session) = crate::flutter::sessions::get_session_by_session_id(&session_id) {
+            session.niko_release_mac_shortcuts();
+        }
         if input_source == CONFIG_INPUT_SOURCE_1 {
             #[cfg(target_os = "macos")]
             if !crate::platform::macos::is_can_input_monitoring(false) {

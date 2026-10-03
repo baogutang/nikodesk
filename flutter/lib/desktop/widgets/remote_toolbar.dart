@@ -832,8 +832,8 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     NikoSessionButton(ffi: widget.ffi),
     if (widget.ffi.connType == ConnType.defaultConn) ...[
       NikoToolbarButton(
-        icon: const Icon(Icons.bolt_outlined),
-        label: nikoText('快捷操作', 'Quick actions'),
+        icon: const Icon(Icons.dashboard_customize_outlined),
+        label: nikoText('控制中心', 'Control center'),
         onPressed: () => showNikoSessionQuickActions(widget.ffi),
       ),
       _KeyboardMenu(id: widget.id, ffi: widget.ffi),

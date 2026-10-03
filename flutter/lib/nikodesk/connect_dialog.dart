@@ -50,7 +50,8 @@ class _ConnectPasswordDialogState extends State<_ConnectPasswordDialog> {
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                    gradient: LinearGradient(
+                    color: nikoIsLight(context) ? NikoPalette.lightAction : null,
+                    gradient: nikoIsLight(context) ? null : LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                         colors: NikoPalette.deviceAvatarGradient(widget.id)),

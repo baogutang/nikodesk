@@ -618,7 +618,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         actions: Row(children: [
           IconButton(
             color: foreground,
-            tooltip: nikoText('快捷操作', 'Quick actions'),
+            tooltip: nikoText('控制中心', 'Control center'),
             icon: const Icon(Icons.bolt_outlined),
             onPressed: () {
               setState(() => _showEdit = false);

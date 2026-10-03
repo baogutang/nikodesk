@@ -60,6 +60,8 @@ const CHANGE_RESOLUTION_VALID_TIMEOUT_SECS: u64 = 15;
 #[derive(Clone, Default)]
 pub struct Session<T: InvokeUiSession> {
     #[cfg(feature = "nikodesk")]
+    pub(crate) niko_mac_shortcuts: Arc<Mutex<crate::nikodesk::mac_shortcuts::MacShortcutState>>,
+    #[cfg(feature = "nikodesk")]
     pub video_metrics_enabled: Arc<std::sync::atomic::AtomicBool>,
     #[cfg(feature = "nikodesk")]
     pub video_metrics_revision: Arc<std::sync::atomic::AtomicU64>,
@@ -335,6 +337,8 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn save_keyboard_mode(&self, value: String) {
+        #[cfg(feature = "nikodesk")]
+        self.niko_release_mac_shortcuts();
         self.lc.write().unwrap().save_keyboard_mode(value);
     }
 
@@ -401,6 +405,10 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn toggle_option(&self, name: String) {
         let msg = self.lc.write().unwrap().toggle_option(name.clone());
+        #[cfg(feature = "nikodesk")]
+        if name == "view-only" || name == "disable-keyboard" || name == "allow_swap_key" {
+            self.niko_release_mac_shortcuts();
+        }
         #[cfg(feature = "nikodesk")]
         if name == "show-quality-monitor" {
             self.video_metrics_enabled.store(false, Ordering::Release);
@@ -669,6 +677,11 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn set_option(&self, k: String, mut v: String) {
         #[cfg(feature = "nikodesk")]
+        if k == crate::nikodesk::mac_shortcuts::OPTION {
+            if !matches!(v.as_str(), "automatic" | "original") { return; }
+            self.niko_release_mac_shortcuts();
+        }
+        #[cfg(feature = "nikodesk")]
         if crate::nikodesk::is_saved_password_option(&k) {
             return;
         }
@@ -803,6 +816,8 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn send_key_event(&self, evt: &KeyEvent) {
+        #[cfg(feature = "nikodesk")]
+        if self.niko_dispatch_mac_key(evt) { return; }
         // mode: legacy(0), map(1), translate(2), auto(3)
 
         let mut msg = evt.clone();
@@ -916,6 +931,8 @@ impl<T: InvokeUiSession> Session<T> {
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn leave(&self, keyboard_mode: String) {
+        #[cfg(feature = "nikodesk")]
+        self.niko_release_mac_shortcuts();
         let session_id = self.lc.read().unwrap().session_id as u128;
         keyboard::client::change_grab_status(GrabState::Wait, &keyboard_mode, session_id);
     }
@@ -931,6 +948,8 @@ impl<T: InvokeUiSession> Session<T> {
         shift: bool,
         command: bool,
     ) {
+        #[cfg(feature = "nikodesk")]
+        if self.niko_input_shortcut(name, down, press, alt, ctrl, shift, command) { return; }
         let chars: Vec<char> = name.chars().collect();
         if chars.len() == 1 {
             let key = Key::_Raw(chars[0] as _);
@@ -1323,6 +1342,8 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn reconnect(&self, force_relay: bool) {
         #[cfg(feature = "nikodesk")]
+        self.niko_release_mac_shortcuts();
+        #[cfg(feature = "nikodesk")]
         if self.is_port_forward() {
             if let Err(reason) = crate::client::nikodesk_tunnel_cleanup::reconnect(self, force_relay) {
                 self.on_error(reason);
@@ -1456,6 +1477,8 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn close(&self) {
+        #[cfg(feature = "nikodesk")]
+        self.niko_release_mac_shortcuts();
         self.send(Data::Close);
     }
 

@@ -137,8 +137,7 @@ class _NikoMobileHomeState extends State<NikoMobileHome> {
                   child: NikoTunnelCleanupEntryPoint()),
               Expanded(child: DecoratedBox(
               decoration: BoxDecoration(
-                  gradient: light ? NikoPalette.lightCanvas : null,
-                  color: light ? null : NikoPalette.darkScaffold),
+                  color: light ? NikoPalette.lightScaffold : NikoPalette.darkScaffold),
               child: IndexedStack(
                   index: pages.keys.toList().indexOf(_destination),
                   children: pages.entries.map((entry) => ExcludeFocus(
