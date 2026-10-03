@@ -8,6 +8,7 @@ import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 
 import 'connection_progress.dart';
+import 'remote_resolution.dart';
 import 'session_quick_actions_view.dart';
 import 'session_shortcuts.dart';
 import 'ui.dart';
@@ -68,6 +69,7 @@ class _NikoSessionQuickActions extends StatefulWidget {
 class _NikoSessionQuickActionsState extends State<_NikoSessionQuickActions> {
   String? _viewStyle;
   NikoMacShortcutMode? _macShortcutMode;
+  bool? _autoFitResolution;
   bool get _macMappingAvailable =>
       isDesktop &&
       (isWindows || isLinux) &&
@@ -97,6 +99,33 @@ class _NikoSessionQuickActionsState extends State<_NikoSessionQuickActions> {
     super.initState();
     unawaited(_readViewStyle());
     if (_macMappingAvailable) unawaited(_readMacShortcutMode());
+    if (_resolutionAvailable) unawaited(_readAutoFitResolution());
+  }
+
+  bool get _resolutionAvailable =>
+      widget.ffi.connType == ConnType.defaultConn;
+
+  Future<void> _readAutoFitResolution() async {
+    try {
+      final enabled = await nikoReadAutoFitResolution(widget.session);
+      if (mounted && _sessionCurrent) {
+        setState(() => _autoFitResolution = enabled);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _autoFitResolution = null);
+    }
+  }
+
+  Future<void> _setAutoFitResolution(bool enabled) async {
+    if (!_sessionCurrent) throw StateError('Session unavailable');
+    await nikoSetAutoFitResolution(widget.session, enabled);
+    if (mounted) setState(() => _autoFitResolution = enabled);
+  }
+
+  Future<void> _setRemoteResolution(NikoDisplayMode mode) async {
+    if (!_keyboardAllowed) throw StateError('Remote input unavailable');
+    await nikoChangeRemoteResolution(widget.ffi, widget.session, mode);
+    if (!_keyboardAllowed) throw StateError('Remote input unavailable');
   }
 
   Future<void> _readMacShortcutMode() async {
@@ -172,6 +201,13 @@ class _NikoSessionQuickActionsState extends State<_NikoSessionQuickActions> {
           onShortcut: _shortcut,
           onViewStyle: _setViewStyle,
           onResetCanvas: isMobile ? _resetCanvas : null,
+          remoteResolution:
+              _sessionCurrent ? nikoRemoteResolution(widget.ffi) : null,
+          autoFitResolution: _autoFitResolution,
+          onRemoteResolution:
+              _resolutionAvailable ? _setRemoteResolution : null,
+          onAutoFitResolution:
+              _resolutionAvailable ? _setAutoFitResolution : null,
           onClose: widget.onClose,
         ),
       );

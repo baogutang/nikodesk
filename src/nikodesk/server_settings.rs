@@ -409,14 +409,43 @@ pub fn patch_locally(key: &str, value: &str, expires_at_ms: u64) -> SaveResult {
         Ok(deadline) => deadline,
         Err(_) => return SaveResult::unknown(),
     };
+    // Read under the settings lock, so every change is seen by the patch that made it.
+    let mut registration = None;
     let result = with_write_lock(&Config::file(), &SETTINGS_WRITE_LOCK, gate(), deadline,
-        &mut LocalSettingsBackend, |unconfirmed, backend| patch_transaction(key, value, backend, deadline, unconfirmed));
+        &mut LocalSettingsBackend, |unconfirmed, backend| {
+            registration = Some(registration_options());
+            patch_transaction(key, value, backend, deadline, unconfirmed)
+        });
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     if result.ok && key == super::auto_lock::OPTION && value != "Y" {
         super::auto_lock::cancel_pending();
     }
-    crate::rendezvous_mediator::RendezvousMediator::restart();
+    if patch_changes_registration(result.ok, registration.as_deref(), &registration_options()) {
+        crate::rendezvous_mediator::RendezvousMediator::restart();
+    }
     result
+}
+
+// A patch to any other option leaves the registration with the private server
+// untouched; restarting it for each one took the device offline once per saved
+// setting.
+const REGISTRATION_OPTIONS: [&str; 8] = [
+    "stop-service",
+    "custom-rendezvous-server",
+    "relay-server",
+    "key",
+    "api-server",
+    "allow-websocket",
+    "disable-udp",
+    "allow-insecure-tls-fallback",
+];
+
+fn registration_options() -> Vec<String> {
+    REGISTRATION_OPTIONS.iter().map(|key| Config::get_option(key)).collect()
+}
+
+fn patch_changes_registration(ok: bool, before: Option<&[String]>, after: &[String]) -> bool {
+    !ok || before != Some(after)
 }
 
 fn valid_patch(key: &str, value: &str) -> bool {
@@ -513,6 +542,29 @@ mod tests {
         assert!(backend.writes.is_empty());
         assert_eq!(backend.reads, 0);
         assert_eq!(backend.options, original);
+    }
+
+    #[test]
+    fn only_registration_changes_or_failures_restart_the_registration() {
+        let state = |stop: &str, server: &str| -> Vec<String> {
+            REGISTRATION_OPTIONS.iter().map(|key| match *key {
+                "stop-service" => stop.to_owned(),
+                "custom-rendezvous-server" => server.to_owned(),
+                _ => String::new(),
+            }).collect()
+        };
+        let online = state("N", "private.example:21116");
+        assert!(!patch_changes_registration(true, Some(&online), &online));
+        assert!(patch_changes_registration(true, Some(&online), &state("Y", "private.example:21116")));
+        assert!(patch_changes_registration(true, Some(&online), &state("N", "")));
+        assert!(patch_changes_registration(false, Some(&online), &online));
+        assert!(patch_changes_registration(true, None, &online));
+        // Everything the IPC-side restart check compares is covered here too.
+        for key in ["stop-service", "custom-rendezvous-server", "key", "api-server",
+            config::keys::OPTION_ALLOW_WEBSOCKET, config::keys::OPTION_ALLOW_INSECURE_TLS_FALLBACK,
+            base::config::keys::OPTION_DISABLE_UDP] {
+            assert!(REGISTRATION_OPTIONS.contains(&key), "{key}");
+        }
     }
 
     struct Backend {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'remote_resolution_policy.dart';
 import 'session_shortcuts.dart';
 import 'ui.dart';
 
@@ -32,6 +33,10 @@ class NikoSessionQuickActionsPanel extends StatefulWidget {
   final Future<void> Function(NikoSessionShortcut) onShortcut;
   final Future<void> Function(String) onViewStyle;
   final VoidCallback? onResetCanvas;
+  final NikoRemoteResolution? remoteResolution;
+  final bool? autoFitResolution;
+  final Future<void> Function(NikoDisplayMode)? onRemoteResolution;
+  final Future<void> Function(bool)? onAutoFitResolution;
   final VoidCallback onClose;
 
   const NikoSessionQuickActionsPanel(
@@ -45,6 +50,10 @@ class NikoSessionQuickActionsPanel extends StatefulWidget {
       required this.onShortcut,
       required this.onViewStyle,
       this.onResetCanvas,
+      this.remoteResolution,
+      this.autoFitResolution,
+      this.onRemoteResolution,
+      this.onAutoFitResolution,
       required this.onClose});
 
   @override
@@ -91,6 +100,81 @@ class _NikoSessionQuickActionsPanelState
               child: Text('${_shortcutName(shortcut)} · ${keys.label}'),
             ),
       ]);
+
+  List<Widget> _remoteResolution(BuildContext context) {
+    final state = widget.remoteResolution;
+    final fit = state?.fit;
+    Future<void> change(NikoDisplayMode mode) => _run(
+        () => widget.onRemoteResolution!(mode),
+        nikoText('已请求远端切换分辨率，画面几秒内更新。',
+            'Remote resolution change requested. Video updates within seconds.'),
+        nikoText('未能确认分辨率请求，请检查会话和远端输入权限后重试。',
+            'Resolution request was not confirmed. Check the session and remote input permission, then retry.'));
+    return [
+      const Divider(),
+      Text(nikoText('远端分辨率', 'Remote resolution'),
+          style: Theme.of(context).textTheme.titleMedium),
+      const SizedBox(height: 8),
+      Text(state == null
+          ? nikoText('需要键鼠权限，并选中单个非虚拟显示器；远端显示信息就绪后可用。',
+              'Needs input permission and one selected, non-virtual display; available once remote display details arrive.')
+          : nikoText(
+              '当前 ${state.current.label}，传输 ${state.capturedPixels.label} 像素。像素更少，要编码和传输的数据也更少；远端屏幕会同步变化。',
+              'Now ${state.current.label}, sending ${state.capturedPixels.label} pixels. Fewer pixels mean less to encode and send; the remote screen changes too.')),
+      const SizedBox(height: 8),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        OutlinedButton.icon(
+          key: const Key('nikodesk-resolution-fit'),
+          icon: const Icon(Icons.aspect_ratio),
+          label: Text(fit == null
+              ? nikoText('匹配本机像素', 'Match this screen')
+              : '${nikoText('匹配本机像素', 'Match this screen')} · ${fit.label}'),
+          onPressed: _busy || state == null || fit == null || fit == state.current
+              ? null
+              : () => change(fit),
+        ),
+        OutlinedButton.icon(
+          key: const Key('nikodesk-resolution-original'),
+          icon: const Icon(Icons.restore),
+          label: Text(state == null
+              ? nikoText('恢复原始', 'Restore original')
+              : '${nikoText('恢复原始', 'Restore original')} · ${state.original.label}'),
+          onPressed: _busy || state == null || !state.changed
+              ? null
+              : () => change(state.original),
+        ),
+      ]),
+      if (state != null && fit == null && !state.changed)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(state.localLongEdge <= 0
+              ? nikoText('未能读取本机屏幕尺寸，无法计算匹配分辨率；可在显示菜单的"分辨率"里手动选择。',
+                  'This screen\'s size could not be read, so no match can be computed; pick a mode in the display menu under Resolution.')
+              : nikoText('没有更小且仍能填满本机屏幕的同比例分辨率。',
+                  'No smaller mode in the same aspect ratio still fills this screen.')),
+        ),
+      if (widget.onAutoFitResolution != null)
+        SwitchListTile(
+          key: const Key('nikodesk-resolution-auto'),
+          contentPadding: EdgeInsets.zero,
+          title: Text(nikoText('连接这台设备后自动匹配', 'Match automatically for this device')),
+          subtitle: Text(nikoText('按设备保存；远端已不在原始分辨率时不再切换。',
+              'Saved for this device; skipped when the remote is already in a non-original mode.')),
+          value: widget.autoFitResolution ?? false,
+          onChanged: _busy || widget.autoFitResolution == null
+              ? null
+              : (enabled) => _run(
+                  () => widget.onAutoFitResolution!(enabled),
+                  enabled
+                      ? nikoText('已开启，下次连接这台设备时生效。',
+                          'On. Applies the next time you connect to this device.')
+                      : nikoText('已关闭自动匹配。', 'Automatic matching is off.'),
+                  nikoText('未能保存该设置，请重试。',
+                      'The setting could not be saved. Retry.')),
+        ),
+      const SizedBox(height: 8),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
@@ -176,6 +260,7 @@ class _NikoSessionQuickActionsPanelState
               Text(nikoText('远端输入当前不可用：请检查只读模式、输入权限和连接状态。',
                   'Remote input is unavailable. Check view-only mode, input permission and connection status.')),
             const SizedBox(height: 16),
+            if (widget.onRemoteResolution != null) ..._remoteResolution(context),
             const Divider(),
             Text(nikoText('本地画面', 'Local view'),
                 style: Theme.of(context).textTheme.titleMedium),

@@ -7,6 +7,7 @@ import 'package:flutter_hbb/nikodesk/tunnel_cleanup.dart';
 import 'package:flutter_hbb/nikodesk/tunnel_cleanup_view.dart';
 import 'package:flutter_hbb/nikodesk/connection_progress.dart';
 import 'package:flutter_hbb/nikodesk/connection_progress_view.dart';
+import 'package:flutter_hbb/nikodesk/remote_resolution.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -4366,6 +4367,7 @@ class FFI {
     }
     closed = false;
     if (const bool.fromEnvironment('NIKODESK')) nikoConnectionProgress.begin();
+    if (const bool.fromEnvironment('NIKODESK')) nikoWatchAutoFitResolution(this);
     if (isMobile) mobileReset();
     assert(
         (!(isPortForward && isViewCamera)) &&
