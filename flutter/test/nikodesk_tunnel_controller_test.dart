@@ -43,7 +43,7 @@ void main() {
       'production Rust Publisher fixture crosses Dart parser without numeric precision loss',
       () {
     final fixture = jsonDecode(
-        File('../../artifacts/m6-tunnel-controller/ui-status-fixture.json')
+        File('test/fixtures/nikodesk/tunnel-controller-serde.json')
             .readAsStringSync()) as Map;
     expect(fixture['synthetic'], true);
     expect(fixture['schema'], 'nikodesk-tunnel-controller-fixture-v1');

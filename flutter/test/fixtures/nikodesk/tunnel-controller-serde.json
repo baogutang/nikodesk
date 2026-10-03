@@ -1,0 +1,127 @@
+{
+  "event_name": "nikodesk_tunnel_controller",
+  "schema": "nikodesk-tunnel-controller-fixture-v1",
+  "statuses": [
+    {
+      "generation": "9007199254740993",
+      "local_port": 12345,
+      "local_resources_closed": false,
+      "namespace": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "peer_id": "123456789",
+      "phase": "Connecting",
+      "reason": "tunnel_connecting",
+      "remote_phase": null,
+      "revision": "1",
+      "target": {
+        "host": "::1",
+        "port": 23456
+      }
+    },
+    {
+      "generation": "9007199254740993",
+      "local_port": 12345,
+      "local_resources_closed": false,
+      "namespace": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "peer_id": "123456789",
+      "phase": "WaitingApproval",
+      "reason": "tunnel_waiting_approval",
+      "remote_phase": "Pending",
+      "revision": "2",
+      "target": {
+        "host": "::1",
+        "port": 23456
+      }
+    },
+    {
+      "generation": "9007199254740993",
+      "local_port": 12345,
+      "local_resources_closed": false,
+      "namespace": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "peer_id": "123456789",
+      "phase": "Starting",
+      "reason": "tunnel_starting",
+      "remote_phase": "Starting",
+      "revision": "3",
+      "target": {
+        "host": "::1",
+        "port": 23456
+      }
+    },
+    {
+      "generation": "9007199254740993",
+      "local_port": 12345,
+      "local_resources_closed": false,
+      "namespace": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "peer_id": "123456789",
+      "phase": "Listening",
+      "reason": "tunnel_listening",
+      "remote_phase": "Running",
+      "revision": "4",
+      "target": {
+        "host": "::1",
+        "port": 23456
+      }
+    },
+    {
+      "generation": "9007199254740993",
+      "local_port": 12345,
+      "local_resources_closed": false,
+      "namespace": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "peer_id": "123456789",
+      "phase": "Stopping",
+      "reason": "tunnel_stopping",
+      "remote_phase": "Revoking",
+      "revision": "5",
+      "target": {
+        "host": "::1",
+        "port": 23456
+      }
+    },
+    {
+      "generation": "9007199254740993",
+      "local_port": 12345,
+      "local_resources_closed": true,
+      "namespace": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "peer_id": "123456789",
+      "phase": "Closed",
+      "reason": "tunnel_local_closed",
+      "remote_phase": "Revoking",
+      "revision": "6",
+      "target": {
+        "host": "::1",
+        "port": 23456
+      }
+    },
+    {
+      "generation": "9007199254740993",
+      "local_port": 12345,
+      "local_resources_closed": true,
+      "namespace": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "peer_id": "123456789",
+      "phase": "Failed",
+      "reason": "tunnel_local_port_unavailable",
+      "remote_phase": null,
+      "revision": "7",
+      "target": {
+        "host": "::1",
+        "port": 23456
+      }
+    },
+    {
+      "generation": "9007199254740993",
+      "local_port": 12345,
+      "local_resources_closed": false,
+      "namespace": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "peer_id": "123456789",
+      "phase": "RecoveryRequired",
+      "reason": "tunnel_local_cleanup_unconfirmed",
+      "remote_phase": "RecoveryRequired",
+      "revision": "8",
+      "target": {
+        "host": "::1",
+        "port": 23456
+      }
+    }
+  ],
+  "synthetic": true
+}

@@ -6,9 +6,10 @@ import 'package:flutter_hbb/nikodesk/cm_capabilities.dart';
 import 'package:flutter_hbb/nikodesk/cm_tunnel.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-// Actual Rust serializer output, containing public synthetic identities only.
+// Production tunnel_flow serializer output; synthetic inputs and regeneration
+// instructions are tracked beside the fixture in test/fixtures/nikodesk/.
 Map<String, dynamic> actualTunnelFixtures() =>
-    jsonDecode(File('../../artifacts/m6-tunnel-flow/actual-serde-fixtures.json')
+    jsonDecode(File('test/fixtures/nikodesk/tunnel-flow-serde.json')
         .readAsStringSync());
 
 Map<String, dynamic> tunnelStatusRaw(

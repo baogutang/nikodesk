@@ -324,7 +324,7 @@ void main() {
       'actual production Rust eight-reply serializer fixture cross-parses without system access',
       () async {
     final fixtures = jsonDecode(File(
-            '../../artifacts/m7-feature-implementation/latest-install-status-fixture.json')
+            'test/fixtures/nikodesk/unattended-install-serde.json')
         .readAsStringSync()) as List;
     expect(fixtures, hasLength(8));
     final parsed = fixtures

@@ -1,0 +1,98 @@
+[
+  {
+    "action": "install",
+    "job_id": "",
+    "machine_id": "",
+    "namespace": "",
+    "ok": true,
+    "phase": "idle",
+    "process_exited": false,
+    "quiescent": false,
+    "reason": "idle",
+    "task_joined": false
+  },
+  {
+    "action": "install",
+    "job_id": "",
+    "machine_id": "",
+    "namespace": "",
+    "ok": false,
+    "phase": "idle",
+    "process_exited": false,
+    "quiescent": false,
+    "reason": "unsupported",
+    "task_joined": false
+  },
+  {
+    "action": "install",
+    "job_id": "f2ee6922-ce2e-4bb4-82df-0b8c2bcc0498",
+    "machine_id": "",
+    "namespace": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "ok": true,
+    "phase": "preparing",
+    "process_exited": false,
+    "quiescent": false,
+    "reason": "queued",
+    "task_joined": false
+  },
+  {
+    "action": "install",
+    "job_id": "f2ee6922-ce2e-4bb4-82df-0b8c2bcc0498",
+    "machine_id": "",
+    "namespace": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "ok": true,
+    "phase": "complete",
+    "process_exited": true,
+    "quiescent": false,
+    "reason": "in_progress",
+    "task_joined": false
+  },
+  {
+    "action": "install",
+    "job_id": "f2ee6922-ce2e-4bb4-82df-0b8c2bcc0498",
+    "machine_id": "1234567890",
+    "namespace": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "ok": true,
+    "phase": "complete",
+    "process_exited": true,
+    "quiescent": true,
+    "reason": "complete",
+    "task_joined": true
+  },
+  {
+    "action": "install",
+    "job_id": "f2ee6922-ce2e-4bb4-82df-0b8c2bcc0498",
+    "machine_id": "",
+    "namespace": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "ok": true,
+    "phase": "recovery_unconfirmed",
+    "process_exited": true,
+    "quiescent": false,
+    "reason": "recovery_required",
+    "task_joined": true
+  },
+  {
+    "action": "install",
+    "job_id": "f2ee6922-ce2e-4bb4-82df-0b8c2bcc0498",
+    "machine_id": "",
+    "namespace": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "ok": true,
+    "phase": "recovery_disabled",
+    "process_exited": true,
+    "quiescent": true,
+    "reason": "recovery_required",
+    "task_joined": true
+  },
+  {
+    "action": "install",
+    "job_id": "f2ee6922-ce2e-4bb4-82df-0b8c2bcc0498",
+    "machine_id": "",
+    "namespace": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "ok": true,
+    "phase": "launch_not_started",
+    "process_exited": true,
+    "quiescent": true,
+    "reason": "launch_not_started",
+    "task_joined": true
+  }
+]

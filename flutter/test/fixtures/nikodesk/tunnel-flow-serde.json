@@ -1,0 +1,87 @@
+{
+  "approve": {
+    "access": "loopback",
+    "address": "127.0.0.1:23456",
+    "identity": {
+      "connection_id": 7,
+      "connection_nonce": "01010101010101010101010101010101",
+      "epoch": "1",
+      "namespace": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "peer_id": "123456789",
+      "request_nonce": "02020202020202020202020202020202"
+    },
+    "op": "approve",
+    "revision": "1"
+  },
+  "pending": {
+    "addresses": [],
+    "cleanup_only": false,
+    "identity": {
+      "connection_id": 7,
+      "connection_nonce": "01010101010101010101010101010101",
+      "epoch": "1",
+      "namespace": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "peer_id": "123456789",
+      "request_nonce": "02020202020202020202020202020202"
+    },
+    "kind": "tunnel",
+    "phase": "Pending",
+    "reason": "local_approval_required",
+    "resource_epoch": "1",
+    "revision": "1",
+    "selected_address": null,
+    "target": {
+      "host": "127.0.0.1",
+      "port": 23456
+    }
+  },
+  "query": {
+    "identity": {
+      "connection_id": 7,
+      "connection_nonce": "01010101010101010101010101010101",
+      "epoch": "1",
+      "namespace": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "peer_id": "123456789",
+      "request_nonce": "02020202020202020202020202020202"
+    },
+    "op": "query",
+    "revision": "1"
+  },
+  "queued": {
+    "identity": {
+      "connection_id": 7,
+      "connection_nonce": "01010101010101010101010101010101",
+      "epoch": "1",
+      "namespace": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "peer_id": "123456789",
+      "request_nonce": "02020202020202020202020202020202"
+    },
+    "ok": true,
+    "reason": "queued",
+    "revision": "1"
+  },
+  "resolve": {
+    "identity": {
+      "connection_id": 7,
+      "connection_nonce": "01010101010101010101010101010101",
+      "epoch": "1",
+      "namespace": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "peer_id": "123456789",
+      "request_nonce": "02020202020202020202020202020202"
+    },
+    "op": "resolve",
+    "revision": "1"
+  },
+  "retry_cleanup": {
+    "identity": {
+      "connection_id": 7,
+      "connection_nonce": "01010101010101010101010101010101",
+      "epoch": "1",
+      "namespace": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "peer_id": "123456789",
+      "request_nonce": "02020202020202020202020202020202"
+    },
+    "op": "retry_cleanup",
+    "revision": "1"
+  }
+}
