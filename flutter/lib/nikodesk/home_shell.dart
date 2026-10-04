@@ -240,8 +240,8 @@ class _NikoHomeShellState extends State<NikoHomeShell> {
         nikoNotice(
             context,
             result?.enabled == true
-                ? nikoText('密码已保存，可用于密码验证；当前接受规则未更改。无人值守需另行配置。',
-                    'Password saved and available for authentication. Acceptance rules are unchanged; unattended access needs separate setup.')
+                ? nikoText('密码已保存。输入正确密码即可连接，无需在本机确认；应用未运行时的后台访问需另行开启。',
+                    'Password saved. A correct password connects without confirmation on this computer; access while the app is not running needs separate setup.')
                 : result?.clickOnly == true && result?.permanentSelected == true
                     ? nikoText(
                         '密码已保存并加入可用密码；本机仍采用点击授权，密码认证尚未生效。请在高级安全设置中核对接受规则。',

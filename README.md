@@ -89,7 +89,7 @@ This changes the real display mode of the controlled computer, so anyone sitting
 1. Download from **[v1.0.4](https://github.com/baogutang/nikodesk/releases/tag/v1.0.4)** and verify against its `SHA256SUMS`. The macOS DMG installs a complete `NikoDesk.app` (ad-hoc signed: right-click → Open on the first launch). Windows runs the portable EXE beside an existing RustDesk; Android uses the same release application ID and signing key, with build 13 following build 12; actual device upgrade acceptance remains pending.
 2. Configure your own [RustDesk Server OSS](https://github.com/rustdesk/rustdesk-server) in **Settings → Private server**: ID server, relay and **server public key**. Keep server private keys on the server.
 3. Configure the other endpoint with the same servers and public key. Check service reachability, registration, then password authentication in a real session; each proves something different.
-4. When using a Mac as a controlled endpoint, grant Screen Recording for capture and Accessibility for remote input through macOS settings. Review individual session permissions before accepting; each extended capability still asks.
+4. When using a Mac as a controlled endpoint, grant Screen Recording for capture and Accessibility for remote input through macOS settings. From the release after 1.0.4 (already in nightly), a correct password connects without a click on the controlled computer, and a request without a password waits for a click there; 1.0.4 and earlier wait for a click by default even with the right password. To require a click for every session, choose click approval in the advanced security settings. Each extended capability still asks.
 
 ## Network and updates
 

@@ -352,7 +352,8 @@ fn install_policy() {
     for (key, value) in [
         ("stop-service", "Y"),
         ("access-mode", "custom"),
-        ("approve-mode", "click"),
+        // No approve-mode default: a correct password is accepted without a
+        // click on the controlled side, and a request without one still asks.
         ("verification-method", "use-temporary-password"),
         ("temporary-password-length", "10"),
         // Accepting a session grants the basics a user expects from remote
