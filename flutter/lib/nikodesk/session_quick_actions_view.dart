@@ -37,6 +37,8 @@ class NikoSessionQuickActionsPanel extends StatefulWidget {
   final bool? autoFitResolution;
   final Future<void> Function(NikoDisplayMode)? onRemoteResolution;
   final Future<void> Function(bool)? onAutoFitResolution;
+  final NikoCaptureMode? captureMode;
+  final Future<void> Function(NikoCaptureMode)? onCaptureMode;
   final VoidCallback onClose;
 
   const NikoSessionQuickActionsPanel(
@@ -54,6 +56,8 @@ class NikoSessionQuickActionsPanel extends StatefulWidget {
       this.autoFitResolution,
       this.onRemoteResolution,
       this.onAutoFitResolution,
+      this.captureMode,
+      this.onCaptureMode,
       required this.onClose});
 
   @override
@@ -100,6 +104,47 @@ class _NikoSessionQuickActionsPanelState
               child: Text('${_shortcutName(shortcut)} · ${keys.label}'),
             ),
       ]);
+
+  List<Widget> _capture(BuildContext context) => [
+        const Divider(),
+        Text(nikoText('传输画面大小', 'Picture size sent'),
+            style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<NikoCaptureMode>(
+          key: const Key('nikodesk-capture-mode'),
+          value: widget.captureMode,
+          isExpanded: true,
+          decoration: InputDecoration(
+              labelText: nikoText('远端按多大采集', 'How large the remote captures')),
+          items: [
+            DropdownMenuItem(
+                value: NikoCaptureMode.fit,
+                child: Text(nikoText('按本机屏幕（默认）', 'Fit this screen (default)'))),
+            DropdownMenuItem(
+                value: NikoCaptureMode.small,
+                child: Text(nikoText('更小：远端的标准大小', 'Smaller: the remote\'s standard size'))),
+            DropdownMenuItem(
+                value: NikoCaptureMode.native,
+                child: Text(nikoText('远端原始大小', 'Remote native size'))),
+          ],
+          onChanged: _busy || widget.captureMode == null
+              ? null
+              : (mode) {
+                  if (mode == null) return;
+                  _run(
+                      () => widget.onCaptureMode!(mode),
+                      nikoText('已请求并按设备保存。远端是 1.0.5 及以上的 Mac 时，画面约一秒内切换。',
+                          'Requested and saved for this device. A remote Mac on 1.0.5 or later switches within about a second.'),
+                      nikoText('未能保存该选择，请重试。',
+                          'The choice could not be saved. Retry.'));
+                },
+        ),
+        const SizedBox(height: 8),
+        Text(nikoText(
+            '只缩小传输的画面，不改变远端显示器的分辨率和窗口布局，远端是 1.0.5 及以上的 Retina Mac 时生效。"标准大小"是每个点一个像素，Retina 屏为原始像素的四分之一；画面更小，要编码和传输的数据更少。',
+            'Only the picture sent is scaled; the remote display mode and its window layout stay as they are. It takes effect on a remote Retina Mac on 1.0.5 or later. Standard size is one pixel per point, a quarter of a Retina display\'s pixels; a smaller picture means less to encode and send.')),
+        const SizedBox(height: 8),
+      ];
 
   List<Widget> _remoteResolution(BuildContext context) {
     final state = widget.remoteResolution;
@@ -260,6 +305,7 @@ class _NikoSessionQuickActionsPanelState
               Text(nikoText('远端输入当前不可用：请检查只读模式、输入权限和连接状态。',
                   'Remote input is unavailable. Check view-only mode, input permission and connection status.')),
             const SizedBox(height: 16),
+            if (widget.onCaptureMode != null) ..._capture(context),
             if (widget.onRemoteResolution != null) ..._remoteResolution(context),
             const Divider(),
             Text(nikoText('本地画面', 'Local view'),

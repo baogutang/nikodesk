@@ -197,8 +197,8 @@ class _NikoHomeShellState extends State<NikoHomeShell> {
             builder: (dialog, update) => AlertDialog(
                   title: Text(nikoText('设置永久密码', 'Set permanent password')),
                   content: Column(mainAxisSize: MainAxisSize.min, children: [
-                    Text(nikoText('保存密码与启用永久密码认证是两步；这不会开启无人值守。请使用本产品专用密码。',
-                        'Saving and enabling password authentication are separate. This does not enable unattended access. Use a unique password.')),
+                    Text(nikoText('知道本机 ID 和有效密码的人可以直接连入，不需要在本机确认。请使用本产品专用密码；要求每次点击确认可在高级设置的安全页里选择。',
+                        'Anyone with this ID and a valid password connects without confirmation here. Use a unique password; to require a click every time, choose it under Security in advanced settings.')),
                     const SizedBox(height: 12),
                     TextField(
                         controller: controller,
@@ -214,8 +214,8 @@ class _NikoHomeShellState extends State<NikoHomeShell> {
                         value: enableAuthentication,
                         onChanged: (value) =>
                             update(() => enableAuthentication = value == true),
-                        title: Text(nikoText('同时允许使用永久密码（接受规则另行设置）',
-                            'Also allow this password (acceptance is configured separately)'))),
+                        title: Text(nikoText('同时允许使用永久密码连接',
+                            'Also allow connecting with this password'))),
                   ]),
                   actions: [
                     TextButton(

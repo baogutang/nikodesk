@@ -280,6 +280,7 @@ class NikoUpdater {
       var received = 0;
       final sink = partial.openWrite();
       Future<void>? flushing;
+      var written = false;
       try {
         await task.read(response, (chunk) async {
           received += chunk.length;
@@ -291,13 +292,19 @@ class NikoUpdater {
           await task.wait(flushing!);
           onProgress?.call(received, total);
         }, () {});
+        written = true;
       } finally {
         // A timeout or cancellation can leave a flush running. Closing the
-        // sink before it settles throws, which would replace that error.
+        // sink before it settles throws, which would replace that error; a
+        // flush that never settles must not hold the failure back either.
         try {
-          await flushing;
+          await flushing?.timeout(const Duration(seconds: 10));
         } catch (_) {}
-        await sink.close();
+        try {
+          await sink.close();
+        } catch (_) {
+          if (written) rethrow;
+        }
       }
       if (total >= 0 && received != total) {
         throw const FormatException('Incomplete update download');

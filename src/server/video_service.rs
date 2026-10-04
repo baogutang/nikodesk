@@ -1294,6 +1294,11 @@ fn handle_one_frame(
             } else {
                 3
             };
+            // VideoToolbox gives nothing back for its first frames after a restart. At 60
+            // frames a second three of those take 50 ms, and giving up on it leaves a 5K
+            // display on a software encoder until the app restarts.
+            #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+            let max_fail_times = crate::nikodesk::encode_fail_limit(encoder.is_hardware(), max_fail_times);
             let repeat = !encoder.latency_free();
             // repeat encoders can reach max_fail_times on the first frame
             if (first && !repeat) || *encode_fail_counter >= max_fail_times {

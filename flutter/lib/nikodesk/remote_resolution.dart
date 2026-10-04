@@ -18,27 +18,78 @@ export 'remote_resolution_policy.dart';
 /// this screen once the first frame of a session has arrived.
 const nikoAutoFitResolutionOption = 'nikodesk-auto-fit-resolution';
 
-/// Physical pixels along the long edge of this controller's screen, or zero
-/// when it cannot be read.
+/// Per-device option read by the native session and sent to the controlled
+/// side: the widest picture, in pixels, it should capture.
+const nikoCaptureWidthOption = 'nikodesk-capture-width';
+
+/// Per-device choice of how much of the remote picture to capture.
+const nikoCaptureModeOption = 'nikodesk-capture-mode';
+
+Future<NikoCaptureMode> nikoReadCaptureMode(SessionID session) async =>
+    nikoCaptureModeFromName(await bind.sessionGetOption(
+        sessionId: session, arg: nikoCaptureModeOption));
+
+/// Tells the controlled side how wide a picture this controller wants. It is
+/// called before login so the first frame already has that size, and again
+/// when the user changes the choice.
+Future<void> nikoDeclareCaptureWidth(SessionID session,
+    {NikoCaptureMode? mode}) async {
+  try {
+    if (mode != null) {
+      await bind.sessionPeerOption(
+          sessionId: session,
+          name: nikoCaptureModeOption,
+          value: mode == NikoCaptureMode.fit ? '' : mode.name);
+    }
+    final width = nikoCaptureWidth(
+        mode ?? await nikoReadCaptureMode(session), nikoLocalLongEdge());
+    await bind.sessionPeerOption(
+        sessionId: session, name: nikoCaptureWidthOption, value: '$width');
+  } catch (error) {
+    debugPrint('NikoDesk capture width not declared: ${error.runtimeType}');
+    if (mode != null) rethrow;
+  }
+}
+
+/// Physical pixels along the longest edge of any screen of this controller,
+/// or zero when none can be read. The window may be on any of them, and each
+/// source can be missing or too small on some platform (a Mac that is itself
+/// being controlled reports a reduced size through the native list), so the
+/// largest value wins: asking for too much only costs pixels.
 int nikoLocalLongEdge() {
+  var edge = 0.0;
+  void take(num? w, num? h) {
+    if (w != null && h != null && w > 0 && h > 0) {
+      edge = math.max(edge, math.max(w, h).toDouble());
+    }
+  }
+
+  try {
+    final dispatcher = ui.PlatformDispatcher.instance;
+    for (final display in dispatcher.displays) {
+      take(display.size.width, display.size.height);
+    }
+    for (final view in dispatcher.views) {
+      take(view.display.size.width, view.display.size.height);
+      take(view.physicalSize.width, view.physicalSize.height);
+    }
+  } catch (_) {}
   if (isDesktop) {
-    // The same source the upstream "fit local" resolution action uses.
+    // The source the upstream "fit local" resolution action uses.
     try {
-      final display = jsonDecode(bind.mainGetMainDisplay());
-      final w = display['w'], h = display['h'];
-      if (w is int && h is int && w > 0 && h > 0) return math.max(w, h);
+      final main = jsonDecode(bind.mainGetMainDisplay());
+      if (main is Map) take(main['w'] as num?, main['h'] as num?);
+    } catch (_) {}
+    try {
+      final all = jsonDecode(bind.mainGetDisplays());
+      if (all is List) {
+        for (final display in all) {
+          if (display is Map) take(display['w'] as num?, display['h'] as num?);
+        }
+      }
     } catch (_) {}
   }
-  try {
-    final views = ui.PlatformDispatcher.instance.views;
-    if (views.isEmpty) return 0;
-    final view = views.first;
-    final display = view.display.size;
-    final size = display.isEmpty ? view.physicalSize : display;
-    return math.max(size.width, size.height).round();
-  } catch (_) {
-    return 0;
-  }
+  return edge.round();
 }
 
 bool _resolutionControlAllowed(FFI ffi) =>
@@ -119,6 +170,11 @@ void nikoWatchAutoFitResolution(FFI ffi) {
     final entered = phase == NikoConnectionPhase.connected && last != phase;
     last = phase;
     if (phase == NikoConnectionPhase.closed) _choseByHand[ffi] = null;
+    if (entered && ffi.connType == ConnType.defaultConn) {
+      // The declaration made before login may have lost the race with it;
+      // repeating the same width changes nothing on the controlled side.
+      unawaited(nikoDeclareCaptureWidth(ffi.sessionId));
+    }
     if (entered) unawaited(_autoFit(ffi));
   });
 }

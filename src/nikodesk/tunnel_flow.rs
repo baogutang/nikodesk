@@ -1720,6 +1720,7 @@ mod tests {
     }
     #[tokio::test(flavor = "current_thread")]
     async fn single_retired_coordinator_report_is_distributed_to_each_original_lease() {
+        let _serial = tunnel_transport::RETIRED_POLL_TEST.lock().await;
         let mut a = Fixture::new(target());
         a.resolved().await;
         a.approve("127.0.0.1:23456".parse().unwrap(), Access::Loopback)

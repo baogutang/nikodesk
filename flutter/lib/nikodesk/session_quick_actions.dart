@@ -70,6 +70,7 @@ class _NikoSessionQuickActionsState extends State<_NikoSessionQuickActions> {
   String? _viewStyle;
   NikoMacShortcutMode? _macShortcutMode;
   bool? _autoFitResolution;
+  NikoCaptureMode? _captureMode;
   bool get _macMappingAvailable =>
       isDesktop &&
       (isWindows || isLinux) &&
@@ -100,6 +101,22 @@ class _NikoSessionQuickActionsState extends State<_NikoSessionQuickActions> {
     unawaited(_readViewStyle());
     if (_macMappingAvailable) unawaited(_readMacShortcutMode());
     if (_resolutionAvailable) unawaited(_readAutoFitResolution());
+    if (_resolutionAvailable) unawaited(_readCaptureMode());
+  }
+
+  Future<void> _readCaptureMode() async {
+    try {
+      final mode = await nikoReadCaptureMode(widget.session);
+      if (mounted && _sessionCurrent) setState(() => _captureMode = mode);
+    } catch (_) {
+      if (mounted) setState(() => _captureMode = null);
+    }
+  }
+
+  Future<void> _setCaptureMode(NikoCaptureMode mode) async {
+    if (!_sessionCurrent) throw StateError('Session unavailable');
+    await nikoDeclareCaptureWidth(widget.session, mode: mode);
+    if (mounted) setState(() => _captureMode = mode);
   }
 
   bool get _resolutionAvailable =>
@@ -208,6 +225,8 @@ class _NikoSessionQuickActionsState extends State<_NikoSessionQuickActions> {
               _resolutionAvailable ? _setRemoteResolution : null,
           onAutoFitResolution:
               _resolutionAvailable ? _setAutoFitResolution : null,
+          captureMode: _captureMode,
+          onCaptureMode: _resolutionAvailable ? _setCaptureMode : null,
           onClose: widget.onClose,
         ),
       );

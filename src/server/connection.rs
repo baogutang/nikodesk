@@ -2424,6 +2424,14 @@ impl Connection {
 
             try_activate_screen();
 
+            // The display list below must already have the size this controller asked for.
+            #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
+            if self.authed_conn_type() == Some(AuthConnType::Remote) {
+                if let Some(o) = self.options_in_login.as_ref() {
+                    crate::nikodesk::capture_scale::declare(self.inner.id(), o.nikodesk_capture_width);
+                }
+            }
+
             match super::display_service::update_get_sync_displays_on_login().await {
                 Err(err) => {
                     res.set_error(format!("{}", err));
@@ -5368,6 +5376,8 @@ impl Connection {
 
     async fn update_options(&mut self, o: &OptionMessage) {
         log::info!("Option update: {:?}", o);
+        #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
+        crate::nikodesk::capture_scale::declare(self.inner.id(), o.nikodesk_capture_width);
         if let Ok(q) = o.image_quality.enum_value() {
             let image_quality;
             if let ImageQuality::NotSet = q {
@@ -6459,6 +6469,7 @@ impl Connection {
             && option.image_quality.enum_value() == Ok(ImageQuality::NotSet)
             && option.custom_image_quality == 0
             && option.custom_fps == 0
+            && option.nikodesk_capture_width == 0
             && Self::is_bool_option_not_set(option.lock_after_session_end)
             && Self::is_bool_option_not_set(option.show_remote_cursor)
             && Self::is_bool_option_not_set(option.privacy_mode)
@@ -6620,6 +6631,7 @@ impl Connection {
         option.image_quality.enum_value() != Ok(ImageQuality::NotSet)
             || option.custom_image_quality != 0
             || option.custom_fps != 0
+            || option.nikodesk_capture_width != 0
             || option.supported_decoding.is_some()
             || !Self::is_bool_option_not_set(option.lock_after_session_end)
             || !Self::is_bool_option_not_set(option.show_remote_cursor)
@@ -7637,6 +7649,8 @@ mod raii {
 
     impl Drop for AuthedConnID {
         fn drop(&mut self) {
+            #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
+            crate::nikodesk::capture_scale::forget(self.0);
             if self.1 == AuthConnType::Remote || !cfg!(feature="nikodesk") && self.1 == AuthConnType::ViewCamera {
                 scrap::codec::Encoder::update(scrap::codec::EncodingUpdate::Remove(self.0));
                 video_service::VIDEO_QOS

@@ -759,6 +759,9 @@ message OptionMessage {
   BoolOption disable_camera = 17;
   BoolOption terminal_persistent = 18;
   BoolOption show_my_cursor = 19;
+  // NikoDesk: the widest picture, in pixels, this controller wants captured.
+  // Zero leaves the controlled side's choice unchanged.
+  int32 nikodesk_capture_width = 60;
 }
 
 message TestDelay {

@@ -438,6 +438,12 @@ pub(crate) struct RetiredReport {
     pub(crate) stopped_leases: Vec<u64>,
 }
 
+/// `poll_retired` drains one process-wide registry. Two tests that poll it at
+/// the same time take each other's reports, so they run one at a time.
+#[cfg(test)]
+pub(crate) static RETIRED_POLL_TEST: hbb_common::tokio::sync::Mutex<()> =
+    hbb_common::tokio::sync::Mutex::const_new(());
+
 pub(crate) async fn poll_retired() -> RetiredReport {
     let work: Vec<OwnedMux> = {
         let mut owners = registry().lock().unwrap_or_else(|e| e.into_inner());
@@ -1431,6 +1437,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn dropped_owner_retains_join_graph_until_actual_retired_cleanup() {
+        let _serial = RETIRED_POLL_TEST.lock().await;
         let f = fixture(false).await;
         let (mut owner, mut output) = owner(&f, Limits::default());
         let mut peer = connected(&f, &mut owner, &mut output, 1).await;

@@ -124,6 +124,26 @@ void main() {
     expect(reduced(before), isFalse);
   });
 
+  test('the capture width follows the screen, the choice and its limits', () {
+    expect(nikoCaptureWidth(NikoCaptureMode.fit, 3840), 3840);
+    expect(nikoCaptureWidth(NikoCaptureMode.fit, 5120), 5120);
+    expect(nikoCaptureWidth(NikoCaptureMode.fit, 2400), 2400);
+    // The smaller picture is the remote's point size whatever this screen is.
+    expect(nikoCaptureWidth(NikoCaptureMode.small, 3840),
+        nikoSmallestCaptureWidth);
+    expect(nikoCaptureWidth(NikoCaptureMode.small, 0), nikoSmallestCaptureWidth);
+    expect(nikoCaptureWidth(NikoCaptureMode.native, 3840), nikoNativeCaptureWidth);
+    // An unreadable or absurd local screen never shrinks a fitted picture.
+    expect(nikoCaptureWidth(NikoCaptureMode.fit, 0), nikoNativeCaptureWidth);
+    expect(nikoCaptureWidth(NikoCaptureMode.fit, 200), nikoSmallestCaptureWidth);
+    expect(nikoCaptureWidth(NikoCaptureMode.fit, 1 << 20), nikoNativeCaptureWidth);
+    expect(nikoCaptureModeFromName(null), NikoCaptureMode.fit);
+    expect(nikoCaptureModeFromName(''), NikoCaptureMode.fit);
+    expect(nikoCaptureModeFromName('small'), NikoCaptureMode.small);
+    expect(nikoCaptureModeFromName('native'), NikoCaptureMode.native);
+    expect(nikoCaptureModeFromName('unknown'), NikoCaptureMode.fit);
+  });
+
   Widget panel(
           {NikoRemoteResolution? state,
           bool? auto,
@@ -248,6 +268,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('未能确认分辨率请求'), findsOneWidget);
     expect(find.textContaining('已请求远端切换分辨率'), findsNothing);
+  });
+
+  testWidgets('choosing a picture size sends it and reports the result',
+      (tester) async {
+    final chosen = <NikoCaptureMode>[];
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: NikoSessionQuickActionsPanel(
+      peerPlatform: 'Mac OS',
+      keyboardAllowed: true,
+      canvasAllowed: true,
+      viewStyle: 'adaptive',
+      onShortcut: (_) async {},
+      onViewStyle: (_) async {},
+      captureMode: NikoCaptureMode.fit,
+      onCaptureMode: (mode) async => chosen.add(mode),
+      onClose: () {},
+    ))));
+    final dropdown = find.byKey(const Key('nikodesk-capture-mode'));
+    await tester.ensureVisible(dropdown);
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('更小').last);
+    await tester.pumpAndSettle();
+    expect(chosen, [NikoCaptureMode.small]);
+    expect(find.textContaining('已请求并按设备保存'), findsOneWidget);
+  });
+
+  testWidgets('the picture size choice is absent without a desktop session',
+      (tester) async {
+    await tester.pumpWidget(panel());
+    expect(find.byKey(const Key('nikodesk-capture-mode')), findsNothing);
   });
 
   testWidgets('the per-device switch saves the new value', (tester) async {

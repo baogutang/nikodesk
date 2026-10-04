@@ -101,3 +101,45 @@ bool nikoFitReducedPixels(
         required int localLongEdge}) =>
     after.area < before.area &&
     math.max(after.width, after.height) >= localLongEdge;
+
+
+/// How much of the remote picture the controlled side captures. This scales
+/// the capture and leaves the remote display mode alone.
+enum NikoCaptureMode {
+  /// As many pixels as this controller's screen can show.
+  fit,
+
+  /// The remote display's point size: one pixel per point, a quarter of the
+  /// pixels of a Retina display.
+  small,
+
+  /// Everything the remote display has.
+  native,
+}
+
+NikoCaptureMode nikoCaptureModeFromName(String? name) =>
+    NikoCaptureMode.values.firstWhere((mode) => mode.name == name,
+        orElse: () => NikoCaptureMode.fit);
+
+/// The controlled side never goes below its point size, so the narrowest
+/// request it accepts asks for exactly that.
+const nikoSmallestCaptureWidth = 640;
+
+/// Any controlled display is narrower than this; it asks for the native size.
+const nikoNativeCaptureWidth = 65535;
+
+/// The width to request. An unreadable local screen asks for the native size
+/// rather than guessing.
+int nikoCaptureWidth(NikoCaptureMode mode, int localLongEdge) {
+  switch (mode) {
+    case NikoCaptureMode.native:
+      return nikoNativeCaptureWidth;
+    case NikoCaptureMode.small:
+      return nikoSmallestCaptureWidth;
+    case NikoCaptureMode.fit:
+      return localLongEdge <= 0
+          ? nikoNativeCaptureWidth
+          : localLongEdge.clamp(
+              nikoSmallestCaptureWidth, nikoNativeCaptureWidth);
+  }
+}

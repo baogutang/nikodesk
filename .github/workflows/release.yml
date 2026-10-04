@@ -139,6 +139,9 @@ jobs:
           cargo test --locked --release --lib \
             --features flutter,hwcodec,unix-file-copy-paste,screencapturekit,nikodesk \
             nikodesk::server_settings::tests
+          cargo test --locked --release --lib \
+            --features flutter,hwcodec,unix-file-copy-paste,screencapturekit,nikodesk \
+            nikodesk::capture_scale::tests
           cargo check --locked --lib --bins \
             --features flutter,hwcodec,unix-file-copy-paste,screencapturekit
 

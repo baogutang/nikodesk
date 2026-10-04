@@ -111,6 +111,9 @@ pub(crate) mod tunnel_actor;
 pub(crate) mod video_metrics;
 #[path = "nikodesk/video_queue.rs"]
 pub(crate) mod video_queue;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[path = "nikodesk/capture_scale.rs"]
+pub(crate) mod capture_scale;
 #[path = "nikodesk/voice/mod.rs"]
 pub(crate) mod voice;
 #[path = "nikodesk/voice_wire.rs"]
@@ -370,6 +373,39 @@ fn install_policy() {
     ] {
         defaults.insert(key.into(), value.into());
     }
+}
+
+/// Per-device option the controller sets: the widest picture, in pixels, it
+/// wants the controlled side to capture.
+pub const CAPTURE_WIDTH_OPTION: &str = "nikodesk-capture-width";
+
+/// The option's value as sent on the wire; anything unusable sends nothing.
+pub fn capture_width(value: &str) -> i32 {
+    value.parse::<i32>().ok().filter(|width| (1..=65535).contains(width)).unwrap_or(0)
+}
+
+/// What to send when the controller changes the option during a session. The
+/// next login carries the option by itself, so nothing is sent before one
+/// (`peer_version` is zero until the first login completes).
+pub fn capture_width_message(option: &str, value: &str, peer_version: i64) -> Option<base::message_proto::Message> {
+    use base::message_proto::{Message, Misc, OptionMessage};
+    let width = capture_width(value);
+    if option != CAPTURE_WIDTH_OPTION || width == 0 || peer_version <= 0 {
+        return None;
+    }
+    let mut misc = Misc::new();
+    misc.set_option(OptionMessage { nikodesk_capture_width: width, ..Default::default() });
+    let mut msg = Message::new();
+    msg.set_misc(misc);
+    Some(msg)
+}
+
+/// How many encodes in a row may return nothing before the encoder is given
+/// up on. A hardware encoder on macOS gets about half a second at 60 frames a
+/// second; three, the general limit, is 50 ms.
+#[cfg(target_os = "macos")]
+pub(crate) fn encode_fail_limit(hardware: bool, general: usize) -> usize {
+    if hardware { general.max(30) } else { general }
 }
 
 pub fn validate_remote_id(id: &str) -> ResultType<()> {

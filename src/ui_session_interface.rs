@@ -685,6 +685,13 @@ impl<T: InvokeUiSession> Session<T> {
         if crate::nikodesk::is_saved_password_option(&k) {
             return;
         }
+        #[cfg(feature = "nikodesk")]
+        {
+            let peer_version = self.lc.read().unwrap().version;
+            if let Some(msg) = crate::nikodesk::capture_width_message(&k, &v, peer_version) {
+                self.send(Data::Message(msg));
+            }
+        }
         let mut lc = self.lc.write().unwrap();
         if k.eq("remote_dir") {
             v = lc.get_all_remote_dir(v);

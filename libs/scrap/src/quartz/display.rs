@@ -75,6 +75,14 @@ impl Display {
         if s > 1. {
             let enable_retina = super::ENABLE_RETINA.lock().unwrap().clone();
             if enable_retina {
+                #[cfg(feature = "nikodesk")]
+                return super::capture_scale(
+                    s,
+                    unsafe { CGDisplayPixelsWide(self.0) },
+                    unsafe { CGDisplayPixelsHigh(self.0) },
+                    super::CAPTURE_LONG_EDGE.load(std::sync::atomic::Ordering::Relaxed),
+                );
+                #[cfg(not(feature = "nikodesk"))]
                 return s;
             }
         }

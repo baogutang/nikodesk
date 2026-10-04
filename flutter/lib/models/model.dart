@@ -4470,6 +4470,10 @@ class FFI {
       inputModel.updateTrackpadSpeed();
     }
 
+    if (const bool.fromEnvironment('NIKODESK') && connType == ConnType.defaultConn) {
+      unawaited(nikoDeclareCaptureWidth(sessionId));
+    }
+
     // CAUTION: `sessionStart()` and `sessionStartWithDisplays()` are an async functions.
     // Though the stream is returned immediately, the stream may not be ready.
     // Any operations that depend on the stream should be carefully handled.

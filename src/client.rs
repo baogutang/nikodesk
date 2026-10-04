@@ -3708,6 +3708,10 @@ impl LoginConfigHandler {
             msg.disable_clipboard = BoolOption::Yes.into();
         }
         msg.supported_decoding = MessageField::some(self.get_supported_decoding());
+        #[cfg(feature = "nikodesk")]
+        {
+            msg.nikodesk_capture_width = crate::nikodesk::capture_width(&self.get_option(crate::nikodesk::CAPTURE_WIDTH_OPTION));
+        }
         Some(msg)
     }
 
