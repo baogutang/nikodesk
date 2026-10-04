@@ -9,6 +9,9 @@ set -euo pipefail
 app=$1
 wait_seconds=${2:-40}
 home=$(mktemp -d)
+# Every macOS account has these; the app creates only its own folder inside.
+mkdir -p "$home/Library/Preferences" "$home/Library/Logs" \
+  "$home/Library/Application Support" "$home/Library/Caches"
 logs="$home/Library/Logs/NikoDesk"
 output="$home/output.log"
 
