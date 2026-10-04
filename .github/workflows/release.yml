@@ -160,6 +160,9 @@ jobs:
           bash .github/scripts/sign-macos-app.sh "$APP" - flutter/macos/Runner/NikoLocalDevelopment.entitlements
           python3 .github/scripts/package-macos.py "$APP" dist --require-privacy-watchdog --require-camera --require-voice
 
+      - name: Start the packaged app
+        run: bash .github/scripts/smoke-macos-app.sh flutter/build/macos/Build/Products/Release/NikoDesk.app
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: NikoDesk-macos-arm64
