@@ -520,6 +520,28 @@ void main() {
     expect(directory.listSync(), isEmpty);
   });
 
+  test('stopping while a chunk is being written reports why it stopped',
+      () async {
+    // The cancellation lands on the next turn of the event loop, while the
+    // 8 MB write is still being flushed. Closing the file at that moment used
+    // to throw and replace the cancellation with its own error.
+    final cancellation = NikoUpdateCancellation();
+    Stream<List<int>> heavy() async* {
+      Timer.run(cancellation.cancel);
+      yield List<int>.filled(8 * 1024 * 1024, 7);
+    }
+
+    final client = _Client([_Response.stream(heavy())]);
+    await expectLater(
+        _http(
+            client,
+            () => const NikoUpdater().downloadAsset(asset, directory, null,
+                cancellation: cancellation)),
+        throwsA(isA<NikoUpdateCancelled>()));
+    expect(client.closed, isTrue);
+    expect(directory.listSync(), isEmpty);
+  });
+
   Future<bool> stage(List<int> bytes, _Processes processes, {String? digest}) {
     final client = _Client([
       _Response(bytes),

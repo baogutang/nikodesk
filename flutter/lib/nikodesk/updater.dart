@@ -279,6 +279,7 @@ class NikoUpdater {
       }
       var received = 0;
       final sink = partial.openWrite();
+      Future<void>? flushing;
       try {
         await task.read(response, (chunk) async {
           received += chunk.length;
@@ -286,10 +287,16 @@ class NikoUpdater {
             throw const FormatException('Update download is too large');
           }
           sink.add(chunk);
-          await task.wait(sink.flush());
+          flushing = sink.flush();
+          await task.wait(flushing!);
           onProgress?.call(received, total);
         }, () {});
       } finally {
+        // A timeout or cancellation can leave a flush running. Closing the
+        // sink before it settles throws, which would replace that error.
+        try {
+          await flushing;
+        } catch (_) {}
         await sink.close();
       }
       if (total >= 0 && received != total) {
