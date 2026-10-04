@@ -52,6 +52,10 @@ void main() {
     final info = await session.event(
         (event) => event['name'] == 'peer_info', 'peer info after login');
     await session.until(() => session.frames > 0, 'first decoded frame');
+    // The picture mode is saved per device; an earlier run may have left the
+    // weak-network preset behind, which caps the stream at 15 frames a second.
+    await native.bind
+        .sessionSetImageQuality(sessionId: session.id, value: 'balanced');
     final before = _display(info);
     final modes = [
       for (final mode in jsonDecode(info['resolutions'] as String) as List)
