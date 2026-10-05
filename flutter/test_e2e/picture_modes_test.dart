@@ -60,5 +60,8 @@ void main() {
         reason: 'the weak-network mode should request less bitrate');
     expect(constrained.fps, lessThanOrEqualTo(15 * 1.3),
         reason: 'the weak-network mode caps the frame rate at 15');
+    // Above 30 only shows when the controlled screen is changing that often
+    // and the path carries it; the request itself is what is checked here.
+    expect(PictureRequest.forMode(PictureMode.smooth).fps, 60);
   }, timeout: const Timeout(Duration(minutes: 4)));
 }

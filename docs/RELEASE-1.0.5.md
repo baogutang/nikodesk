@@ -70,6 +70,25 @@ Not verified: Windows and Android controllers; a Windows controlled computer; fr
 
 The v1.0.5 tag builds all seven macOS ARM64, Windows x64 and Android ARM64 packages plus SHA256SUMS after the platform and packaging gates pass. Android keeps its release identity and certificate with versionCode `14`.
 
+## Measured after release (2026-10-05)
+
+**The first session between two devices.** With both ends on 1.0.5, a Mac whose screen is 3024 pixels wide controlled the 5K Mac. The controlled side's log shows the request for 3024, a capture of `3200×1800`, the hardware H.265 encoder throughout, and the login completing 40 ms after the connection opened, which no click could have done.
+
+**A correction to "Reported problem".** The run described there as sharing the uplink with a second 5K stream was limited by something else. On the network the 5K Mac is on, data arriving from the relay is held to about 4.4 megabits a second in total; data sent to the relay is not (46 megabits a second or more was measured). A session in which that Mac is controlled sends its picture in the unrestricted direction. The local test sessions have both ends on that Mac, so their picture came back through the restricted direction. The delays of 7.2 and 4.1 seconds are what a 4.4 megabit path does to those picture sizes; they say nothing about a session controlling that Mac from elsewhere. What imposes the limit is not known: the relay itself forwarded 46 megabits a second when reached another way.
+
+Repeated with the relay reached through a tunnel that avoids the restricted direction, 90% quality and a 60 frame limit, whole-window changes every 2 s for 15 s:
+
+| Picture | Decoded frames a second | Gaps over 100 ms | Longest gap | Delay, median and most |
+|---|---|---|---|---|
+| `5120×2880` | 49.7 | 4 | 184 ms | 21 and 46 ms |
+| `3200×1800` | 54.0 | 0 | 70 ms | 20 and 38 ms |
+
+So on a path that carries it, the smaller picture is somewhat smoother and needs about half the bitrate (8.9 against 16.5 megabits a second targeted); it is not the difference between unusable and usable that the earlier numbers suggested.
+
+**The earlier ceiling of about ten new pictures a second is gone.** With only a NikoDesk session connected, the same Mac delivered 75 new pictures a second to a capture at `3200×1800`. On 10-04 another remote-control product had a session open on it at the time.
+
+**"Responsive control" was the slowest of the ordinary modes.** It asked for the balanced quality, which a session holds to 30 frames a second: 27.3 decoded frames a second against 53.9 for a custom 60 frame limit on the same path. It is changed after this release to ask for a 60 frame limit. Until then, choose a custom mode with a 60 frame limit.
+
 ## Updating
 
 macOS packages are still ad-hoc signed. After the app is replaced, the Screen Recording and Accessibility grants stop applying and must be given again at the Mac. Do not update a controlled Mac that you cannot reach physically or through another remote-control tool.

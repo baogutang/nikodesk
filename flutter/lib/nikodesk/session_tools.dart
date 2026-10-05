@@ -198,8 +198,8 @@ class _PictureModesState extends State<_PictureModes> {
         return nikoText('上游 best 画质 + 原始 1:1 缩放；编码器自动协商。',
             'Upstream best quality + original 1:1 view; automatic codec negotiation.');
       case PictureMode.smooth:
-        return nikoText('上游 balanced 画质与自适应 QoS；保留当前缩放。',
-            'Upstream balanced quality and adaptive QoS; keep current view scale.');
+        return nikoText('帧率上限 60、50% 码率比例（需要对端支持）；对端仍按网络延迟自行下调。保留当前缩放。',
+            'Up to 60 FPS at a 50% bitrate ratio when supported; the peer still lowers both when the network is slow. Keeps the current view scale.');
       case PictureMode.constrained:
         return nikoText('保守请求：30% 码率比例、15 FPS（需要对端支持）。沿用上游 QoS；弱网改善尚未测量。',
             'Conservative request: 30% bitrate ratio and 15 FPS when supported. Uses upstream QoS; weak-network improvement is unmeasured.');

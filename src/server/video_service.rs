@@ -732,8 +732,12 @@ fn run(vs: VideoService) -> ResultType<()> {
     let (mut second_instant, mut send_counter) = (Instant::now(), 0);
     #[cfg(feature = "nikodesk-dev-profile")]
     let mut dev_stages = crate::nikodesk::DevVideoStages::default();
+    #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
+    let mut video_pulse = crate::nikodesk::VideoPulse::default();
 
     while sp.ok() {
+        #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
+        video_pulse.report((capture_width, capture_height), codec_format, encoder.is_hardware(), spf, quality);
         #[cfg(windows)]
         check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
         check_qos(
@@ -872,6 +876,8 @@ fn run(vs: VideoService) -> ResultType<()> {
                     )?;
                     #[cfg(feature = "nikodesk-dev-profile")]
                     dev_stages.add(dev_capture, dev_convert, dev_encode.elapsed());
+                    #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
+                    video_pulse.frame();
                     frame_controller.set_send(now, send_conn_ids);
                     send_counter += 1;
                 }

@@ -106,7 +106,8 @@ class PictureRequest {
       case PictureMode.office:
         return PictureRequest(mode, 'best', originalScale: true);
       case PictureMode.smooth:
-        return PictureRequest(mode, 'balanced');
+        // Any non-custom quality is held to 30 frames a second by the session.
+        return PictureRequest(mode, 'custom', bitratePercent: 50, fps: 60);
       case PictureMode.constrained:
         return PictureRequest(mode, 'custom', bitratePercent: 30, fps: 15);
       case PictureMode.custom:

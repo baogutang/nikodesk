@@ -270,6 +270,78 @@ impl DevVideoStages {
     }
 }
 
+/// What the controlled side produced for one display, logged twice a minute
+/// while pictures flow, so a report of choppy video can be read from the log
+/// afterwards: the size and encoder, how many new pictures a second were sent
+/// against the limit in force, and the bitrate and delay the limit came from.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[derive(Default)]
+pub(crate) struct VideoPulse {
+    frames: u32,
+    since: Option<std::time::Instant>,
+}
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+impl VideoPulse {
+    const EVERY: std::time::Duration = std::time::Duration::from_secs(30);
+
+    pub(crate) fn frame(&mut self) {
+        self.frames += 1;
+    }
+
+    pub(crate) fn report(
+        &mut self,
+        (width, height): (usize, usize),
+        encoder: impl std::fmt::Debug,
+        hardware: bool,
+        limit: std::time::Duration,
+        quality: f32,
+    ) {
+        let elapsed = self.since.get_or_insert_with(std::time::Instant::now).elapsed();
+        if elapsed < Self::EVERY {
+            return;
+        }
+        if self.frames > 0 {
+            let (bitrate, delay) = {
+                let qos = crate::server::video_service::VIDEO_QOS.lock().unwrap();
+                (qos.bitrate(), qos.nikodesk_latest_delay())
+            };
+            hbb_common::log::info!(
+                "video pulse: {}",
+                video_pulse_line(
+                    (width, height),
+                    &format!("{encoder:?}"),
+                    hardware,
+                    self.frames as f64 / elapsed.as_secs_f64(),
+                    limit,
+                    quality,
+                    bitrate,
+                    delay,
+                )
+            );
+        }
+        *self = Self::default();
+    }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn video_pulse_line(
+    (width, height): (usize, usize),
+    encoder: &str,
+    hardware: bool,
+    frames_per_second: f64,
+    limit: std::time::Duration,
+    quality: f32,
+    bitrate: u32,
+    delay: Option<u32>,
+) -> String {
+    let limit = if limit.is_zero() { 0. } else { 1. / limit.as_secs_f64() };
+    format!(
+        "{width}x{height} {encoder} {}, {frames_per_second:.1} new pictures/s of {limit:.0} allowed, quality {quality:.2}, target {bitrate} kbps, delay {}",
+        if hardware { "hardware" } else { "software" },
+        delay.map_or("unknown".to_owned(), |ms| format!("{ms} ms")),
+    )
+}
+
 #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "android")))]
 fn initialize_inner() -> ResultType<()> {
     bail!("NikoDesk isolation is not supported on this platform")
@@ -1309,5 +1381,27 @@ mod tests {
         assert!(!options.contains_key("rdp_password"));
         assert_eq!(options["view-style"], "original");
         assert_eq!(options["alias"], "Office");
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[test]
+    fn the_video_status_line_says_what_was_sent_and_what_limited_it() {
+        let line = video_pulse_line(
+            (3200, 1800),
+            "H265",
+            true,
+            53.94,
+            std::time::Duration::from_micros(16_667),
+            1.8,
+            8939,
+            Some(27),
+        );
+        assert_eq!(
+            line,
+            "3200x1800 H265 hardware, 53.9 new pictures/s of 60 allowed, quality 1.80, target 8939 kbps, delay 27 ms"
+        );
+        let line = video_pulse_line((2560, 1440), "AV1", false, 9.0, std::time::Duration::ZERO, 0.67, 0, None);
+        assert!(line.ends_with("of 0 allowed, quality 0.67, target 0 kbps, delay unknown"), "{line}");
+        assert!(line.contains("AV1 software"), "{line}");
     }
 }

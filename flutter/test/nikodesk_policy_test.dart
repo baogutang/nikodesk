@@ -81,7 +81,13 @@ void main() {
     expect(office.imageQuality, 'best');
     expect(office.originalScale, isTrue);
     expect(office.requestsCustomFps, isFalse);
-    expect(PictureRequest.forMode(PictureMode.smooth).imageQuality, 'balanced');
+    // "balanced" would be held to 30 frames a second by the session.
+    final smooth = PictureRequest.forMode(PictureMode.smooth);
+    expect(smooth.imageQuality, 'custom');
+    expect(smooth.bitratePercent, 50);
+    expect(smooth.fps, 60);
+    expect(smooth.requestsCustomFps, isTrue);
+    expect(smooth.originalScale, isFalse);
     final weak = PictureRequest.forMode(PictureMode.constrained);
     expect(weak.imageQuality, 'custom');
     expect(weak.bitratePercent, 30);
@@ -131,6 +137,12 @@ void main() {
     expect(observed(codec: 'vp9'), PictureMode.custom);
     expect(observed(codec: null), PictureMode.custom);
     expect(observed(saved: null), PictureMode.custom);
+    // A device that saved the earlier "balanced" meaning of the smooth mode is
+    // shown as custom until the mode is chosen again.
+    expect(observed(saved: 'smooth', quality: 'balanced'), PictureMode.custom);
+    expect(
+        observed(saved: 'smooth', quality: 'custom', percent: 50, fps: 60),
+        PictureMode.smooth);
     expect(observed(saved: 'constrained', quality: 'custom'),
         PictureMode.constrained);
     expect(observed(saved: 'constrained', quality: 'custom', percent: 50),

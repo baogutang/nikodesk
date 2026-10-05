@@ -374,6 +374,15 @@ impl VideoQoS {
     }
 
     // Check if any user is in recording mode
+    // The newest delay any viewer reported, for the NikoDesk status line.
+    #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
+    pub fn nikodesk_latest_delay(&self) -> Option<u32> {
+        self.users
+            .values()
+            .filter_map(|user| user.delay.delay_history.back().copied())
+            .max()
+    }
+
     pub fn record(&self) -> bool {
         self.users.iter().any(|u| u.1.record)
     }
