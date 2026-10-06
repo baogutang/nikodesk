@@ -55,6 +55,24 @@ class NikoSessionButton extends StatelessWidget {
       );
 }
 
+/// The highest refresh rate among this controller's screens, or null when
+/// none can be read.
+double? nikoLocalRefreshRate() {
+  try {
+    double? best;
+    for (final display
+        in WidgetsBinding.instance.platformDispatcher.displays) {
+      final rate = display.refreshRate;
+      if (rate.isFinite && rate > 0 && (best == null || rate > best)) {
+        best = rate;
+      }
+    }
+    return best;
+  } catch (_) {
+    return null;
+  }
+}
+
 String _modeLabel(PictureMode mode) {
   switch (mode) {
     case PictureMode.office:
@@ -126,7 +144,9 @@ class _PictureModesState extends State<_PictureModes> {
           if (quality != null && quality.isNotEmpty) {
             _quality = quality.first.toDouble().clamp(10, 100);
           }
-          _fps = (double.tryParse(fps ?? '') ?? 30).clamp(5, 60);
+          _fps = (double.tryParse(fps ?? '') ?? 30)
+              .clamp(5, nikoMaxFps)
+              .toDouble();
           _currentQuality =
               const ['best', 'balanced', 'low', 'custom'].contains(current)
                   ? current
@@ -153,7 +173,9 @@ class _PictureModesState extends State<_PictureModes> {
       _message = null;
     });
     final request = PictureRequest.forMode(_mode,
-        customPercent: _quality.round(), customFps: _fps.round());
+        customPercent: _quality.round(),
+        customFps: _fps.round(),
+        smoothFps: nikoSmoothFps(nikoLocalRefreshRate()));
     final session = _session;
     try {
       await bind.sessionPeerOption(
@@ -198,8 +220,10 @@ class _PictureModesState extends State<_PictureModes> {
         return nikoText('上游 best 画质 + 原始 1:1 缩放；编码器自动协商。',
             'Upstream best quality + original 1:1 view; automatic codec negotiation.');
       case PictureMode.smooth:
-        return nikoText('帧率上限 60、50% 码率比例（需要对端支持）；对端仍按网络延迟自行下调。保留当前缩放。',
-            'Up to 60 FPS at a 50% bitrate ratio when supported; the peer still lowers both when the network is slow. Keeps the current view scale.');
+        final fps = nikoSmoothFps(nikoLocalRefreshRate());
+        return nikoText(
+            '帧率上限跟随本机屏幕刷新率（此处为 $fps，范围 60–$nikoMaxFps）、50% 码率比例（需要对端支持）；实际帧率不超过对端屏幕的刷新率，对端仍按网络延迟自行下调。保留当前缩放。',
+            'Frame limit follows this screen\'s refresh rate ($fps here, 60–$nikoMaxFps) at a 50% bitrate ratio when supported. The peer sends no more than its own screen refreshes and still lowers both when the network is slow. Keeps the current view scale.');
       case PictureMode.constrained:
         return nikoText('保守请求：30% 码率比例、15 FPS（需要对端支持）。沿用上游 QoS；弱网改善尚未测量。',
             'Conservative request: 30% bitrate ratio and 15 FPS when supported. Uses upstream QoS; weak-network improvement is unmeasured.');
@@ -258,12 +282,16 @@ class _PictureModesState extends State<_PictureModes> {
                   Slider(
                       value: _fps,
                       min: 5,
-                      max: 60,
-                      divisions: 55,
+                      max: nikoMaxFps.toDouble(),
+                      divisions: nikoMaxFps - 5,
                       label: '${_fps.round()}',
                       onChanged: _saving || !_supportsFps
                           ? null
                           : (value) => setState(() => _fps = value)),
+                  Text(
+                      nikoText('实际帧率不会超过对端屏幕的刷新率，也不会超过本机能显示的帧率。',
+                          'The peer sends no more frames than its own screen refreshes, and this screen shows no more than its own rate.'),
+                      style: Theme.of(context).textTheme.bodySmall),
                 ],
                 if (!_supportsFps)
                   Text(nikoText('对端版本未知或低于 1.2.0：不会发送自定义 FPS。',

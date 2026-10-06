@@ -88,6 +88,20 @@ void main() {
     expect(smooth.fps, 60);
     expect(smooth.requestsCustomFps, isTrue);
     expect(smooth.originalScale, isFalse);
+    // It follows the controller's screen, between 60 and the session's limit.
+    expect(nikoSmoothFps(null), 60);
+    expect(nikoSmoothFps(double.nan), 60);
+    expect(nikoSmoothFps(50), 60);
+    expect(nikoSmoothFps(59.94), 60);
+    expect(nikoSmoothFps(74.97), 75);
+    expect(nikoSmoothFps(120), 120);
+    expect(nikoSmoothFps(144), nikoMaxFps);
+    expect(
+        PictureRequest.forMode(PictureMode.smooth, smoothFps: nikoSmoothFps(120))
+            .fps,
+        120);
+    expect(() => PictureRequest.forMode(PictureMode.smooth, smoothFps: 30),
+        throwsArgumentError);
     final weak = PictureRequest.forMode(PictureMode.constrained);
     expect(weak.imageQuality, 'custom');
     expect(weak.bitratePercent, 30);
@@ -101,7 +115,9 @@ void main() {
     expect(
         () => PictureRequest.forMode(PictureMode.custom, customPercent: 3000),
         throwsArgumentError);
-    expect(() => PictureRequest.forMode(PictureMode.custom, customFps: 120),
+    // The session accepts up to 120; the panel must not stop at 60.
+    expect(PictureRequest.forMode(PictureMode.custom, customFps: 120).fps, 120);
+    expect(() => PictureRequest.forMode(PictureMode.custom, customFps: 121),
         throwsArgumentError);
   });
   test('custom FPS capability rejects old, empty and malformed peer versions',
@@ -143,6 +159,13 @@ void main() {
     expect(
         observed(saved: 'smooth', quality: 'custom', percent: 50, fps: 60),
         PictureMode.smooth);
+    // Chosen on a 120 Hz screen, read back on any screen.
+    expect(
+        observed(saved: 'smooth', quality: 'custom', percent: 50, fps: 120),
+        PictureMode.smooth);
+    expect(
+        observed(saved: 'smooth', quality: 'custom', percent: 50, fps: 30),
+        PictureMode.custom);
     expect(observed(saved: 'constrained', quality: 'custom'),
         PictureMode.constrained);
     expect(observed(saved: 'constrained', quality: 'custom', percent: 50),

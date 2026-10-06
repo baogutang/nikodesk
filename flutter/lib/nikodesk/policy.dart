@@ -84,6 +84,17 @@ class PrivateServerConfig {
 
 enum PictureMode { office, smooth, constrained, custom }
 
+/// The highest frame-rate limit a session accepts.
+const nikoMaxFps = 120;
+
+/// The limit the responsive mode asks for: this controller's own refresh
+/// rate, since it cannot show more, and never less than 60. The controlled
+/// screen's refresh rate still bounds what is actually sent.
+int nikoSmoothFps(double? localRefreshRate) =>
+    localRefreshRate == null || !localRefreshRate.isFinite
+        ? 60
+        : localRefreshRate.round().clamp(60, nikoMaxFps);
+
 class PictureRequest {
   final PictureMode mode;
   final String imageQuality;
@@ -95,11 +106,13 @@ class PictureRequest {
       {this.bitratePercent, this.fps, this.originalScale = false});
 
   factory PictureRequest.forMode(PictureMode mode,
-      {int customPercent = 50, int customFps = 30}) {
+      {int customPercent = 50, int customFps = 30, int smoothFps = 60}) {
     if (customPercent < 10 ||
         customPercent > 100 ||
         customFps < 5 ||
-        customFps > 60) {
+        customFps > nikoMaxFps ||
+        smoothFps < 60 ||
+        smoothFps > nikoMaxFps) {
       throw ArgumentError('Picture parameters are outside supported bounds');
     }
     switch (mode) {
@@ -107,7 +120,8 @@ class PictureRequest {
         return PictureRequest(mode, 'best', originalScale: true);
       case PictureMode.smooth:
         // Any non-custom quality is held to 30 frames a second by the session.
-        return PictureRequest(mode, 'custom', bitratePercent: 50, fps: 60);
+        return PictureRequest(mode, 'custom',
+            bitratePercent: 50, fps: smoothFps);
       case PictureMode.constrained:
         return PictureRequest(mode, 'custom', bitratePercent: 30, fps: 15);
       case PictureMode.custom:
@@ -137,10 +151,14 @@ class PictureRequest {
       return PictureMode.custom;
     }
     final request = PictureRequest.forMode(mode);
+    // The responsive mode's limit depends on the screen it was chosen on.
+    final fpsMatches = mode == PictureMode.smooth
+        ? fps != null && fps >= 60 && fps <= nikoMaxFps
+        : fps == request.fps;
     if (quality != request.imageQuality ||
         (request.originalScale && viewStyle != 'original') ||
         (request.bitratePercent != null && percent != request.bitratePercent) ||
-        (request.requestsCustomFps && supportsFps && fps != request.fps)) {
+        (request.requestsCustomFps && supportsFps && !fpsMatches)) {
       return PictureMode.custom;
     }
     return mode;

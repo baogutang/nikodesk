@@ -734,6 +734,8 @@ fn run(vs: VideoService) -> ResultType<()> {
     let mut dev_stages = crate::nikodesk::DevVideoStages::default();
     #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
     let mut video_pulse = crate::nikodesk::VideoPulse::default();
+    #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+    let mut frame_due = None;
 
     while sp.ok() {
         #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
@@ -1008,6 +1010,8 @@ fn run(vs: VideoService) -> ResultType<()> {
         let elapsed = now.elapsed();
         // may need to enable frame(timeout)
         log::trace!("{:?} {:?}", time::Instant::now(), elapsed);
+        #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+        let elapsed = spf.saturating_sub(crate::nikodesk::frame_pause(&mut frame_due, now, Instant::now(), spf));
         if elapsed < spf {
             std::thread::sleep(spf - elapsed);
         }

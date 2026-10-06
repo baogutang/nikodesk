@@ -475,6 +475,24 @@ pub fn capture_width_message(option: &str, value: &str, peer_version: i64) -> Op
 /// How many encodes in a row may return nothing before the encoder is given
 /// up on. A hardware encoder on macOS gets about half a second at 60 frames a
 /// second; three, the general limit, is 50 ms.
+/// How long the video loop pauses after an iteration so that iterations
+/// start one frame time apart on average. Sleeping the rest of each frame
+/// time adds every oversleep to the period: a 60 frame limit produced 54.
+/// `due` is when this iteration should have started; lateness is made up
+/// for, by one frame time at most.
+#[cfg(target_os = "macos")]
+pub(crate) fn frame_pause(
+    due: &mut Option<std::time::Instant>,
+    started: std::time::Instant,
+    now: std::time::Instant,
+    spf: std::time::Duration,
+) -> std::time::Duration {
+    let next = due.unwrap_or(started) + spf;
+    let next = next.max(now.checked_sub(spf).unwrap_or(now)).min(now + spf);
+    *due = Some(next);
+    next.saturating_duration_since(now)
+}
+
 #[cfg(target_os = "macos")]
 pub(crate) fn encode_fail_limit(hardware: bool, general: usize) -> usize {
     if hardware { general.max(30) } else { general }
@@ -1403,5 +1421,91 @@ mod tests {
         let line = video_pulse_line((2560, 1440), "AV1", false, 9.0, std::time::Duration::ZERO, 0.67, 0, None);
         assert!(line.ends_with("of 0 allowed, quality 0.67, target 0 kbps, delay unknown"), "{line}");
         assert!(line.contains("AV1 software"), "{line}");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_video_loop_keeps_its_frame_rate_when_sleeps_run_long() {
+        use std::time::{Duration, Instant};
+        let spf = Duration::from_micros(16_667);
+        let origin = Instant::now();
+        let mut due = None;
+        let mut clock = origin;
+        // Every iteration works for 5 ms and every sleep runs 2 ms long.
+        for _ in 0..600 {
+            let started = clock;
+            clock += Duration::from_millis(5);
+            let pause = frame_pause(&mut due, started, clock, spf);
+            assert!(pause <= spf);
+            if !pause.is_zero() {
+                clock += pause + Duration::from_millis(2);
+            }
+        }
+        let rate = 600. / (clock - origin).as_secs_f64();
+        assert!((59.5..60.5).contains(&rate), "{rate}");
+
+        // An iteration that took a second is made up for by one frame, not sixty.
+        let started = clock;
+        clock += Duration::from_secs(1);
+        assert_eq!(frame_pause(&mut due, started, clock, spf), Duration::ZERO);
+        let mut unpaused = 0;
+        loop {
+            let started = clock;
+            clock += Duration::from_millis(5);
+            let pause = frame_pause(&mut due, started, clock, spf);
+            if !pause.is_zero() {
+                assert!(pause <= spf, "{pause:?}");
+                break;
+            }
+            unpaused += 1;
+        }
+        assert!(unpaused <= 1, "{unpaused}");
+
+        // Work that fills the frame time leaves no pause and no growing debt.
+        let mut due = None;
+        let mut clock = origin;
+        for _ in 0..10 {
+            let started = clock;
+            clock += Duration::from_millis(20);
+            assert_eq!(frame_pause(&mut due, started, clock, spf), Duration::ZERO);
+        }
+    }
+
+    // Measures real sleeps on this machine; run by hand with --ignored --nocapture.
+    #[cfg(target_os = "macos")]
+    #[test]
+    #[ignore]
+    fn measure_frame_rates_with_real_sleeps() {
+        use std::time::{Duration, Instant};
+        let work = Duration::from_micros(5_700);
+        for limit in [30u32, 60, 75, 120] {
+            let spf = Duration::from_secs_f64(1. / limit as f64);
+            let mut rates = Vec::new();
+            for paced in [false, true] {
+                let begin = Instant::now();
+                let mut due = None;
+                let mut frames = 0u32;
+                while begin.elapsed() < Duration::from_secs(3) {
+                    let now = Instant::now();
+                    while now.elapsed() < work {
+                        std::hint::spin_loop();
+                    }
+                    let elapsed = if paced {
+                        spf.saturating_sub(frame_pause(&mut due, now, Instant::now(), spf))
+                    } else {
+                        now.elapsed()
+                    };
+                    if elapsed < spf {
+                        std::thread::sleep(spf - elapsed);
+                    }
+                    frames += 1;
+                }
+                rates.push(frames as f64 / begin.elapsed().as_secs_f64());
+            }
+            println!(
+                "limit {limit}: sleeping out each frame gives {:.1}/s, keeping to deadlines gives {:.1}/s",
+                rates[0], rates[1]
+            );
+        }
     }
 }
