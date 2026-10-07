@@ -1,11 +1,12 @@
 # NikoDesk 1.0.7+16 — development candidate
 
-This source tree is a candidate. It has not been published, installed on target
-devices, or accepted as a formal release. Existing
+This source tree is a development candidate, not a formal release.
+Target-device installation and acceptance remain unverified. Existing
 [v1.0.6 downloads](https://github.com/baogutang/nikodesk/releases/tag/v1.0.6) remain.
 [Candidate build status for `validation/1.0.7`](https://github.com/baogutang/nikodesk/actions/workflows/release.yml?query=branch%3Avalidation%2F1.0.7)
-is separate from formal publication and target-device acceptance. A queued or
-running build is not a passed build; this document does not claim CI completion.
+is separate from formal publication and target-device acceptance. Consult the
+linked workflow for CI results; passing CI does not establish formal publication
+or target-device acceptance.
 
 ## Changes
 

@@ -21,7 +21,7 @@
 
 ## 当前状态
 
-**1.0.7+16 开发候选（尚未发布）**：补强隐私屏持续检查与恢复、有界且可取消的目录扫描、开发构建凭据隔离、跟随当前会话窗口的采集与帧率，以及自动匹配分辨率无效时的恢复。更新清单必须通过客户端内固定发行公钥的签名验证；正式版必须对同一批候选包完成签名与真机验收后晋级。Rust OpenSSL 绑定已修补至 `openssl 0.10.72` / `openssl-sys 0.9.107`，不代表全部依赖审计已清零。[开发范围与发布条件](docs/RELEASE-1.0.7.md) · [候选构建状态（`validation/1.0.7`）](https://github.com/baogutang/nikodesk/actions/workflows/release.yml?query=branch%3Avalidation%2F1.0.7)。构建结果与设备验收分别记录，下方 v1.0.6 下载入口保留到新版实际发布。
+**1.0.7+16 开发候选（尚未正式发布）**：补强隐私屏持续检查与恢复、有界且可取消的目录扫描、开发构建凭据隔离、跟随当前会话窗口的采集与帧率，以及自动匹配分辨率无效时的恢复。更新清单必须通过客户端内固定发行公钥的签名验证；正式版必须对同一批候选包完成签名与真机验收后晋级。Rust OpenSSL 绑定已修补至 `openssl 0.10.72` / `openssl-sys 0.9.107`，不代表全部依赖审计已清零。[开发范围与发布条件](docs/RELEASE-1.0.7.md) · [候选构建状态（`validation/1.0.7`）](https://github.com/baogutang/nikodesk/actions/workflows/release.yml?query=branch%3Avalidation%2F1.0.7)。构建结果与设备验收分别记录，下方 v1.0.6 下载入口保留到新版正式发布。
 
 版本交付入口为 **[NikoDesk v1.0.6](https://github.com/baogutang/nikodesk/releases/tag/v1.0.6)**（产品版本 `1.0.6`、构建号 `15`）。标签触发 macOS ARM64、Windows x64 与 Android ARM64 自动构建，构建和打包检查全部通过后发布产物。每次推送到 `main` 都会构建全部三个平台，并替换滚动更新的 **[nightly 预发布](https://github.com/baogutang/nikodesk/releases/tag/nightly)**；从 1.0.7 起，`v*` 标签只创建候选草稿，验收通过后才晋级正式版本。[v1.0.0 归档](https://github.com/baogutang/nikodesk/releases/tag/v1.0.0) 是历史测试构建，其中仅 macOS ZIP 仍保留发布。
 
