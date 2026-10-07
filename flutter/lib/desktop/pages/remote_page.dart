@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_hbb/nikodesk/connection_progress_view.dart';
 import 'package:flutter_hbb/nikodesk/privacy_screen.dart';
+import 'package:flutter_hbb/nikodesk/remote_resolution.dart';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
@@ -93,6 +94,7 @@ class _RemotePageState extends State<RemotePage>
         WidgetsBindingObserver,
         TickerProviderStateMixin {
   Timer? _timer;
+  NikoSessionViewport? _nikoViewport;
   String keyboardMode = "legacy";
   bool _isWindowBlur = false;
   // Known macOS remote-input trade-offs (kept simple intentionally):
@@ -154,6 +156,9 @@ class _RemotePageState extends State<RemotePage>
   void initState() {
     super.initState();
     _ffi = FFI(widget.sessionId);
+    if (const bool.fromEnvironment('NIKODESK') && !isMacOS) {
+      WidgetsBinding.instance.addObserver(this);
+    }
     if (isMacOS) {
       // SchedulerBinding.instance.lifecycleState is null in the first connection in a new window.
       _macOSLifecycleState = SchedulerBinding.instance.lifecycleState;
@@ -561,6 +566,7 @@ class _RemotePageState extends State<RemotePage>
   @override
   void onWindowRestore() {
     super.onWindowRestore();
+    _nikoViewport?.schedule();
     // On windows, we use `onWindowRestore` way to handle window restore from
     // a minimized state.
     if (isWindows) {
@@ -575,6 +581,7 @@ class _RemotePageState extends State<RemotePage>
   @override
   void onWindowMaximize() {
     super.onWindowMaximize();
+    _nikoViewport?.schedule();
     WakelockManager.enable(_uniqueKey);
     // Update pointer lock center when window is maximized
     _updatePointerLockCenterIfNeeded();
@@ -583,6 +590,7 @@ class _RemotePageState extends State<RemotePage>
   @override
   void onWindowResize() {
     super.onWindowResize();
+    _nikoViewport?.schedule();
     // Update pointer lock center when window is resized
     _updatePointerLockCenterIfNeeded();
   }
@@ -590,6 +598,7 @@ class _RemotePageState extends State<RemotePage>
   @override
   void onWindowMove() {
     super.onWindowMove();
+    _nikoViewport?.schedule();
     // Update pointer lock center when window is moved
     _updatePointerLockCenterIfNeeded();
   }
@@ -615,6 +624,7 @@ class _RemotePageState extends State<RemotePage>
   @override
   void onWindowMinimize() {
     super.onWindowMinimize();
+    _nikoViewport?.cancelPending();
     WakelockManager.disable(_uniqueKey);
     if (isMacOS) {
       _macOSFullScreenFocusRecovery.cancel();
@@ -632,6 +642,7 @@ class _RemotePageState extends State<RemotePage>
   @override
   void onWindowEnterFullScreen() {
     super.onWindowEnterFullScreen();
+    _nikoViewport?.schedule();
     if (isMacOS) {
       stateGlobal.setFullscreen(true);
       _queueMacOSKeyboardAfterFullScreen();
@@ -641,6 +652,7 @@ class _RemotePageState extends State<RemotePage>
   @override
   void onWindowLeaveFullScreen() {
     super.onWindowLeaveFullScreen();
+    _nikoViewport?.schedule();
     if (isMacOS) {
       stateGlobal.setFullscreen(false);
       _queueMacOSKeyboardAfterFullScreen();
@@ -650,6 +662,10 @@ class _RemotePageState extends State<RemotePage>
   @override
   Future<void> dispose() async {
     final closeSession = closeSessionOnDispose.remove(widget.id) ?? true;
+    _nikoViewport?.dispose();
+    if (const bool.fromEnvironment('NIKODESK') && !isMacOS) {
+      WidgetsBinding.instance.removeObserver(this);
+    }
 
     // https://github.com/flutter/flutter/issues/64935
     if (isMacOS) {
@@ -827,6 +843,20 @@ class _RemotePageState extends State<RemotePage>
         }
       }),
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (const bool.fromEnvironment('NIKODESK')) {
+      _nikoViewport ??= NikoSessionViewport(_ffi);
+      _nikoViewport!.updateView(View.of(context));
+    }
+  }
+
+  @override
+  void didChangeMetrics() {
+    _nikoViewport?.schedule();
   }
 
   @override

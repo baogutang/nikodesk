@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'policy.dart' show nikoSmoothFps;
 
 class NikoDisplayMode {
   final int width;
@@ -143,3 +144,55 @@ int nikoCaptureWidth(NikoCaptureMode mode, int localLongEdge) {
               nikoSmallestCaptureWidth, nikoNativeCaptureWidth);
   }
 }
+
+/// Backing pixels required by the current canvas, capped by its own display.
+/// Other attached monitors cannot increase this request.
+int nikoViewportLongEdge({
+  required double width,
+  required double height,
+  required double devicePixelRatio,
+  required double screenWidth,
+  required double screenHeight,
+}) {
+  if (!width.isFinite || !height.isFinite || !devicePixelRatio.isFinite ||
+      width <= 0 || height <= 0 || devicePixelRatio <= 0) return 0;
+  var edge = math.max(width, height) * devicePixelRatio;
+  if (screenWidth.isFinite && screenHeight.isFinite &&
+      screenWidth > 0 && screenHeight > 0) {
+    edge = math.min(edge, math.max(screenWidth, screenHeight));
+  }
+  return edge.isFinite ? edge.round() : 0;
+}
+
+/// A one-pixel resize must not repeatedly restart the remote capture.
+bool nikoCaptureWidthNeedsUpdate(int? previous, int next) =>
+    previous == null || previous <= 0 ||
+    (previous != next &&
+        (previous == nikoNativeCaptureWidth || next == nikoNativeCaptureWidth ||
+            (previous - next).abs() >= math.max(128, previous * .1)));
+
+int nikoSessionCaptureWidth(NikoCaptureMode mode, int edge, String? viewStyle) =>
+    mode == NikoCaptureMode.fit && (viewStyle == 'original' || viewStyle == 'custom')
+        ? nikoNativeCaptureWidth : nikoCaptureWidth(mode, edge);
+
+int? nikoAutomaticFpsUpdate({required String? savedMode, required int? managed,
+    required int? current, required String? quality, required int? percent,
+    required double? refreshRate}) {
+  if (savedMode != 'smooth' || managed == null || current != managed ||
+      quality != 'custom' || percent != 50 || refreshRate == null ||
+      !refreshRate.isFinite || refreshRate <= 0) return null;
+  final next = nikoSmoothFps(refreshRate);
+  return next == current ? null : next;
+}
+
+/// Restore only the mode this attempt has been observed to apply. A mode
+/// change can leave the captured pixel count unchanged on a Retina display.
+bool nikoAutoFitShouldRestore({
+  required NikoRemoteResolution before,
+  required NikoRemoteResolution after,
+  required NikoDisplayMode requested,
+}) =>
+    after.current == requested &&
+    after.original == before.original &&
+    !nikoFitReducedPixels(before: before.capturedPixels,
+        after: after.capturedPixels, localLongEdge: before.localLongEdge);

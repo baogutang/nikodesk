@@ -229,6 +229,16 @@ pub enum FS {
         offset_blk: u32,
         conn_id: i32,
     },
+    #[cfg(feature = "nikodesk")]
+    NikoCancelDirectory {
+        request: base::fs::directory_scan::Request,
+        conn_id: i32,
+    },
+    #[cfg(feature = "nikodesk")]
+    NikoScanDirectory {
+        request: base::fs::directory_scan::Request,
+        conn_id: i32,
+    },
     ReadAllFiles {
         path: String,
         id: i32,
@@ -511,6 +521,12 @@ pub enum Data {
         file_size: u64,
         is_resume: bool,
         conn_id: i32,
+    },
+    #[cfg(feature = "nikodesk")]
+    NikoDirectoryResult {
+        request: base::fs::directory_scan::Request,
+        conn_id: i32,
+        result: Result<Vec<u8>, String>,
     },
     /// Response to ReadAllFiles: recursive directory listing
     AllFilesResult {

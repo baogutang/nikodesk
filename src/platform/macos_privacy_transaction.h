@@ -112,6 +112,18 @@ public:
         return true;
     }
 
+    bool verify_all(const std::vector<std::string>& displays, const GammaReader& read) const {
+        if (displays.empty()) return false;
+        std::set<std::string> unique;
+        for (const auto& uuid : displays) {
+            if (uuid.empty() || !unique.insert(uuid).second || !touched_.count(uuid) ||
+                    uncertain_.count(uuid)) return false;
+            GammaTable current;
+            if (!read(uuid, current) || !is_black(current)) return false;
+        }
+        return true;
+    }
+
     bool restore(const GammaReader& read, const GammaWriter& write) {
         bool success = true;
         for (auto it = touched_.begin(); it != touched_.end();) {

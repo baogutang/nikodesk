@@ -379,6 +379,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
   <div class="sec-head reveal">
     <span class="sec-pill">Features</span>
     <h2>Made for daily driving</h2>
+    <p class="sec-sub">1.0.7+16 is a development candidate, not a published release. It adds continuous privacy checks and recovery, bounded and cancellable directory scans, development credential isolation, capture and FPS matching to the current window, recovery from ineffective resolution changes, and a signed-update gate using a pinned publisher key. It also patches the Rust OpenSSL bindings; the full dependency audit is not cleared. Follow the <a href="https://github.com/baogutang/nikodesk/actions/workflows/release.yml?query=branch%3Avalidation%2F1.0.7">candidate build status</a>; build checks do not establish device acceptance. Stable downloads remain on v1.0.6.</p>
     <p class="sec-sub">Version 1.0.6 makes the privacy screen something you can find and see: a toolbar button and a Control center switch turn it on, and a label stays on the remote picture while it is on. Frame-rate limits go to 120, Responsive control asks for this screen's refresh rate instead of being held to 30, and a controlled Mac reaches the limit it is given. Windows and Android now carry NikoDesk's own icon. Capture scaling to this screen and password-only login from 1.0.5, the warm light theme, Windows-to-Mac editing shortcuts and remote Spaces controls remain available. Sessions between two identities on one Mac verified the privacy screen and the frame limits; the new interface and icons have not been looked at on Windows or Android devices, and cross-device latency and frame rate remain unmeasured.</p>
   </div>
   <div class="grid">
@@ -555,7 +556,7 @@ Key:        (id_ed25519.pub)</pre>
   <div class="sec-head reveal">
     <span class="sec-pill">Download</span>
     <h2>Downloads and platform status</h2>
-    <p class="sec-sub">The v1.0.6 tag builds macOS, Windows and Android, and publishes their packages together after all checks pass. Verify downloads against its SHA256SUMS. Nightly remains a separate rolling preview. Core sessions — password authentication with video, bidirectional file transfer, TOTP two-factor with replay rejection, session records on both ends, remote terminal, port tunnels and picture modes — are verified end to end between two identities of one user on one Mac through a private relay; cross-device, Windows and Android real-device acceptance is still in progress, and the notes below say so plainly.</p>
+    <p class="sec-sub">The existing v1.0.6 release provides macOS, Windows and Android packages. Starting with 1.0.7, tags create drafts; formal promotion requires signed acceptance of the exact candidate packages. Verify downloads against its SHA256SUMS. Nightly remains a separate rolling preview. Core sessions — password authentication with video, bidirectional file transfer, TOTP two-factor with replay rejection, session records on both ends, remote terminal, port tunnels and picture modes — are verified end to end between two identities of one user on one Mac through a private relay; cross-device, Windows and Android real-device acceptance is still in progress, and the notes below say so plainly.</p>
   </div>
   <div class="dl-list">
     <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.6/NikoDesk-macos-arm64.dmg">
@@ -592,7 +593,7 @@ Key:        (id_ed25519.pub)</pre>
     </details>
     <details class="reveal">
       <summary>How secure is it?</summary>
-      <div class="a">Sessions use upstream encryption and authentication; the connection entry requires a password. A server public key verifies the server and is not a remote-control password. Keep the server private key on the server. Terminal, camera, tunnels and voice are off by default and each needs a local per-capability policy plus an approval on the controlled side, revocable mid-session. Unattended access, wake-on-LAN, privacy screens, virtual displays and lock-on-disconnect are implemented in source; real cross-device acceptance is still in progress. Builds and unit tests do not replace cross-device security validation.</div>
+      <div class="a">Sessions use upstream encryption and authentication; the connection entry requires a password. A server public key verifies the server and is not a remote-control password. Keep the server private key on the server. Terminal, camera, tunnels and voice are off by default and each needs a local per-capability policy plus an approval on the controlled side, revocable mid-session. Existing capabilities have platform limits: Windows has unattended-service and virtual-display driver paths; macOS has gamma-based privacy blackout but no virtual-display implementation; Android is controller only. The full roadmap is not complete, and real cross-device acceptance is still in progress. Builds and unit tests do not replace cross-device security validation.</div>
     </details>
     <details class="reveal">
       <summary>What is the relationship to RustDesk?</summary>

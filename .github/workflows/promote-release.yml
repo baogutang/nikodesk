@@ -1,0 +1,46 @@
+name: Promote accepted NikoDesk candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing draft release tag (vMAJOR.MINOR.PATCH)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: formal-release-promotion
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Validate the exact draft and signed acceptance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+          commit=$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")
+          mkdir candidate
+          gh release download "$RELEASE_TAG" --dir candidate
+          python3 .github/scripts/release-manifest.py verify candidate --tag "$RELEASE_TAG" \
+            --commit "$commit" --public-key res/nikodesk-update-public.pem
+      - name: Promote the same bytes without rebuilding
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest --title "NikoDesk $RELEASE_TAG"

@@ -1,3 +1,6 @@
+#[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
+#[path = "ui_cm_directory.rs"]
+mod nikodesk_directory;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::ipc::Connection;
 #[cfg(not(any(target_os = "ios")))]
@@ -257,6 +260,8 @@ struct IpcTaskRunner<T: InvokeUiCM> {
     file_transfer_enabled_peer: bool,
     /// Read jobs for CM-side file reading (server to client transfers)
     read_jobs: Vec<fs::TransferJob>,
+    #[cfg(feature = "nikodesk")]
+    niko_directory: fs::directory_scan::Scans,
 }
 
 lazy_static::lazy_static! {
@@ -791,6 +796,8 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 }
                                 Data::SwitchPermission { name, enabled } => {
                                     #[cfg(feature = "nikodesk")]
+                                    if name == "file" && !enabled { self.niko_directory.cancel_all(); self.read_jobs.clear(); }
+                                    #[cfg(feature = "nikodesk")]
                                     {
                                         let confirmed = CLIENTS.write().ok().and_then(|mut clients| {
                                             clients.get_mut(&self.conn_id).and_then(|client| {
@@ -823,6 +830,11 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                     }
                                 }
                                 Data::FS(mut fs) => {
+                                    #[cfg(feature = "nikodesk")]
+                                    if self.handle_nikodesk_directory_request(&fs) {
+                                        if self.niko_directory.is_pending() { file_timer = crate::rustdesk_interval(time::interval(MILLI5)); }
+                                        continue;
+                                    }
                                     if let ipc::FS::WriteBlock { id, file_num, data: _, compressed } = fs {
                                         if let Ok(bytes) = self.stream.next_raw().await {
                                             fs = ipc::FS::WriteBlock{id, file_num, data:bytes.into(), compressed};
@@ -939,6 +951,14 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                     }
                 }
                 Some(data) = self.rx.recv() => {
+                    #[cfg(feature = "nikodesk")]
+                    {
+                        if matches!(&data, Data::SwitchPermission { name, enabled: false } if name == "file") || matches!(&data, Data::Close) {
+                            self.niko_directory.cancel_all();
+                            self.read_jobs.clear();
+                        }
+                        if matches!(&data, Data::NikoDirectoryResult { .. }) && !self.nikodesk_directory_allowed() { continue; }
+                    }
                     #[cfg(feature="nikodesk")]
                     if CLIENTS.read().ok().and_then(|clients|clients.get(&self.conn_id).map(|client| !client.accepts_cleanup_dispatch(&data))).unwrap_or(false) {continue;}
                     // For FileBlockFromCM, data is sent separately via send_raw (data field has #[serde(skip)]).
@@ -1017,6 +1037,8 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                     self.cm.ui_handler.file_transfer_log("transfer", &job_log);
                 }
                 _ = file_timer.tick() => {
+                    #[cfg(feature = "nikodesk")]
+                    self.poll_nikodesk_directory();
                     if !self.read_jobs.is_empty() {
                         let conn_id = self.conn_id;
                         if let Err(e) = handle_read_jobs_tick(&mut self.read_jobs, &self.tx, conn_id).await {
@@ -1025,11 +1047,15 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                         let log = fs::serialize_transfer_jobs(&self.read_jobs);
                         self.cm.ui_handler.file_transfer_log("transfer", &log);
                     } else {
+                        #[cfg(feature = "nikodesk")]
+                        if self.niko_directory.is_pending() { continue; }
                         file_timer = crate::rustdesk_interval(time::interval_at(Instant::now() + SEC30, SEC30));
                     }
                 }
             }
         }
+        #[cfg(feature = "nikodesk")]
+        self.niko_directory.cancel_all();
     }
 
     async fn ipc_task(stream: Connection, cm: ConnectionManager<T>) {
@@ -1059,6 +1085,8 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             #[cfg(target_os = "windows")]
             file_transfer_enabled_peer: false,
             read_jobs: Vec::new(),
+            #[cfg(feature = "nikodesk")]
+            niko_directory: Default::default(),
         };
 
         while task_runner.running {

@@ -277,6 +277,9 @@ fn turn_on_privacy_sync(impl_key: &str, conn_id: i32) -> Option<ResultType<bool>
             Ok(true) => {
                 if cur_impl_key == impl_key {
                     // Same peer, same implementation.
+                    #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+                    return Some(privacy_mode_lock.as_mut()?.turn_on_privacy(conn_id));
+                    #[cfg(not(all(feature = "nikodesk", target_os = "macos")))]
                     return Some(Ok(true));
                 } else {
                     // Same peer, switch to new implementation.
@@ -441,6 +444,61 @@ pub fn is_privacy_mode_supported() -> bool {
 #[cfg(all(feature = "nikodesk", any(target_os="windows",target_os="macos")))]
 pub(crate) fn nikodesk_heartbeat(conn_id: i32, permitted: bool) -> bool {
     PRIVACY_MODE.lock().unwrap().as_mut().is_some_and(|mode| mode.nikodesk_heartbeat(conn_id, permitted))
+}
+
+#[cfg(all(test, feature = "nikodesk", target_os = "macos"))]
+mod nikodesk_privacy_wrapper_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+    struct Mode {
+        active: Arc<AtomicBool>,
+        calls: Arc<AtomicUsize>,
+    }
+
+    impl PrivacyMode for Mode {
+        fn is_async_privacy_mode(&self) -> bool { false }
+        fn init(&self) -> ResultType<()> { Ok(()) }
+        fn clear(&mut self) {}
+        fn turn_on_privacy(&mut self, conn_id: i32) -> ResultType<bool> {
+            assert_eq!(conn_id, 7);
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            if !self.active.load(Ordering::Relaxed) {
+                return Err(anyhow!("Privacy mode is inactive; restoration is still pending"));
+            }
+            Ok(true)
+        }
+        fn turn_off_privacy(&mut self, _: i32, _: Option<PrivacyModeState>) -> ResultType<()> {
+            Ok(())
+        }
+        fn pre_conn_id(&self) -> i32 { 7 }
+        fn get_impl_key(&self) -> &str { macos::PRIVACY_MODE_IMPL }
+    }
+
+    struct Restore(Option<Box<dyn PrivacyMode>>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            *PRIVACY_MODE.lock().unwrap() = self.0.take();
+        }
+    }
+
+    #[test]
+    fn same_owner_wrapper_rechecks_native_implementation_after_protection_loss() {
+        let active = Arc::new(AtomicBool::new(false));
+        let calls = Arc::new(AtomicUsize::new(0));
+        // Keep the original instance alive: no native destructor or screen/input
+        // API is invoked while exercising the real public dispatch wrapper.
+        let _restore = Restore(PRIVACY_MODE.lock().unwrap().replace(Box::new(Mode {
+            active: active.clone(), calls: calls.clone(),
+        })));
+        assert!(turn_on_privacy_sync(macos::PRIVACY_MODE_IMPL, 7).unwrap().is_err());
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+        assert!(turn_on_privacy_sync(macos::PRIVACY_MODE_IMPL, 8).unwrap().is_err());
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+        active.store(true, Ordering::Relaxed);
+        assert!(turn_on_privacy_sync(macos::PRIVACY_MODE_IMPL, 7).unwrap().unwrap());
+        assert_eq!(calls.load(Ordering::Relaxed), 2);
+    }
 }
 
 #[inline]

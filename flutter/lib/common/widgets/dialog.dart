@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_hbb/nikodesk/ui.dart';
+import 'package:flutter_hbb/nikodesk/remote_resolution.dart' show nikoStopAutomaticFps;
 
 import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
@@ -1863,6 +1864,7 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
     }
     if (fps != null) {
       fpsSet = true;
+      if (const bool.fromEnvironment('NIKODESK')) await nikoStopAutomaticFps(sessionId);
       await bind.sessionSetCustomFps(sessionId: sessionId, fps: fps.toInt());
     }
     if (!qualitySet) {

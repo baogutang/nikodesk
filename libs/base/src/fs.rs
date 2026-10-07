@@ -1,3 +1,5 @@
+pub mod directory_scan;
+
 #[cfg(windows)]
 use std::os::windows::prelude::*;
 use std::{

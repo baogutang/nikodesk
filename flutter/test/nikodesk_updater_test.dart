@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_hbb/nikodesk/updater.dart';
+import 'package:flutter_hbb/nikodesk/update_publisher.dart';
 import 'package:flutter_hbb/nikodesk/update_transfer.dart' show NikoUpdateTask;
 import 'package:flutter_test/flutter_test.dart';
 
@@ -107,9 +108,13 @@ const _bundleFiles = {
   '__MACOSX/._NikoDesk.app': 'metadata',
 };
 
+final _publisher = NikoUpdatePublisher(publicKeyBase64: base64Encode(utf8.encode(
+    '-----BEGIN PUBLIC KEY-----\nVEVTVA==\n-----END PUBLIC KEY-----\n')));
+
 class _Processes {
   final calls = <(String, List<String>)>[];
   int signatureExit = 0;
+  int publisherSignatureExit = 0;
   String identifier = 'io.nikodesk.macos';
   String architecture = 'arm64';
   String? injectedLink;
@@ -143,6 +148,7 @@ class _Processes {
       }[args[1]]!;
     }
     if (executable == '/usr/bin/codesign') code = signatureExit;
+    if (executable == '/usr/bin/openssl') code = publisherSignatureExit;
     return ProcessResult(1, code, stdout, '');
   }
 }
@@ -227,6 +233,8 @@ void main() {
           'https://github.com/owner/repo/releases/download/v1.1.0/NikoDesk-macos-arm64.zip'));
   final sums = NikoReleaseAsset(
       'SHA256SUMS', Uri.parse('https://github.com/owner/repo/SHA256SUMS'));
+  final signature = NikoReleaseAsset('SHA256SUMS.sig',
+      Uri.parse('https://github.com/owner/repo/SHA256SUMS.sig'));
   setUp(() async => directory =
       await Directory.systemTemp.createTemp('nikodesk-updater-test-'));
   tearDown(() async => directory.delete(recursive: true));
@@ -546,13 +554,14 @@ void main() {
     final client = _Client([
       _Response(bytes),
       _Response(
-          utf8.encode('${digest ?? sha256.convert(bytes)}  ${asset.name}\n'))
+          utf8.encode('# NikoDesk release v1.1.0\n${digest ?? sha256.convert(bytes)}  ${asset.name}\n')),
+      _Response(utf8.encode(base64Encode([1, 2, 3])))
     ]);
     final release =
-        NikoReleaseInfo(tag: 'v1.1.0', notes: '', assets: [asset, sums]);
+        NikoReleaseInfo(tag: 'v1.1.0', notes: '', assets: [asset, sums, signature]);
     return _http(
         client,
-        () => NikoUpdater(runProcess: processes.run)
+        () => NikoUpdater(publisher: _publisher, runProcess: processes.run)
             .verifyAndStageMacUpdate(release, asset, directory));
   }
 
@@ -561,7 +570,7 @@ void main() {
       () async {
     final processes = _Processes();
     expect(await stage(_zip(_bundleFiles), processes), isTrue);
-    await NikoUpdater(runProcess: processes.run)
+    await NikoUpdater(publisher: _publisher, runProcess: processes.run)
         .revealStagedMacUpdate(directory);
     expect(processes.calls.last.$1, '/usr/bin/open');
     expect(
@@ -583,11 +592,28 @@ void main() {
         isTrue);
   });
 
+  test('unconfigured publisher refuses staging before downloading', () async {
+    final client = _Client([]);
+    final release = NikoReleaseInfo(tag: 'v1.1.0', notes: '',
+        assets: [asset, sums, signature]);
+    expect(await _http(client, () => const NikoUpdater()
+        .verifyAndStageMacUpdate(release, asset, directory)), isFalse);
+    expect(client.requested, isEmpty);
+    expect(directory.listSync(), isEmpty);
+  });
+
+  test('invalid publisher signature refuses extraction and cleans downloads', () async {
+    final processes = _Processes()..publisherSignatureExit = 1;
+    expect(await stage(_zip(_bundleFiles), processes), isFalse);
+    expect(processes.calls.map((call) => call.$1), ['/usr/bin/openssl']);
+    expect(directory.listSync(), isEmpty);
+  });
+
   test('digest mismatch refuses extraction', () async {
     final processes = _Processes();
     expect(
         await stage(_zip(_bundleFiles), processes, digest: '0' * 64), isFalse);
-    expect(processes.calls, isEmpty);
+    expect(processes.calls.where((call) => call.$1 != '/usr/bin/openssl'), isEmpty);
     expect(directory.listSync(), isEmpty);
   });
 
@@ -604,7 +630,7 @@ void main() {
     }
     final processes = _Processes();
     expect(await stage(bytes, processes), isFalse);
-    expect(processes.calls, isEmpty);
+    expect(processes.calls.where((call) => call.$1 != '/usr/bin/openssl'), isEmpty);
     expect(directory.listSync(), isEmpty);
   });
 
@@ -614,7 +640,7 @@ void main() {
     expect(await stage(_zip(_bundleFiles), processes), isTrue);
     final cancellation = NikoUpdateCancellation()..cancel();
     await expectLater(
-        NikoUpdater(runProcess: processes.run)
+        NikoUpdater(publisher: _publisher, runProcess: processes.run)
             .revealStagedMacUpdate(directory, cancellation: cancellation),
         throwsA(isA<NikoUpdateCancelled>()));
     expect(processes.calls.any((call) => call.$1 == '/usr/bin/open'), isFalse);
@@ -631,17 +657,18 @@ void main() {
       final processes = _Processes();
       final client = _Client([
         _Response(bytes),
-        _Response(utf8.encode('${sha256.convert(bytes)}  ${asset.name}\n'))
+        _Response(utf8.encode('# NikoDesk release v1.1.0\n${sha256.convert(bytes)}  ${asset.name}\n')),
+        _Response(utf8.encode(base64Encode([1, 2, 3])))
       ]);
       final release =
-          NikoReleaseInfo(tag: 'v1.1.0', notes: '', assets: [asset, sums]);
+          NikoReleaseInfo(tag: 'v1.1.0', notes: '', assets: [asset, sums, signature]);
       expect(
           await _http(
               client,
-              () => NikoUpdater(limits: limit, runProcess: processes.run)
+              () => NikoUpdater(publisher: _publisher, limits: limit, runProcess: processes.run)
                   .verifyAndStageMacUpdate(release, asset, directory)),
           isFalse);
-      expect(processes.calls, isEmpty);
+      expect(processes.calls.where((call) => call.$1 != '/usr/bin/openssl'), isEmpty);
       expect(directory.listSync(), isEmpty);
     });
   }
@@ -663,7 +690,7 @@ void main() {
       final processes = _Processes();
       expect(await stage(_zip({..._bundleFiles, name: 'unsafe'}), processes),
           isFalse);
-      expect(processes.calls, isEmpty);
+      expect(processes.calls.where((call) => call.$1 != '/usr/bin/openssl'), isEmpty);
     });
   }
 
@@ -674,7 +701,7 @@ void main() {
             _zip(_bundleFiles, links: {'NikoDesk.app/escape': '../../outside'}),
             processes),
         isFalse);
-    expect(processes.calls, isEmpty);
+    expect(processes.calls.where((call) => call.$1 != '/usr/bin/openssl'), isEmpty);
   });
 
   test('writing through a symlink is rejected before extraction', () async {
@@ -685,7 +712,7 @@ void main() {
                 links: {'NikoDesk.app/link': 'Contents'}),
             processes),
         isFalse);
-    expect(processes.calls, isEmpty);
+    expect(processes.calls.where((call) => call.$1 != '/usr/bin/openssl'), isEmpty);
   });
 
   for (final failure in [

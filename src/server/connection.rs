@@ -1,3 +1,6 @@
+#[cfg(feature = "nikodesk")]
+#[path = "nikodesk_directory.rs"]
+mod nikodesk_directory;
 #[cfg(all(feature = "nikodesk", target_os = "macos"))]
 use crate::nikodesk_input;
 #[cfg(all(feature = "nikodesk", target_os = "windows"))]
@@ -384,6 +387,8 @@ pub struct Connection {
     server: super::ServerPtrWeak,
     hash: Hash,
     read_jobs: Vec<fs::TransferJob>,
+    #[cfg(feature = "nikodesk")]
+    niko_directory: fs::directory_scan::Scans,
     timer: crate::RustDeskInterval,
     file_timer: crate::RustDeskInterval,
     file_transfer: Option<(String, bool)>,
@@ -683,6 +688,8 @@ impl Connection {
             server,
             hash,
             read_jobs: Vec::new(),
+            #[cfg(feature = "nikodesk")]
+            niko_directory: Default::default(),
             timer: crate::rustdesk_interval(time::interval(SEC30)),
             file_timer: crate::rustdesk_interval(time::interval(SEC30)),
             file_transfer: None,
@@ -1030,6 +1037,8 @@ impl Connection {
                                 }
                             } else if &name == "file" {
                                 conn.file = enabled;
+                                #[cfg(feature = "nikodesk")]
+                                if !enabled { conn.cancel_nikodesk_directories(); }
                                 conn.send_permission(Permission::File, enabled).await;
                                 #[cfg(feature = "nikodesk")]
                                 if !enabled && conn.file_transfer.is_some() {
@@ -1212,6 +1221,10 @@ impl Connection {
                                 conn.handle_file_digest_from_cm(id, file_num, last_modified, file_size, is_resume).await;
                             }
                         }
+                        #[cfg(feature = "nikodesk")]
+                        ipc::Data::NikoDirectoryResult { request, conn_id, result } => {
+                            conn.receive_nikodesk_directory(request, conn_id, result).await;
+                        }
                         ipc::Data::AllFilesResult { id, conn_id, path, result } => {
                             if conn_id == conn.inner.id() {
                                 conn.handle_all_files_result(id, path, result).await;
@@ -1250,6 +1263,8 @@ impl Connection {
                     }
                 },
                 _ = conn.file_timer.tick() => {
+                    #[cfg(feature = "nikodesk")]
+                    conn.poll_nikodesk_directory().await;
                     if !conn.read_jobs.is_empty() {
                         conn.send_to_cm(ipc::Data::FileTransferLog(("transfer".to_string(), fs::serialize_transfer_jobs(&conn.read_jobs))));
                         match fs::handle_read_jobs(&mut conn.read_jobs, &mut conn.stream).await {
@@ -1264,6 +1279,8 @@ impl Connection {
                             }
                         }
                     } else {
+                        #[cfg(feature = "nikodesk")]
+                        if conn.niko_directory.is_pending() { continue; }
                         conn.file_timer = crate::rustdesk_interval(time::interval_at(Instant::now() + SEC30, SEC30));
                     }
                 }
@@ -4077,6 +4094,9 @@ impl Connection {
                                 self.read_dir(&rd.path, rd.include_hidden);
                             }
                             Some(file_action::Union::AllFiles(f)) => {
+                                #[cfg(feature = "nikodesk")]
+                                self.start_nikodesk_directory(f.id, f.path, f.include_hidden, None).await;
+                                #[cfg(not(feature = "nikodesk"))]
                                 if crate::common::need_fs_cm_send_files() {
                                     self.send_fs(ipc::FS::ReadAllFiles {
                                         path: f.path,
@@ -4118,6 +4138,10 @@ impl Connection {
                                         let od = can_enable_overwrite_detection(
                                             get_version_number(&self.lr.version),
                                         );
+                                        #[cfg(feature = "nikodesk")]
+                                        self.start_nikodesk_directory(id, path, s.include_hidden,
+                                            Some(fs::directory_scan::ReadSpec { file_num: s.file_num, overwrite_detection: od })).await;
+                                        #[cfg(not(feature = "nikodesk"))]
                                         if crate::common::need_fs_cm_send_files() {
                                             // Delegate file reading to CM on Windows
                                             self.cm_read_job_ids.insert(id);
@@ -4238,6 +4262,8 @@ impl Connection {
                                 )));
                             }
                             Some(file_action::Union::Cancel(c)) => {
+                                #[cfg(feature = "nikodesk")]
+                                self.niko_directory.cancel(c.id);
                                 self.send_fs(ipc::FS::CancelWrite { id: c.id });
                                 let _ = self.cm_read_job_ids.remove(&c.id);
                                 self.send_fs(ipc::FS::CancelRead {
@@ -5764,6 +5790,8 @@ impl Connection {
             return;
         }
         self.closed = true;
+        #[cfg(feature = "nikodesk")]
+        self.cancel_nikodesk_directories();
         #[cfg(all(feature = "nikodesk", any(target_os = "macos", target_os = "windows")))]
         if let Some(audit) = self.niko_audit.as_mut() { audit.finish(); }
         #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
@@ -6060,19 +6088,29 @@ impl Connection {
     }
 
     fn read_empty_dirs(&mut self, dir: &str, include_hidden: bool) {
-        let dir = dir.to_string();
-        self.send_fs(ipc::FS::ReadEmptyDirs {
-            dir,
-            include_hidden,
-        });
+        #[cfg(feature = "nikodesk")]
+        self.start_nikodesk_directory_query(dir, include_hidden, fs::directory_scan::Kind::EmptyDirectories);
+        #[cfg(not(feature = "nikodesk"))]
+        {
+            let dir = dir.to_string();
+            self.send_fs(ipc::FS::ReadEmptyDirs {
+                dir,
+                include_hidden,
+            });
+        }
     }
 
     fn read_dir(&mut self, dir: &str, include_hidden: bool) {
-        let dir = dir.to_string();
-        self.send_fs(ipc::FS::ReadDir {
-            dir,
-            include_hidden,
-        });
+        #[cfg(feature = "nikodesk")]
+        self.start_nikodesk_directory_query(dir, include_hidden, fs::directory_scan::Kind::Directory);
+        #[cfg(not(feature = "nikodesk"))]
+        {
+            let dir = dir.to_string();
+            self.send_fs(ipc::FS::ReadDir {
+                dir,
+                include_hidden,
+            });
+        }
     }
 
     /// Create a new read job and start processing it (Connection-side).

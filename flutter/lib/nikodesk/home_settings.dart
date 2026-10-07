@@ -235,13 +235,15 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
         _buildInfo = info;
         _buildInfoLoading = false;
       });
-      if (!release.isNightly &&
+      final legacyTransition = !release.isNightly &&
+          info.canMigrateLegacyPreviewTo(release.tag);
+      if (!release.isNightly && !legacyTransition &&
           info.relationTo(release.tag) !=
               PublishedVersionRelation.newerRelease) {
         nikoNotice(context, info.updateStatus(release.tag));
         return;
       }
-      final macAsset = Platform.isMacOS && !release.isNightly
+      final macAsset = Platform.isMacOS && !release.isNightly && !legacyTransition && _updater.publisher.configured
           ? release.assetFor('macos-arm64')
           : null;
       final confirmed = await showDialog<bool>(
@@ -249,7 +251,9 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
           builder: (dialog) => AlertDialog(
                 title: Text(release.isNightly
                     ? nikoText('预览版本', 'Nightly preview')
-                    : nikoText('发现新版本', 'Update available')),
+                    : legacyTransition
+                        ? nikoText('切换到正式版', 'Switch to stable')
+                        : nikoText('发现新版本', 'Update available')),
                 content: SizedBox(
                     width: 420,
                     child: SingleChildScrollView(
@@ -276,6 +280,12 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
                                 '预览版随 main 更新，可能尚未完成真机验收。相同版本号不能判断是否比本机构建更新；请核对发布名称和时间后手动下载。',
                                 'Nightly follows main and may still be awaiting device acceptance. Matching version numbers cannot establish whether it is newer than your installed build; review the release name and time before downloading manually.')),
                           ],
+                          if (legacyTransition) ...[
+                            const SizedBox(height: 10),
+                            Text(nikoText(
+                                '本机 1.1.0+9 使用旧预览版编号；1.0.7 是新的正式版编号。本次仅打开发布页供你核对并手动切换，请保留备用远控入口。',
+                                'Installed 1.1.0+9 uses the old preview numbering. Stable 1.0.7 uses the new scheme. Open the release page to review and switch manually, keeping a backup remote-access path.')),
+                          ],
                           const SizedBox(height: 10),
                           if (release.notes.isNotEmpty)
                             Text(release.notes,
@@ -289,11 +299,11 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
                           const SizedBox(height: 10),
                           Text(
                               macAsset == null
-                                  ? nikoText('本平台请从 GitHub Releases 下载更新包。',
-                                      'Download the update from GitHub Releases for this platform.')
+                                  ? nikoText('请前往 GitHub Releases 手动下载。此构建未提供本平台的发行者签名验证下载流程。',
+                                      'Download manually from GitHub Releases. This build does not provide publisher-verified downloads for this platform.')
                                   : nikoText(
-                                      '下载并校验更新包后，在 Finder 中显示供你手动安装；当前应用会继续运行。',
-                                      'Download and verify the update, then show it in Finder for manual installation. The current app keeps running.'),
+                                      '验证发行者签名和更新包完整性后，在 Finder 中显示供你手动安装；当前应用会继续运行。',
+                                      'Verify the publisher signature and update integrity, then show it in Finder for manual installation. The current app keeps running.'),
                               style: TextStyle(
                                   fontSize: 11.5,
                                   color: Theme.of(dialog)
@@ -593,9 +603,11 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
             ]),
             const SizedBox(height: 6),
             Text(
-                nikoText(
-                    '从 GitHub Releases 下载，校验 SHA256 与应用包完整性后手动安装。SHA256 不等同于发行签名。',
-                    'Download from GitHub Releases, verify SHA256 and bundle integrity, then install manually. SHA256 is not a publisher signature.'),
+                _updater.publisher.configured
+                    ? nikoText('macOS 更新使用内置发行公钥验证签名与 SHA256，再手动安装。系统签名与公证状态请参阅发布说明。',
+                        'macOS updates verify a signed SHA256 manifest with the built-in publisher key before manual installation. See release notes for OS signing and notarization status.')
+                    : nikoText('此构建未配置发行验证公钥，更新仅提供手动下载入口。SHA256 本身不能确认发行者。',
+                        'No publisher verification key is configured in this build. Updates offer manual download only. SHA256 alone does not authenticate a publisher.'),
                 style: TextStyle(fontSize: 11.5, color: muted)),
           ]),
           const SizedBox(height: 16),

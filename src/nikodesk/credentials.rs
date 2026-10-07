@@ -71,7 +71,18 @@ fn account(key: &PeerStorageKey) -> String {
         Sha256::digest(format!("nikodesk-controller-credential-v1\0{}", key.storage()).as_bytes())
     )
 }
+
+fn ensure_persistent_profile() -> ResultType<()> {
+    // Experimental binaries must never read, replace or delete the installed
+    // client's credentials, including when their profile variable is absent.
+    if cfg!(feature = "nikodesk-dev-profile") {
+        bail!("secure_credentials_development_disabled");
+    }
+    Ok(())
+}
+
 pub(crate) fn load(key: &PeerStorageKey) -> ResultType<Option<StoredCredential>> {
+    ensure_persistent_profile()?;
     let account = account(key);
     let Some(mut bytes) = platform::read(&account)? else {
         return Ok(None);
@@ -81,6 +92,7 @@ pub(crate) fn load(key: &PeerStorageKey) -> ResultType<Option<StoredCredential>>
     credential.map(Some)
 }
 pub(crate) fn save(key: &PeerStorageKey, salt: &str, password: &[u8]) -> ResultType<()> {
+    ensure_persistent_profile()?;
     if password.len() != 32 || password.iter().all(|byte| *byte == 0) || salt.is_empty() {
         bail!("secure_credentials_invalid");
     }
@@ -105,6 +117,7 @@ pub(crate) fn save(key: &PeerStorageKey, salt: &str, password: &[u8]) -> ResultT
     result
 }
 pub(crate) fn delete(key: &PeerStorageKey) -> ResultType<()> {
+    ensure_persistent_profile()?;
     let account = account(key);
     platform::delete(&account)?;
     match platform::read(&account)? {
@@ -155,6 +168,26 @@ pub(crate) fn status(input: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn persistent_storage_is_available_only_in_production_builds() {
+        assert_eq!(
+            ensure_persistent_profile().is_ok(),
+            !cfg!(feature = "nikodesk-dev-profile")
+        );
+    }
+
+    #[cfg(feature = "nikodesk-dev-profile")]
+    #[test]
+    fn experimental_build_rejects_all_persistent_credential_operations() {
+        let scope = super::super::server_scope::ServerScope::from_namespace(&"a".repeat(64)).unwrap();
+        let key = scope.peer_key("123456789").unwrap();
+        assert!(matches!(load(&key), Err(error)
+            if error.to_string() == "secure_credentials_development_disabled"));
+        for result in [save(&key, "synthetic-salt", &[7; 32]), delete(&key)] {
+            assert_eq!(result.unwrap_err().to_string(), "secure_credentials_development_disabled");
+        }
+    }
+
     #[test]
     fn credential_records_bind_account_and_salt_and_never_accept_truncation() {
         let account = "synthetic-account";

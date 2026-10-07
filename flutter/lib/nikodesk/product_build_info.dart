@@ -76,6 +76,11 @@ class ProductBuildInfo {
         : '$value+$build';
   }
 
+  // Build 9 used the old preview numbering scheme. This is a manual channel
+  // transition, so keep numeric ordering (relationTo) unchanged.
+  bool canMigrateLegacyPreviewTo(String releaseTag) =>
+      version == '1.1.0' && buildNumber == '9' && releaseTag == 'v1.0.7';
+
   /// Release tags do not identify an installed build number or its provenance.
   PublishedVersionRelation relationTo(String releaseTag) {
     List<int>? stable(String? value) {

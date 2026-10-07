@@ -12,6 +12,8 @@ import 'package:flutter_hbb/models/platform_model.dart';
 import 'metrics.dart';
 import 'diagnostics_export.dart';
 import 'policy.dart';
+import 'remote_resolution.dart' show nikoViewRefreshRate, nikoAutomaticFpsOption,
+    nikoCancelViewportUpdate;
 import 'ui.dart';
 
 void showNikoSessionTools(FFI ffi, {bool diagnostics = false}) {
@@ -55,23 +57,9 @@ class NikoSessionButton extends StatelessWidget {
       );
 }
 
-/// The highest refresh rate among this controller's screens, or null when
-/// none can be read.
-double? nikoLocalRefreshRate() {
-  try {
-    double? best;
-    for (final display
-        in WidgetsBinding.instance.platformDispatcher.displays) {
-      final rate = display.refreshRate;
-      if (rate.isFinite && rate > 0 && (best == null || rate > best)) {
-        best = rate;
-      }
-    }
-    return best;
-  } catch (_) {
-    return null;
-  }
-}
+/// Refresh rate of the view containing this panel, never another monitor.
+double? nikoLocalRefreshRate([BuildContext? context]) =>
+    nikoViewRefreshRate(context == null ? null : View.of(context));
 
 String _modeLabel(PictureMode mode) {
   switch (mode) {
@@ -168,6 +156,7 @@ class _PictureModesState extends State<_PictureModes> {
 
   Future<void> _apply() async {
     if (!_sessionCurrent || _loading || _saving) return;
+    nikoCancelViewportUpdate(_session);
     setState(() {
       _saving = true;
       _message = null;
@@ -175,7 +164,7 @@ class _PictureModesState extends State<_PictureModes> {
     final request = PictureRequest.forMode(_mode,
         customPercent: _quality.round(),
         customFps: _fps.round(),
-        smoothFps: nikoSmoothFps(nikoLocalRefreshRate()));
+        smoothFps: nikoSmoothFps(nikoLocalRefreshRate(context)));
     final session = _session;
     try {
       await bind.sessionPeerOption(
@@ -190,6 +179,10 @@ class _PictureModesState extends State<_PictureModes> {
       if (request.requestsCustomFps && _supportsFps) {
         await bind.sessionSetCustomFps(sessionId: session, fps: request.fps!);
       }
+      if (!_sessionCurrent) return;
+      await bind.sessionPeerOption(sessionId: session,
+          name: nikoAutomaticFpsOption,
+          value: _mode == PictureMode.smooth && _supportsFps ? '${request.fps}' : '');
       if (request.originalScale) {
         await bind.sessionSetViewStyle(sessionId: session, value: 'original');
         if (_sessionCurrent) await widget.ffi.canvasModel.updateViewStyle();
@@ -220,7 +213,7 @@ class _PictureModesState extends State<_PictureModes> {
         return nikoText('上游 best 画质 + 原始 1:1 缩放；编码器自动协商。',
             'Upstream best quality + original 1:1 view; automatic codec negotiation.');
       case PictureMode.smooth:
-        final fps = nikoSmoothFps(nikoLocalRefreshRate());
+        final fps = nikoSmoothFps(nikoLocalRefreshRate(context));
         return nikoText(
             '帧率上限跟随本机屏幕刷新率（此处为 $fps，范围 60–$nikoMaxFps）、50% 码率比例（需要对端支持）；实际帧率不超过对端屏幕的刷新率，对端仍按网络延迟自行下调。保留当前缩放。',
             'Frame limit follows this screen\'s refresh rate ($fps here, 60–$nikoMaxFps) at a 50% bitrate ratio when supported. The peer sends no more than its own screen refreshes and still lowers both when the network is slow. Keeps the current view scale.');

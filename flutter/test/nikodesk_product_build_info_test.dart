@@ -11,6 +11,18 @@ const _fixture = ProductBuildInfo(
     version: '9.8.7', buildNumber: '42', nativeVersion: '0.9.0');
 
 void main() {
+  test('only the known preview build gets a manual stable transition', () {
+    const preview = ProductBuildInfo(version: '1.1.0', buildNumber: '9');
+    expect(preview.canMigrateLegacyPreviewTo('v1.0.7'), isTrue);
+    expect(preview.relationTo('v1.0.7'), PublishedVersionRelation.localAhead);
+    expect(preview.canMigrateLegacyPreviewTo('v1.0.6'), isFalse);
+    expect(preview.canMigrateLegacyPreviewTo('nightly'), isFalse);
+    expect(const ProductBuildInfo(version: '1.1.0', buildNumber: '10')
+        .canMigrateLegacyPreviewTo('v1.0.7'), isFalse);
+    expect(const ProductBuildInfo(version: '1.1.0')
+        .canMigrateLegacyPreviewTo('v1.0.7'), isFalse);
+  });
+
   setUp(() => NikoLanguage.english = true);
 
   test('reads package version/build independently from native protocol',

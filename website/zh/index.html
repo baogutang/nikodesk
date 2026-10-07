@@ -378,6 +378,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
   <div class="sec-head reveal">
     <span class="sec-pill">功能</span>
     <h2>为日常驾驭而生</h2>
+    <p class="sec-sub">1.0.7+16 是尚未正式发布的开发候选：增加隐私屏持续验证与恢复、有界且可取消的目录扫描、开发凭据隔离、当前窗口画面与帧率匹配、无效分辨率切换后的恢复，以及使用固定发行公钥的签名更新门禁。同时修补 Rust OpenSSL 绑定，全部依赖审计仍未清零。可查看<a href="https://github.com/baogutang/nikodesk/actions/workflows/release.yml?query=branch%3Avalidation%2F1.0.7">候选构建状态</a>；构建检查不能代替设备验收。稳定下载保持 v1.0.6。</p>
     <p class="sec-sub">1.0.6 让隐私屏找得到、看得见：工具栏按钮和控制中心的开关都能开启，开启期间远端画面上一直有标记。帧率上限放开到 120，“操作流畅”按本机屏幕的刷新率请求，不再被固定在 30 帧；被控 Mac 能出到设定的上限。Windows 和 Android 换上了 NikoDesk 自己的图标。1.0.5 的按本机屏幕大小采集和密码直接连入、暖纸亮色、Windows 控 Mac 编辑快捷键与远端空间切换继续可用；同一台 Mac 两个身份之间的会话已核对隐私屏和帧率上限，新的界面和图标还没有在 Windows 和 Android 设备上看过，跨设备延迟和帧率仍未测量。</p>
   </div>
   <div class="grid">
@@ -554,7 +555,7 @@ Key:      (id_ed25519.pub)</pre>
   <div class="sec-head reveal">
     <span class="sec-pill">下载</span>
     <h2>下载与平台状态</h2>
-    <p class="sec-sub">v1.0.6 标签自动构建 macOS、Windows 与 Android，全部检查通过后统一发布安装包；请对照其 SHA256SUMS 校验下载文件。nightly 继续作为独立滚动预览。核心会话——带画面的密码认证、双向文件传输、含重放拒绝的 TOTP 双重验证、两端的会话记录、远程终端、端口隧道与画质模式——已在一台 Mac 上经私服中继在同一用户的两个身份之间完成端到端验证；跨设备与 Windows、Android 真机验收仍在进行中，下方说明均如实标注。</p>
+    <p class="sec-sub">现有 v1.0.6 提供 macOS、Windows 与 Android 安装包；从 1.0.7 起，标签只创建发布草稿，正式晋级需要对同一批包完成签名与验收；请对照其 SHA256SUMS 校验下载文件。nightly 继续作为独立滚动预览。核心会话——带画面的密码认证、双向文件传输、含重放拒绝的 TOTP 双重验证、两端的会话记录、远程终端、端口隧道与画质模式——已在一台 Mac 上经私服中继在同一用户的两个身份之间完成端到端验证；跨设备与 Windows、Android 真机验收仍在进行中，下方说明均如实标注。</p>
   </div>
   <div class="dl-list">
     <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.6/NikoDesk-macos-arm64.dmg">
@@ -591,7 +592,7 @@ Key:      (id_ed25519.pub)</pre>
     </details>
     <details class="reveal">
       <summary>安全性到底怎么样？</summary>
-      <div class="a">会话使用上游加密与认证实现，连接入口要求密码。服务端公钥用于服务器身份校验，不是远控密码；服务端私钥应留在服务端。终端、摄像头、隧道与语音默认关闭，各自需要本机逐能力策略加上被控端批准，会话中可随时撤销。无人值守、网络唤醒、隐私屏、虚拟屏与断开时锁定已在源码中实现；真实跨设备验收仍在进行中。构建或单元测试不能替代跨设备安全验收。</div>
+      <div class="a">会话使用上游加密与认证实现，连接入口要求密码。服务端公钥用于服务器身份校验，不是远控密码；服务端私钥应留在服务端。终端、摄像头、隧道与语音默认关闭，各自需要本机逐能力策略加上被控端批准，会话中可随时撤销。现有能力受平台限制：Windows 有无人值守服务和虚拟屏驱动路径；macOS 有基于 gamma 的隐私黑屏，但尚未实现虚拟屏；Android 仅做控制端。全部规划尚未完成，真实跨设备验收仍在进行中。构建或单元测试不能替代跨设备安全验收。</div>
     </details>
     <details class="reveal">
       <summary>和 RustDesk 是什么关系？</summary>

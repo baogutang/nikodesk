@@ -53,6 +53,7 @@ void NikoPrivacyTeardownInput() {
 void NikoPrivacyReconfigured(CGDirectDisplayID, CGDisplayChangeSummaryFlags, void*);
 
 bool NikoPrivacyTurnOff() {
+    const bool wasActive = nikoPrivacyActive;
     nikoPrivacyActive = false;
     ++nikoPrivacyMonitorToken;
     ++nikoPrivacySessionToken;
@@ -67,7 +68,7 @@ bool NikoPrivacyTurnOff() {
     // Restore only tables this session saved and actually attempted to change.
     // No global ColorSync reset: it would overwrite another application's state.
     bool success = nikoPrivacyGammas.restore(NikoPrivacyReadGamma, NikoPrivacyWriteGamma);
-    if (!success) NSLog(@"Niko privacy gamma restore incomplete; saved tables retained for retry");
+    if (!success && wasActive) NSLog(@"Niko privacy gamma restore incomplete; saved tables retained for retry");
     bool helperStopped = nikoPrivacyWatchdog.stop();
     return success && callbackRemoved && helperStopped;
 }
@@ -138,6 +139,12 @@ bool NikoPrivacyEnforceAll() {
         nikoPrivacyGammas.enforce_all(uuids, NikoPrivacyReadGamma, NikoPrivacyWriteGamma, NikoPrivacyCheckpoint);
 }
 
+bool NikoPrivacyValidateAll() {
+    if (!nikoPrivacyEventTap || !CGEventTapIsEnabled(nikoPrivacyEventTap)) return false;
+    std::vector<std::string> uuids;
+    return NikoPrivacyDisplayUUIDs(uuids) && nikoPrivacyGammas.verify_all(uuids, NikoPrivacyReadGamma);
+}
+
 void NikoPrivacyHeartbeat(uint64_t token) {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 200 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
         if (!nikoPrivacyActive || token != nikoPrivacySessionToken) return;
@@ -151,14 +158,17 @@ void NikoPrivacyHeartbeat(uint64_t token) {
 }
 
 void NikoPrivacyMonitor(uint64_t token, std::chrono::steady_clock::time_point deadline) {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 200 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+    const int64_t interval = std::chrono::steady_clock::now() < deadline ? 200 : 1000;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, interval * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
         if (!nikoPrivacyActive || token != nikoPrivacyMonitorToken) return;
-        if (!NikoPrivacyEnforceAll()) {
+        // After display configuration settles, keep checking at low frequency.
+        // Never repaint over an external gamma change or a local recovery action.
+        if (!NikoPrivacyValidateAll()) {
             NSLog(@"Niko privacy all-display validation failed; restoring owned displays");
             NikoPrivacyTurnOff();
             return;
         }
-        if (std::chrono::steady_clock::now() < deadline) NikoPrivacyMonitor(token, deadline);
+        NikoPrivacyMonitor(token, deadline);
     });
 }
 
@@ -186,7 +196,7 @@ void NikoPrivacyReconfigured(CGDirectDisplayID, CGDisplayChangeSummaryFlags flag
 bool NikoPrivacySetOnMain(bool on) {
     if (!on) return NikoPrivacyTurnOff();
     if (nikoPrivacyActive) {
-        if (NikoPrivacyEnforceAll()) return true;
+        if (NikoPrivacyValidateAll()) return true;
         NikoPrivacyTurnOff();
         return false;
     }

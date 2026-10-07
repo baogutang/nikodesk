@@ -1,8 +1,8 @@
 name: Release NikoDesk
 
 # Every push to main builds all three platforms and replaces the rolling
-# `nightly` pre-release; a v* tag publishes a formal release. Windows and
-# Android still need target-device acceptance, which the notes say plainly.
+# `nightly` pre-release; a v* tag creates a draft candidate. Formal promotion
+# verifies signed acceptance of those same bytes without rebuilding.
 on:
   push:
     branches:
@@ -126,30 +126,45 @@ jobs:
           PRODUCT_BUILD_NUMBER: ${{ steps.product-version.outputs.build_number }}
         run: |
           flutter pub get
-          flutter build macos --release --dart-define=NIKODESK=true --build-name "$PRODUCT_VERSION" --build-number "$PRODUCT_BUILD_NUMBER"
+          UPDATE_PUBLIC_KEY=$(python3 ../.github/scripts/update-key.py)
+          flutter build macos --release --dart-define=NIKODESK=true --dart-define="NIKODESK_UPDATE_PUBLIC_KEY_BASE64=$UPDATE_PUBLIC_KEY" --build-name "$PRODUCT_VERSION" --build-number "$PRODUCT_BUILD_NUMBER"
 
-      - name: Test video recovery, Mac key mapping and upstream compatibility
+      - name: Test product security, recovery and upstream compatibility
         run: |
+          set -euo pipefail
+          mkdir -p test-evidence
+          for filter in nikodesk:: nikodesk_ privacy_mode::macos::tests client::kx_tests server::connection::test::session_scope; do
+            cargo test --locked --release --lib \
+              --features flutter,hwcodec,unix-file-copy-paste,screencapturekit,nikodesk \
+              "$filter" 2>&1 | tee "test-evidence/${filter//::/-}.log"
+          done
+          cargo test --locked -p base --lib
           cargo test --locked --release --lib \
-            --features flutter,hwcodec,unix-file-copy-paste,screencapturekit,nikodesk \
-            nikodesk::video_queue::tests
-          cargo test --locked --release --lib \
-            --features flutter,hwcodec,unix-file-copy-paste,screencapturekit,nikodesk \
-            nikodesk::mac_shortcuts::tests
-          cargo test --locked --release --lib \
-            --features flutter,hwcodec,unix-file-copy-paste,screencapturekit,nikodesk \
-            nikodesk::server_settings::tests
-          cargo test --locked --release --lib \
-            --features flutter,hwcodec,unix-file-copy-paste,screencapturekit,nikodesk \
-            nikodesk::capture_scale::tests
+            --features flutter,hwcodec,unix-file-copy-paste,screencapturekit,nikodesk,nikodesk-dev-profile \
+            nikodesk::credentials::tests
           cargo check --locked --lib --bins \
             --features flutter,hwcodec,unix-file-copy-paste,screencapturekit
+
+      - name: Retain native test logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macos-native-test-evidence
+          path: test-evidence/
 
       - name: Test NikoDesk and upstream Flutter paths
         working-directory: flutter
         run: |
           flutter test --no-pub --dart-define=NIKODESK=true
           flutter test --no-pub --dart-define=NIKODESK=false
+
+      - name: Test native privacy callbacks without physical display changes
+        run: bash .github/scripts/test-macos-privacy.sh
+
+      - name: Test release promotion gate
+        run: |
+          python3 -m unittest discover -s .github/scripts/tests -p test_release_manifest.py -v
+          python3 -m unittest discover -s .github/scripts/tests -p test_update_key.py -v
 
       - name: Sign and package
         run: |
@@ -607,13 +622,14 @@ jobs:
             --title "NikoDesk nightly ($short)" --notes-file notes.md
 
   release:
-    name: Publish release
+    name: Prepare draft release candidate
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: [build-macos, build-windows, build-android, test-windows-packaging]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: dist
@@ -631,14 +647,27 @@ jobs:
           test -f NikoDesk-windows-x64-setup-validation.exe
           test -f NikoDesk-windows-x64-setup-validation.zip
           test -f NikoDesk-android-arm64.apk
-          sha256sum * | tee SHA256SUMS
+          python3 - <<'PYCODE'
+          import hashlib, json, os
+          from pathlib import Path
+          key = Path('../res/nikodesk-update-public.pem')
+          Path('build-provenance.json').write_text(json.dumps({
+              'tag': os.environ['GITHUB_REF_NAME'], 'commit': os.environ['GITHUB_SHA'],
+              'workflow_run': os.environ['GITHUB_RUN_ID'],
+              'publisher_public_key_sha256': hashlib.sha256(key.read_bytes()).hexdigest() if key.is_file() else None,
+              'state': 'candidate; device acceptance and publisher signature pending'
+          }, sort_keys=True) + '\n')
+          PYCODE
+          python3 ../.github/scripts/release-manifest.py create . --tag "$GITHUB_REF_NAME"
 
-      - name: Create GitHub release
+      - name: Create draft candidate for acceptance
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
+          draft: true
           generate_release_notes: true
           name: NikoDesk ${{ github.ref_name }}
           body: |
+            Draft candidate: not a formal release. Promotion requires signed acceptance bound to these exact package hashes and source commit.
             macOS (Apple silicon): DMG for installation; the ZIP keeps the updater bundle format. Ad-hoc signature, no Apple Developer ID or notarization.
             Windows x64: portable EXE (no installation) or ZIP; the setup-validation installer adds unattended access. Unsigned.
             Android arm64: controller APK signed with the NikoDesk release key.

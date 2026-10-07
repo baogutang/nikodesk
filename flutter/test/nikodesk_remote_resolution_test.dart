@@ -144,6 +144,34 @@ void main() {
     expect(nikoCaptureModeFromName('unknown'), NikoCaptureMode.fit);
   });
 
+  test('a confirmed mode change with identical capture pixels is restored', () {
+    const before = NikoRemoteResolution(current: NikoDisplayMode(2560, 1440),
+        original: NikoDisplayMode(2560, 1440), capturedPixels: NikoDisplayMode(3840, 2160),
+        fit: NikoDisplayMode(1920, 1080), localLongEdge: 1920);
+    const after = NikoRemoteResolution(current: NikoDisplayMode(1920, 1080),
+        original: NikoDisplayMode(2560, 1440), capturedPixels: NikoDisplayMode(3840, 2160),
+        fit: NikoDisplayMode(1920, 1080), localLongEdge: 1920);
+    expect(nikoAutoFitShouldRestore(before: before, after: after, requested: before.fit!), isTrue);
+  });
+
+  test('rollback never overwrites a different mode or a different original', () {
+    const before = NikoRemoteResolution(current: NikoDisplayMode(2560, 1440),
+        original: NikoDisplayMode(2560, 1440), capturedPixels: NikoDisplayMode(5120, 2880),
+        fit: NikoDisplayMode(1920, 1080), localLongEdge: 3840);
+    NikoRemoteResolution after(NikoDisplayMode current, NikoDisplayMode original,
+        NikoDisplayMode pixels) => NikoRemoteResolution(current: current,
+            original: original, capturedPixels: pixels, fit: before.fit);
+    expect(nikoAutoFitShouldRestore(before: before,
+        after: after(const NikoDisplayMode(1600, 900), before.original, const NikoDisplayMode(6400, 3600)),
+        requested: before.fit!), isFalse);
+    expect(nikoAutoFitShouldRestore(before: before,
+        after: after(before.fit!, const NikoDisplayMode(3840, 2160), const NikoDisplayMode(5120, 2880)),
+        requested: before.fit!), isFalse);
+    expect(nikoAutoFitShouldRestore(before: before,
+        after: after(before.fit!, before.original, const NikoDisplayMode(3840, 2160)),
+        requested: before.fit!), isFalse);
+  });
+
   Widget panel(
           {NikoRemoteResolution? state,
           bool? auto,

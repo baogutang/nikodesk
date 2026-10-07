@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 
 import 'update_transfer.dart';
+import 'update_publisher.dart';
 export 'update_transfer.dart'
     show NikoUpdateCancellation, NikoUpdateCancelled, NikoUpdateLimits;
 
@@ -25,8 +26,8 @@ class _UpdateHttpException extends HttpException {
 ///  - https only, host must be in the allowlist (no localhost/loopback or
 ///    private addresses by construction, and every redirect target is
 ///    re-validated);
-///  - the downloaded bundle must match the SHA256 published in the same
-///    release's SHA256SUMS asset, otherwise nothing is installed;
+///  - the downloaded bundle must match a version-bound SHA256 manifest signed
+///    by the publisher key pinned in this binary; no key means no staging;
 ///  - verified macOS bundles are shown for manual installation; the running
 ///    installation is never overwritten by this updater.
 class NikoUpdater {
@@ -34,6 +35,7 @@ class NikoUpdater {
       {this.owner = 'baogutang',
       this.repo = 'nikodesk',
       this.limits = const NikoUpdateLimits(),
+      this.publisher = const NikoUpdatePublisher(),
       @visibleForTesting
       Future<ProcessResult> Function(String, List<String>)? runProcess})
       : _runProcess = runProcess;
@@ -41,6 +43,7 @@ class NikoUpdater {
   final String owner;
   final String repo;
   final NikoUpdateLimits limits;
+  final NikoUpdatePublisher publisher;
   final Future<ProcessResult> Function(String, List<String>)? _runProcess;
 
   Future<ProcessResult> _run(String executable, List<String> arguments,
@@ -215,23 +218,21 @@ class NikoUpdater {
     return false;
   }
 
-  /// Fetch the release's SHA256SUMS text and return the digest for [asset].
+  /// Authenticate the release manifest against the installed publisher key.
   Future<String?> _expectedDigest(NikoReleaseInfo release,
-      NikoReleaseAsset asset, NikoUpdateTask task) async {
-    final sums = release.assets
-        .where((a) => a.name == 'SHA256SUMS' || a.name.endsWith('SHA256SUMS'))
-        .toList();
-    if (sums.isEmpty) return null;
+      NikoReleaseAsset asset, NikoUpdateTask task, Directory staging) async {
+    final sums = release.assets.where((a) => a.name == 'SHA256SUMS').toList();
+    final signatures = release.assets
+        .where((a) => a.name == 'SHA256SUMS.sig').toList();
+    if (sums.length != 1 || signatures.length != 1) return null;
     try {
-      final text = await _getString(sums.first.url, task);
-      for (final line in text.split('\n')) {
-        final parts = line.trim().split(RegExp(r'\s+'));
-        if (parts.length == 2 &&
-            parts[1] == asset.name &&
-            RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(parts[0])) {
-          return parts[0].toLowerCase();
-        }
-      }
+      final manifest = await _getString(sums.single.url, task);
+      final signature = await _getString(signatures.single.url, task);
+      return await publisher.verify(
+          manifest: manifest, signatureBase64: signature, tag: release.tag,
+          asset: asset.name, workspace: staging,
+          run: (executable, arguments) => _run(executable, arguments, task: task),
+          check: task.check);
     } on NikoUpdateCancelled {
       rethrow;
     } on TimeoutException {
@@ -324,6 +325,8 @@ class NikoUpdater {
       {void Function(int received, int total)? onProgress,
       NikoUpdateCancellation? cancellation}) async {
     final task = NikoUpdateTask(limits, cancellation);
+    task.check();
+    if (!publisher.configured) return false;
     final staged = Directory('${staging.path}/mac');
     if (await FileSystemEntity.type(staged.path, followLinks: false) !=
         FileSystemEntityType.notFound) return false;
@@ -332,7 +335,7 @@ class NikoUpdater {
     var ownsStage = false;
     try {
       zip = await _downloadAsset(asset, staging, onProgress, task);
-      final expected = await _expectedDigest(release, asset, task);
+      final expected = await _expectedDigest(release, asset, task, staging);
       if (expected == null) return false;
       final digest = await task.wait(sha256.bind(zip.openRead()).first);
       if (digest.toString() != expected) return false;

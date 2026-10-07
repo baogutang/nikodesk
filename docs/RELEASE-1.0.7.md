@@ -1,0 +1,100 @@
+# NikoDesk 1.0.7+16 — development candidate
+
+This source tree is a candidate. It has not been published, installed on target
+devices, or accepted as a formal release. Existing
+[v1.0.6 downloads](https://github.com/baogutang/nikodesk/releases/tag/v1.0.6) remain.
+[Candidate build status for `validation/1.0.7`](https://github.com/baogutang/nikodesk/actions/workflows/release.yml?query=branch%3Avalidation%2F1.0.7)
+is separate from formal publication and target-device acceptance. A queued or
+running build is not a passed build; this document does not claim CI completion.
+
+## Changes
+
+- macOS privacy protection continues checking the recorded display gamma and
+  local input filter after the initial five seconds. Protection loss notifies
+  the controller; failed restoration retains its owner and retries. Reopening
+  an inactive mode cannot rely on the old same-owner success shortcut.
+- File listing and transfer initialization run on bounded workers. Cancellation,
+  permission revocation, disconnection and request generations discard stale
+  results. The 30-second, 100,000-entry, depth-128 and 16-MiB-name budgets fail
+  explicitly; they never return a truncated successful list. At most four scan
+  workers run per process. An OS-blocked filesystem call cannot be interrupted;
+  its worker stays bounded until the OS returns.
+- Development-profile binaries refuse every persistent credential operation,
+  even without a profile environment variable. Production credential keys are
+  unchanged; saved passwords are not migrated or deleted.
+- Capture matching and responsive-control refresh rate use the current session
+  window rather than the largest or fastest of all attached displays. Resize
+  changes are debounced; manual capture modes and manual FPS remain in charge.
+  Automatic remote-resolution rollback checks the actual reported display mode,
+  including scale, instead of waiting only for changed captured pixels.
+- macOS update staging requires a version-bound checksum manifest authenticated
+  by a public key compiled into the client. Missing keys use an explicit manual
+  download path. A checksum alone is not publisher authentication.
+- The Rust OpenSSL bindings are pinned to `openssl 0.10.72` with
+  `openssl-sys 0.9.107`, addressing
+  RUSTSEC-2025-0004 and RUSTSEC-2025-0022. Android/Linux compilation and TLS
+  acceptance remain separate from the macOS build.
+- Version is `1.0.7+16`; upstream protocol version is unchanged. The known old
+  `1.1.0+9` preview can open the stable release page for a manual transition,
+  without treating a numerical downgrade as an automatic update.
+
+## Evidence and limits
+
+Native bridge tests use memory-backed providers and do not demonstrate physical
+blackout, hot-plug, sleep/wake recovery or real remote notification. Directory
+tests use synthetic local files and controlled workers; Windows CM, Android,
+slow mounts and cross-device transfers need target-device acceptance. Display
+policy tests do not establish Retina pointer accuracy or a performance gain.
+
+No Developer ID identity or publisher release key has been provisioned by this
+change. Ad-hoc macOS signing cannot establish continuity of system permissions
+across updates. Windows remains unsigned. Keep an independent remote-access
+path while testing upgrades; do not disable system protections.
+
+The release must also resolve or explicitly assess the current dependency audit.
+No ToDesk latency, throughput, CPU, battery or visual-quality comparison has been
+measured for this candidate. Existing virtual display, terminal, camera, voice,
+file and mobile capabilities retain their platform-specific acceptance limits.
+
+## Candidate promotion
+
+Pushes to `validation/**` run candidate checks and upload workflow artifacts.
+They do not publish a stable release or replace nightly. Consult the linked
+workflow run for the exact source commit, job result and available artifacts.
+
+1. A `v*` tag matching `flutter/pubspec.yaml` builds packages and creates a
+   **draft** with `build-provenance.json`, including the public-key digest used
+   by that source build. Promotion rejects a missing or different pin; adding a
+   key after building an unpinned candidate cannot make that candidate eligible.
+   It does not publish a formal release.
+   Nightly remains a separate pre-release channel.
+2. Before building a publisher-verified candidate, provision only the public RSA
+   key (2048–8192 bits, SubjectPublicKeyInfo PEM) in
+   `res/nikodesk-update-public.pem`. Keep its private key offline, outside this
+   repository and outside CI secrets. Changing the pin requires a trusted
+   transition for already-installed clients. Older clients without this verifier
+   need a trusted manual bootstrap; this patch cannot retroactively protect them.
+3. Complete real acceptance for the exact seven package hashes. Create
+   `release-acceptance.json` with the same `tag` and full `commit` as provenance,
+   a `package_sha256` map for all seven packages, and a `gates` map. Each gate
+   from `.github/scripts/release-manifest.py` needs `status: "passed"` and a
+   concrete `evidence` reference. Untested, failed or waived gates block release.
+   A signed assertion is not a substitute for performing those checks.
+4. In the candidate directory, use `release-manifest.py create` to generate
+   canonical ASCII `SHA256SUMS` after adding acceptance. Sign its exact bytes
+   offline using RSA/SHA-256 and supply the base64 signature as `SHA256SUMS.sig`.
+   The first line binds the tag: `# NikoDesk release v1.0.7`. Re-run
+   `release-manifest.py verify` with the trusted public key and full source SHA.
+5. Uploading or publishing needs the maintainer's explicit authorization. Once
+   authorized, add the acceptance, manifest and signature to the draft and run
+   `Promote accepted NikoDesk candidate`. It downloads and checks that draft,
+   then promotes the same bytes without a rebuild. Configure required reviewers
+   for the repository's `release` environment; declaring the environment in
+   YAML does not itself create reviewer protection.
+
+Formal promotion requires source/security review, package settings on macOS and
+Windows, Android upgrade, a private-network session, permission revocation,
+physical privacy recovery, display/input acceptance, macOS signing continuity,
+and Windows unattended installation acceptance. Authorization to push a candidate
+and run CI does not establish those acceptance results or authorize remote access,
+driver/service installation, or formal-release promotion.
