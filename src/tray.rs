@@ -50,7 +50,10 @@ fn make_tray() -> hbb_common::ResultType<()> {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        icon = include_bytes!("../res/tray-icon.ico");
+        #[cfg(feature = "nikodesk")]
+        { icon = include_bytes!("../res/nikodesk-tray.ico"); }
+        #[cfg(not(feature = "nikodesk"))]
+        { icon = include_bytes!("../res/tray-icon.ico"); }
     }
 
     let (icon_rgba, icon_width, icon_height) = {

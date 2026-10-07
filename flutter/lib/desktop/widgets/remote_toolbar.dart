@@ -8,6 +8,7 @@ import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:flutter_hbb/nikodesk/privacy_screen.dart';
 import 'package:flutter_hbb/nikodesk/session_tools.dart';
 import 'package:flutter_hbb/nikodesk/session_quick_actions.dart';
 import 'package:flutter_hbb/nikodesk/session_toolbar.dart';
@@ -831,6 +832,8 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
         setFullscreen: _setFullscreen),
     NikoSessionButton(ffi: widget.ffi),
     if (widget.ffi.connType == ConnType.defaultConn) ...[
+      NikoPrivacyScreenButton(ffi: widget.ffi,
+          onExplain: () => showNikoSessionQuickActions(widget.ffi)),
       NikoToolbarButton(
         icon: const Icon(Icons.dashboard_customize_outlined),
         label: nikoText('控制中心', 'Control center'),

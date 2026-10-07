@@ -7,7 +7,10 @@ import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 
+import 'package:get/get.dart';
+
 import 'connection_progress.dart';
+import 'privacy_screen.dart';
 import 'remote_resolution.dart';
 import 'session_quick_actions_view.dart';
 import 'session_shortcuts.dart';
@@ -208,8 +211,11 @@ class _NikoSessionQuickActionsState extends State<_NikoSessionQuickActions> {
           widget.ffi.canvasModel,
           widget.ffi.nikoConnectionProgress,
         ]),
-        builder: (context, _) => NikoSessionQuickActionsPanel(
+        builder: (context, _) => _withPrivacyScreen((privacyScreen) =>
+            NikoSessionQuickActionsPanel(
           peerPlatform: widget.ffi.ffiModel.pi.platform,
+          privacyScreen: privacyScreen,
+          onPrivacyScreen: privacyScreen == null ? null : _setPrivacyScreen,
           keyboardAllowed: _keyboardAllowed,
           canvasAllowed: _canvasAllowed,
           viewStyle: _viewStyle,
@@ -228,6 +234,22 @@ class _NikoSessionQuickActionsState extends State<_NikoSessionQuickActions> {
           captureMode: _captureMode,
           onCaptureMode: _resolutionAvailable ? _setCaptureMode : null,
           onClose: widget.onClose,
-        ),
+        )),
       );
+
+  // The privacy screen's state lives outside the session model, in a value
+  // the session page registers; follow it as well.
+  Widget _withPrivacyScreen(
+      Widget Function(NikoPrivacyScreenStatus?) build) {
+    final active = _sessionCurrent && widget.ffi.connType == ConnType.defaultConn
+        ? nikoPrivacyScreenActive(widget.ffi.id)
+        : null;
+    if (active == null) return build(null);
+    return Obx(() => build(nikoPrivacyScreenStatusOf(widget.ffi, active.value)));
+  }
+
+  Future<void> _setPrivacyScreen(bool on) async {
+    if (!_sessionCurrent) throw StateError('Session unavailable');
+    await nikoRequestPrivacyScreen(widget.ffi, on: on);
+  }
 }

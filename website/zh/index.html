@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NikoDesk - 跑在自己服务器上的远程桌面</title>
-<meta name="description" content="基于 RustDesk 内核的私服远程桌面。1.0.5 通过自动构建交付 macOS、Windows 与 Android 三端；平台状态如实说明。">
+<meta name="description" content="基于 RustDesk 内核的私服远程桌面。1.0.6 通过自动构建交付 macOS、Windows 与 Android 三端；平台状态如实说明。">
 <link rel="icon" href="../assets/favicon.png?v=5" type="image/png">
 <link rel="apple-touch-icon" href="../assets/logo.png?v=5">
 <link rel="preload" href="../assets/fonts/inter-800.woff2?v=5" as="font" type="font/woff2" crossorigin>
 <meta property="og:title" content="NikoDesk - 跑在自己服务器上的远程桌面">
-<meta property="og:description" content="基于 RustDesk 内核，使用自己的注册与中继服务。1.0.5 三端下载与平台状态如实说明。">
+<meta property="og:description" content="基于 RustDesk 内核，使用自己的注册与中继服务。1.0.6 三端下载与平台状态如实说明。">
 <meta property="og:image" content="https://baogutang.github.io/nikodesk/assets/app-light.png?v=102">
 <meta property="og:image:alt" content="NikoDesk 暖纸亮色工作区，生产 Flutter 组件与合成示例数据">
 <meta property="og:type" content="website">
@@ -358,7 +358,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
 <main id="content" tabindex="-1">
 <header class="hero wrap" id="top" tabindex="-1">
   <a class="badge" href="https://github.com/baogutang/nikodesk/releases" target="_blank" rel="noopener">
-    <span class="dot"></span>v1.0.5 · 三平台<span class="arrow">→</span>
+    <span class="dot"></span>v1.0.6 · 三平台<span class="arrow">→</span>
   </a>
   <h1><span class="phrase">你的设备，</span><span class="phrase">你的服务器，</span><br><span class="accent">你的远程桌面。</span></h1>
   <p class="sub">保留 RustDesk 的原生远控内核，连接你自己的注册与中继服务。Windows 与 macOS 面向主控及被控，Android 仅做控制端；跨设备验收仍在进行中。</p>
@@ -378,7 +378,7 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
   <div class="sec-head reveal">
     <span class="sec-pill">功能</span>
     <h2>为日常驾驭而生</h2>
-    <p class="sec-sub">1.0.5 让 Retina 屏的被控 Mac 把采集向本机屏幕的大小缩放，主控报告 3840 像素宽、被控是 5K 的 Mac 时为 3840×2160，不改变它的显示器分辨率；“更小”选项是每个点一个像素。有效密码即可连接，不再需要在被控端点击确认。暖纸亮色、Windows 控 Mac 编辑快捷键与远端空间切换继续可用；同一台 Mac 两个身份之间的会话已核对缩放、指针坐标换算和密码规则，Windows 和 Android 主控、跨设备延迟和帧率仍未测试。</p>
+    <p class="sec-sub">1.0.6 让隐私屏找得到、看得见：工具栏按钮和控制中心的开关都能开启，开启期间远端画面上一直有标记。帧率上限放开到 120，“操作流畅”按本机屏幕的刷新率请求，不再被固定在 30 帧；被控 Mac 能出到设定的上限。Windows 和 Android 换上了 NikoDesk 自己的图标。1.0.5 的按本机屏幕大小采集和密码直接连入、暖纸亮色、Windows 控 Mac 编辑快捷键与远端空间切换继续可用；同一台 Mac 两个身份之间的会话已核对隐私屏和帧率上限，新的界面和图标还没有在 Windows 和 Android 设备上看过，跨设备延迟和帧率仍未测量。</p>
   </div>
   <div class="grid">
     <div class="card reveal">
@@ -554,29 +554,29 @@ Key:      (id_ed25519.pub)</pre>
   <div class="sec-head reveal">
     <span class="sec-pill">下载</span>
     <h2>下载与平台状态</h2>
-    <p class="sec-sub">v1.0.5 标签自动构建 macOS、Windows 与 Android，全部检查通过后统一发布安装包；请对照其 SHA256SUMS 校验下载文件。nightly 继续作为独立滚动预览。核心会话——带画面的密码认证、双向文件传输、含重放拒绝的 TOTP 双重验证、两端的会话记录、远程终端、端口隧道与画质模式——已在一台 Mac 上经私服中继在同一用户的两个身份之间完成端到端验证；跨设备与 Windows、Android 真机验收仍在进行中，下方说明均如实标注。</p>
+    <p class="sec-sub">v1.0.6 标签自动构建 macOS、Windows 与 Android，全部检查通过后统一发布安装包；请对照其 SHA256SUMS 校验下载文件。nightly 继续作为独立滚动预览。核心会话——带画面的密码认证、双向文件传输、含重放拒绝的 TOTP 双重验证、两端的会话记录、远程终端、端口隧道与画质模式——已在一台 Mac 上经私服中继在同一用户的两个身份之间完成端到端验证；跨设备与 Windows、Android 真机验收仍在进行中，下方说明均如实标注。</p>
   </div>
   <div class="dl-list">
-    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.5/NikoDesk-macos-arm64.dmg">
+    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.6/NikoDesk-macos-arm64.dmg">
       <h3>macOS</h3>
       <span class="arch">Apple Silicon · DMG · ad-hoc 签名</span>
       <span class="note">从 DMG 安装完整的 NikoDesk.app。无 Apple Developer ID、未公证：首次启动请右键点按 → 打开。可与现有 RustDesk 并存运行，身份独立。</span>
-      <span class="go">下载 v1.0.5 →</span>
+      <span class="go">下载 v1.0.6 →</span>
     </a>
-    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.5/NikoDesk-windows-x64.exe">
+    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.6/NikoDesk-windows-x64.exe">
       <h3>Windows</h3>
       <span class="arch">x64 · 便携 EXE/ZIP · 未签名</span>
       <span class="note">用户态便携客户端，无需安装即可与 RustDesk 并存运行；另附用于验证安装流程的无人值守安装器。未签名：SmartScreen 会询问一次。真机验收仍在进行中——安装器会改动系统，请先在测试机上使用。</span>
-      <span class="go">下载 v1.0.5 →</span>
+      <span class="go">下载 v1.0.6 →</span>
     </a>
-    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.5/NikoDesk-android-arm64.apk">
+    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.6/NikoDesk-android-arm64.apk">
       <h3>Android</h3>
       <span class="arch">arm64 · APK · release 签名</span>
       <span class="note">仅控制端应用（io.nikodesk.android），使用专用 NikoDesk 发行密钥签名，并在 CI 中完成加密校验。真机操作、远控会话与通话仍未验证；部分蓝牙组合暂不支持。</span>
-      <span class="go">下载 v1.0.5 →</span>
+      <span class="go">下载 v1.0.6 →</span>
     </a>
   </div>
-  <p class="dl-note reveal">校验清单与 Windows 无人值守安装验证包见 <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.5">v1.0.5 发布页</a>；<a href="https://github.com/baogutang/nikodesk/releases/tag/nightly">nightly 预览</a>随 main 更新。<a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.0">v1.0.0 归档</a>仅供查阅。请保持系统安全防护开启。</p>
+  <p class="dl-note reveal">校验清单与 Windows 无人值守安装验证包见 <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.6">v1.0.6 发布页</a>；<a href="https://github.com/baogutang/nikodesk/releases/tag/nightly">nightly 预览</a>随 main 更新。<a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.0">v1.0.0 归档</a>仅供查阅。请保持系统安全防护开启。</p>
 </section>
 
 <section id="faq" tabindex="-1" class="wrap faq" style="padding-top: 20px;">
@@ -599,7 +599,7 @@ Key:      (id_ed25519.pub)</pre>
     </details>
     <details class="reveal">
       <summary>Android 版能做什么？</summary>
-      <div class="a">Android 仅做控制端连接 Windows 与 macOS，不提供手机被控能力。APK 使用专用 NikoDesk 发行密钥签名，构建号从 13 递增至 14，包名保持一致；并接入主控发起语音、手选设备与麦克风权限。真机操作、远控会话与通话仍未验证；部分蓝牙组合暂不支持。</div>
+      <div class="a">Android 仅做控制端连接 Windows 与 macOS，不提供手机被控能力。APK 使用专用 NikoDesk 发行密钥签名，构建号从 14 递增至 15，包名保持一致；并接入主控发起语音、手选设备与麦克风权限。真机操作、远控会话与通话仍未验证；部分蓝牙组合暂不支持。</div>
     </details>
   </div>
 </section>

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'privacy_screen_policy.dart';
 import 'remote_resolution_policy.dart';
 import 'session_shortcuts.dart';
 import 'ui.dart';
@@ -39,6 +40,10 @@ class NikoSessionQuickActionsPanel extends StatefulWidget {
   final Future<void> Function(bool)? onAutoFitResolution;
   final NikoCaptureMode? captureMode;
   final Future<void> Function(NikoCaptureMode)? onCaptureMode;
+
+  /// Null hides the section: this kind of session has no privacy screen.
+  final NikoPrivacyScreenStatus? privacyScreen;
+  final Future<void> Function(bool)? onPrivacyScreen;
   final VoidCallback onClose;
 
   const NikoSessionQuickActionsPanel(
@@ -58,6 +63,8 @@ class NikoSessionQuickActionsPanel extends StatefulWidget {
       this.onAutoFitResolution,
       this.captureMode,
       this.onCaptureMode,
+      this.privacyScreen,
+      this.onPrivacyScreen,
       required this.onClose});
 
   @override
@@ -85,6 +92,40 @@ class _NikoSessionQuickActionsPanelState
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  List<Widget> _privacyScreen(NikoPrivacyScreenStatus status) {
+    final on = status == NikoPrivacyScreenStatus.on;
+    return [
+      Text(nikoText('隐私屏', 'Privacy screen'),
+          style: Theme.of(context).textTheme.titleMedium),
+      SwitchListTile.adaptive(
+        key: const Key('nikodesk-privacy-screen'),
+        contentPadding: EdgeInsets.zero,
+        value: on,
+        title: Text(nikoPrivacyScreenLabel(status)),
+        subtitle: Text(nikoPrivacyScreenDetail(status, widget.peerPlatform)),
+        onChanged: _busy ||
+                widget.onPrivacyScreen == null ||
+                !nikoPrivacyScreenCanToggle(status)
+            ? null
+            : (value) => _run(
+                () => widget.onPrivacyScreen!(value),
+                value
+                    ? nikoText('已请求开启，以上面的状态为准；被控端拒绝或失败时会弹出原因。',
+                        'Requested. The state above is what counts; the remote says why if it refuses or fails.')
+                    : nikoText('已请求关闭，以上面的状态为准。',
+                        'Requested. The state above is what counts.'),
+                nikoText('请求没有发出。请确认会话仍在连接；多显示器的 Windows 被控端需要先切到显示器 1。',
+                    'The request was not sent. Check that the session is still connected; a multi-display Windows remote needs display 1 selected first.')),
+      ),
+      if (nikoPrivacyScreenCanToggle(status))
+        Text(
+            nikoText('断开时如果隐私屏开着，下次连接这台设备会自动再开启；想让它每次都开，保持开启即可。',
+                'If it is on when you disconnect, the next connection to this device turns it on again; leave it on to have it every time.'),
+            style: Theme.of(context).textTheme.bodySmall),
+      const Divider(),
+    ];
   }
 
   Widget _shortcuts(Iterable<NikoSessionShortcut> shortcuts) =>
@@ -233,6 +274,8 @@ class _NikoSessionQuickActionsPanelState
             Text(nikoText('快捷键发送到远端当前应用。粘贴使用远端剪贴板；内容同步由剪贴板设置控制。',
                 'Shortcuts go to the active remote app. Paste uses the remote clipboard; clipboard settings control content sync.')),
             const SizedBox(height: 16),
+            if (widget.privacyScreen case final status?)
+              ..._privacyScreen(status),
             if (widget.onMacShortcutMode != null) ...[
               Text(nikoText('本地键盘 → Mac', 'Local keyboard → Mac'),
                   style: Theme.of(context).textTheme.titleMedium),
