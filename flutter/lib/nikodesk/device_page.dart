@@ -191,8 +191,27 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
     if (_refreshing) return;
     _refreshing = true;
     try {
-      final server = await _gateway.read();
-      final directory = await _store.load();
+      Future<void> loadDirectory() async {
+        final directory = await _store.load();
+        if (!mounted) return;
+        setState(() {
+          _devices = directory.devices;
+          _loading = false;
+          if (directory.recovered) {
+            _notice = nikoText('设备目录损坏，已保留损坏文件并恢复可用备份（无备份时为空目录）。',
+                'The damaged device file was preserved. A valid backup was restored, or an empty directory was created.');
+          }
+        });
+      }
+
+      late ServerSnapshot server;
+      final serverRead = _gateway.read().then<void>((value) => server = value);
+      // Discover the native scope before resolving the default directory. An
+      // explicitly supplied or already scoped directory can render immediately.
+      if (widget.store == null && _native && NikoServerScope.current == null) {
+        await serverRead;
+      }
+      await Future.wait<void>([serverRead, loadDirectory()]);
       final legacyAvailable = _native &&
           _store.serverNamespace != null &&
           (await File('${DeviceStore.privateDirectory.path}/devices.json')
@@ -203,14 +222,8 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
         setState(() {
           _expireOnline(server.namespace);
           _server = server;
-          _devices = directory.devices;
-          _loading = false;
           _error = null;
           _legacyAvailable = legacyAvailable;
-          if (directory.recovered) {
-            _notice = nikoText('设备目录损坏，已保留损坏文件并恢复可用备份（无备份时为空目录）。',
-                'The damaged device file was preserved. A valid backup was restored, or an empty directory was created.');
-          }
         });
       }
     } on FutureDeviceSchema {
@@ -1006,14 +1019,16 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
                 child: Text(
                     configured
                         ? nikoText('私服配置完整', 'Private server configured')
-                        : nikoText('先连接自己的服务器', 'Set up your private server'),
+                        : _server == null
+                            ? nikoText('私服配置状态未知', 'Server settings unknown')
+                            : nikoText('先连接自己的服务器', 'Set up your private server'),
                     style: Theme.of(context)
                         .textTheme
                         .titleMedium
                         ?.copyWith(fontWeight: FontWeight.w700))),
           ]),
           const SizedBox(height: 10),
-          Text(configured
+          Text(configured || _server == null
               ? _registration()
               : nikoText('需要 ID 服务器、中继地址与公钥。未配置时无法连接。',
                   'Enter your ID server, relay and public key. Connections are disabled until configured.')),

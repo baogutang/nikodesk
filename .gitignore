@@ -62,6 +62,7 @@ flutter/.mimosa/
 
 # Product images required by the build, docs and website.
 !res/nikodesk-tray.png
+!res/nikodesk-brand/**
 !flutter/assets/nikodesk.png
 !flutter/assets/readme-light.png
 !flutter/assets/readme-dark.png

@@ -1,0 +1,225 @@
+{
+  "schema": "nikodesk-brand-assets-v1",
+  "origin": "User-provided NikoDesk_Logo_Pack v1.0; existing blue N connection mark; no redesign",
+  "canonical_vector": "vector/nikodesk-app-icon.svg",
+  "sources": {
+    "macos/icon_128x128.png": {
+      "origin": "06_macos/NikoDesk.iconset/icon_128x128.png",
+      "sha256": "a3cb379f084066f8c90064d23365dec25b696bdcf80bc08658b27a72b393f2d9"
+    },
+    "macos/icon_128x128@2x.png": {
+      "origin": "06_macos/NikoDesk.iconset/icon_128x128@2x.png",
+      "sha256": "259c95a91450bb08958a9b1ba0417638e9155e4d97ce54e0ce8cc030b0867392"
+    },
+    "macos/icon_16x16.png": {
+      "origin": "06_macos/NikoDesk.iconset/icon_16x16.png",
+      "sha256": "d8b1857b7bba72f1f929669ee6fd83131610ac6b8b2821f3bc5bd17f39fe6e97"
+    },
+    "macos/icon_16x16@2x.png": {
+      "origin": "06_macos/NikoDesk.iconset/icon_16x16@2x.png",
+      "sha256": "44f50fe67ae424ef3d016dd761d3ae3600c28601f2ac44d90689b4f421a05f9c"
+    },
+    "macos/icon_256x256.png": {
+      "origin": "06_macos/NikoDesk.iconset/icon_256x256.png",
+      "sha256": "259c95a91450bb08958a9b1ba0417638e9155e4d97ce54e0ce8cc030b0867392"
+    },
+    "macos/icon_256x256@2x.png": {
+      "origin": "06_macos/NikoDesk.iconset/icon_256x256@2x.png",
+      "sha256": "15d88a689d12718466358498b3401132b3bb01a82e97ea71c7b4938e3c85b5a4"
+    },
+    "macos/icon_32x32.png": {
+      "origin": "06_macos/NikoDesk.iconset/icon_32x32.png",
+      "sha256": "44f50fe67ae424ef3d016dd761d3ae3600c28601f2ac44d90689b4f421a05f9c"
+    },
+    "macos/icon_32x32@2x.png": {
+      "origin": "06_macos/NikoDesk.iconset/icon_32x32@2x.png",
+      "sha256": "28b27f0f014553939645db803d48e8cb54065e2d50fc74a3bb5f09268a107d26"
+    },
+    "macos/icon_512x512.png": {
+      "origin": "06_macos/NikoDesk.iconset/icon_512x512.png",
+      "sha256": "15d88a689d12718466358498b3401132b3bb01a82e97ea71c7b4938e3c85b5a4"
+    },
+    "macos/icon_512x512@2x.png": {
+      "origin": "06_macos/NikoDesk.iconset/icon_512x512@2x.png",
+      "sha256": "61f01c2ec20ba6ed51505b365801f2ab855d8ce347a54e6938dded5df97df993"
+    },
+    "windows/app-16.png": {
+      "origin": "02_png/app-icon/nikodesk-16x16.png",
+      "sha256": "806ed18a68e888ad2ae7b939b16ac4987e3ffa7a1dd39328a7e264aeb0615da0"
+    },
+    "windows/app-20.png": {
+      "origin": "02_png/app-icon/nikodesk-20x20.png",
+      "sha256": "91fae57c975149e800f91dea80c35bafe37642bae065e081c6c4546831bb5342"
+    },
+    "windows/app-24.png": {
+      "origin": "02_png/app-icon/nikodesk-24x24.png",
+      "sha256": "3f88cf0498ea3611eb104996ecaeb280d97f9ec9fb11f4d6d7e38ee1d2e46a23"
+    },
+    "windows/app-32.png": {
+      "origin": "02_png/app-icon/nikodesk-32x32.png",
+      "sha256": "ae6f50826b6d6c796a667c311e32002609e339cd4738b98f3c966e8114aac377"
+    },
+    "windows/app-40.png": {
+      "origin": "02_png/app-icon/nikodesk-40x40.png",
+      "sha256": "3512e360c717075f5520c01ede279f2a5b56b5924835ace1a0d3fdf39aab05ef"
+    },
+    "windows/app-48.png": {
+      "origin": "02_png/app-icon/nikodesk-48x48.png",
+      "sha256": "bab422ab918120aa0017af9bbf3f0e7e4ee99b136d223070ddc299a2e3e6fb2a"
+    },
+    "windows/app-64.png": {
+      "origin": "02_png/app-icon/nikodesk-64x64.png",
+      "sha256": "0ee7f7fffbfa83c328484b019b871b6b9cd8eba91be419bd905db1885c182d5a"
+    },
+    "windows/app-128.png": {
+      "origin": "02_png/app-icon/nikodesk-128x128.png",
+      "sha256": "fad715cc2d1c99db228d13bf3dabcc55da5f5d64ec26c81f81a3445543e8fc89"
+    },
+    "windows/app-256.png": {
+      "origin": "02_png/app-icon/nikodesk-256x256.png",
+      "sha256": "7a54339664dc6401331b417378bd97bdcceccbca7f9763d0d6ce6dca086cc316"
+    },
+    "windows/tray-16.png": {
+      "origin": "11_tray/blue/nikodesk-tray-16.png",
+      "sha256": "77952cb761fdd49986a67e9587e4ec469a75313778eebbe52452fafe8b3947dc"
+    },
+    "windows/tray-20.png": {
+      "origin": "11_tray/blue/nikodesk-tray-20.png",
+      "sha256": "53077b24ca155320da6c5f8133fd855e38e888c9549dd890704113875d6a2bea"
+    },
+    "windows/tray-24.png": {
+      "origin": "11_tray/blue/nikodesk-tray-24.png",
+      "sha256": "cdad7cff7d22419908dd4d2f51e1896930fcca316c0095d5bbdf21bd4d2718df"
+    },
+    "windows/tray-32.png": {
+      "origin": "11_tray/blue/nikodesk-tray-32.png",
+      "sha256": "33dbf9813e7897ebcfcc31efd472da03ad5b99b577623f7f4efda6e55910c623"
+    },
+    "windows/tray-48.png": {
+      "origin": "11_tray/blue/nikodesk-tray-48.png",
+      "sha256": "b1823cc9dccaa71c18ee0ca8735c5fd231691860c400e1cf2dc1b5a548a65690"
+    },
+    "macos/tray.png": {
+      "origin": "11_tray/NikoDeskTemplate@2x.png",
+      "sha256": "7f0d31b3a04562b3591a519db8a9cfbf80b42c7e1770b825d67c3e272869ac26"
+    },
+    "vector/nikodesk-app-icon.svg": {
+      "origin": "01_vector/nikodesk-app-icon.svg",
+      "sha256": "dcbc77d09d3e0f4046a62a89365dd5a9da3e34ff3cecc6e393b6fab8748ba3fe"
+    },
+    "vector/nikodesk-app-icon-small.svg": {
+      "origin": "01_vector/nikodesk-app-icon-small.svg",
+      "sha256": "330b42db9cb2abda6900692a9aac188f288ffebe4f7dca5b8cd3669c37b0d384"
+    },
+    "vector/nikodesk-app-icon-macos.svg": {
+      "origin": "01_vector/nikodesk-app-icon-macos.svg",
+      "sha256": "2aff9a5226344257c974d09b2da49cce947743c7e3ff803de4ffe0157924fa1a"
+    },
+    "vector/nikodesk-symbol-blue.svg": {
+      "origin": "01_vector/nikodesk-symbol-blue.svg",
+      "sha256": "32a042ead219487338bd8e1a388f8abf4b639701d3dd396eb32d43875c375c9c"
+    },
+    "vector/nikodesk-symbol-black.svg": {
+      "origin": "01_vector/nikodesk-symbol-black.svg",
+      "sha256": "373f8ee2ac2145caeb6522a0b191914fb01d53188d7b164e02e2e167e274e250"
+    },
+    "android/drawable/nikodesk_launcher_background.xml": {
+      "origin": "08_android/res/drawable/nikodesk_launcher_background.xml",
+      "sha256": "f5204ef48f4642ddbb9fc2c2876ae8a57a910c37b5315f244626af084a04ffbc"
+    },
+    "android/drawable/nikodesk_launcher_foreground.xml": {
+      "origin": "08_android/res/drawable/nikodesk_launcher_foreground.xml",
+      "sha256": "fd24ac4dc1081a898d43e2a657dce71baa5d3c16fdd8ab7eaea15d9fec8af896"
+    },
+    "android/drawable/nikodesk_launcher_monochrome.xml": {
+      "origin": "08_android/res/drawable/nikodesk_launcher_monochrome.xml",
+      "sha256": "85d64629c30639b9a33ce4e7088abbee43c208a4e8214f2ea8f21dcfc39cab95"
+    },
+    "android/mipmap-anydpi-v26/ic_launcher.xml": {
+      "origin": "08_android/res/mipmap-anydpi-v26/ic_launcher.xml",
+      "sha256": "6eb93075bae34edacdfa6d262d7124810fe0180ae6d48f7456cca1234f8e74a0"
+    },
+    "android/mipmap-anydpi-v26/ic_launcher_round.xml": {
+      "origin": "08_android/res/mipmap-anydpi-v26/ic_launcher_round.xml",
+      "sha256": "6eb93075bae34edacdfa6d262d7124810fe0180ae6d48f7456cca1234f8e74a0"
+    },
+    "android/mipmap-anydpi-v33/ic_launcher.xml": {
+      "origin": "08_android/res/mipmap-anydpi-v33/ic_launcher.xml",
+      "sha256": "83becb7bf8ca29c5232a9611ffc1978985bc8ead98bf6eaca196ab3571b58671"
+    },
+    "android/mipmap-anydpi-v33/ic_launcher_round.xml": {
+      "origin": "08_android/res/mipmap-anydpi-v33/ic_launcher_round.xml",
+      "sha256": "83becb7bf8ca29c5232a9611ffc1978985bc8ead98bf6eaca196ab3571b58671"
+    },
+    "android/mipmap-hdpi/ic_launcher.png": {
+      "origin": "08_android/res/mipmap-hdpi/ic_launcher.png",
+      "sha256": "9506485502ef54699af9f7817eca1c2b6e8dcea8f2342dc16e4ec547434cd748"
+    },
+    "android/mipmap-hdpi/ic_launcher_round.png": {
+      "origin": "08_android/res/mipmap-hdpi/ic_launcher_round.png",
+      "sha256": "7833a671c7cb4789bb6efd2fe46d4bbe04fb0cfc570fd0c9c00958a0c0cb72cb"
+    },
+    "android/mipmap-mdpi/ic_launcher.png": {
+      "origin": "08_android/res/mipmap-mdpi/ic_launcher.png",
+      "sha256": "bab422ab918120aa0017af9bbf3f0e7e4ee99b136d223070ddc299a2e3e6fb2a"
+    },
+    "android/mipmap-mdpi/ic_launcher_round.png": {
+      "origin": "08_android/res/mipmap-mdpi/ic_launcher_round.png",
+      "sha256": "a2b809fd618b5136130dec71305f18c24b8df6c3777fc026a1e67c9dddb32268"
+    },
+    "android/mipmap-xhdpi/ic_launcher.png": {
+      "origin": "08_android/res/mipmap-xhdpi/ic_launcher.png",
+      "sha256": "7f2f8a9aa578f5924ebfd2ab4f98a6fa68d59889dbfb4f846dcadc78ac5ce49e"
+    },
+    "android/mipmap-xhdpi/ic_launcher_round.png": {
+      "origin": "08_android/res/mipmap-xhdpi/ic_launcher_round.png",
+      "sha256": "0f8236cf68967cc6269cf30584a52627adb33721c1e6328e2ab797a5c3b4de73"
+    },
+    "android/mipmap-xxhdpi/ic_launcher.png": {
+      "origin": "08_android/res/mipmap-xxhdpi/ic_launcher.png",
+      "sha256": "4fea1e0d197872e6cedcadda4281eba1aba8a5e3d2c32e21e24e2379247ac1de"
+    },
+    "android/mipmap-xxhdpi/ic_launcher_round.png": {
+      "origin": "08_android/res/mipmap-xxhdpi/ic_launcher_round.png",
+      "sha256": "198b6fef0011ee1567b848055ff9f33d93a39d8c0441ed972a3ee79f013715e9"
+    },
+    "android/mipmap-xxxhdpi/ic_launcher.png": {
+      "origin": "08_android/res/mipmap-xxxhdpi/ic_launcher.png",
+      "sha256": "cb4bc80e86e98d5dbb760c69dc94b1de75d702f8c1e84f88373b134139ce30f7"
+    },
+    "android/mipmap-xxxhdpi/ic_launcher_round.png": {
+      "origin": "08_android/res/mipmap-xxxhdpi/ic_launcher_round.png",
+      "sha256": "fe65ffc049db4bfc3d2b62fd13230a7cdbe031fc3e7ede1904fbe15eba2fb3d0"
+    },
+    "ui/nikodesk.png": {
+      "origin": "02_png/app-icon/nikodesk-512x512.png",
+      "sha256": "d972261527e477b8145a8b59a17220791bd213f9174d5c9ed75026e5f976b80f"
+    }
+  },
+  "copies": {
+    "res/nikodesk-tray.png": "macos/tray.png",
+    "flutter/android/app/src/nikodesk/res/drawable/nikodesk_launcher_background.xml": "android/drawable/nikodesk_launcher_background.xml",
+    "flutter/android/app/src/nikodesk/res/drawable/nikodesk_launcher_foreground.xml": "android/drawable/nikodesk_launcher_foreground.xml",
+    "flutter/android/app/src/nikodesk/res/drawable/nikodesk_launcher_monochrome.xml": "android/drawable/nikodesk_launcher_monochrome.xml",
+    "flutter/android/app/src/nikodesk/res/mipmap-anydpi-v26/ic_launcher.xml": "android/mipmap-anydpi-v26/ic_launcher.xml",
+    "flutter/android/app/src/nikodesk/res/mipmap-anydpi-v26/ic_launcher_round.xml": "android/mipmap-anydpi-v26/ic_launcher_round.xml",
+    "flutter/android/app/src/nikodesk/res/mipmap-anydpi-v33/ic_launcher.xml": "android/mipmap-anydpi-v33/ic_launcher.xml",
+    "flutter/android/app/src/nikodesk/res/mipmap-anydpi-v33/ic_launcher_round.xml": "android/mipmap-anydpi-v33/ic_launcher_round.xml",
+    "flutter/android/app/src/nikodesk/res/mipmap-hdpi/ic_launcher.png": "android/mipmap-hdpi/ic_launcher.png",
+    "flutter/android/app/src/nikodesk/res/mipmap-hdpi/ic_launcher_round.png": "android/mipmap-hdpi/ic_launcher_round.png",
+    "flutter/android/app/src/nikodesk/res/mipmap-mdpi/ic_launcher.png": "android/mipmap-mdpi/ic_launcher.png",
+    "flutter/android/app/src/nikodesk/res/mipmap-mdpi/ic_launcher_round.png": "android/mipmap-mdpi/ic_launcher_round.png",
+    "flutter/android/app/src/nikodesk/res/mipmap-xhdpi/ic_launcher.png": "android/mipmap-xhdpi/ic_launcher.png",
+    "flutter/android/app/src/nikodesk/res/mipmap-xhdpi/ic_launcher_round.png": "android/mipmap-xhdpi/ic_launcher_round.png",
+    "flutter/android/app/src/nikodesk/res/mipmap-xxhdpi/ic_launcher.png": "android/mipmap-xxhdpi/ic_launcher.png",
+    "flutter/android/app/src/nikodesk/res/mipmap-xxhdpi/ic_launcher_round.png": "android/mipmap-xxhdpi/ic_launcher_round.png",
+    "flutter/android/app/src/nikodesk/res/mipmap-xxxhdpi/ic_launcher.png": "android/mipmap-xxxhdpi/ic_launcher.png",
+    "flutter/android/app/src/nikodesk/res/mipmap-xxxhdpi/ic_launcher_round.png": "android/mipmap-xxxhdpi/ic_launcher_round.png",
+    "flutter/assets/nikodesk.png": "ui/nikodesk.png"
+  },
+  "generated": {
+    "flutter/windows/runner/resources/app_icon.ico": "ad13e2ed5b9ad5c014bc9b959faa28f9c84e78bc21181236ca1021fc43e394a6",
+    "res/nikodesk-tray.ico": "2bb72cda65231d66fac0dc973b9db4bbda4e35b0d70e0ef1c8cf03b1c2870e95",
+    "flutter/macos/Runner/AppIcon.icns": "7f293e397a8de2fc10e2ac2fa9ab284a5c3caa46f159643b12a409c9c72a130c"
+  }
+}

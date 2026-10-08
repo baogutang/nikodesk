@@ -27,7 +27,10 @@
   root.textContent = '';
   var top = el('div', undefined, 'nd-top');
   var brand = el('div', undefined, 'nd-brand');
-  brand.append(el('span', 'N', 'nd-brand-mark'), el('span', 'NikoDesk'));
+  var brandIcon = el('img', undefined, 'nd-brand-mark');
+  brandIcon.src = new URL('logo.png', document.currentScript.src).href;
+  brandIcon.alt = '';
+  brand.append(brandIcon, el('span', 'NikoDesk'));
   top.append(brand, el('span', t('INTERACTIVE EXAMPLE · INVENTED DATA', '交互示例 · 虚构数据'), 'nd-example'));
   var themes = el('div', undefined, 'nd-theme');
   themes.setAttribute('role','group'); themes.setAttribute('aria-label', t('Example theme','示例主题'));

@@ -66,6 +66,9 @@ jobs:
         id: product-version
         run: python3 .github/scripts/product-version.py --github-output
 
+      - name: Verify canonical brand sources
+        run: python3 .github/scripts/sync-brand-icons.py --check
+
       - name: Install build runtime
         run: |
           brew install llvm pkg-config
@@ -177,6 +180,7 @@ jobs:
             > "$APP/Contents/Resources/NikoDesk-SOURCE.txt"
           bash .github/scripts/sign-macos-app.sh "$APP" - flutter/macos/Runner/NikoLocalDevelopment.entitlements
           python3 .github/scripts/package-macos.py "$APP" dist --require-privacy-watchdog --require-camera --require-voice
+          python3 .github/scripts/sync-brand-icons.py --check --macos-app "$APP"
 
       - name: Start the packaged app
         run: bash .github/scripts/smoke-macos-app.sh flutter/build/macos/Build/Products/Release/NikoDesk.app
@@ -208,6 +212,9 @@ jobs:
       - name: Read product version
         id: product-version
         run: python3 .github/scripts/product-version.py --github-output
+
+      - name: Verify canonical brand sources
+        run: python3 .github/scripts/sync-brand-icons.py --check
 
       - name: Install LLVM and NASM
         run: choco install -y llvm nasm
@@ -274,6 +281,8 @@ jobs:
             if (!(Test-Path "$bundle\$required")) { throw "Missing bundle file: $required" }
           }
           if (!(Test-Path 'NikoDesk-windows-x64.exe')) { throw 'Missing NikoDesk portable executable' }
+          python3 .github/scripts/sync-brand-icons.py --check --windows-exe "$bundle\NikoDesk.exe" --windows-exe NikoDesk-windows-x64.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Set-Content "$bundle\EXPERIMENTAL.txt" 'Preview user-mode client: target-device acceptance is still in progress. It runs beside RustDesk without replacing it and installs no service.'
           Compress-Archive -Path "$bundle\*" -DestinationPath NikoDesk-windows-x64.zip
 
@@ -319,6 +328,8 @@ jobs:
           Remove-Item "flutter\build\windows\x64\runner\Release\EXPERIMENTAL.txt"
           New-Item -ItemType Directory -Force dist | Out-Null
           python3 .github/scripts/build-windows-product.py --build-name "$env:PRODUCT_VERSION" --build-number "$env:PRODUCT_BUILD_NUMBER" --setup-output dist/NikoDesk-windows-x64-setup-validation --setup-trust-mode reviewed-local-unsigned-validation --reuse-client-build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python3 .github/scripts/sync-brand-icons.py --check --windows-exe dist/NikoDesk-windows-x64-setup-validation.exe --windows-exe dist/NikoDesk-windows-x64-setup-validation/NikoDesk.exe --windows-exe dist/NikoDesk-windows-x64-setup-validation/nikodesk-host.exe --windows-exe dist/NikoDesk-windows-x64-setup-validation/nikodesk-setup.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload setup validation artifacts
@@ -403,6 +414,9 @@ jobs:
       - name: Read product version
         id: product-version
         run: python3 .github/scripts/product-version.py --github-output
+
+      - name: Verify canonical brand sources
+        run: python3 .github/scripts/sync-brand-icons.py --check
 
       - name: Install dependencies
         run: |
@@ -551,6 +565,16 @@ jobs:
               --report-output NikoDesk-android-arm64-unsigned-report.json
           fi
 
+      - name: Verify final APK brand icons
+        env:
+          APK_NAME: ${{ steps.signing.outputs.signed == 'true' && 'NikoDesk-android-arm64' || 'NikoDesk-android-arm64-unsigned' }}
+          PYTHONPATH: ${{ github.workspace }}/.tools/icon-verifier
+        run: |
+          python3 -m pip install --disable-pip-version-check --only-binary=:all: --index-url https://pypi.org/simple --target .tools/icon-verifier Pillow==12.3.0
+          AAPT2=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -name aapt2 -type f | sort -V | tail -n 1)
+          test -n "$AAPT2"
+          python3 .github/scripts/sync-brand-icons.py --check --android-apk "$APK_NAME.apk" --aapt2 "$AAPT2"
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ steps.signing.outputs.signed == 'true' && 'NikoDesk-android-arm64' || 'NikoDesk-android-arm64-unsigned' }}
@@ -576,6 +600,10 @@ jobs:
       group: nightly-release
       cancel-in-progress: false
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: dist
@@ -615,6 +643,10 @@ jobs:
 
           Windows and Android packages are still in target-device acceptance. Verify downloads with \`SHA256SUMS\`.
           EOF
+          version=$(python3 .github/scripts/product-version.py | python3 -c 'import json, sys; print(json.load(sys.stdin)["version_name"])')
+          test -f "docs/RELEASE-$version.md"
+          printf '\n---\n\n' >> notes.md
+          cat "docs/RELEASE-$version.md" >> notes.md
           # Only delete a release that exists; a stray tag without a release
           # would make create adopt it and silently ignore --target.
           gh release view nightly >/dev/null 2>&1 && gh release delete nightly --cleanup-tag --yes

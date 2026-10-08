@@ -11,6 +11,7 @@ fn main() {
             println!("cargo:rerun-if-env-changed=NIKODESK_PRODUCT_VERSION");
             println!("cargo:rerun-if-env-changed=NIKODESK_BUILD_NUMBER");
             println!("cargo:rerun-if-changed=../../flutter/pubspec.yaml");
+            println!("cargo:rerun-if-changed=../../flutter/windows/runner/resources/app_icon.ico");
             let explicit = (
                 std::env::var("NIKODESK_PRODUCT_VERSION"),
                 std::env::var("NIKODESK_BUILD_NUMBER"),

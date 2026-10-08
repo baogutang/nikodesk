@@ -40,6 +40,8 @@ class NikoSettingsView extends StatefulWidget {
   final Future<ProductBuildInfo> Function()? buildInfoLoader;
   // Explicit UI-test injection; production uses the real NikoUpdater.
   final Future<NikoReleaseInfo?> Function(NikoUpdateCancellation)? updateChecker;
+  final NikoUpdater? updater;
+  final Future<bool> Function(Uri)? openUpdateUrl;
   const NikoSettingsView(
       {super.key,
       this.gateway,
@@ -50,14 +52,16 @@ class NikoSettingsView extends StatefulWidget {
       this.onOpenAdvanced,
       this.autostart,
       this.buildInfoLoader,
-      this.updateChecker});
+      this.updateChecker,
+      this.updater,
+      this.openUpdateUrl});
 
   @override
   State<NikoSettingsView> createState() => _NikoSettingsViewState();
 }
 
 class _NikoSettingsViewState extends State<NikoSettingsView> {
-  final _updater = const NikoUpdater();
+  late final _updater = widget.updater ?? const NikoUpdater();
   ProductBuildInfo _buildInfo = ProductBuildInfo.unknown;
   bool _buildInfoLoading = true;
   int _buildInfoRequest = 0;
@@ -67,6 +71,12 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
   bool _downloadingUpdate = false;
   double? _updateProgress;
   NikoUpdateCancellation? _updateCancellation;
+  String? _updateStatus;
+  Uri? _updatePage;
+  Directory? _stagedMacUpdate;
+  String? _stagedMacVersion;
+  bool _stagedMacReady = false;
+  bool _openingUpdate = false;
   late final _gateway =
       widget.gateway ?? (widget.native ? NativeServerGateway() : null);
   late final _autostart = widget.autostart ??
@@ -206,10 +216,13 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
   }
 
   Future<void> _checkForUpdate() async {
-    if (_checkingUpdate || (!_native && widget.updateChecker == null)) return;
+    if (_checkingUpdate || _openingUpdate || (!_native && widget.updateChecker == null)) return;
     final cancellation = NikoUpdateCancellation();
     _updateCancellation = cancellation;
-    setState(() => _checkingUpdate = true);
+    setState(() {
+      _checkingUpdate = true;
+      _updateStatus = nikoText('正在检查更新…', 'Checking for updates…');
+    });
     final task = NikoUpdateTask(_updater.limits, cancellation);
     int? metadataRequest;
     try {
@@ -220,7 +233,7 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
           : Future<NikoReleaseInfo?>.sync(() => checker(cancellation)));
       if (!_ownsUpdate(cancellation)) return;
       if (release == null) {
-        nikoNotice(context, nikoText('暂无已发布版本。', 'No published release yet.'));
+        _showUpdateStatus(nikoText('暂无已发布版本。', 'No published release yet.'));
         return;
       }
       metadataRequest = ++_buildInfoRequest;
@@ -240,12 +253,17 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
       if (!release.isNightly && !legacyTransition &&
           info.relationTo(release.tag) !=
               PublishedVersionRelation.newerRelease) {
-        nikoNotice(context, info.updateStatus(release.tag));
+        _showUpdateStatus(info.updateStatus(release.tag));
         return;
       }
       final macAsset = Platform.isMacOS && !release.isNightly && !legacyTransition && _updater.publisher.configured
           ? release.assetFor('macos-arm64')
           : null;
+      setState(() {
+        _updatePage = _updater.releasePage(release);
+        _updateStatus = nikoText('可下载 ${release.displayName}，尚未安装。',
+            '${release.displayName} is available to download, not installed.');
+      });
       final confirmed = await showDialog<bool>(
           context: context,
           builder: (dialog) => AlertDialog(
@@ -324,17 +342,17 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
               ));
       if (confirmed != true || !_ownsUpdate(cancellation)) return;
       if (macAsset == null) {
-        await launchUrl(_updater.releasePage(release));
+        await _openUpdatePage();
         return;
       }
       await _prepareMacUpdate(release, macAsset, cancellation);
     } on NikoUpdateCancelled {
       if (mounted && identical(_updateCancellation, cancellation)) {
-        nikoNotice(context, nikoText('已取消更新。', 'Update cancelled.'));
+        _showUpdateStatus(nikoText('已取消更新。', 'Update cancelled.'));
       }
     } catch (_) {
       if (mounted && identical(_updateCancellation, cancellation)) {
-        nikoNotice(context,
+        _showUpdateStatus(
             nikoText('检查更新失败，请稍后重试。', 'Update check failed. Retry later.'));
       }
     } finally {
@@ -357,6 +375,58 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
   bool _ownsUpdate(NikoUpdateCancellation cancellation) => mounted &&
       identical(_updateCancellation, cancellation) && !cancellation.isCancelled;
 
+  void _showUpdateStatus(String message) {
+    if (mounted) setState(() => _updateStatus = message);
+  }
+
+  Future<void> _openUpdatePage() async {
+    final page = _updatePage;
+    if (page == null || _openingUpdate) return;
+    setState(() => _openingUpdate = true);
+    try {
+      final opened = await (widget.openUpdateUrl?.call(page) ?? launchUrl(page));
+      _showUpdateStatus(opened
+          ? _stagedMacUpdate != null
+              ? nikoText('已打开发布页。之前准备的文件仍列在下方，请按其校验状态操作；此次打开网页没有安装或重启应用。',
+                  'Release page opened. Previously prepared files remain listed below; follow their verification status. Opening this page did not install or restart the app.')
+              : nikoText('已打开发布页，尚未下载或安装。下载后按发布说明手动安装，再从原安装位置重新打开 NikoDesk 核对版本。',
+                  'Release page opened; nothing has been downloaded or installed by this app. Install manually using the release instructions, then reopen NikoDesk from its installation location and check the version.')
+          : nikoText('无法打开发布页。请重试，或复制下方地址到浏览器；当前版本未更改。',
+              'Could not open the release page. Retry or copy the address below into a browser. The current version is unchanged.'));
+    } catch (_) {
+      _showUpdateStatus(nikoText('无法打开发布页。请重试，或复制下方地址到浏览器；当前版本未更改。',
+          'Could not open the release page. Retry or copy the address below into a browser. The current version is unchanged.'));
+    } finally {
+      if (mounted) setState(() => _openingUpdate = false);
+    }
+  }
+
+  Future<void> _revealUpdate({NikoUpdateCancellation? cancellation}) async {
+    final staged = _stagedMacUpdate;
+    if (staged == null || _openingUpdate) return;
+    setState(() {
+      _openingUpdate = true;
+      // Retained files are not evidence that a later validation still passes.
+      _stagedMacReady = false;
+    });
+    try {
+      await _updater.revealStagedMacUpdate(staged, cancellation: cancellation);
+      if (mounted) setState(() => _stagedMacReady = true);
+      _showUpdateStatus(nikoText('已在 Finder 显示安装包，尚未安装或重启。请按下方步骤完成。',
+          'Installer shown in Finder; the app has not been installed or restarted. Follow the steps below.'));
+    } on NikoUpdateCancelled {
+      rethrow;
+    } on FormatException {
+      _showUpdateStatus(nikoText('安装包重新校验失败，文件可能已损坏、变更或缺失。请勿安装这些文件；可重试校验或从发布页重新下载。当前版本未更改。',
+          'Installer recheck failed: files may be damaged, changed or missing. Do not install these files. Retry verification or download again from the release page. The current version is unchanged.'));
+    } catch (_) {
+      _showUpdateStatus(nikoText('未能在 Finder 显示或重新确认安装包。应用未删除已准备的文件，位置见下方；可重试或从发布页重新下载。当前版本未更改。',
+          'Could not show or recheck the installer in Finder. This app has not deleted the prepared files; their location is below. Retry or download again from the release page. The current version is unchanged.'));
+    } finally {
+      if (mounted) setState(() => _openingUpdate = false);
+    }
+  }
+
   Future<void> _prepareMacUpdate(NikoReleaseInfo release,
       NikoReleaseAsset asset, NikoUpdateCancellation cancellation) async {
     setState(() {
@@ -364,44 +434,55 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
       _updateProgress = null;
     });
     Directory? staging;
-    var revealed = false;
+    var retained = false;
     try {
       staging = await Directory.systemTemp.createTemp('nikodesk-update-');
       final ok = await _updater.verifyAndStageMacUpdate(release, asset, staging,
+          onPhase: (phase) {
+        if (!_ownsUpdate(cancellation)) return;
+        setState(() {
+          _updateProgress = null;
+          _updateStatus = switch (phase) {
+            NikoUpdatePhase.downloading => nikoText('正在下载安装包…', 'Downloading the installer…'),
+            NikoUpdatePhase.verifying => nikoText('下载完成，正在验证发行者与文件完整性…', 'Download complete. Verifying publisher and file integrity…'),
+            NikoUpdatePhase.unpacking => nikoText('正在解包并检查应用，尚未安装…', 'Unpacking and checking the app; not installed yet…'),
+          };
+        });
+      },
           cancellation: cancellation, onProgress: (received, total) {
-        if (total > 0 && mounted) {
+        if (total > 0 && _ownsUpdate(cancellation)) {
           setState(() => _updateProgress = received / total);
         }
       });
       if (!ok) {
         if (mounted) {
-          nikoNotice(
-              context,
-              nikoText('更新包校验失败，未做任何更改。',
-                  'Update verification failed. Nothing was changed.'));
+          _showUpdateStatus(nikoText('更新包校验失败，未安装或重启。可重试或查看发布说明，当前版本未更改。',
+              'Update verification failed. Nothing was installed or restarted. Retry or check the release notes; the current version is unchanged.'));
         }
         return;
       }
       cancellation.check();
-      await _updater.revealStagedMacUpdate(staging, cancellation: cancellation);
-      revealed = true;
-      if (mounted) {
-        nikoNotice(
-            context,
-            nikoText('更新包已校验并在 Finder 中显示。请退出应用后手动安装。',
-                'The verified update is shown in Finder. Quit the app before installing it manually.'));
-      }
+      if (!_ownsUpdate(cancellation)) return;
+      setState(() {
+        _stagedMacUpdate = staging;
+        _stagedMacVersion = release.tag;
+        _stagedMacReady = false;
+      });
+      // Finder failure must not discard the verified package or its retry path.
+      retained = true;
+      await _revealUpdate(cancellation: cancellation);
     } on NikoUpdateCancelled {
       rethrow;
+    } on TimeoutException {
+      _showUpdateStatus(nikoText('下载或校验超时，未安装或重启。请重试；当前版本未更改。',
+          'Download or verification timed out. Nothing was installed or restarted. Retry; the current version is unchanged.'));
     } catch (_) {
       if (mounted) {
-        nikoNotice(
-            context,
-            nikoText('更新失败，当前版本未受影响。',
-                'Update failed. Current version is untouched.'));
+        _showUpdateStatus(nikoText('下载或准备安装包失败，未安装或重启。请重试或从发布页下载；当前版本未更改。',
+            'Could not download or prepare the installer. Nothing was installed or restarted. Retry or download from the release page; the current version is unchanged.'));
       }
     } finally {
-      if (!revealed && staging != null && await staging.exists()) {
+      if (!retained && staging != null && await staging.exists()) {
         try {
           await staging.delete(recursive: true);
         } catch (_) {
@@ -559,7 +640,7 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
                       value: NikoUpdateChannel.nightly,
                       child: Text(nikoText('预览版（nightly）', 'Nightly preview'))),
                 ],
-                onChanged: _checkingUpdate
+                onChanged: _checkingUpdate || _openingUpdate
                     ? null
                     : (channel) {
                         if (channel != null) {
@@ -586,7 +667,7 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
                           minHeight: 6,
                           borderRadius: BorderRadius.circular(3)))
                   : OutlinedButton(
-                      onPressed: _checkingUpdate ? null : _checkForUpdate,
+                      onPressed: _checkingUpdate || _openingUpdate ? null : _checkForUpdate,
                       child: _checkingUpdate
                           ? SizedBox(
                               width: 14,
@@ -602,6 +683,39 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
               ],
             ]),
             const SizedBox(height: 6),
+            if (_updateStatus != null) ...[
+              Text(_updateStatus!, key: const Key('nikodesk-update-status')),
+              const SizedBox(height: 8),
+            ],
+            if (_stagedMacUpdate != null) ...[
+              Text(_stagedMacReady
+                  ? nikoText('$_stagedMacVersion 安装包已校验，仍需手动安装',
+                      '$_stagedMacVersion installer checked; manual installation required')
+                  : nikoText('保留了 $_stagedMacVersion 的文件，安装前需重新校验',
+                      '$_stagedMacVersion files retained; recheck before installation'),
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              if (_stagedMacReady)
+                Text(nikoText('1. 保存工作并结束远控会话，然后手动退出 NikoDesk。\n2. 在 Finder 将准备好的 NikoDesk.app 复制到原安装位置，按系统提示确认替换。\n3. 从原安装位置重新打开 NikoDesk，在本页核对版本。应用不会自动替换或重启。\n升级可能需要重新授予 macOS 权限；请保留备用远控入口。',
+                    '1. Save your work and end remote sessions, then quit NikoDesk manually.\n2. In Finder, copy the prepared NikoDesk.app to its original installation location and confirm replacement when prompted.\n3. Reopen NikoDesk from that location and check the version here. The app will not replace itself or restart automatically.\nmacOS permissions may need to be granted again; keep a backup remote-access path.'))
+              else
+                Text(nikoText('请先重新校验并在 Finder 显示，成功前不要安装这些文件。也可从发布页重新下载。',
+                    'Recheck and show the files in Finder before installation. Do not install them until this succeeds, or download again from the release page.')),
+              SelectableText('${_stagedMacUpdate!.path}/mac/NikoDesk.app',
+                  key: const Key('nikodesk-update-staged-path')),
+              Align(alignment: Alignment.centerLeft, child: OutlinedButton(
+                  onPressed: _checkingUpdate || _openingUpdate ? null : () => _revealUpdate(),
+                  child: Text(nikoText('在 Finder 显示安装包', 'Show installer in Finder')))),
+              Text(nikoText('安装前请记下文件位置；关闭此页后，可在 Finder 中按该位置找到文件。',
+                  'Keep the file location before closing this page so you can find the files in Finder later.'),
+                  style: TextStyle(fontSize: 11.5, color: muted)),
+              const SizedBox(height: 8),
+            ],
+            if (_updatePage != null) ...[
+              SelectableText(_updatePage.toString(), key: const Key('nikodesk-update-release-url')),
+              Align(alignment: Alignment.centerLeft, child: TextButton(
+                  onPressed: _checkingUpdate || _openingUpdate ? null : _openUpdatePage,
+                  child: Text(nikoText('打开发布页', 'Open release page')))),
+            ],
             Text(
                 _updater.publisher.configured
                     ? nikoText('macOS 更新使用内置发行公钥验证签名与 SHA256，再手动安装。系统签名与公证状态请参阅发布说明。',

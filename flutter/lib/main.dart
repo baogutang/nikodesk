@@ -30,6 +30,8 @@ import 'mobile/pages/server_page.dart';
 import 'mobile/widgets/deploy_dialog.dart';
 import 'models/platform_model.dart';
 import 'nikodesk/mobile_home.dart';
+import 'nikodesk/startup_failure.dart';
+import 'nikodesk/startup_shell.dart';
 import 'nikodesk/theme.dart';
 import 'nikodesk/ui.dart';
 
@@ -137,6 +139,10 @@ Future<void> initEnv(String appType) async {
 }
 
 void runMainApp(bool startService) async {
+  if (const bool.fromEnvironment('NIKODESK')) {
+    _runNikoMainApp(startService);
+    return;
+  }
   // register uni links
   await initEnv(kAppTypeMain);
   checkUpdate();
@@ -176,6 +182,46 @@ void runMainApp(bool startService) async {
     windowManager.setTitle(getWindowName());
     // Do not use `windowManager.setResizable()` here.
     setResizable(!bind.isIncomingOnly());
+  });
+}
+
+Future<void> _runNikoMainApp(bool startService) async {
+  final ready = Completer<void>();
+  final visible = Completer<void>();
+  runApp(NikoStartupShell(
+      ready: ready.future, visible: visible.future, buildReady: () => App()));
+  await initializeNikoMainWindow(() async {
+    await initEnv(kAppTypeMain);
+
+    // Position and initial-link decisions require a working core. Keep the
+    // native window hidden until those decisions have completed as before.
+    final alwaysOnTop =
+        bind.mainGetBuildinOption(key: 'main-window-always-on-top') == 'Y';
+    await windowManager.waitUntilReadyToShow(getHiddenTitleBarWindowOptions(
+        isMainWindow: true, alwaysOnTop: alwaysOnTop));
+    await restoreWindowPosition(WindowType.Main);
+    final handledByUniLinks = await initUniLinks();
+    final keepHidden =
+        handledByUniLinks || handleUriLink(cmdArgs: kBootArgs);
+    await windowManager.setTitle(getWindowName());
+    setResizable(!bind.isIncomingOnly());
+    if (keepHidden) {
+      await windowManager.hide();
+      await windowManager.setOpacity(1);
+    } else {
+      await windowManager.setOpacity(1);
+      await windowManager.show();
+      await windowManager.focus();
+      rustDeskWinManager.registerActiveWindow(kWindowMainId);
+      visible.complete();
+    }
+
+    checkUpdate();
+    await bind.mainCheckConnectStatus();
+    if (startService) gFFI.serverModel.startService();
+    await Future.wait([gFFI.abModel.loadCache(), gFFI.groupModel.loadCache()]);
+    gFFI.userModel.refreshCurrentUser();
+    ready.complete();
   });
 }
 

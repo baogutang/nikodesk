@@ -184,6 +184,11 @@ fn build_nikodesk_windows_resources() -> Result<(), Box<dyn std::error::Error>> 
     if !manifest.is_file() || manifest_name.contains('"') {
         return Err("NikoDesk background manifest unavailable".into());
     }
+    let icon = root.join("flutter/windows/runner/resources/app_icon.ico");
+    let icon_name = icon.to_string_lossy().replace('\\', "/");
+    if !icon.is_file() || icon_name.contains('"') {
+        return Err("NikoDesk application icon unavailable".into());
+    }
     // rc.exe comes from the selected Windows SDK, or its configured PATH. No
     // compiler failure may silently produce an unversioned host/setup binary.
     let rc = std::env::var_os("NIKODESK_WINDOWS_RC").map(PathBuf::from)
@@ -195,7 +200,7 @@ fn build_nikodesk_windows_resources() -> Result<(), Box<dyn std::error::Error>> 
     for bin in ["nikodesk-host", "nikodesk-setup"] {
         let source = out.join(format!("{bin}-version.rc"));
         let resource = out.join(format!("{bin}-version.res"));
-        let contents = format!("{}\n1 24 \"{}\"\n", nikodesk_windows_rc(bin, parts)?, manifest_name);
+        let contents = format!("{}\n1 24 \"{}\"\n1 ICON \"{}\"\n", nikodesk_windows_rc(bin, parts)?, manifest_name, icon_name);
         std::fs::write(&source, contents)?;
         let status = Command::new(&rc).arg("/nologo").arg("/fo").arg(&resource).arg(&source).status()?;
         if !status.success() || std::fs::metadata(&resource)?.len() == 0 {
@@ -206,6 +211,7 @@ fn build_nikodesk_windows_resources() -> Result<(), Box<dyn std::error::Error>> 
     println!("cargo:rerun-if-changed={}", helper.display());
     println!("cargo:rerun-if-changed={}", pubspec.display());
     println!("cargo:rerun-if-changed={}", manifest.display());
+    println!("cargo:rerun-if-changed={}", icon.display());
     println!("cargo:rerun-if-env-changed=NIKODESK_BUILD_PYTHON");
     println!("cargo:rerun-if-env-changed=NIKODESK_WINDOWS_RC");
     println!("cargo:rerun-if-env-changed=WindowsSdkVerBinPath");

@@ -14,6 +14,7 @@ export 'update_transfer.dart'
     show NikoUpdateCancellation, NikoUpdateCancelled, NikoUpdateLimits;
 
 enum NikoUpdateChannel { stable, nightly }
+enum NikoUpdatePhase { downloading, verifying, unpacking }
 
 class _UpdateHttpException extends HttpException {
   final int statusCode;
@@ -323,6 +324,7 @@ class NikoUpdater {
   Future<bool> verifyAndStageMacUpdate(
       NikoReleaseInfo release, NikoReleaseAsset asset, Directory staging,
       {void Function(int received, int total)? onProgress,
+      void Function(NikoUpdatePhase phase)? onPhase,
       NikoUpdateCancellation? cancellation}) async {
     final task = NikoUpdateTask(limits, cancellation);
     task.check();
@@ -334,7 +336,9 @@ class NikoUpdater {
     var succeeded = false;
     var ownsStage = false;
     try {
+      onPhase?.call(NikoUpdatePhase.downloading);
       zip = await _downloadAsset(asset, staging, onProgress, task);
+      onPhase?.call(NikoUpdatePhase.verifying);
       final expected = await _expectedDigest(release, asset, task, staging);
       if (expected == null) return false;
       final digest = await task.wait(sha256.bind(zip.openRead()).first);
@@ -342,6 +346,7 @@ class NikoUpdater {
       task.check();
       final bytes = await task.wait(zip.readAsBytes());
       await _validateZip(bytes, task);
+      onPhase?.call(NikoUpdatePhase.unpacking);
       await staged.create();
       ownsStage = true;
       final result = await _run(

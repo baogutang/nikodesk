@@ -115,6 +115,7 @@ class _Processes {
   final calls = <(String, List<String>)>[];
   int signatureExit = 0;
   int publisherSignatureExit = 0;
+  int revealExit = 0;
   String identifier = 'io.nikodesk.macos';
   String architecture = 'arm64';
   String? injectedLink;
@@ -149,6 +150,7 @@ class _Processes {
     }
     if (executable == '/usr/bin/codesign') code = signatureExit;
     if (executable == '/usr/bin/openssl') code = publisherSignatureExit;
+    if (executable == '/usr/bin/open') code = revealExit;
     return ProcessResult(1, code, stdout, '');
   }
 }
@@ -550,7 +552,8 @@ void main() {
     expect(directory.listSync(), isEmpty);
   });
 
-  Future<bool> stage(List<int> bytes, _Processes processes, {String? digest}) {
+  Future<bool> stage(List<int> bytes, _Processes processes,
+      {String? digest, void Function(NikoUpdatePhase)? onPhase}) {
     final client = _Client([
       _Response(bytes),
       _Response(
@@ -562,7 +565,7 @@ void main() {
     return _http(
         client,
         () => NikoUpdater(publisher: _publisher, runProcess: processes.run)
-            .verifyAndStageMacUpdate(release, asset, directory));
+            .verifyAndStageMacUpdate(release, asset, directory, onPhase: onPhase));
   }
 
   test(
@@ -600,6 +603,41 @@ void main() {
         .verifyAndStageMacUpdate(release, asset, directory)), isFalse);
     expect(client.requested, isEmpty);
     expect(directory.listSync(), isEmpty);
+  });
+
+  test('download completion reports verification before unpacking', () async {
+    final phases = <NikoUpdatePhase>[];
+    expect(await stage(_zip(_bundleFiles), _Processes(), onPhase: phases.add), isTrue);
+    expect(phases, [NikoUpdatePhase.downloading, NikoUpdatePhase.verifying,
+      NikoUpdatePhase.unpacking]);
+  });
+
+  test('Finder failure keeps a verified bundle available for a checked retry', () async {
+    final processes = _Processes()..revealExit = 1;
+    expect(await stage(_zip(_bundleFiles), processes), isTrue);
+    final updater = NikoUpdater(publisher: _publisher, runProcess: processes.run);
+    await expectLater(updater.revealStagedMacUpdate(directory),
+        throwsA(isA<FileSystemException>()));
+    expect(await File('${directory.path}/mac/NikoDesk.app/Contents/MacOS/NikoDesk').exists(), isTrue);
+    processes.revealExit = 0;
+    await updater.revealStagedMacUpdate(directory);
+    expect(processes.calls.where((call) => call.$1 == '/usr/bin/open').length, 2);
+    expect(processes.calls.any((call) => call.$1.contains('sh') ||
+        call.$2.any((arg) => arg.contains('/Applications/'))), isFalse);
+  });
+
+  test('failed staged bundle recheck refuses Finder without deleting retained files', () async {
+    final processes = _Processes();
+    expect(await stage(_zip(_bundleFiles), processes), isTrue);
+    final updater = NikoUpdater(publisher: _publisher, runProcess: processes.run);
+    processes.signatureExit = 1;
+    await expectLater(updater.revealStagedMacUpdate(directory),
+        throwsA(isA<FormatException>()));
+    expect(processes.calls.any((call) => call.$1 == '/usr/bin/open'), isFalse);
+    expect(await File('${directory.path}/mac/NikoDesk.app/Contents/MacOS/NikoDesk').exists(), isTrue);
+    processes.signatureExit = 0;
+    await updater.revealStagedMacUpdate(directory);
+    expect(processes.calls.where((call) => call.$1 == '/usr/bin/open').length, 1);
   });
 
   test('invalid publisher signature refuses extraction and cleans downloads', () async {

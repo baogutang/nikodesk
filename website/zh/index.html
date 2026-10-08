@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NikoDesk - 跑在自己服务器上的远程桌面</title>
-<meta name="description" content="基于 RustDesk 内核的私服远程桌面。1.0.6 通过自动构建交付 macOS、Windows 与 Android 三端；平台状态如实说明。">
+<meta name="description" content="NikoDesk，让熟悉的电脑随你而行。远程操作、文件传输与多设备工作，连接由自己的服务器管理。">
 <link rel="icon" href="../assets/favicon.png?v=5" type="image/png">
 <link rel="apple-touch-icon" href="../assets/logo.png?v=5">
 <link rel="preload" href="../assets/fonts/inter-800.woff2?v=5" as="font" type="font/woff2" crossorigin>
 <meta property="og:title" content="NikoDesk - 跑在自己服务器上的远程桌面">
-<meta property="og:description" content="基于 RustDesk 内核，使用自己的注册与中继服务。1.0.6 三端下载与平台状态如实说明。">
+<meta property="og:description" content="熟悉的电脑，换个地方继续。远程桌面，连接自主。">
 <meta property="og:image" content="https://baogutang.github.io/nikodesk/assets/app-light.png?v=102">
 <meta property="og:image:alt" content="NikoDesk 暖纸亮色工作区，生产 Flutter 组件与合成示例数据">
 <meta property="og:type" content="website">
@@ -335,7 +335,8 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
 @media (prefers-reduced-motion: reduce) { .hero > *, .hero .shot-zone { animation: none; } }
 </style>
 <link rel="stylesheet" href="../assets/demo.css?v=102">
-<script defer src="../assets/demo.js?v=102"></script>
+<script defer src="../assets/demo.js?v=108"></script>
+<link rel="stylesheet" href="../assets/product.css?v=109">
 </head>
 <body>
 <a class="skip-link" href="#content">跳到主要内容</a>
@@ -357,252 +358,59 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
 
 <main id="content" tabindex="-1">
 <header class="hero wrap" id="top" tabindex="-1">
-  <a class="badge" href="https://github.com/baogutang/nikodesk/releases" target="_blank" rel="noopener">
-    <span class="dot"></span>v1.0.6 · 三平台<span class="arrow">→</span>
-  </a>
-  <h1><span class="phrase">你的设备，</span><span class="phrase">你的服务器，</span><br><span class="accent">你的远程桌面。</span></h1>
-  <p class="sub">保留 RustDesk 的原生远控内核，连接你自己的注册与中继服务。Windows 与 macOS 面向主控及被控，Android 仅做控制端；跨设备验收仍在进行中。</p>
-  <div class="cta-row">
-    <a class="btn btn-primary" href="#download">下载 NikoDesk</a>
-    <a class="btn btn-outline" href="https://github.com/baogutang/nikodesk" target="_blank" rel="noopener">阅读源码</a>
+  <div class="hero-copy">
+    <a class="badge" href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.6"><span class="dot"></span>NikoDesk · 远程桌面，连接自主<span class="arrow">↗</span></a>
+    <h1>熟悉的电脑，<br><span class="accent">换个地方继续。</span></h1>
+    <div class="hero-bottom"><p class="sub">家里的书桌、出差的路上，或手边的一部手机。回到你的电脑，接着做手里的事。</p>
+    <div class="cta-row"><a class="btn btn-primary" href="#download">下载 NikoDesk <span aria-hidden="true">↗</span></a><a class="text-link" href="#features">了解工作方式 <span aria-hidden="true">↓</span></a></div></div>
   </div>
-  <div class="shot-zone">
-    <div id="nikodesk-demo" class="nd-demo" data-lang="zh" data-theme="light">
-      <noscript>开启 JavaScript 即可操作界面示例。软件及下载不依赖此演示。</noscript>
-    </div>
-  </div>
-  <p class="shot-caption">试试设备搜索、主题切换和远端空间操作。这是使用虚构数据的交互界面示例，不建立连接、不发送按键；软件仍使用真实 RustDesk 原生内核。</p>
+  <div class="product-strip"><span>原生远程桌面</span><span>自己的服务器</span><span>macOS / Windows / Android</span></div>
+  <div class="shot-zone"><div id="nikodesk-demo" class="nd-demo" data-lang="zh" data-theme="light"><noscript>启用 JavaScript 可体验交互预览。下载与软件使用不受影响。</noscript></div></div>
+  <p class="shot-caption">交互预览 · 示例数据。试试搜索设备、切换主题或会话工具；此预览不会建立远程连接。</p>
 </header>
 
-<section id="features" tabindex="-1" class="wrap">
-  <div class="sec-head reveal">
-    <span class="sec-pill">功能</span>
-    <h2>为日常驾驭而生</h2>
-    <p class="sec-sub">1.0.7+16 是尚未正式发布的开发候选：增加隐私屏持续验证与恢复、有界且可取消的目录扫描、开发凭据隔离、当前窗口画面与帧率匹配、无效分辨率切换后的恢复，以及使用固定发行公钥的签名更新门禁。同时修补 Rust OpenSSL 绑定，全部依赖审计仍未清零。可查看<a href="https://github.com/baogutang/nikodesk/actions/workflows/release.yml?query=branch%3Avalidation%2F1.0.7">候选构建状态</a>；构建检查不能代替设备验收。稳定下载保持 v1.0.6。</p>
-    <p class="sec-sub">1.0.6 让隐私屏找得到、看得见：工具栏按钮和控制中心的开关都能开启，开启期间远端画面上一直有标记。帧率上限放开到 120，“操作流畅”按本机屏幕的刷新率请求，不再被固定在 30 帧；被控 Mac 能出到设定的上限。Windows 和 Android 换上了 NikoDesk 自己的图标。1.0.5 的按本机屏幕大小采集和密码直接连入、暖纸亮色、Windows 控 Mac 编辑快捷键与远端空间切换继续可用；同一台 Mac 两个身份之间的会话已核对隐私屏和帧率上限，新的界面和图标还没有在 Windows 和 Android 设备上看过，跨设备延迟和帧率仍未测量。</p>
-  </div>
-  <div class="grid">
-    <div class="card reveal">
-      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m10.85 12.15 8.9-8.9"/><path d="m18 5 3 3"/><path d="m15 8 3 3"/></svg></div>
-      <h3>密码就是门禁</h3>
-      <p>连接入口要求先输入远端密码，密码不写入设备目录。输入密码后仍需完成对端认证与加密握手。</p>
-    </div>
-    <div class="card reveal" style="--d:.06s">
-      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
-      <h3>在线、离线与未知</h3>
-      <p>设备状态来自私服查询；没有有效结果时显示未知。服务器可达或本机已注册，不代表远端可连接。</p>
-    </div>
-    <div class="card reveal" style="--d:.12s">
-      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg></div>
-      <h3>本地连接历史</h3>
-      <p>本地保留最近 200 次连接发起记录，便于再次连接。历史记录不代表对端已接受，也不保存连接密码。</p>
-    </div>
-    <div class="card reveal">
-      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9z"/><path d="M13 3v6h6"/></svg></div>
-      <h3>文件与剪贴板</h3>
-      <p>沿用原生文件传输与剪贴板能力。用有效密码登录的会话默认获得键鼠、剪贴板和文件传输权限，请事先在被控端设好这些权限。</p>
-    </div>
-    <div class="card reveal" style="--d:.06s">
-      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg></div>
-      <h3>正式版与预览，自行选择</h3>
-      <p>应用内选择正式版或 nightly，查看发布名称与时间，再进入对应发布页。Mac 正式版下载校验后手动安装；哈希校验不等于发布者签名。</p>
-    </div>
-    <div class="card reveal" style="--d:.12s">
-      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></div>
-      <h3>一套界面，两种气质</h3>
-      <p>亮色使用暖纸背景、陶土色按钮与棕灰文字，暗色沿用熟悉的工作区。上方交互示例可体验两种主题。</p>
-    </div>
+<section id="features" tabindex="-1" class="wrap product-features">
+  <div class="sec-head reveal"><span class="sec-pill">为每天的工作设计</span><h2>距离改变了，<br>工作方式不用变。</h2><p class="sec-sub">从连接到操作，把远端电脑放回你的工作节奏里。</p></div>
+  <div class="feature-rows">
+    <article class="feature-row reveal"><span class="feature-no">01</span><h3>打开熟悉的桌面</h3><p>在设备目录中找到电脑，用键盘和鼠标接着操作。多屏切换、全屏与快捷键，让日常动作保持顺手。</p><span class="feature-tag">远程操作</span></article>
+    <article class="feature-row reveal"><span class="feature-no">02</span><h3>文件，跟得上你</h3><p>在两端传送文件、复制文字，把设备间的来回变成工作的一部分。传输与访问权限由你管理。</p><span class="feature-tag">文件与剪贴板</span></article>
+    <article class="feature-row reveal"><span class="feature-no">03</span><h3>按眼前的任务调整</h3><p>阅读文字、编辑文档或操作动态画面，自行选择清晰度与流畅度。在会话中查看连接状态，随时调整。</p><span class="feature-tag">画面与会话工具</span></article>
   </div>
 </section>
 
 <section id="why" tabindex="-1" class="wrap">
-  <div class="sec-head reveal">
-    <span class="sec-pill">为什么自建</span>
-    <h2>把注册与中继交给自己的服务</h2>
-    <p class="sec-sub">你管理 hbbs 注册服务与 hbbr 中继服务。客户端未配置私服时保持停止，不使用上游默认公共注册服务。</p>
-  </div>
-  <div class="why-grid">
-    <div class="why-copy reveal">
-      <p>会话经<b>你的服务器</b>协商，随后尝试认证后的点对点直连，必要时使用你的中继。直连时会访问对端地址，更新检查与下载还会访问 GitHub。</p>
-      <p>私服策略由 NikoDesk 构建特性启用；下面只展示特性，不是完整构建命令：</p>
-      <div class="term">
-        <div class="term-bar"><i></i><i></i><i></i></div>
-        <pre><span class="c"># Rust 内核构建片段，完整工具链见仓库</span>
-<span class="v">$</span> cargo build --locked --lib --release --features flutter,hwcodec,<span class="k">nikodesk</span>
-<span class="c"># 未配置私服时，不使用默认公共注册服务</span></pre>
-      </div>
-    </div>
-    <div class="reveal" style="--d:.1s">
-      <svg class="topo" viewBox="0 0 560 360" role="img" aria-label="笔记本与手机经由你自己的服务器互连">
-        <path class="link" d="M120 96 C 200 96, 220 168, 280 180"/>
-        <path class="link" d="M120 264 C 200 264, 220 192, 280 180"/>
-        <path class="link" d="M356 180 C 420 180, 430 120, 452 110"/>
-        <path class="link" d="M356 180 C 420 180, 430 250, 452 258"/>
-        <rect class="node" x="40" y="72" width="80" height="48" rx="12"/>
-        <text x="80" y="101" text-anchor="middle">笔记本</text>
-        <rect class="node" x="40" y="240" width="80" height="48" rx="12"/>
-        <text x="80" y="269" text-anchor="middle">手机</text>
-        <rect class="node-core" x="278" y="142" width="80" height="76" rx="14"/>
-        <text x="318" y="174" text-anchor="middle">你的服务器</text>
-        <text class="sub" x="318" y="194" text-anchor="middle">hbbs + hbbr</text>
-        <rect class="node" x="448" y="86" width="80" height="48" rx="12"/>
-        <text x="488" y="115" text-anchor="middle">工作室 Mac</text>
-        <rect class="node" x="448" y="234" width="80" height="48" rx="12"/>
-        <text x="488" y="263" text-anchor="middle">NAS</text>
-      </svg>
-    </div>
-  </div>
+ <div class="private-layout"><div class="sec-head reveal"><span class="sec-pill">连接，由你安排</span><h2>自己的设备，<br>自己的连接。</h2><p class="sec-sub">用自己的服务器管理注册与中继。无需 NikoDesk 云账号，也不用把设备目录交给另一个平台。</p><a class="text-link" href="#deploy">开始自托管 ↗</a></div>
+ <div class="connection-map reveal" role="img" aria-label="本机通过自己的服务器发现远端电脑，随后尝试直连，必要时中继"><div class="map-end"><span class="device-outline">⌘</span>你所在的地方</div><div class="map-route"><span></span><b><img src="../assets/logo.png" alt="">自己的服务器</b><span></span></div><div class="map-end"><span class="device-outline">↗</span>熟悉的电脑</div><p>优先尝试直连 · 需要时使用自己的中继</p></div></div>
 </section>
 
-<section id="security" tabindex="-1" style="padding: 20px 0 92px;">
-  <div class="band reveal">
-    <div class="band-in">
-      <div class="sec-head">
-        <span class="sec-pill">安全</span>
-        <h2>安全，摊开来讲</h2>
-        <p class="sec-sub">NikoDesk 继承 RustDesk 内核的端到端加密会话，并加上自己的规矩。</p>
-      </div>
-      <div class="sec-groups">
-        <div class="sec-group">
-          <h3>准入</h3>
-          <p>连接必须先过密码关。临时密码与永久密码都在被控端管理。</p>
-          <p>有效密码无需被控端确认即可连接；不带密码的请求仍在被控端等待点击。被控端保留权限开关并可随时结束会话，实际撤权效果需在目标设备验证。</p>
-        </div>
-        <div class="sec-group">
-          <h3>网络</h3>
-          <p>注册与中继使用配置的私服；默认公共注册回退被禁用。服务端保存自己的私钥，客户端只填写服务端公钥。</p>
-          <p>会话还可能访问协商后的对端地址，更新流程会访问 GitHub。</p>
-        </div>
-        <div class="sec-group">
-          <h3>供应链</h3>
-          <p>构建流程公开，发布页提供 SHA256SUMS。摘要用于检查文件一致性，不能替代可信发行签名。</p>
-          <p>macOS 构建采用本地 ad-hoc 签名，尚无 Apple Developer ID 签名或公证。</p>
-        </div>
-      </div>
-    </div>
-  </div>
+<section id="security" tabindex="-1" class="wrap">
+ <div class="security-surface"><div class="sec-head reveal"><span class="sec-pill">信任，有迹可循</span><h2>控制权，留在你手里。</h2></div>
+ <div class="sec-groups"><article class="sec-group reveal"><h3>你决定谁能连接</h3><p>密码与接入策略由被控端管理。查看、操作和文件访问可以分别授权，会话也可以随时结束。</p></article><article class="sec-group reveal"><h3>权限清楚可见</h3><p>屏幕录制、键鼠控制、相机和麦克风遵守系统权限。需要时授权，用完后可以撤回。</p></article><article class="sec-group reveal"><h3>实现公开可查</h3><p>基于 RustDesk 原生内核，遵循 AGPL-3.0。源码、构建说明和版本变更都可在 GitHub 查看。</p><a class="text-link" href="https://github.com/baogutang/nikodesk">查看源码 ↗</a></article></div></div>
 </section>
 
 <section id="deploy" tabindex="-1" class="wrap">
-  <div class="sec-head reveal">
-    <span class="sec-pill">自建服务</span>
-    <h2>先配置，再分别验证</h2>
-    <p class="sec-sub">兼容 RustDesk Server OSS。已有服务可复用；下方是新建环境示例，请核对镜像版本、域名与数据目录。</p>
-  </div>
-  <div class="steps">
-    <div class="step reveal">
-      <div class="n">1</div>
-      <h3>起服务</h3>
-      <p>分别运行 hbbs 与 hbbr，使用专用数据目录。设置客户端可达的中继地址，升级前保留服务端密钥。</p>
-      <pre>docker run -d --name hbbs -v /data:/root \
-  -p 21115:21115 -p 21116:21116 \
-  -p 21116:21116/udp \
-  rustdesk/rustdesk-server hbbs \
-  -r desk.example.com:21117
-
-docker run -d --name hbbr -v /data:/root \
-  -p 21117:21117 \
-  rustdesk/rustdesk-server hbbr</pre>
-    </div>
-    <div class="step reveal" style="--d:.07s">
-      <div class="n">2</div>
-      <h3>通网络</h3>
-      <p>两端需能访问服务。原生客户端使用 TCP 21115–21117 与 UDP 21116；无需 Web 客户端时不开放 21118/21119。</p>
-      <pre>cat /data/id_ed25519.pub
-# DNS 指向主机
-# TCP 21115, 21116, 21117
-# UDP 21116
-# 只把 .pub 公钥填入客户端</pre>
-    </div>
-    <div class="step reveal" style="--d:.14s">
-      <div class="n">3</div>
-      <h3>填客户端</h3>
-      <p>两端配置相同的私服与公钥。先测服务可达，再确认注册状态，最后通过一次真实会话验证密码、画面与权限。</p>
-      <pre>ID 服务器:  desk.example.com
-中继:      desk.example.com:21117
-Key:      (id_ed25519.pub)</pre>
-    </div>
-  </div>
+ <div class="sec-head reveal"><span class="sec-pill">开始使用</span><h2>三步，回到你的电脑。</h2></div>
+ <div class="steps"><article class="step reveal"><div class="n">01</div><h3>准备自己的服务</h3><p>可复用已有的 RustDesk Server OSS，也可按文档部署新的注册与中继服务。</p><a class="text-link" href="https://rustdesk.com/docs/en/self-host/rustdesk-server-oss/">自托管文档 ↗</a></article><article class="step reveal"><div class="n">02</div><h3>配置两端设备</h3><p>在两端填写相同的私服地址与服务端公钥。按需要允许屏幕录制与键鼠控制。</p></article><article class="step reveal"><div class="n">03</div><h3>建立你的连接</h3><p>输入远端设备 ID 与访问密码，进入桌面。常用设备可保存在本地，方便下次使用。</p></article></div>
 </section>
 
-<section class="wrap">
-  <div class="sec-head reveal">
-    <span class="sec-pill">自托管的边界</span>
-    <h2>你掌控什么，也负责什么</h2>
-  </div>
-  <div class="vs">
-    <div class="vs-card them reveal">
-      <h3>你来管理</h3>
-      <ul>
-        <li><span class="mark">＋</span>服务端升级、网络端口与配置备份</li>
-        <li><span class="mark">＋</span>服务端私钥保管，以及客户端公钥核对</li>
-        <li><span class="mark">＋</span>设备授权、应用升级与真实会话测试</li>
-      </ul>
-    </div>
-    <div class="vs-badge reveal" style="--d:.07s">＋</div>
-    <div class="vs-card us reveal" style="--d:.12s">
-      <h3>NikoDesk</h3>
-      <ul>
-        <li><span class="mark">✓</span>注册与中继服务由你选择和部署</li>
-        <li><span class="mark">✓</span>本地设备目录，无需 NikoDesk 云账号</li>
-        <li><span class="mark">✓</span>AGPL-3.0 源码与构建流程可审查</li>
-      </ul>
-    </div>
-  </div>
+<section id="download" tabindex="-1" class="wrap">
+ <div class="download-heading"><div class="sec-head reveal"><span class="sec-pill">把工作空间带在身边</span><h2>选择你的设备。</h2></div><a class="text-link" href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.6">v1.0.6 · 版本说明 ↗</a></div>
+ <div class="dl-list">
+  <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.6/NikoDesk-macos-arm64.dmg"><span class="platform-mark" aria-hidden="true">⌘</span><h3>macOS</h3><span class="arch">Apple Silicon · macOS 12.3+</span><span class="note">DMG 安装包。尚未进行 Apple Developer ID 签名与公证，安装前请查看版本说明。</span><span class="go">下载 macOS 版 ↗</span></a>
+  <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.6/NikoDesk-windows-x64.exe"><span class="platform-mark" aria-hidden="true">⊞</span><h3>Windows</h3><span class="arch">x64 · 便携客户端</span><span class="note">无需安装的 EXE。当前包未签名，Windows 可能显示安全提示；安装说明见发布页。</span><span class="go">下载 Windows 版 ↗</span></a>
+  <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.6/NikoDesk-android-arm64.apk"><span class="platform-mark" aria-hidden="true">↗</span><h3>Android</h3><span class="arch">ARM64 · 控制端</span><span class="note">通过手机连接电脑。发行密钥签名的 APK，不提供手机被控功能。</span><span class="go">下载 Android 版 ↗</span></a>
+ </div>
+ <p class="dl-note">完整变更、兼容性与已知限制见 <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.6">版本说明</a> · <a href="https://github.com/baogutang/nikodesk/releases/tag/nightly">nightly 预览</a> · <a href="https://github.com/baogutang/nikodesk#current-status">平台支持</a></p>
 </section>
 
-<section id="download" tabindex="-1" class="wrap" style="padding-top: 20px;">
-  <div class="sec-head reveal">
-    <span class="sec-pill">下载</span>
-    <h2>下载与平台状态</h2>
-    <p class="sec-sub">现有 v1.0.6 提供 macOS、Windows 与 Android 安装包；从 1.0.7 起，标签只创建发布草稿，正式晋级需要对同一批包完成签名与验收；请对照其 SHA256SUMS 校验下载文件。nightly 继续作为独立滚动预览。核心会话——带画面的密码认证、双向文件传输、含重放拒绝的 TOTP 双重验证、两端的会话记录、远程终端、端口隧道与画质模式——已在一台 Mac 上经私服中继在同一用户的两个身份之间完成端到端验证；跨设备与 Windows、Android 真机验收仍在进行中，下方说明均如实标注。</p>
-  </div>
-  <div class="dl-list">
-    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.6/NikoDesk-macos-arm64.dmg">
-      <h3>macOS</h3>
-      <span class="arch">Apple Silicon · DMG · ad-hoc 签名</span>
-      <span class="note">从 DMG 安装完整的 NikoDesk.app。无 Apple Developer ID、未公证：首次启动请右键点按 → 打开。可与现有 RustDesk 并存运行，身份独立。</span>
-      <span class="go">下载 v1.0.6 →</span>
-    </a>
-    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.6/NikoDesk-windows-x64.exe">
-      <h3>Windows</h3>
-      <span class="arch">x64 · 便携 EXE/ZIP · 未签名</span>
-      <span class="note">用户态便携客户端，无需安装即可与 RustDesk 并存运行；另附用于验证安装流程的无人值守安装器。未签名：SmartScreen 会询问一次。真机验收仍在进行中——安装器会改动系统，请先在测试机上使用。</span>
-      <span class="go">下载 v1.0.6 →</span>
-    </a>
-    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.6/NikoDesk-android-arm64.apk">
-      <h3>Android</h3>
-      <span class="arch">arm64 · APK · release 签名</span>
-      <span class="note">仅控制端应用（io.nikodesk.android），使用专用 NikoDesk 发行密钥签名，并在 CI 中完成加密校验。真机操作、远控会话与通话仍未验证；部分蓝牙组合暂不支持。</span>
-      <span class="go">下载 v1.0.6 →</span>
-    </a>
-  </div>
-  <p class="dl-note reveal">校验清单与 Windows 无人值守安装验证包见 <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.6">v1.0.6 发布页</a>；<a href="https://github.com/baogutang/nikodesk/releases/tag/nightly">nightly 预览</a>随 main 更新。<a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.0">v1.0.0 归档</a>仅供查阅。请保持系统安全防护开启。</p>
-</section>
-
-<section id="faq" tabindex="-1" class="wrap faq" style="padding-top: 20px;">
-  <div class="sec-head reveal">
-    <span class="sec-pill">常见问题</span>
-    <h2>大家真正会问的问题</h2>
-  </div>
-  <div class="faq-list">
-    <details class="reveal" open>
-      <summary>必须有公网 IP 吗？</summary>
-      <div class="a">hbbs 与 hbbr 的端口需要能被两端访问。家庭宽带做端口映射，或者把这对服务放进 WireGuard、Tailscale 隧道都可以。会话依然会优先尝试点对点直连，中继只在打洞失败时才参与。</div>
-    </details>
-    <details class="reveal">
-      <summary>安全性到底怎么样？</summary>
-      <div class="a">会话使用上游加密与认证实现，连接入口要求密码。服务端公钥用于服务器身份校验，不是远控密码；服务端私钥应留在服务端。终端、摄像头、隧道与语音默认关闭，各自需要本机逐能力策略加上被控端批准，会话中可随时撤销。现有能力受平台限制：Windows 有无人值守服务和虚拟屏驱动路径；macOS 有基于 gamma 的隐私黑屏，但尚未实现虚拟屏；Android 仅做控制端。全部规划尚未完成，真实跨设备验收仍在进行中。构建或单元测试不能替代跨设备安全验收。</div>
-    </details>
-    <details class="reveal">
-      <summary>和 RustDesk 是什么关系？</summary>
-      <div class="a">NikoDesk 是基于 RustDesk 1.5.0-pre 内核与界面的独立下游产品，遵循与上游一致的 AGPL-3.0。源码、构建脚本与 CI 公开，支持按相同依赖自行构建；尚未验证产物逐字节可复现。</div>
-    </details>
-    <details class="reveal">
-      <summary>Android 版能做什么？</summary>
-      <div class="a">Android 仅做控制端连接 Windows 与 macOS，不提供手机被控能力。APK 使用专用 NikoDesk 发行密钥签名，构建号从 14 递增至 15，包名保持一致；并接入主控发起语音、手选设备与麦克风权限。真机操作、远控会话与通话仍未验证；部分蓝牙组合暂不支持。</div>
-    </details>
-  </div>
+<section id="faq" tabindex="-1" class="wrap faq">
+ <div class="sec-head reveal"><span class="sec-pill">使用之前</span><h2>你可能还想知道。</h2></div>
+ <div class="faq-list">
+ <details class="reveal"><summary>需要自己的服务器吗？</summary><div class="a">需要可访问的 RustDesk Server OSS 服务，也可使用你已经部署的服务。NikoDesk 未配置私服时不会连接公共注册服务器。</div></details>
+ <details class="reveal"><summary>下载更新后会自动安装吗？</summary><div class="a">目前需要手动安装。下载完成后，按应用中的安装提示退出旧版、替换应用并重新打开；具体步骤与签名说明见发布页。</div></details>
+ <details class="reveal"><summary>Android 可以被远程控制吗？</summary><div class="a">当前 Android 版只作为控制端，连接你的 Windows 或 Mac 电脑，不提供手机被控能力。</div></details>
+ <details class="reveal"><summary>和 RustDesk 是什么关系？</summary><div class="a">NikoDesk 是基于 RustDesk 原生内核的独立开源项目，遵循 AGPL-3.0，与 RustDesk 官方没有从属或背书关系。</div></details>
+ </div>
 </section>
 
 </main>

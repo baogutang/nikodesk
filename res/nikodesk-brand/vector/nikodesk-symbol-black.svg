@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="NikoDesk"><title>NikoDesk</title><defs>
+ <linearGradient id="bg" x1="0" y1="0" x2="0.9" y2="1"><stop stop-color="#079FFF"/><stop offset="0.44" stop-color="#087CFF"/><stop offset="1" stop-color="#0559F5"/></linearGradient>
+ <linearGradient id="leg" x1="0.08" y1="0" x2="0.3" y2="0.85"><stop stop-color="#16C9EA"/><stop offset="0.5" stop-color="#DBFAFD"/><stop offset="0.88" stop-color="#FFFFFF"/></linearGradient>
+ <linearGradient id="ribbon" x1="0.23" y1="0" x2="0.75" y2="1"><stop offset="0.10" stop-color="#FFFFFF"/><stop offset="0.46" stop-color="#ECFDFF"/><stop offset="0.71" stop-color="#A6F6F5"/><stop offset="1" stop-color="#FFFFFF"/></linearGradient>
+ <linearGradient id="corner" x1="0.2" y1="0" x2="0.85" y2="1"><stop offset="0.25" stop-color="#FFFFFF"/><stop offset="1" stop-color="#A5F5F6"/></linearGradient>
+ <clipPath id="tile"><rect width="1024" height="1024" rx="218"/></clipPath>
+</defs><g transform="translate(-77.5 -87.5) scale(1.15)"><path fill="#000000" d="M 148,363 C 175,303 213,294 257,332 L 300,375 L 300,704 C 300,731 314,748 342,748 L 408,748 C 430,748 448,765 448,786 C 448,808 430,826 408,826 L 224,826 C 177,826 148,798 148,753 Z"/>
+<path fill="#000000" d="M 148,363 L 148,284 C 148,233 204,178 263,178 C 292,178 315,195 338,219 L 739,624 C 756,642 768,647 786,630 L 864,559 C 874,550 880,553 880,566 L 880,730 C 880,787 842,835 786,836 C 756,837 736,826 714,804 L 257,352 C 215,310 184,315 148,363 Z"/>
+<path fill="none" stroke="#000000" stroke-width="74" stroke-linecap="round" stroke-linejoin="round" d="M 624,221 L 772,221 C 814,221 845,251 845,293 L 845,497"/>
+<circle fill="#000000" cx="535" cy="223" r="48"/>
+<circle fill="#000000" cx="499" cy="784" r="48"/></g></svg>

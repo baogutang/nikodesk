@@ -1,14 +1,43 @@
-# NikoDesk 1.0.7+16 — development candidate
+# NikoDesk 1.0.7+17 — development candidate
 
 This source tree is a development candidate, not a formal release.
 Target-device installation and acceptance remain unverified. Existing
 [v1.0.6 downloads](https://github.com/baogutang/nikodesk/releases/tag/v1.0.6) remain.
-[Candidate build status for `validation/1.0.7`](https://github.com/baogutang/nikodesk/actions/workflows/release.yml?query=branch%3Avalidation%2F1.0.7)
+[Nightly build status for `main`](https://github.com/baogutang/nikodesk/actions/workflows/release.yml?query=branch%3Amain)
 is separate from formal publication and target-device acceptance. Consult the
 linked workflow for CI results; passing CI does not establish formal publication
 or target-device acceptance.
 
 ## Changes
+
+### Build 17: icon consistency, update handoff and startup responsiveness
+
+- Windows application, portable/setup and background executable icons and Android
+  launcher/adaptive/monochrome icons now use the canonical blue NikoDesk brand.
+  macOS ICNS is rebuilt with Apple iconutil to repair malformed small image slots.
+  CI checks canonical inputs and the icons in the final platform packages.
+  Existing macOS permission records/caches and installed applications are untouched;
+  their visible icons still need installation-side verification.
+- Update status distinguishes downloading, verifying and unpacking. Installation
+  steps and file locations remain visible in the current settings page; a Finder
+  failure preserves verified files and offers a retry. Browser-opening failure
+  is visible. This remains manual installation, with no automatic replacement or
+  restart; page-local status is not persisted across app restarts.
+- Once the private-server namespace is known, local devices render without
+  waiting for optional status IPC. Unknown configuration and connection gates
+  remain unchanged. Five widget regressions cover this path.
+- The English/Chinese website is reorganized around everyday use, private
+  connections and clear download choices. Engineering details belong here and
+  in GitHub release notes. The selected light-trail startup design is implemented
+  with Flutter animations in the desktop main window. Readiness interrupts the
+  entry immediately; reduced motion is supported. Slow visible startup offers
+  an exit, and initialization failure opens a standalone error page instead of
+  continuing with partial core bindings. Initial-link and hidden-window rules
+  are retained. Native initialization before Flutter, and core-dependent hidden
+  window preparation, are outside the visible animation. Real startup timings
+  remain unmeasured. `design/startup` retains the three review demos.
+
+### Build 16 foundations
 
 - macOS privacy protection continues checking the recorded display gamma and
   local input filter after the initial five seconds. Protection loss notifies
@@ -35,7 +64,7 @@ or target-device acceptance.
   `openssl-sys 0.9.107`, addressing
   RUSTSEC-2025-0004 and RUSTSEC-2025-0022. Android/Linux compilation and TLS
   acceptance remain separate from the macOS build.
-- Version is `1.0.7+16`; upstream protocol version is unchanged. The known old
+- Version is `1.0.7+17`; upstream protocol version is unchanged. The known old
   `1.1.0+9` preview can open the stable release page for a manual transition,
   without treating a numerical downgrade as an automatic update.
 

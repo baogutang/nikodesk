@@ -242,6 +242,13 @@ class PlatformFFI {
         _startListenEvent(_ffiBind);
       }
     } catch (e) {
+      // The NikoDesk desktop main window must not continue with partial FFI.
+      if (const bool.fromEnvironment('NIKODESK') &&
+          isDesktop &&
+          desktopType == DesktopType.main &&
+          appType == kAppTypeMain) {
+        rethrow;
+      }
       debugPrintStack(label: 'initialize failed: $e');
     }
     version = await getVersion();

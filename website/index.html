@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NikoDesk - Remote desktop on your own server</title>
-<meta name="description" content="A private-server remote desktop built on RustDesk. Version 1.0.6 delivers macOS, Windows and Android through checked builds; platform status is stated openly.">
+<meta name="description" content="NikoDesk brings your familiar computer with you. Remote control, file transfer and your own server, in one considered workspace.">
 <link rel="icon" href="assets/favicon.png?v=5" type="image/png">
 <link rel="apple-touch-icon" href="assets/logo.png?v=5">
 <link rel="preload" href="assets/fonts/inter-800.woff2?v=5" as="font" type="font/woff2" crossorigin>
 <meta property="og:title" content="NikoDesk - Remote desktop on your own server">
-<meta property="og:description" content="A RustDesk-powered client for your own rendezvous and relay. Platform limits and downloads are stated openly.">
+<meta property="og:description" content="Your familiar desktop. Wherever you work. Remote access on your own terms.">
 <meta property="og:image" content="https://baogutang.github.io/nikodesk/assets/app-light.png?v=102">
 <meta property="og:image:alt" content="NikoDesk warm light workspace, production Flutter widgets with synthetic example data">
 <meta property="og:type" content="website">
@@ -336,7 +336,8 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
 @media (prefers-reduced-motion: reduce) { .hero > *, .hero .shot-zone { animation: none; } }
 </style>
 <link rel="stylesheet" href="assets/demo.css?v=102">
-<script defer src="assets/demo.js?v=102"></script>
+<script defer src="assets/demo.js?v=108"></script>
+<link rel="stylesheet" href="assets/product.css?v=109">
 </head>
 <body>
 <a class="skip-link" href="#content">Skip to content</a>
@@ -358,252 +359,59 @@ footer { border-top: 1px solid var(--border); padding: 48px 0 40px; font-size: 1
 
 <main id="content" tabindex="-1">
 <header class="hero wrap" id="top" tabindex="-1">
-  <a class="badge" href="https://github.com/baogutang/nikodesk/releases" target="_blank" rel="noopener">
-    <span class="dot"></span>v1.0.6 · three platforms<span class="arrow">→</span>
-  </a>
-  <h1>Your machines, your server,<br><span class="accent">your remote desktop.</span></h1>
-  <p class="sub">The native RustDesk core, connected to your own rendezvous and relay services. Windows and macOS target controller and receiver roles; Android is controller only. Cross-device acceptance remains pending.</p>
-  <div class="cta-row">
-    <a class="btn btn-primary" href="#download">Download NikoDesk</a>
-    <a class="btn btn-outline" href="https://github.com/baogutang/nikodesk" target="_blank" rel="noopener">Read the source</a>
+  <div class="hero-copy">
+    <a class="badge" href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.6"><span class="dot"></span>NikoDesk · Remote access, on your terms<span class="arrow">↗</span></a>
+    <h1>Your familiar desktop.<br><span class="accent">Wherever you work.</span></h1>
+    <div class="hero-bottom"><p class="sub">From your desk at home, a place on the road, or the phone in your hand. Pick up where you left off.</p>
+    <div class="cta-row"><a class="btn btn-primary" href="#download">Get NikoDesk <span aria-hidden="true">↗</span></a><a class="text-link" href="#features">Explore the workspace <span aria-hidden="true">↓</span></a></div></div>
   </div>
-  <div class="shot-zone">
-    <div id="nikodesk-demo" class="nd-demo" data-lang="en" data-theme="light">
-      <noscript>Enable JavaScript to explore the interface. The app and downloads work independently of this demo.</noscript>
-    </div>
-  </div>
-  <p class="shot-caption">Try searching devices, changing themes and switching remote Spaces. This interactive UI example uses invented data, makes no connections and sends no keys. The native app uses the real RustDesk core.</p>
+  <div class="product-strip"><span>Native remote desktop</span><span>Your own server</span><span>macOS / Windows / Android</span></div>
+  <div class="shot-zone"><div id="nikodesk-demo" class="nd-demo" data-lang="en" data-theme="light"><noscript>Enable JavaScript to explore the preview. Downloads work independently.</noscript></div></div>
+  <p class="shot-caption">Interactive preview · Sample data. Try device search, themes or session tools. This preview makes no remote connections.</p>
 </header>
 
-<section id="features" tabindex="-1" class="wrap">
-  <div class="sec-head reveal">
-    <span class="sec-pill">Features</span>
-    <h2>Made for daily driving</h2>
-    <p class="sec-sub">1.0.7+16 is a development candidate, not a stable release. It adds continuous privacy checks and recovery, bounded and cancellable directory scans, development credential isolation, capture and FPS matching to the current window, recovery from ineffective resolution changes, and a signed-update gate using a pinned publisher key. It also patches the Rust OpenSSL bindings; the full dependency audit is not cleared. Follow the <a href="https://github.com/baogutang/nikodesk/actions/workflows/release.yml?query=branch%3Avalidation%2F1.0.7">candidate build status</a>; build checks do not establish device acceptance. Stable downloads remain on v1.0.6.</p>
-    <p class="sec-sub">Version 1.0.6 makes the privacy screen something you can find and see: a toolbar button and a Control center switch turn it on, and a label stays on the remote picture while it is on. Frame-rate limits go to 120, Responsive control asks for this screen's refresh rate instead of being held to 30, and a controlled Mac reaches the limit it is given. Windows and Android now carry NikoDesk's own icon. Capture scaling to this screen and password-only login from 1.0.5, the warm light theme, Windows-to-Mac editing shortcuts and remote Spaces controls remain available. Sessions between two identities on one Mac verified the privacy screen and the frame limits; the new interface and icons have not been looked at on Windows or Android devices, and cross-device latency and frame rate remain unmeasured.</p>
-  </div>
-  <div class="grid">
-    <div class="card reveal">
-      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m10.85 12.15 8.9-8.9"/><path d="m18 5 3 3"/><path d="m15 8 3 3"/></svg></div>
-      <h3>The password is the gate</h3>
-      <p>The connection entry requires a remote password and does not save it in the device directory. The peer still verifies authentication and encryption for each session.</p>
-    </div>
-    <div class="card reveal" style="--d:.06s">
-      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
-      <h3>Online, offline, or unknown</h3>
-      <p>Device availability comes from your server. Missing results stay unknown; a reachable server or local registration does not prove the peer is connectable.</p>
-    </div>
-    <div class="card reveal" style="--d:.12s">
-      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg></div>
-      <h3>Local connection history</h3>
-      <p>The last 200 connection attempts stay on your device for reconnecting. An entry does not prove remote acceptance and never includes the connection password.</p>
-    </div>
-    <div class="card reveal">
-      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9z"/><path d="M13 3v6h6"/></svg></div>
-      <h3>Files and clipboard</h3>
-      <p>Uses the native file-transfer and clipboard paths. A session that logs in with a valid password gets keyboard and mouse, clipboard and file transfer by default; set these permissions on the controlled device beforehand.</p>
-    </div>
-    <div class="card reveal" style="--d:.06s">
-      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg></div>
-      <h3>Stable or preview, your choice</h3>
-      <p>Choose stable releases or nightly in the app. See the checked release name and time, then download from its page. Mac stable packages are verified before manual installation; a checksum does not authenticate the publisher.</p>
-    </div>
-    <div class="card reveal" style="--d:.12s">
-      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></div>
-      <h3>Two themes, one workspace</h3>
-      <p>Warm paper surfaces and terracotta controls in light mode; the familiar dark workspace at night. Explore both themes in the interactive example above.</p>
-    </div>
+<section id="features" tabindex="-1" class="wrap product-features">
+  <div class="sec-head reveal"><span class="sec-pill">Made for everyday work</span><h2>A different place.<br>The same familiar flow.</h2><p class="sec-sub">From the first connection to the last file, keep your remote computer part of your day.</p></div>
+  <div class="feature-rows">
+    <article class="feature-row reveal"><span class="feature-no">01</span><h3>Back to your desktop</h3><p>Find a computer in your device list and keep working with your keyboard and mouse. Switch displays, go full screen and keep familiar shortcuts close.</p><span class="feature-tag">Remote control</span></article>
+    <article class="feature-row reveal"><span class="feature-no">02</span><h3>Bring your files along</h3><p>Move files and copy text between computers without breaking your flow. You stay in control of transfer and access permissions.</p><span class="feature-tag">Files & clipboard</span></article>
+    <article class="feature-row reveal"><span class="feature-no">03</span><h3>A view that fits the task</h3><p>Choose clarity for reading or responsiveness for interaction. See connection details and adjust the picture while you work.</p><span class="feature-tag">Picture & session tools</span></article>
   </div>
 </section>
 
 <section id="why" tabindex="-1" class="wrap">
-  <div class="sec-head reveal">
-    <span class="sec-pill">Why private</span>
-    <h2>Run your own rendezvous and relay</h2>
-    <p class="sec-sub">Manage hbbs for registration and hbbr for relay. Without private-server configuration, the client stays stopped instead of using the upstream public rendezvous defaults.</p>
-  </div>
-  <div class="why-grid">
-    <div class="why-copy reveal">
-      <p>Sessions negotiate through <b>your server</b>, then try authenticated peer-to-peer connections or use your relay. Direct sessions contact the peer address; update checks and downloads also contact GitHub.</p>
-      <p>The NikoDesk build feature enables the private-server policy. This shows the feature, not the complete build process:</p>
-      <div class="term">
-        <div class="term-bar"><i></i><i></i><i></i></div>
-        <pre><span class="c"># Rust core excerpt; see the repository for dependencies</span>
-<span class="v">$</span> cargo build --locked --lib --release --features flutter,hwcodec,<span class="k">nikodesk</span>
-<span class="c"># no default public registration without private settings</span></pre>
-      </div>
-    </div>
-    <div class="reveal" style="--d:.1s">
-      <svg class="topo" viewBox="0 0 560 360" role="img" aria-label="Your laptop and phone connect through your own server">
-        <path class="link" d="M120 96 C 200 96, 220 168, 280 180"/>
-        <path class="link" d="M120 264 C 200 264, 220 192, 280 180"/>
-        <path class="link" d="M356 180 C 420 180, 430 120, 452 110"/>
-        <path class="link" d="M356 180 C 420 180, 430 250, 452 258"/>
-        <rect class="node" x="40" y="72" width="80" height="48" rx="12"/>
-        <text x="80" y="101" text-anchor="middle">Laptop</text>
-        <rect class="node" x="40" y="240" width="80" height="48" rx="12"/>
-        <text x="80" y="269" text-anchor="middle">Phone</text>
-        <rect class="node-core" x="278" y="142" width="80" height="76" rx="14"/>
-        <text x="318" y="174" text-anchor="middle">Your server</text>
-        <text class="sub" x="318" y="194" text-anchor="middle">hbbs + hbbr</text>
-        <rect class="node" x="448" y="86" width="80" height="48" rx="12"/>
-        <text x="488" y="115" text-anchor="middle">Studio Mac</text>
-        <rect class="node" x="448" y="234" width="80" height="48" rx="12"/>
-        <text x="488" y="263" text-anchor="middle">NAS</text>
-      </svg>
-    </div>
-  </div>
+ <div class="private-layout"><div class="sec-head reveal"><span class="sec-pill">A connection you own</span><h2>Your machines.<br>Your own connection.</h2><p class="sec-sub">Use your own server for rendezvous and relay. No NikoDesk cloud account, and no need to hand your device list to another platform.</p><a class="text-link" href="#deploy">Start self-hosting ↗</a></div>
+ <div class="connection-map reveal" role="img" aria-label="Your server helps discover the remote computer, then a direct connection is attempted with relay as needed"><div class="map-end"><span class="device-outline">⌘</span>Where you are</div><div class="map-route"><span></span><b><img src="assets/logo.png" alt="">Your server</b><span></span></div><div class="map-end"><span class="device-outline">↗</span>Your computer</div><p>Direct when possible · Your relay when needed</p></div></div>
 </section>
 
-<section id="security" tabindex="-1" style="padding: 20px 0 92px;">
-  <div class="band reveal">
-    <div class="band-in">
-      <div class="sec-head">
-        <span class="sec-pill">Security</span>
-        <h2>Security, in plain words</h2>
-        <p class="sec-sub">NikoDesk inherits end-to-end encrypted sessions from the RustDesk core and adds its own house rules.</p>
-      </div>
-      <div class="sec-groups">
-        <div class="sec-group">
-          <h3>Admission</h3>
-          <p>Sessions require the remote password before connecting. Temporary and permanent passwords are managed on the controlled side.</p>
-          <p>A valid password connects without confirmation on the receiver; a request without one waits for a click there. The receiver keeps its permission controls and can end a session. Revocation still needs verification on the target device.</p>
-        </div>
-        <div class="sec-group">
-          <h3>Network</h3>
-          <p>Registration and relay use your configured servers; default public rendezvous fallback is disabled. Server private keys stay on the server; clients use its public key.</p>
-          <p>Sessions may contact negotiated peer addresses; update requests also contact GitHub.</p>
-        </div>
-        <div class="sec-group">
-          <h3>Supply chain</h3>
-          <p>Build workflows are public and release pages include SHA256SUMS. Checksums verify file consistency; they do not replace trusted publisher signatures.</p>
-          <p>macOS builds use local ad-hoc signatures, without Apple Developer ID signing or notarization.</p>
-        </div>
-      </div>
-    </div>
-  </div>
+<section id="security" tabindex="-1" class="wrap">
+ <div class="security-surface"><div class="sec-head reveal"><span class="sec-pill">Trust you can inspect</span><h2>Keep control in your hands.</h2></div>
+ <div class="sec-groups"><article class="sec-group reveal"><h3>Choose who connects</h3><p>Manage passwords and access rules on the remote computer. Grant viewing, input and file permissions separately, and end a session at any time.</p></article><article class="sec-group reveal"><h3>Permissions stay visible</h3><p>Screen capture, input, camera and microphone follow system permissions. Allow access when needed and revoke it afterwards.</p></article><article class="sec-group reveal"><h3>Open for inspection</h3><p>Built on the native RustDesk core under AGPL-3.0. Source code, build instructions and release notes are available on GitHub.</p><a class="text-link" href="https://github.com/baogutang/nikodesk">Explore the source ↗</a></article></div></div>
 </section>
 
 <section id="deploy" tabindex="-1" class="wrap">
-  <div class="sec-head reveal">
-    <span class="sec-pill">Self-hosting</span>
-    <h2>Configure, then verify each step</h2>
-    <p class="sec-sub">Compatible with RustDesk Server OSS. Reuse existing servers, or review the image version, hostname and data directory before using this new-deployment example.</p>
-  </div>
-  <div class="steps">
-    <div class="step reveal">
-      <div class="n">1</div>
-      <h3>Run the pair</h3>
-      <p>Run hbbs and hbbr with a dedicated data directory. Advertise a relay address both clients can reach, and preserve the server keys before upgrades.</p>
-      <pre>docker run -d --name hbbs -v /data:/root \
-  -p 21115:21115 -p 21116:21116 \
-  -p 21116:21116/udp \
-  rustdesk/rustdesk-server hbbs \
-  -r desk.example.com:21117
-
-docker run -d --name hbbr -v /data:/root \
-  -p 21117:21117 \
-  rustdesk/rustdesk-server hbbr</pre>
-    </div>
-    <div class="step reveal" style="--d:.07s">
-      <div class="n">2</div>
-      <h3>Expose and harden</h3>
-      <p>Both clients need access to the services: TCP 21115–21117 and UDP 21116 for native clients. Leave WebSocket ports 21118/21119 closed if no web client needs them.</p>
-      <pre>cat /data/id_ed25519.pub
-# point DNS at the host
-# TCP 21115, 21116, 21117
-# UDP 21116
-# only the .pub key goes into clients</pre>
-    </div>
-    <div class="step reveal" style="--d:.14s">
-      <div class="n">3</div>
-      <h3>Point the clients</h3>
-      <p>Configure the same servers and public key on both ends. Test reachability, confirm registration, then verify authentication, video and permissions in a real session.</p>
-      <pre>ID server:  desk.example.com
-Relay:      desk.example.com:21117
-Key:        (id_ed25519.pub)</pre>
-    </div>
-  </div>
+ <div class="sec-head reveal"><span class="sec-pill">Get started</span><h2>Three steps to your desktop.</h2></div>
+ <div class="steps"><article class="step reveal"><div class="n">01</div><h3>Prepare your server</h3><p>Reuse an existing RustDesk Server OSS setup, or follow the documentation to deploy rendezvous and relay services.</p><a class="text-link" href="https://rustdesk.com/docs/en/self-host/rustdesk-server-oss/">Self-hosting guide ↗</a></article><article class="step reveal"><div class="n">02</div><h3>Set up both devices</h3><p>Enter the same server address and public key on both devices. Allow screen capture and input access as needed.</p></article><article class="step reveal"><div class="n">03</div><h3>Make your connection</h3><p>Enter the remote device ID and access password. Save frequently used computers locally for next time.</p></article></div>
 </section>
 
-<section class="wrap">
-  <div class="sec-head reveal">
-    <span class="sec-pill">Self-hosting boundaries</span>
-    <h2>Your control, your responsibilities</h2>
-  </div>
-  <div class="vs">
-    <div class="vs-card them reveal">
-      <h3>You maintain</h3>
-      <ul>
-        <li><span class="mark">＋</span>Server upgrades, network ports and configuration backups</li>
-        <li><span class="mark">＋</span>Server private keys and client public-key verification</li>
-        <li><span class="mark">＋</span>Device permissions, app upgrades and real-session tests</li>
-      </ul>
-    </div>
-    <div class="vs-badge reveal" style="--d:.07s">＋</div>
-    <div class="vs-card us reveal" style="--d:.12s">
-      <h3>NikoDesk</h3>
-      <ul>
-        <li><span class="mark">✓</span>Choose and deploy your rendezvous and relay services</li>
-        <li><span class="mark">✓</span>Local device directory; no NikoDesk cloud account required</li>
-        <li><span class="mark">✓</span>AGPL-3.0 source and public build workflows to inspect</li>
-      </ul>
-    </div>
-  </div>
+<section id="download" tabindex="-1" class="wrap">
+ <div class="download-heading"><div class="sec-head reveal"><span class="sec-pill">Take your workspace with you</span><h2>Choose your device.</h2></div><a class="text-link" href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.6">v1.0.6 · Release notes ↗</a></div>
+ <div class="dl-list">
+  <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.6/NikoDesk-macos-arm64.dmg"><span class="platform-mark" aria-hidden="true">⌘</span><h3>macOS</h3><span class="arch">Apple Silicon · macOS 12.3+</span><span class="note">DMG package. Not Developer ID signed or notarized; read the release notes before installing.</span><span class="go">Download for macOS ↗</span></a>
+  <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.6/NikoDesk-windows-x64.exe"><span class="platform-mark" aria-hidden="true">⊞</span><h3>Windows</h3><span class="arch">x64 · Portable client</span><span class="note">Portable EXE. Currently unsigned; Windows may show a security notice. Installation notes are on the release page.</span><span class="go">Download for Windows ↗</span></a>
+  <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.6/NikoDesk-android-arm64.apk"><span class="platform-mark" aria-hidden="true">↗</span><h3>Android</h3><span class="arch">ARM64 · Controller</span><span class="note">Connect to your computer from your phone. Release-key signed APK; remote control of the phone is not supported.</span><span class="go">Download for Android ↗</span></a>
+ </div>
+ <p class="dl-note">Changes, compatibility and known limitations: <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.6">release notes</a> · <a href="https://github.com/baogutang/nikodesk/releases/tag/nightly">nightly preview</a> · <a href="https://github.com/baogutang/nikodesk#current-status">platform support</a></p>
 </section>
 
-<section id="download" tabindex="-1" class="wrap" style="padding-top: 20px;">
-  <div class="sec-head reveal">
-    <span class="sec-pill">Download</span>
-    <h2>Downloads and platform status</h2>
-    <p class="sec-sub">The existing v1.0.6 release provides macOS, Windows and Android packages. Starting with 1.0.7, tags create drafts; formal promotion requires signed acceptance of the exact candidate packages. Verify downloads against its SHA256SUMS. Nightly remains a separate rolling preview. Core sessions — password authentication with video, bidirectional file transfer, TOTP two-factor with replay rejection, session records on both ends, remote terminal, port tunnels and picture modes — are verified end to end between two identities of one user on one Mac through a private relay; cross-device, Windows and Android real-device acceptance is still in progress, and the notes below say so plainly.</p>
-  </div>
-  <div class="dl-list">
-    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.6/NikoDesk-macos-arm64.dmg">
-      <h3>macOS</h3>
-      <span class="arch">Apple Silicon · DMG · ad-hoc signed</span>
-      <span class="note">Install the complete NikoDesk.app from the DMG. No Apple Developer ID or notarization: right-click → Open on the first launch. Runs beside an existing RustDesk with its own identity.</span>
-      <span class="go">Download v1.0.6 →</span>
-    </a>
-    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.6/NikoDesk-windows-x64.exe">
-      <h3>Windows</h3>
-      <span class="arch">x64 · portable EXE/ZIP · unsigned</span>
-      <span class="note">A user-mode portable client that runs beside RustDesk with no installation, plus a setup-validation installer for unattended access. Unsigned: SmartScreen asks once. Real-device acceptance is in progress — the installer changes the system, so use a test machine first.</span>
-      <span class="go">Download v1.0.6 →</span>
-    </a>
-    <a class="dl reveal" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.6/NikoDesk-android-arm64.apk">
-      <h3>Android</h3>
-      <span class="arch">arm64 · APK · release-signed</span>
-      <span class="note">Controller-only app (io.nikodesk.android), signed with the dedicated NikoDesk release key and cryptographically verified in CI. Real-device operation, remote sessions and calls remain unverified; some Bluetooth combinations are unsupported.</span>
-      <span class="go">Download v1.0.6 →</span>
-    </a>
-  </div>
-  <p class="dl-note reveal">Use the <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.6">v1.0.6 release page</a> for checksums and the Windows unattended setup-validation installer. The <a href="https://github.com/baogutang/nikodesk/releases/tag/nightly">nightly preview</a> is replaced on every push to main. The <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.0">v1.0.0 archive</a> remains for inspection only. Keep system security protections enabled.</p>
-</section>
-
-<section id="faq" tabindex="-1" class="wrap faq" style="padding-top: 20px;">
-  <div class="sec-head reveal">
-    <span class="sec-pill">FAQ</span>
-    <h2>Questions people actually ask</h2>
-  </div>
-  <div class="faq-list">
-    <details class="reveal" open>
-      <summary>Do I need a public IP?</summary>
-      <div class="a">The hbbs and hbbr ports must be reachable by both ends. A home connection works with port forwarding or by putting the pair behind a WireGuard or Tailscale tunnel. Sessions still try to connect peer-to-peer directly; the relay only carries traffic when punching fails.</div>
-    </details>
-    <details class="reveal">
-      <summary>How secure is it?</summary>
-      <div class="a">Sessions use upstream encryption and authentication; the connection entry requires a password. A server public key verifies the server and is not a remote-control password. Keep the server private key on the server. Terminal, camera, tunnels and voice are off by default and each needs a local per-capability policy plus an approval on the controlled side, revocable mid-session. Existing capabilities have platform limits: Windows has unattended-service and virtual-display driver paths; macOS has gamma-based privacy blackout but no virtual-display implementation; Android is controller only. The full roadmap is not complete, and real cross-device acceptance is still in progress. Builds and unit tests do not replace cross-device security validation.</div>
-    </details>
-    <details class="reveal">
-      <summary>What is the relationship to RustDesk?</summary>
-      <div class="a">NikoDesk is an independent downstream product built on the RustDesk 1.5.0-pre core and UI, licensed under AGPL-3.0 like the upstream. Source, build scripts and CI are public for building with the same dependencies. Byte-for-byte reproducibility has not been verified.</div>
-    </details>
-    <details class="reveal">
-      <summary>What can the Android build do?</summary>
-      <div class="a">Android controls Windows and macOS; it does not act as a phone receiver. The APK is signed with the dedicated NikoDesk release key; build 15 follows build 14 on the same application ID, and it integrates controller-initiated voice with manual device selection and microphone permission. Real-device operation, remote sessions and calls remain unverified; some Bluetooth combinations are unsupported.</div>
-    </details>
-  </div>
+<section id="faq" tabindex="-1" class="wrap faq">
+ <div class="sec-head reveal"><span class="sec-pill">Before you begin</span><h2>A few things to know.</h2></div>
+ <div class="faq-list">
+ <details class="reveal"><summary>Do I need my own server?</summary><div class="a">Yes: an accessible RustDesk Server OSS instance, including one you already run. NikoDesk does not connect to public rendezvous servers when private-server settings are absent.</div></details>
+ <details class="reveal"><summary>Do downloaded updates install automatically?</summary><div class="a">Updates currently require manual installation. Follow the installation steps after downloading: quit the old version, replace the app and reopen it. See the release page for details and signing information.</div></details>
+ <details class="reveal"><summary>Can I control an Android phone remotely?</summary><div class="a">The Android app is a controller for your Windows or Mac computer. It does not expose the phone for remote control.</div></details>
+ <details class="reveal"><summary>How is NikoDesk related to RustDesk?</summary><div class="a">NikoDesk is an independent open-source project built on the native RustDesk core under AGPL-3.0. It is not affiliated with or endorsed by RustDesk.</div></details>
+ </div>
 </section>
 
 </main>

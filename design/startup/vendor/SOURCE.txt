@@ -1,0 +1,5 @@
+GSAP 3.13.0 — https://registry.npmjs.org/gsap/3.13.0
+Integrity: sha512-QL7MJ2WMjm1PHWsoFrAQH/J8wUeqZvMtHO58qdekHpCfhvhSL4gSiz6vJf5EeMP0LOn3ZCprL2ki/gjED8ghVw==
+License: https://gsap.com/standard-license/
+Used only by the design review demo.
+Distribution-only whitespace normalization: trim trailing spaces and blank EOF lines; copyright/license header retained.
