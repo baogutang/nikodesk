@@ -1,3 +1,6 @@
 * text=auto
 # Preserve fixed upstream bytes and provenance hashes on every checkout platform.
 libs/nikodesk_cpal/** -text
+# Brand hashes pin the supplied source bytes; Android copies use the same LF XML.
+res/nikodesk-brand/** -text
+flutter/android/app/src/nikodesk/res/**/*.xml text eol=lf

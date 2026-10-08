@@ -3,6 +3,7 @@ import importlib.util
 import plistlib
 import shutil
 import struct
+import subprocess
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
@@ -62,6 +63,30 @@ class BrandIcons(unittest.TestCase):
             (root / BRAND.BRAND / 'windows/app-16.png').write_bytes(b'changed')
             with self.assertRaisesRegex(ValueError, 'Canonical brand source changed'):
                 BRAND.check(root)
+
+    def test_fresh_autocrlf_checkout_preserves_exact_brand_and_consumer_bytes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            seed, checkout = Path(folder) / 'seed', Path(folder) / 'checkout'
+            seed.mkdir()
+            checkout.mkdir()
+            shutil.copyfile(ROOT / '.gitattributes', seed / '.gitattributes')
+            shutil.copytree(ROOT / BRAND.BRAND, seed / BRAND.BRAND)
+            data = BRAND.manifest(seed)
+            for name in list(data['copies']) + list(data['generated']):
+                target = seed / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(ROOT / name, target)
+            (seed / 'control.txt').write_bytes(b'ordinary text\nsecond line\n')
+            # Real clean/smudge filters and a new worktree; no source commit,
+            # repository configuration or installed application is changed.
+            for arguments in (['init'], ['-c', 'core.autocrlf=false', 'add', '-f', '.'],
+                              ['-c', 'core.autocrlf=true', '-c', 'core.eol=crlf',
+                               '--work-tree=' + str(checkout), 'checkout-index', '--all']):
+                subprocess.run(['git', *arguments], cwd=seed, check=True,
+                               capture_output=True)
+            self.assertEqual((checkout / 'control.txt').read_bytes(),
+                             b'ordinary text\r\nsecond line\r\n')
+            self.assertEqual(BRAND.check(checkout), 22)
 
     def test_windows_program_portable_and_tray_keep_compatible_small_bitmaps(self):
         for name, sizes in ((BRAND.APP_ICO, BRAND.APP_SIZES), (BRAND.TRAY_ICO, BRAND.TRAY_SIZES)):
