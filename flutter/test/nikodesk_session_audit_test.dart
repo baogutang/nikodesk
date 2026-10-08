@@ -318,6 +318,32 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('a covering route pauses history and popping refreshes immediately',
+      (tester) async {
+    var reads = 0;
+    final api = FakeAudit()
+      ..onRead = (namespace) async {
+        reads++;
+        return snapshot(namespace: namespace, rows: []);
+      };
+    await tester.pumpWidget(page(api));
+    await tester.pumpAndSettle();
+    expect(reads, 1);
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    navigator.push(MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Text('Remote session'))));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 12));
+    expect(reads, 1);
+    navigator.pop();
+    await tester.pumpAndSettle();
+    expect(reads, 2);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    expect(reads, 3);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('slow reads do not overlap and hidden or disposed replies expire',
       (tester) async {
     final first = Completer<String>();

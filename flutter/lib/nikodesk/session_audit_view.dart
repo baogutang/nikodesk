@@ -33,6 +33,7 @@ class _NikoNativeSessionHistoryState extends State<NikoNativeSessionHistory>
   bool _interacting = false;
   Timer? _timer;
   bool _foreground = true;
+  bool _routeVisible = true;
   String? _message;
   bool _activities = false;
   @override
@@ -44,7 +45,20 @@ class _NikoNativeSessionHistoryState extends State<NikoNativeSessionHistory>
     _syncRefresh();
   }
 
-  bool get _visible => widget.active && _foreground;
+  bool get _visible => widget.active && _foreground && _routeVisible;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final visible = ModalRoute.isCurrentOf(context) ?? true;
+    if (_routeVisible == visible) return;
+    _routeVisible = visible;
+    if (!_interacting) {
+      _generation++;
+      _busy = false;
+    }
+    _syncRefresh();
+  }
 
   void _syncRefresh() {
     _timer?.cancel();
@@ -143,6 +157,9 @@ class _NikoNativeSessionHistoryState extends State<NikoNativeSessionHistory>
               ));
     } finally {
       if (mounted) {
+        // The dialog future can finish before the route dependency rebuilds.
+        _routeVisible = ModalRoute.isCurrentOf(context) ?? true;
+        _syncRefresh();
         setState(() => _interacting = false);
         if (widget.namespace != snapshot.namespace) _read();
       }
@@ -206,6 +223,8 @@ class _NikoNativeSessionHistoryState extends State<NikoNativeSessionHistory>
       }
     } finally {
       if (mounted) {
+        _routeVisible = ModalRoute.isCurrentOf(context) ?? true;
+        _syncRefresh();
         setState(() => _interacting = false);
         if (widget.namespace != namespace) _read();
       }
