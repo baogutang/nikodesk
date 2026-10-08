@@ -112,6 +112,14 @@ class DeviceDirectory {
 
 /// All processes use the same lock; UI and session windows update the latest file.
 class DeviceStore {
+  factory DeviceStore.forServerNamespace(String namespace, {Directory? root}) {
+    final verified = NikoServerScope.validate(namespace);
+    if (verified == null) throw ArgumentError('Invalid private server namespace');
+    return DeviceStore(
+        Directory('${(root ?? privateDirectory).path}/scopes/$verified'),
+        serverNamespace: verified);
+  }
+
   static DeviceStore get instance {
     final namespace = NikoServerScope.current;
     return DeviceStore(
@@ -341,6 +349,8 @@ class DeviceStore {
         if (index < 0) {
           devices.add(DeviceEntry(id: normalized, lastConnectedAt: at.toUtc()));
         } else {
+          final previous = devices[index].lastConnectedAt;
+          if (previous != null && !at.isAfter(previous)) return;
           devices[index] = devices[index].copyWith(lastConnectedAt: at.toUtc());
         }
         await _write(devices);

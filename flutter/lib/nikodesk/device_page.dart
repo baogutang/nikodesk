@@ -36,6 +36,7 @@ class NikoDevicePage extends StatefulWidget {
   final bool controllerOnly;
   final bool? native;
   final bool active;
+  final Future<String> Function(String namespace, String id)? credentialStatusLoader;
   const NikoDevicePage(
       {super.key,
       this.store,
@@ -47,7 +48,8 @@ class NikoDevicePage extends StatefulWidget {
       this.sessionLog,
       this.controllerOnly = false,
       this.native,
-      this.active = true});
+      this.active = true,
+      this.credentialStatusLoader});
   @override
   State<NikoDevicePage> createState() => _NikoDevicePageState();
 }
@@ -69,6 +71,7 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
   bool _fileTransfer = false;
   bool _tunnel = false;
   bool _forceRelay = false;
+  bool _rememberPassword = false;
   bool _legacyAvailable = false;
   bool _quickExpanded = false;
   final Map<String, bool> _online = {};
@@ -81,6 +84,9 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
   bool get _native =>
       widget.native ??
       (widget.gateway == null || widget.gateway is NativeServerGateway);
+  bool get _credentialNative => _native || widget.credentialStatusLoader != null;
+  Future<String> _credentialStatus(String namespace, String id) =>
+      (widget.credentialStatusLoader ?? nikoCredentialStatus)(namespace, id);
   static const _onlineEvent = 'callback_query_onlines';
   static const _onlineHandler = 'nikodesk-device-page';
 
@@ -136,6 +142,7 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
       if (_onlineNamespace != null) {
         _password.clear();
         _temporary.clear();
+        _rememberPassword = false;
       }
       _online.clear();
       _onlineObserved.clear();
@@ -260,8 +267,8 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
       !_connecting;
 
   /// NikoDesk controller policy: no session is dispatched without a
-  /// password entered on this client. The remote side still verifies every
-  /// session on its own.
+  /// typed password or an authorized secure credential. The remote side
+  /// still verifies every session on its own.
   Future<void> _dispatch(String id,
       {required String password,
       required bool fileTransfer,
@@ -270,7 +277,8 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
       String? expectedNamespace,
       bool tunnel = false}) async {
     if (_connecting) return;
-    final log = widget.sessionLog ?? SessionLogStore.instance;
+    final log = widget.sessionLog ??
+        SessionLogStore(_store.directory, serverNamespace: _store.serverNamespace);
     final namespace = expectedNamespace ?? _store.serverNamespace;
     final alias = _devices
         .firstWhere((device) => device.id == id,
@@ -296,7 +304,8 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
                         isTcpTunneling: true,
                         connToken: connToken)
             : widget.onConnect,
-        expectedServerNamespace: namespace);
+        expectedServerNamespace: namespace,
+        credentialStatusLoader: widget.credentialStatusLoader);
     if (mounted) _password.clear();
     // History currently distinguishes control and files only. Do not label
     // a tunnel request as a successful control session.
@@ -314,8 +323,26 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
               'Enter a numeric device ID with 6–16 digits.'));
       return;
     }
+    final namespace = _store.serverNamespace;
+    NikoConnectAuth? auth;
+    if (_credentialNative && namespace != null) {
+      if (_password.text.trim().isEmpty) {
+        if (_connecting || !_canConnect) return;
+        setState(() => _connecting = true);
+        auth = await nikoAskCredentialConnect(context, normalizeDeviceId(raw), '',
+            namespace: namespace, fileTransfer: _fileTransfer,
+            statusLoader: () => _credentialStatus(namespace, normalizeDeviceId(raw)));
+        if (!mounted) return;
+        setState(() => _connecting = false);
+        if (auth == null) return;
+      } else {
+        auth = NikoConnectAuth(_password.text, remember: _rememberPassword);
+      }
+    }
     await _dispatch(normalizeDeviceId(raw),
-        password: _password.text,
+        password: auth?.password ?? _password.text,
+        auth: auth,
+        expectedNamespace: namespace,
         fileTransfer: _fileTransfer,
         forceRelay: _forceRelay,
         tunnel: _tunnel);
@@ -466,12 +493,16 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
       return;
     }
     final namespace = expectedNamespace ?? _store.serverNamespace;
+    setState(() => _connecting = true);
     final auth = await nikoAskCredentialConnect(
         context, device.id, device.alias,
         namespace: namespace ?? '',
-        native: _native,
+        native: _credentialNative,
+        statusLoader: () => _credentialStatus(namespace ?? '', device.id),
         fileTransfer: fileTransfer);
-    if (auth == null || !mounted) return;
+    if (!mounted) return;
+    setState(() => _connecting = false);
+    if (auth == null) return;
     await _dispatch(device.id,
         password: auth.password,
         auth: auth,
@@ -522,7 +553,8 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
 
   Future<void> _importUnscoped() async {
     final target = _store;
-    final log = widget.sessionLog ?? SessionLogStore.instance;
+    final log = widget.sessionLog ??
+        SessionLogStore(target.directory, serverNamespace: target.serverNamespace);
     final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialog) => AlertDialog(
@@ -979,6 +1011,17 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
                           style: TextStyle(
                               fontSize: 12.5, color: _muted(context)))),
                 ])),
+                if (_credentialNative && _store.serverNamespace != null)
+                  MergeSemantics(child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Checkbox(
+                        key: const Key('nikodesk-hero-remember'),
+                        value: _rememberPassword,
+                        onChanged: !_canConnect
+                            ? null
+                            : (value) => setState(
+                                () => _rememberPassword = value == true)),
+                    Flexible(child: Text(nikoText('记住密码', 'Remember password'))),
+                  ])),
                 NikoPrimaryButton(
                     key: const Key('nikodesk-hero-connect'),
                     onPressed: _canConnect ? _connectHero : null,

@@ -3019,6 +3019,8 @@ pub struct LoginConfigHandler {
     #[cfg(feature = "nikodesk")]
     stored_credential: Option<crate::nikodesk::credentials::StoredCredential>,
     #[cfg(feature = "nikodesk")]
+    using_stored_credential: bool,
+    #[cfg(feature = "nikodesk")]
     credential_choice: Option<bool>,
     #[cfg(feature = "nikodesk")]
     pub(crate) credential_warning: Option<&'static str>,
@@ -4836,7 +4838,11 @@ pub fn handle_login_error(
         true
     } else if err == LOGIN_MSG_PASSWORD_WRONG {
         lc.write().unwrap().password = Default::default();
-        interface.msgbox("re-input-password", err, "Do you want to enter again?", "");
+        #[cfg(feature = "nikodesk")]
+        let message = lc.write().unwrap().reject_stored_credential();
+        #[cfg(not(feature = "nikodesk"))]
+        let message = None;
+        interface.msgbox("re-input-password", err, message.unwrap_or("Do you want to enter again?"), "");
         true
     } else if err == LOGIN_MSG_2FA_WRONG || err == REQUIRE_2FA {
         let enabled = lc.read().unwrap().get_option("trust-this-device") == "Y";
@@ -5033,6 +5039,8 @@ pub async fn handle_hash(
             let res = hasher.finalize();
             password = res[..].into();
             lc.write().unwrap().password_source = PasswordSource::SharedAb(shared_password);
+            #[cfg(feature = "nikodesk")]
+            { lc.write().unwrap().using_stored_credential = false; }
         }
     }
     // peer config password
@@ -5075,7 +5083,11 @@ pub async fn handle_hash(
 
     let password = if password.is_empty() {
         // login without password, the remote side can click accept
-        interface.msgbox("input-password", "Password Required", "", "");
+        #[cfg(feature = "nikodesk")]
+        let message = lc.write().unwrap().credential_warning.take();
+        #[cfg(not(feature = "nikodesk"))]
+        let message = None;
+        interface.msgbox("input-password", "Password Required", message.unwrap_or(""), "");
         #[cfg(feature = "nikodesk")]
         {
             lc.write().unwrap().hash = hash;
@@ -5182,7 +5194,11 @@ pub async fn handle_login_from_ui(
         let res = hasher.finalize();
         lc.write().unwrap().remember = remember;
         #[cfg(feature = "nikodesk")]
-        { lc.write().unwrap().credential_choice = Some(remember); }
+        {
+            let mut handler = lc.write().unwrap();
+            handler.credential_choice = Some(remember);
+            handler.using_stored_credential = false;
+        }
         res[..].into()
     };
     lc.write().unwrap().password = hash_password.clone();

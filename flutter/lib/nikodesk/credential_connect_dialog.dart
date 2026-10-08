@@ -35,29 +35,47 @@ Future<NikoConnectAuth?> nikoAskCredentialConnect(
     {required String namespace,
     bool native = true,
     bool fileTransfer = false,
+    bool autoUseSaved = true,
     Future<String> Function()? statusLoader}) async {
   if (!native) {
     final password = await nikoAskConnectPassword(context, id, alias,
         fileTransfer: fileTransfer);
     return password == null ? null : NikoConnectAuth(password);
   }
+  final loadStatus = statusLoader ?? () => nikoCredentialStatus(namespace, id);
+  String? initialStatus;
+  if (autoUseSaved) {
+    var status = 'unavailable';
+    try {
+      status = await loadStatus().timeout(const Duration(seconds: 2));
+    } catch (_) {
+      // Manual entry remains available when secure storage cannot be read.
+    }
+    if (!context.mounted) return null;
+    if (status == 'present') {
+      return const NikoConnectAuth('', useSaved: true);
+    }
+    initialStatus = status;
+  }
   return showDialog<NikoConnectAuth>(
       context: context,
       builder: (_) => NikoCredentialConnectDialog(
           id: id,
           alias: alias,
-          statusLoader:
-              statusLoader ?? () => nikoCredentialStatus(namespace, id)));
+          statusLoader: loadStatus,
+          initialStatus: initialStatus));
 }
 
 class NikoCredentialConnectDialog extends StatefulWidget {
   final String id, alias;
   final Future<String> Function() statusLoader;
+  final String? initialStatus;
   const NikoCredentialConnectDialog(
       {super.key,
       required this.id,
       required this.alias,
-      required this.statusLoader});
+      required this.statusLoader,
+      this.initialStatus});
   @override
   State<NikoCredentialConnectDialog> createState() => _CredentialState();
 }
@@ -69,7 +87,12 @@ class _CredentialState extends State<NikoCredentialConnectDialog> {
   @override
   void initState() {
     super.initState();
-    _load();
+    if (widget.initialStatus != null) {
+      _status = widget.initialStatus!;
+      _loading = false;
+    } else {
+      _load();
+    }
   }
 
   Future<void> _load() async {

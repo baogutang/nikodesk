@@ -126,6 +126,16 @@ class _NikoSessionHistoryPageState extends State<NikoSessionHistoryPage> {
     }
   }
 
+  Future<void> _reconnectResult(
+      String id, bool fileTransfer, String namespace) async {
+    await nikoConnectWithPassword(context,
+        id: id,
+        fileTransfer: fileTransfer,
+        gateway: widget.gateway,
+        expectedServerNamespace: namespace,
+        onConnect: widget.onConnect);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_nativeHistory && _showNativeHistory) {
@@ -145,7 +155,8 @@ class _NikoSessionHistoryPageState extends State<NikoSessionHistoryPage> {
         Expanded(
             child: NikoNativeSessionHistory(
                 namespace: _store.serverNamespace ?? '',
-                active: widget.active)),
+                active: widget.active,
+                onReconnect: _reconnectResult)),
       ]));
     }
     final muted =

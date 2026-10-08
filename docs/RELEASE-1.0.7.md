@@ -1,4 +1,4 @@
-# NikoDesk 1.0.7+17 — development candidate
+# NikoDesk 1.0.7+18 — development candidate
 
 This source tree is a development candidate, not a formal release.
 Target-device installation and acceptance remain unverified. Existing
@@ -9,6 +9,25 @@ linked workflow for CI results; passing CI does not establish formal publication
 or target-device acceptance.
 
 ## Changes
+
+### Build 18: connection history and remembered credentials
+
+- Successful desktop sessions record the device in the immutable server scope
+  of that session. A separate Windows remote window no longer writes success
+  into an unconfigured directory hidden from the main window. Existing ambiguous
+  unconfigured records are retained, not assigned to an arbitrary server.
+- The actual-session history refreshes while visible and offers reconnection
+  for eligible controller records. Controlled-end records never become a way
+  to connect to an untrusted self-reported peer ID.
+- The quick connection entry offers an explicit remember choice. Authentication
+  success is still required before saving. Later user-initiated connections
+  reuse available system-stored credentials without an extra password dialog;
+  external links retain their confirmation boundary. Invalid saved credentials
+  require a fresh password, and replacements are stored only after success.
+- The default remains not to save a password without an explicit choice. No
+  plaintext passwords or private keys are copied into the device/history files.
+  Cross-device Windows installation and real credential-store acceptance remain
+  separate from the synthetic regression tests.
 
 ### Build 17: icon consistency, update handoff and startup responsiveness
 
@@ -64,7 +83,7 @@ or target-device acceptance.
   `openssl-sys 0.9.107`, addressing
   RUSTSEC-2025-0004 and RUSTSEC-2025-0022. Android/Linux compilation and TLS
   acceptance remain separate from the macOS build.
-- Version is `1.0.7+17`; upstream protocol version is unchanged. The known old
+- Version is `1.0.7+18`; upstream protocol version is unchanged. The known old
   `1.1.0+9` preview can open the stable release page for a manual transition,
   without treating a numerical downgrade as an automatic update.
 

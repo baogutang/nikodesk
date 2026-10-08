@@ -33,7 +33,7 @@ import 'package:flutter_hbb/models/printer_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
-import 'package:flutter_hbb/nikodesk/device_store.dart';
+import 'package:flutter_hbb/nikodesk/session_success.dart';
 import 'package:flutter_hbb/nikodesk/metrics.dart';
 import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/terminal_model.dart';
@@ -1583,10 +1583,15 @@ class FfiModel with ChangeNotifier {
     }
 
     _pi.isSet.value = true;
-    if (!isCache && _nikoMetricsActive && _secure == true &&
-        connType == ConnType.defaultConn &&
-        parent.target?.qualityMonitorModel.nikoMetrics.markAuthenticated() == true) {
-      unawaited(DeviceStore.instance.recordSuccess(peerId, DateTime.now())
+    final sessionOwner = parent.target;
+    if (_nikoMetricsActive && sessionOwner != null) {
+      unawaited(nikoRecordAuthenticatedDevice(
+          namespace: sessionOwner.serverNamespace,
+          peerId: peerId,
+          metrics: sessionOwner.qualityMonitorModel.nikoMetrics,
+          secure: _secure == true,
+          fromCache: isCache,
+          remoteControl: connType == ConnType.defaultConn)
           .catchError((Object _) { debugPrint('NikoDesk: could not save successful session timestamp'); }));
     }
     stateGlobal.resetLastResolutionGroupValues(peerId);

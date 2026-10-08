@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import 'policy.dart';
 import 'session_audit.dart';
 import 'theme.dart';
 import 'ui.dart';
@@ -8,28 +11,57 @@ class NikoNativeSessionHistory extends StatefulWidget {
   final String namespace;
   final SessionAuditApi? api;
   final bool active;
+  final Future<void> Function(String id, bool fileTransfer, String namespace)?
+      onReconnect;
   const NikoNativeSessionHistory(
-      {super.key, required this.namespace, this.api, this.active = true});
+      {super.key,
+      required this.namespace,
+      this.api,
+      this.active = true,
+      this.onReconnect});
   @override
   State<NikoNativeSessionHistory> createState() =>
       _NikoNativeSessionHistoryState();
 }
 
-class _NikoNativeSessionHistoryState extends State<NikoNativeSessionHistory> {
+class _NikoNativeSessionHistoryState extends State<NikoNativeSessionHistory>
+    with WidgetsBindingObserver {
   late final _api = widget.api ?? NativeSessionAuditApi();
   SessionAuditSnapshot? _snapshot;
   int _generation = 0;
-  bool _busy = true;
+  bool _busy = false;
+  bool _interacting = false;
+  Timer? _timer;
+  bool _foreground = true;
   String? _message;
   bool _activities = false;
   @override
   void initState() {
     super.initState();
-    if (widget.active) {
-      _read();
-    } else {
-      _busy = false;
-    }
+    WidgetsBinding.instance.addObserver(this);
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    _foreground = lifecycle == null || lifecycle == AppLifecycleState.resumed;
+    _syncRefresh();
+  }
+
+  bool get _visible => widget.active && _foreground;
+
+  void _syncRefresh() {
+    _timer?.cancel();
+    _timer = null;
+    if (!_visible) return;
+    _read();
+    _timer = Timer.periodic(const Duration(seconds: 3), (_) => _read());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final foreground = state == AppLifecycleState.resumed;
+    if (_foreground == foreground) return;
+    _foreground = foreground;
+    _generation++;
+    _busy = false;
+    _syncRefresh();
   }
 
   @override
@@ -37,16 +69,26 @@ class _NikoNativeSessionHistoryState extends State<NikoNativeSessionHistory> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.namespace != widget.namespace) {
       _snapshot = null;
+      _message = null;
     }
     if (!widget.active || oldWidget.namespace != widget.namespace) {
       _generation++;
       _busy = false;
     }
-    if (widget.active &&
-        (!oldWidget.active || oldWidget.namespace != widget.namespace)) _read();
+    if (oldWidget.active != widget.active ||
+        oldWidget.namespace != widget.namespace) _syncRefresh();
+  }
+
+  @override
+  void dispose() {
+    _generation++;
+    _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   Future<void> _read() async {
+    if (!_visible || _busy || _interacting) return;
     final generation = ++_generation;
     final namespace = widget.namespace;
     setState(() {
@@ -79,23 +121,32 @@ class _NikoNativeSessionHistoryState extends State<NikoNativeSessionHistory> {
   Future<void> _clear() async {
     final snapshot = _snapshot;
     final generation = _generation;
-    if (snapshot == null || _busy) return;
-    final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-              title: Text(nikoText('清空会话结果', 'Clear session results')),
-              content: Text(nikoText('清空本机当前私服的连接结果和功能授权记录。仍在运行的连接会继续记录后续事件。',
-                  'Remove connection results and capability records for this private server on this computer. Running connections keep recording later events.')),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: Text(nikoText('取消', 'Cancel'))),
-                TextButton(
-                    key: const ValueKey('niko-audit-confirm-clear'),
-                    onPressed: () => Navigator.pop(context, true),
-                    child: Text(nikoText('清空', 'Clear'))),
-              ],
-            ));
+    if (snapshot == null || _busy || _interacting || !_visible) return;
+    setState(() => _interacting = true);
+    bool? confirmed;
+    try {
+      confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+                title: Text(nikoText('清空会话结果', 'Clear session results')),
+                content: Text(nikoText('清空本机当前私服的连接结果和功能授权记录。仍在运行的连接会继续记录后续事件。',
+                    'Remove connection results and capability records for this private server on this computer. Running connections keep recording later events.')),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: Text(nikoText('取消', 'Cancel'))),
+                  TextButton(
+                      key: const ValueKey('niko-audit-confirm-clear'),
+                      onPressed: () => Navigator.pop(context, true),
+                      child: Text(nikoText('清空', 'Clear'))),
+                ],
+              ));
+    } finally {
+      if (mounted) {
+        setState(() => _interacting = false);
+        if (widget.namespace != snapshot.namespace) _read();
+      }
+    }
     if (confirmed != true ||
         !mounted ||
         generation != _generation ||
@@ -130,6 +181,34 @@ class _NikoNativeSessionHistoryState extends State<NikoNativeSessionHistory> {
         _message = nikoText(
             '清空未确认，请刷新后重试。', 'Clear was not confirmed. Refresh and retry.');
       });
+    }
+  }
+
+  bool _canReconnect(SessionAuditEntry entry) =>
+      widget.onReconnect != null &&
+      entry.role == 'controller' &&
+      entry.authenticatedAt != null &&
+      entry.peerId != null &&
+      validDeviceId(entry.peerId!) &&
+      const ['desktop', 'file_transfer'].contains(entry.kind);
+
+  Future<void> _reconnect(SessionAuditEntry entry) async {
+    if (!_visible || _busy || _interacting || !_canReconnect(entry)) return;
+    final namespace = widget.namespace;
+    setState(() => _interacting = true);
+    try {
+      await widget.onReconnect!(
+          entry.peerId!, entry.kind == 'file_transfer', namespace);
+    } catch (_) {
+      if (mounted && widget.namespace == namespace) {
+        setState(() => _message = nikoText(
+            '无法发起连接，请重试。', 'Could not start the session. Please retry.'));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _interacting = false);
+        if (widget.namespace != namespace) _read();
+      }
     }
   }
 
@@ -195,14 +274,14 @@ class _NikoNativeSessionHistoryState extends State<NikoNativeSessionHistory> {
                     style: Theme.of(context).textTheme.headlineMedium),
                 TextButton.icon(
                     key: const ValueKey('niko-audit-refresh'),
-                    onPressed: _busy ? null : _read,
+                    onPressed: _busy || _interacting ? null : _read,
                     icon: const Icon(Icons.refresh_rounded),
                     label: Text(nikoText('刷新', 'Refresh'))),
                 if (snapshot?.entries.isNotEmpty == true ||
                     snapshot?.activities.isNotEmpty == true)
                   OutlinedButton(
                       key: const ValueKey('niko-audit-clear'),
-                      onPressed: _busy ? null : _clear,
+                      onPressed: _busy || _interacting ? null : _clear,
                       child: Text(nikoText('清空结果', 'Clear results'))),
               ]),
           const SizedBox(height: 8),
@@ -226,7 +305,8 @@ class _NikoNativeSessionHistoryState extends State<NikoNativeSessionHistory> {
                 onSelected: (_) => setState(() => _activities = true)),
           ]),
           const SizedBox(height: 16),
-          if (_busy) const Center(child: CircularProgressIndicator()),
+          if (_busy && snapshot == null)
+            const Center(child: CircularProgressIndicator()),
           if (_message != null)
             Padding(
                 padding: const EdgeInsets.only(bottom: 16),
@@ -266,6 +346,17 @@ class _NikoNativeSessionHistoryState extends State<NikoNativeSessionHistory> {
                         if (entry.durationMs != null)
                           Text(
                               '${nikoText('总时长（含连接等待）', 'Duration (including connection wait)')}: ${_duration(entry.durationMs!)}'),
+                        if (_canReconnect(entry)) ...[
+                          const SizedBox(height: 12),
+                          NikoPrimaryButton(
+                              key: ValueKey(
+                                  'niko-audit-reconnect-${entry.session}'),
+                              compact: true,
+                              onPressed: _busy || _interacting
+                                  ? null
+                                  : () => _reconnect(entry),
+                              child: Text(nikoText('重新连接', 'Reconnect'))),
+                        ],
                       ])),
                 )),
           if (!_busy && _activities && snapshot?.activities.isEmpty == true)

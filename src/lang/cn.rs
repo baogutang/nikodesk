@@ -83,6 +83,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Successful", "成功"),
         ("Credential storage", "安全凭据存储"),
         ("Saved credentials could not be updated. This connection remains authenticated. Retry from the device password dialog.", "无法确认已保存凭据的更新。本次连接仍已通过认证，请从设备密码弹窗重试保存或移除。"),
+        ("The saved password is no longer valid. Enter the remote password again.", "已保存的密码已失效，请重新输入远端密码。"),
+        ("The saved password is no longer valid and secure storage could not confirm its removal. Enter the remote password again.", "已保存的密码已失效，且无法确认是否已从系统安全存储中移除。请重新输入远端密码。"),
         ("Connected, waiting for image...", "已连接，等待画面传输..."),
         ("Name", "名称"),
         ("Type", "类型"),

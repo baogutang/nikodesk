@@ -8,16 +8,16 @@ use hbb_common::{
 };
 use sha2::{Digest, Sha256};
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(test)))]
 #[path = "credentials/macos.rs"]
 mod platform;
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", not(test)))]
 #[path = "credentials/windows.rs"]
 mod platform;
-#[cfg(target_os = "android")]
+#[cfg(all(target_os = "android", not(test)))]
 #[path = "credentials/android.rs"]
 mod platform;
-#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "android")))]
+#[cfg(all(not(test), not(any(target_os = "macos", target_os = "windows", target_os = "android"))))]
 mod platform {
     pub(super) fn read(_: &str) -> super::ResultType<Option<Vec<u8>>> {
         Ok(None)
@@ -29,6 +29,73 @@ mod platform {
         super::bail!("secure_credentials_unsupported")
     }
 }
+
+// Tests cannot load an operating-system provider, even on worker threads.
+#[cfg(test)]
+mod platform {
+    use std::{cell::RefCell, collections::HashMap, path::PathBuf};
+    thread_local! {
+        static RECORDS: RefCell<HashMap<String, Vec<u8>>> = RefCell::default();
+        static FAIL_DELETE: RefCell<bool> = const { RefCell::new(false) };
+        static LOCK_ROOT: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
+        static AFTER_READ: RefCell<Option<Box<dyn FnOnce()>>> = RefCell::default();
+    }
+    pub(super) fn read(account: &str) -> super::ResultType<Option<Vec<u8>>> {
+        let value = RECORDS.with(|records| records.borrow().get(account).cloned());
+        let after_read = AFTER_READ.with(|hook| hook.borrow_mut().take());
+        if let Some(after_read) = after_read { after_read(); }
+        Ok(value)
+    }
+    pub(super) fn write(account: &str, bytes: &[u8]) -> super::ResultType<()> {
+        RECORDS.with(|records| records.borrow_mut().insert(account.to_owned(), bytes.to_vec()));
+        Ok(())
+    }
+    pub(super) fn delete(account: &str) -> super::ResultType<()> {
+        if FAIL_DELETE.with(|fail| *fail.borrow()) {
+            super::bail!("synthetic_delete_unavailable");
+        }
+        RECORDS.with(|records| records.borrow_mut().remove(account));
+        Ok(())
+    }
+    pub(super) fn lock_root() -> super::ResultType<PathBuf> {
+        LOCK_ROOT.with(|root| root.borrow().clone())
+            .ok_or_else(|| hbb_common::anyhow::anyhow!("synthetic_storage_not_initialized"))
+    }
+    pub(crate) struct TestStore {
+        _directory: Option<crate::nikodesk::favorites::tests::Temp>,
+    }
+    impl TestStore {
+        pub(crate) fn new() -> Self {
+            let directory = crate::nikodesk::favorites::tests::Temp::new();
+            let mut store = Self::at(directory.0.clone());
+            store._directory = Some(directory);
+            store
+        }
+        pub(super) fn at(root: PathBuf) -> Self {
+            RECORDS.with(|records| records.borrow_mut().clear());
+            FAIL_DELETE.with(|fail| *fail.borrow_mut() = false);
+            LOCK_ROOT.with(|value| *value.borrow_mut() = Some(root));
+            AFTER_READ.with(|hook| *hook.borrow_mut() = None);
+            Self { _directory: None }
+        }
+        pub(crate) fn fail_delete(&self) {
+            FAIL_DELETE.with(|fail| *fail.borrow_mut() = true);
+        }
+        pub(super) fn after_read(&self, hook: impl FnOnce() + 'static) {
+            AFTER_READ.with(|value| *value.borrow_mut() = Some(Box::new(hook)));
+        }
+    }
+    impl Drop for TestStore {
+        fn drop(&mut self) {
+            RECORDS.with(|records| records.borrow_mut().clear());
+            FAIL_DELETE.with(|fail| *fail.borrow_mut() = false);
+            LOCK_ROOT.with(|root| *root.borrow_mut() = None);
+            AFTER_READ.with(|hook| *hook.borrow_mut() = None);
+        }
+    }
+}
+#[cfg(test)]
+pub(crate) use platform::TestStore;
 
 const MAGIC: &[u8] = b"NIKOCRED1";
 const RECORD_LEN: usize = MAGIC.len() + 96;
@@ -81,6 +148,16 @@ fn ensure_persistent_profile() -> ResultType<()> {
     Ok(())
 }
 
+fn write_lock() -> ResultType<super::favorites::storage::Lock> {
+    #[cfg(not(test))]
+    let root = super::favorites::application_root()?;
+    #[cfg(test)]
+    let root = platform::lock_root()?;
+    super::favorites::storage::Directory::open(&root)?
+        .try_exclusive_lease("nikodesk-credentials.lock")?
+        .ok_or_else(|| anyhow!("secure_credentials_busy"))
+}
+
 pub(crate) fn load(key: &PeerStorageKey) -> ResultType<Option<StoredCredential>> {
     ensure_persistent_profile()?;
     let account = account(key);
@@ -96,6 +173,7 @@ pub(crate) fn save(key: &PeerStorageKey, salt: &str, password: &[u8]) -> ResultT
     if password.len() != 32 || password.iter().all(|byte| *byte == 0) || salt.is_empty() {
         bail!("secure_credentials_invalid");
     }
+    let _lock = write_lock()?;
     let account = account(key);
     let mut bytes = Vec::with_capacity(RECORD_LEN);
     bytes.extend_from_slice(MAGIC);
@@ -118,15 +196,32 @@ pub(crate) fn save(key: &PeerStorageKey, salt: &str, password: &[u8]) -> ResultT
 }
 pub(crate) fn delete(key: &PeerStorageKey) -> ResultType<()> {
     ensure_persistent_profile()?;
+    let _lock = write_lock()?;
     let account = account(key);
-    platform::delete(&account)?;
-    match platform::read(&account)? {
+    delete_account(&account)
+}
+
+fn delete_account(account: &str) -> ResultType<()> {
+    platform::delete(account)?;
+    match platform::read(account)? {
         None => Ok(()),
         Some(mut bytes) => {
             memzero(&mut bytes);
             bail!("secure_credentials_delete_unconfirmed");
         }
     }
+}
+
+pub(crate) fn delete_stored(key: &PeerStorageKey, expected: &StoredCredential) -> ResultType<()> {
+    ensure_persistent_profile()?;
+    let _lock = write_lock()?;
+    if let Some(current) = load(key)? {
+        // A different successful login may already have replaced this record.
+        if current.password == expected.password && current.salt == expected.salt {
+            delete_account(&account(key))?;
+        }
+    }
+    Ok(())
 }
 
 // Native selectors capture the private namespace even when settings change in
@@ -168,6 +263,101 @@ pub(crate) fn status(input: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(not(feature = "nikodesk-dev-profile"))]
+    fn key() -> PeerStorageKey {
+        super::super::server_scope::ServerScope::from_namespace(&"a".repeat(64))
+            .unwrap().peer_key("123456789").unwrap()
+    }
+
+    #[cfg(not(feature = "nikodesk-dev-profile"))]
+    #[test]
+    fn conditional_delete_excludes_a_save_between_comparison_and_delete() {
+        use std::{cell::Cell, rc::Rc};
+        let store = TestStore::new();
+        let key = key();
+        save(&key, "salt", &[7; 32]).unwrap();
+        let old = load(&key).unwrap().unwrap();
+        let attempted = Rc::new(Cell::new(false));
+        let observed = attempted.clone();
+        let competing_key = key.clone();
+        store.after_read(move || {
+            observed.set(true);
+            assert_eq!(save(&competing_key, "salt", &[8; 32]).unwrap_err().to_string(), "secure_credentials_busy");
+        });
+        delete_stored(&key, &old).unwrap();
+        assert!(attempted.get());
+        assert!(load(&key).unwrap().is_none());
+        // The losing writer can retry after the lease is released. A later
+        // rejection of the old reference must preserve that replacement.
+        save(&key, "salt", &[8; 32]).unwrap();
+        delete_stored(&key, &old).unwrap();
+        assert_eq!(load(&key).unwrap().unwrap().password_for_salt("salt"), Some(vec![8; 32]));
+    }
+
+    #[cfg(not(feature = "nikodesk-dev-profile"))]
+    #[test]
+    fn save_verification_excludes_all_competing_writers() {
+        use std::{cell::Cell, rc::Rc};
+        let store = TestStore::new();
+        let key = key();
+        save(&key, "salt", &[7; 32]).unwrap();
+        let old = load(&key).unwrap().unwrap();
+        let attempted = Rc::new(Cell::new(false));
+        let observed = attempted.clone();
+        let competing_key = key.clone();
+        store.after_read(move || {
+            observed.set(true);
+            for result in [
+                save(&competing_key, "salt", &[9; 32]),
+                delete(&competing_key),
+                delete_stored(&competing_key, &old),
+            ] {
+                assert_eq!(result.unwrap_err().to_string(), "secure_credentials_busy");
+            }
+        });
+        save(&key, "salt", &[8; 32]).unwrap();
+        assert!(attempted.get());
+        assert_eq!(load(&key).unwrap().unwrap().password_for_salt("salt"), Some(vec![8; 32]));
+        delete(&key).unwrap();
+        assert!(load(&key).unwrap().is_none());
+    }
+
+    #[cfg(not(feature = "nikodesk-dev-profile"))]
+    #[test]
+    fn credential_lock_child() {
+        let Some(root) = std::env::var_os("NIKODESK_CREDENTIAL_LOCK_TEST_ROOT") else { return; };
+        let _store = TestStore::at(root.into());
+        let key = key();
+        let expected = StoredCredential { password: [7; 32], salt: Sha256::digest("salt").into() };
+        let busy = std::env::var("NIKODESK_CREDENTIAL_LOCK_TEST_BUSY").unwrap() == "1";
+        for result in [save(&key, "salt", &[8; 32]), delete(&key), delete_stored(&key, &expected)] {
+            if busy {
+                assert_eq!(result.unwrap_err().to_string(), "secure_credentials_busy");
+            } else {
+                result.unwrap();
+            }
+        }
+    }
+
+    #[cfg(not(feature = "nikodesk-dev-profile"))]
+    #[test]
+    fn credential_write_lease_excludes_another_process_and_releases_on_drop() {
+        let _store = TestStore::new();
+        let root = platform::lock_root().unwrap();
+        let held = write_lock().unwrap();
+        let child = |busy: bool| {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "nikodesk::credentials::tests::credential_lock_child", "--nocapture"])
+                .env("NIKODESK_CREDENTIAL_LOCK_TEST_ROOT", &root)
+                .env("NIKODESK_CREDENTIAL_LOCK_TEST_BUSY", if busy { "1" } else { "0" })
+                .output().unwrap();
+            assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stdout));
+        };
+        child(true);
+        drop(held);
+        child(false);
+    }
+
     #[test]
     fn persistent_storage_is_available_only_in_production_builds() {
         assert_eq!(
@@ -183,7 +373,8 @@ mod tests {
         let key = scope.peer_key("123456789").unwrap();
         assert!(matches!(load(&key), Err(error)
             if error.to_string() == "secure_credentials_development_disabled"));
-        for result in [save(&key, "synthetic-salt", &[7; 32]), delete(&key)] {
+        let expected = StoredCredential { password: [7; 32], salt: [8; 32] };
+        for result in [save(&key, "synthetic-salt", &[7; 32]), delete(&key), delete_stored(&key, &expected)] {
             assert_eq!(result.unwrap_err().to_string(), "secure_credentials_development_disabled");
         }
     }

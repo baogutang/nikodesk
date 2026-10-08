@@ -173,6 +173,7 @@ Future<void> dispatchNikoLink(BuildContext context, NikoLinkRequest request,
     auth = await nikoAskCredentialConnect(context, request.id, '',
         namespace: scope ?? '',
         native: scope != null,
+        autoUseSaved: false,
         fileTransfer: request.mode == 'file-transfer',
         statusLoader: credentialStatusLoader);
   } else {

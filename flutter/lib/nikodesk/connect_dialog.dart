@@ -10,9 +10,8 @@ import 'credential_connect_dialog.dart'
     show nikoCredentialStatus, nikoAskCredentialConnect;
 
 /// NikoDesk controller-side security policy: a session is never started with
-/// only a device id. The remote password must be entered in this client
-/// before any connect dispatch — no passwordless "ask the remote side"
-/// handshake is initiated from here.
+/// only a device id. A typed password or a previously authorized secure
+/// credential is required before dispatch; the remote authenticates each login.
 Future<String?> nikoAskConnectPassword(
     BuildContext context, String id, String alias,
     {bool fileTransfer = false}) async {
@@ -155,6 +154,7 @@ Future<bool> nikoDispatchConnection(
   required String id,
   required String password,
   bool useSavedCredential = false,
+  Future<String> Function(String namespace, String id)? credentialStatusLoader,
   String? connToken,
   bool fileTransfer = false,
   bool forceRelay = false,
@@ -192,7 +192,9 @@ Future<bool> nikoDispatchConnection(
     }
     if (useSavedCredential &&
         (current.namespace == null ||
-            await nikoCredentialStatus(current.namespace!, id) != 'present')) {
+            await (credentialStatusLoader ?? nikoCredentialStatus)(
+                    current.namespace!, id).timeout(const Duration(seconds: 2)) !=
+                'present')) {
       if (context.mounted)
         nikoNotice(
             context,
@@ -200,6 +202,7 @@ Future<bool> nikoDispatchConnection(
                 'The saved credential is unavailable. Enter a password.'));
       return false;
     }
+    if (!context.mounted) return false;
     if (onConnect != null) {
       await onConnect(context, id, forceRelay,
           isFileTransfer: fileTransfer, password: password);

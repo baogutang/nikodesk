@@ -359,6 +359,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test --locked --lib --features flutter,hwcodec,nikodesk nikodesk::mac_shortcuts::tests
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --locked --lib --features flutter,hwcodec,nikodesk credentials
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test --locked -p rustdesk-portable-packer --features nikodesk
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

@@ -155,4 +155,31 @@ void main() {
     expect(find.textContaining('connections are paused'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('external link does not automatically use a saved credential',
+      (tester) async {
+    final gateway = _Gateway();
+    gateway.snapshot =
+        ServerSnapshot(gateway.snapshot.config, 1, true, namespace: 'a' * 64);
+    var calls = 0;
+    await tester.pumpWidget(MaterialApp(
+        home: Builder(
+            builder: (context) => Scaffold(
+                body: TextButton(
+                    onPressed: () => dispatchNikoLink(context,
+                        const NikoLinkRequest('123456', 'connect', null, false),
+                        gateway: gateway,
+                        credentialStatusLoader: () async => 'present',
+                        onConnect: (_, __, ___,
+                            {isFileTransfer = false, password}) async {
+                          calls++;
+                        }),
+                    child: const Text('Link'))))));
+    await tester.tap(find.text('Link'));
+    await tester.pumpAndSettle();
+    expect(calls, 0);
+    expect(find.byKey(const Key('connect-saved-credential')), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(calls, 0);
+  });
 }
