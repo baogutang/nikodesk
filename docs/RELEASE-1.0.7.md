@@ -1,12 +1,24 @@
-# NikoDesk 1.0.7+18 — development candidate
+# NikoDesk 1.0.7+18 — formal release
 
-This source tree is a development candidate, not a formal release.
-Target-device installation and acceptance remain unverified. Existing
-[v1.0.6 downloads](https://github.com/baogutang/nikodesk/releases/tag/v1.0.6) remain.
-[Nightly build status for `main`](https://github.com/baogutang/nikodesk/actions/workflows/release.yml?query=branch%3Amain)
-is separate from formal publication and target-device acceptance. Consult the
-linked workflow for CI results; passing CI does not establish formal publication
-or target-device acceptance.
+**[Download v1.0.7](https://github.com/baogutang/nikodesk/releases/tag/v1.0.7)**
+
+Published with the maintainer's explicit authorization using the same seven
+packages verified from successful [build 37726367056](https://github.com/baogutang/nikodesk/actions/runs/37726367056).
+The tag and binaries correspond to public source
+[`4423a266cf01e1cef687530871e0bd16d10c8dcc`](https://github.com/baogutang/nikodesk/commit/4423a266cf01e1cef687530871e0bd16d10c8dcc).
+No application rebuild was performed for formal publication. Every package was
+downloaded and matched to the CI artifact and published SHA-256 checksum;
+platform version, entrypoint, archive, icon and source checks passed.
+
+This is a manual maintainer-authorized release. The automated signed-acceptance
+promotion workflow described below was not used or changed. No unperformed
+acceptance gate is represented as passed. Target-device upgrades and real
+cross-device sessions remain unverified for this build. macOS is ad-hoc signed
+without Developer ID or notarization, Windows is unsigned, and Android uses the
+existing NikoDesk release certificate. The Windows setup-validation files retain
+their installation-preview status. Installation remains manual; automatic app
+replacement/restart is not implemented. No publisher-key pin or signed update
+manifest is supplied, so this client uses the explicit manual-download path.
 
 ## Changes
 
@@ -33,7 +45,8 @@ or target-device acceptance.
 
 - Windows application, portable/setup and background executable icons and Android
   launcher/adaptive/monochrome icons now use the canonical blue NikoDesk brand.
-  macOS ICNS is rebuilt with Apple iconutil to repair malformed small image slots.
+  macOS ICNS is rebuilt with Apple iconutil to improve system decoding compatibility
+  for small image slots.
   CI checks canonical inputs and the icons in the final platform packages.
   Existing macOS permission records/caches and installed applications are untouched;
   their visible icons still need installation-side verification.
@@ -100,12 +113,16 @@ change. Ad-hoc macOS signing cannot establish continuity of system permissions
 across updates. Windows remains unsigned. Keep an independent remote-access
 path while testing upgrades; do not disable system protections.
 
-The release must also resolve or explicitly assess the current dependency audit.
+The dependency audit still has unresolved items; this release does not claim
+that the full audit is cleared.
 No ToDesk latency, throughput, CPU, battery or visual-quality comparison has been
-measured for this candidate. Existing virtual display, terminal, camera, voice,
+measured for this release. Existing virtual display, terminal, camera, voice,
 file and mobile capabilities retain their platform-specific acceptance limits.
 
-## Candidate promotion
+## Automated signed-acceptance promotion
+
+The following describes the separate automated path. It was not used for the
+manual v1.0.7 release above and remains unchanged for future eligible candidates.
 
 Pushes to `validation/**` run candidate checks and upload workflow artifacts.
 They do not publish a stable release or replace nightly. Consult the linked
@@ -127,7 +144,7 @@ workflow run for the exact source commit, job result and available artifacts.
    `release-acceptance.json` with the same `tag` and full `commit` as provenance,
    a `package_sha256` map for all seven packages, and a `gates` map. Each gate
    from `.github/scripts/release-manifest.py` needs `status: "passed"` and a
-   concrete `evidence` reference. Untested, failed or waived gates block release.
+   concrete `evidence` reference. Untested, failed or waived gates block automated promotion.
    A signed assertion is not a substitute for performing those checks.
 4. In the candidate directory, use `release-manifest.py create` to generate
    canonical ASCII `SHA256SUMS` after adding acceptance. Sign its exact bytes
@@ -141,9 +158,11 @@ workflow run for the exact source commit, job result and available artifacts.
    for the repository's `release` environment; declaring the environment in
    YAML does not itself create reviewer protection.
 
-Formal promotion requires source/security review, package settings on macOS and
+Automated signed-acceptance promotion requires source/security review, package settings on macOS and
 Windows, Android upgrade, a private-network session, permission revocation,
 physical privacy recovery, display/input acceptance, macOS signing continuity,
 and Windows unattended installation acceptance. Authorization to push a candidate
-and run CI does not establish those acceptance results or authorize remote access,
-driver/service installation, or formal-release promotion.
+and run CI does not establish those acceptance results or authorize remote access
+or driver/service installation. The subsequent explicit instruction to publish
+v1.0.7 authorized the manual publication above; it did not establish device
+acceptance, platform signing or a signed-manifest verification result.
