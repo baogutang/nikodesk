@@ -58,11 +58,11 @@ fix, adversarial review, push and formal publication of 1.0.8.
   (551 passed / 2 ignored) including the new directory tests; Android-target
   compile check via cargo-ndk; the Android packaging verifier suite
   (43 tests) including the new unstripped-library rejection; actionlint.
-- Real-device acceptance: the release Android package must launch on the
-  maintainer's device (vivo, Android 16) and stay running past the first-run
-  screen; this was performed with the locally built release-signed candidate
-  before publication and recorded in `docs/PROGRESS.md`. Touch control,
-  remote sessions and upgrade behavior from a working 1.0.8 install remain
+- Real-device acceptance gate: before publication, a locally built,
+  test-signed package of this exact source must launch on the maintainer's
+  device (vivo, Android 16) and stay running past the first-run screen. The
+  published release package is built by CI from the tagged source. Touch
+  control, remote sessions and upgrades from earlier installs remain
   separate acceptance items.
 - macOS/Windows behavior is untouched by this change; their configuration
   directories were already private and follow the same invariant as before.
