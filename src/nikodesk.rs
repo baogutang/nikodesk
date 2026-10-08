@@ -145,7 +145,46 @@ pub fn initialize() -> ResultType<()> {
 pub fn initialize_or_exit() {
     if let Err(err) = initialize() {
         eprintln!("NikoDesk stopped: {err}");
+        #[cfg(target_os = "android")]
+        report_android_startup_failure(&err.to_string());
         std::process::exit(1);
+    }
+}
+
+/// Early startup failures happen before any logger is initialized and
+/// `eprintln` is invisible on Android because the app's stderr is
+/// /dev/null. Surface the reason through logcat and a marker file inside
+/// the configuration directory so the failure can be diagnosed on a real
+/// device instead of looking like a random render-thread crash.
+#[cfg(target_os = "android")]
+pub fn report_android_startup_failure(reason: &str) {
+    use hbb_common::log;
+    android_logger::init_once(
+        android_logger::Config::default()
+            .with_max_level(log::LevelFilter::Error)
+            .with_tag("NikoDesk"),
+    );
+    log::error!("NikoDesk startup failed: {}", reason);
+    let marker = config::APP_DIR.read().ok().and_then(|dir| {
+        let dir = dir.clone();
+        if dir.is_empty() {
+            None
+        } else {
+            Some(std::path::PathBuf::from(dir).join("nikodesk-startup-failure.txt"))
+        }
+    });
+    if let Some(marker) = marker {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&marker)
+        {
+            let _ = writeln!(file, "NikoDesk stopped: {}", reason);
+        }
     }
 }
 
@@ -991,6 +1030,13 @@ mod identity_file {
         let dir = path
             .parent()
             .ok_or_else(|| anyhow!("Invalid identity path"))?;
+        // Android creates the app's configuration directory with the
+        // platform's 0771 convention (group/other execute bits). The app
+        // sandbox is enforced by the 0700 package directory above it, but
+        // the strict privacy invariant below is kept identical on every
+        // platform by tightening this directory to 0700 before checking.
+        #[cfg(target_os = "android")]
+        ensure_directory_private(dir)?;
         match fs::symlink_metadata(dir) {
             Ok(meta) => check_metadata(&meta, true)?,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -1055,6 +1101,33 @@ mod identity_file {
         result?;
         Ok((lock, identity))
     }
+
+    /// Removes group/other permission bits from an existing directory so the
+    /// strict privacy check in `check_metadata` can hold on platforms that
+    /// create app directories with shared execute bits (Android's 0771
+    /// convention). Only reachable on Android; unit tests exercise it here.
+    #[cfg(any(target_os = "android", test))]
+    pub(super) fn ensure_directory_private(dir: &Path) -> ResultType<()> {
+        use std::os::unix::fs::PermissionsExt;
+        let meta = fs::symlink_metadata(dir)?;
+        if meta.file_type().is_symlink() {
+            bail!("NikoDesk identity parent must not be a symbolic link");
+        }
+        if !meta.is_dir() {
+            bail!("NikoDesk identity parent is not a directory");
+        }
+        if meta.mode() & 0o077 != 0 {
+            fs::set_permissions(dir, fs::Permissions::from_mode(0o700))?;
+        }
+        let verified = fs::symlink_metadata(dir)?;
+        if verified.file_type().is_symlink() || !verified.is_dir() {
+            bail!("NikoDesk identity parent changed while tightening permissions");
+        }
+        if verified.mode() & 0o077 != 0 || verified.mode() & 0o700 != 0o700 {
+            bail!("NikoDesk identity directory permissions could not be tightened");
+        }
+        Ok(())
+    }
 }
 
 #[cfg(windows)]
@@ -1066,7 +1139,7 @@ mod tests {
     use super::*;
     use std::{
         fs,
-        os::unix::fs::{symlink, PermissionsExt},
+        os::unix::fs::{symlink, DirBuilderExt, MetadataExt, PermissionsExt},
         path::PathBuf,
         sync::{Arc, Barrier},
     };
@@ -1120,6 +1193,43 @@ mod tests {
         ] {
             assert!(validate_android_directory(directory).is_err());
         }
+    }
+
+    // Android hands the app its platform-created configuration directory with
+    // the 0771 convention; the strict metadata check must reject that raw
+    // state (the pre-1.0.8 startup failure) and the tightening step must make
+    // the directory acceptable without weakening the invariant.
+    #[test]
+    fn android_style_directory_permissions_are_rejected_then_tightened() {
+        let temp = Temp::new();
+        let dir = temp.0.join("app_flutter");
+        fs::DirBuilder::new().mode(0o771).create(&dir).unwrap();
+        let shared_mode = fs::symlink_metadata(&dir).unwrap().mode();
+        assert_ne!(shared_mode & 0o077, 0);
+        assert!(identity_file::check_metadata(&fs::symlink_metadata(&dir).unwrap(), true).is_err());
+        identity_file::ensure_directory_private(&dir).unwrap();
+        assert_eq!(fs::symlink_metadata(&dir).unwrap().mode() & 0o777, 0o700);
+        assert!(identity_file::check_metadata(&fs::symlink_metadata(&dir).unwrap(), true).is_ok());
+    }
+
+    #[test]
+    fn already_private_directory_is_left_unchanged() {
+        let temp = Temp::new();
+        let dir = temp.0.join("config");
+        fs::DirBuilder::new().mode(0o700).create(&dir).unwrap();
+        identity_file::ensure_directory_private(&dir).unwrap();
+        assert_eq!(fs::symlink_metadata(&dir).unwrap().mode() & 0o777, 0o700);
+    }
+
+    #[test]
+    fn symbolic_link_parent_is_rejected_without_touching_the_target() {
+        let temp = Temp::new();
+        let real = temp.0.join("real");
+        fs::DirBuilder::new().mode(0o700).create(&real).unwrap();
+        let link = temp.0.join("link");
+        symlink(&real, &link).unwrap();
+        assert!(identity_file::ensure_directory_private(&link).is_err());
+        assert_eq!(fs::symlink_metadata(&real).unwrap().mode() & 0o777, 0o700);
     }
 
     #[test]

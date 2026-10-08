@@ -510,16 +510,20 @@ def verify_apk(apk, application_id, manifest_output=None, version_name=None,
                 raise ValueError(f'Missing native library: {library}')
         native = {}
         with apk.open('rb') as apk_stream:
-            for entry in archive.infolist():
-                if entry.filename.startswith('lib/') and entry.filename.endswith('.so'):
-                    if not entry.filename.startswith('lib/arm64-v8a/') or entry.file_size > 256 * 1024 * 1024:
-                        raise ValueError(f'Unexpected native APK entry: {entry.filename}')
-                    native[entry.filename] = {
-                        **verify_elf(archive.read(entry), entry.filename),
-                        **verify_zip_library_alignment(apk_stream, entry),
-                    }
-                    if native[entry.filename]['zip_compressed'] and not extract_native:
-                        raise ValueError('Compressed native libraries require extractNativeLibs=true')
+                for entry in archive.infolist():
+                    if entry.filename.startswith('lib/') and entry.filename.endswith('.so'):
+                        if not entry.filename.startswith('lib/arm64-v8a/') or entry.file_size > 256 * 1024 * 1024:
+                            raise ValueError(f'Unexpected native APK entry: {entry.filename}')
+                        native[entry.filename] = {
+                            **verify_elf(archive.read(entry), entry.filename),
+                            **verify_zip_library_alignment(apk_stream, entry),
+                        }
+                        if entry.filename.endswith('/libc++_shared.so') and entry.file_size >= 2_000_000:
+                            raise ValueError(
+                                f'{entry.filename} is unstripped ({entry.file_size} bytes); '
+                                'strip it before packaging to keep the APK small')
+                        if native[entry.filename]['zip_compressed'] and not extract_native:
+                            raise ValueError('Compressed native libraries require extractNativeLibs=true')
         if require_owned_voice:
             voice_verification = {
                 **verify_voice_dex(archive),

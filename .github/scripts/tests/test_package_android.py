@@ -185,6 +185,19 @@ class PageSizeTests(unittest.TestCase):
                         with self.assertRaises(ValueError):
                             PACKAGE.verify_apk(apk, 'io.nikodesk.android.dev', unsigned=True)
 
+    def test_unstripped_libcxx_is_rejected_in_the_final_apk(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            apk = Path(temporary) / 'sample.apk'
+            with zipfile.ZipFile(apk, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+                for name in ('librustdesk.so', 'libflutter.so', 'libapp.so'):
+                    archive.writestr('lib/arm64-v8a/' + name, elf())
+                archive.writestr('lib/arm64-v8a/libc++_shared.so', elf() + bytes(2_000_000))
+            with patch.object(PACKAGE, 'analyzer_path', return_value='apkanalyzer'), \
+                 patch.object(PACKAGE.subprocess, 'run') as run, contextlib.redirect_stdout(io.StringIO()):
+                run.return_value.stdout = manifest()
+                with self.assertRaises(ValueError):
+                    PACKAGE.verify_apk(apk, 'io.nikodesk.android.dev', unsigned=True)
+
 
 class SigningAndArchiveTests(unittest.TestCase):
     certificate = 'ab' * 32

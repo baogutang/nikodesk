@@ -534,6 +534,15 @@ jobs:
           mkdir -p ./flutter/android/app/src/main/jniLibs/arm64-v8a
           cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/
           cp ./target/aarch64-linux-android/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
+          # NDK r28 ships the sysroot libc++_shared.so unstripped (~9 MB) and
+          # AGP does not reliably strip jniLibs, so strip it here; the staged
+          # library must stay small or the build fails loudly.
+          "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-all \
+            ./flutter/android/app/src/main/jniLibs/arm64-v8a/libc++_shared.so
+          staged_size="$(wc -c < ./flutter/android/app/src/main/jniLibs/arm64-v8a/libc++_shared.so)"
+          if [ "$staged_size" -ge 2000000 ]; then
+            echo "libc++_shared.so is still unstripped: $staged_size bytes"; exit 1
+          fi
           pushd flutter
           flutter pub get --enforce-lockfile
           flutter build apk --release --flavor nikodesk --target-platform android-arm64 --no-pub --dart-define=NIKODESK=true --build-name "$PRODUCT_VERSION" --build-number "$PRODUCT_BUILD_NUMBER"

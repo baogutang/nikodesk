@@ -50,6 +50,8 @@ fn initialize(app_dir: &str, custom_client_config: &str) {
     #[cfg(feature = "nikodesk")]
     if let Err(err) = nikodesk_init {
         eprintln!("NikoDesk stopped: {err}");
+        #[cfg(target_os = "android")]
+        crate::nikodesk::report_android_startup_failure(&err.to_string());
         std::process::exit(1);
     }
     flutter::async_tasks::start_flutter_async_runner();
