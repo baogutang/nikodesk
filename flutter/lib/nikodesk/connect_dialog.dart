@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 
@@ -109,6 +111,13 @@ class _ConnectPasswordDialogState extends State<_ConnectPasswordDialog> {
 }
 
 /// Enforce the policy and dispatch through the real connect path.
+/// The envelope the native session gate and secure-storage loader parse.
+/// Attaching it authorizes using a saved credential in lieu of a typed
+/// password; it asserts no secret by itself.
+String nikoSavedCredentialEnvelope(String namespace) => jsonEncode({
+      'nikodesk_credentials': {'schema': 1, 'namespace': namespace, 'remember': true}
+    });
+
 Future<bool> nikoConnectWithPassword(
   BuildContext context, {
   required String id,
@@ -203,6 +212,13 @@ Future<bool> nikoDispatchConnection(
       return false;
     }
     if (!context.mounted) return false;
+    // A saved-credential dispatch carries only a reference; the dispatch
+    // layer attaches the authorization envelope the native session gate and
+    // secure-storage loader parse, so every caller is covered uniformly.
+    final effectiveToken = connToken ??
+        (useSavedCredential && current.namespace != null
+            ? nikoSavedCredentialEnvelope(current.namespace!)
+            : null);
     if (onConnect != null) {
       await onConnect(context, id, forceRelay,
           isFileTransfer: fileTransfer, password: password);
@@ -212,7 +228,7 @@ Future<bool> nikoDispatchConnection(
           isFileTransfer: fileTransfer,
           password: password,
           serverNamespace: current.namespace,
-          connToken: connToken);
+          connToken: effectiveToken);
     }
     onDispatched?.call();
     return true;
