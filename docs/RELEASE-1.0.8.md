@@ -33,6 +33,43 @@ fix, adversarial review, push and formal publication of 1.0.8.
   tightening; already-private directories are untouched; symbolic-link parents
   are rejected without touching the target.
 
+### Android outgoing sessions were impossible (second and third real-device findings)
+
+- With the app finally launching, the first real connect attempt from an
+  Android controller still failed locally with "private server identity
+  changed or session could not be created" before any request left the
+  phone. Root cause: the mobile device page freezes its device store on
+  first access — before the first private-server read activates the
+  server scope — so every connection dispatch carried an empty namespace
+  and was rejected by the local session gate. Desktop wiring is
+  unaffected. Fix: dispatches resolve the live scope at connection time;
+  a widget regression test freezes an empty-namespace store, activates
+  the scope late (the exact first-launch ordering) and asserts the
+  credential flow observes the live scope.
+- The next layer rejected the scoped peer/favorites storage because
+  Android hands out the per-user symlink form `/data/user/N` (a link to
+  `/data/data`) and storage hardening rejects symlinked path components.
+  `initialize_android` now canonicalizes the validated directory to the
+  real path — the identity allowlist already accepts both forms and no
+  hardening is relaxed — and the FFI layer no longer clobbers that
+  resolved form with the raw handoff path.
+- The session-history page had the same frozen-store ordering: reconnecting
+  from an initiation record or a native session result dispatched an empty
+  namespace. Reconnects and the native history view now resolve the live
+  scope the same way.
+- Remembered credentials were unusable in real dispatches on every
+  platform: the session gate demanded a typed password unconditionally,
+  and the automatic saved-credential path attached no authorization
+  envelope at all. The gate now accepts a saved-credential token (issued
+  only after a successful authentication chose to remember), and the
+  automatic path carries the envelope the native side parses to load the
+  credential from secure storage. Verified on device: an empty-password
+  reconnect through the saved credential establishes the session.
+- The local session gate's rejection reason, and the underlying
+  peer-storage failure cause, are now written to logcat (tag `NikoDesk`)
+  and the Flutter log; these diagnostics are what identified the remaining
+  layers on the device within minutes.
+
 ### Startup failures are now diagnosable on Android
 
 - An early initialization failure previously wrote the reason to `stderr`,
@@ -58,12 +95,18 @@ fix, adversarial review, push and formal publication of 1.0.8.
   (551 passed / 2 ignored) including the new directory tests; Android-target
   compile check via cargo-ndk; the Android packaging verifier suite
   (43 tests) including the new unstripped-library rejection; actionlint.
-- Real-device acceptance gate: before publication, a locally built,
-  test-signed package of this exact source must launch on the maintainer's
-  device (vivo, Android 16) and stay running past the first-run screen. The
-  published release package is built by CI from the tagged source. Touch
-  control, remote sessions and upgrades from earlier installs remain
-  separate acceptance items.
+- Real-device acceptance (performed before publication with a locally
+  built, test-signed package of this exact source, on vivo V2547A /
+  Android 16): the app launches and stays running past the first-run
+  screen, and a real cross-device session was established and used —
+  password authentication against the maintainer's Mac through the
+  configured private server, HEVC video (captured at 3200×1800 on the
+  controlled Mac) and touch input (pan and pinch on the remote canvas)
+  all worked. This is the first verified real cross-device Android
+  session in the project's history. The published release package is
+  built by CI from the tagged source; upgrades from earlier installed
+  releases remain a separate acceptance item, as do file transfer,
+  tunnels and extended capabilities on Android.
 - macOS/Windows behavior is untouched by this change; their configuration
   directories were already private and follow the same invariant as before.
 - The 1.0.7 OpenSSL pin, icons, update handoff and history/credential work

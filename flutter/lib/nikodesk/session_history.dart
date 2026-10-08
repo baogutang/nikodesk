@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'connect_dialog.dart';
 import 'server_gateway.dart';
+import 'server_scope.dart';
 
 import 'session_log.dart';
 import 'session_audit_view.dart';
@@ -105,7 +106,7 @@ class _NikoSessionHistoryPageState extends State<NikoSessionHistoryPage> {
         fileTransfer: entry.fileTransfer,
         forceRelay: entry.forceRelay,
         gateway: widget.gateway,
-        expectedServerNamespace: _store.serverNamespace,
+        expectedServerNamespace: NikoServerScope.current ?? _store.serverNamespace,
         onConnect: widget.onConnect);
     if (!dispatched) return;
     try {
@@ -132,7 +133,8 @@ class _NikoSessionHistoryPageState extends State<NikoSessionHistoryPage> {
         id: id,
         fileTransfer: fileTransfer,
         gateway: widget.gateway,
-        expectedServerNamespace: namespace,
+        expectedServerNamespace:
+            NikoServerScope.validate(namespace) ?? NikoServerScope.current ?? _store.serverNamespace,
         onConnect: widget.onConnect);
   }
 
@@ -152,11 +154,11 @@ class _NikoSessionHistoryPageState extends State<NikoSessionHistoryPage> {
               icon: const Icon(Icons.history_rounded),
               label: Text(nikoText('查看发起记录', 'View initiation history')),
             )),
-        Expanded(
-            child: NikoNativeSessionHistory(
-                namespace: _store.serverNamespace ?? '',
-                active: widget.active,
-                onReconnect: _reconnectResult)),
+      Expanded(
+          child: NikoNativeSessionHistory(
+              namespace: NikoServerScope.current ?? _store.serverNamespace ?? '',
+              active: widget.active,
+              onReconnect: _reconnectResult)),
       ]));
     }
     final muted =

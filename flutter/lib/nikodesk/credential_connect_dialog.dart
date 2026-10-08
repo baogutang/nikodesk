@@ -53,7 +53,11 @@ Future<NikoConnectAuth?> nikoAskCredentialConnect(
     }
     if (!context.mounted) return null;
     if (status == 'present') {
-      return const NikoConnectAuth('', useSaved: true);
+      // The token envelope is what tells the native side to load the saved
+      // credential from secure storage; without it the session gate sees an
+      // empty password and no authorization. Using the stored credential
+      // keeps it remembered.
+      return const NikoConnectAuth('', useSaved: true, remember: true);
     }
     initialStatus = status;
   }

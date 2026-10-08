@@ -156,6 +156,32 @@ pub fn initialize_or_exit() {
 /// /dev/null. Surface the reason through logcat and a marker file inside
 /// the configuration directory so the failure can be diagnosed on a real
 /// device instead of looking like a random render-thread crash.
+/// Logcat-only logging for Android, where the file logger's output is not
+/// reachable while diagnosing a device. Writes through __android_log_print
+/// directly: the process may already have a file logger on the `log` facade,
+/// which would silently swallow android_logger's output.
+#[cfg(target_os = "android")]
+pub fn log_android(message: &str) {
+    use std::ffi::CString;
+    extern "C" {
+        fn __android_log_print(prio: i32, tag: *const std::os::raw::c_char,
+            fmt: *const std::os::raw::c_char, ...) -> i32;
+    }
+    const ANDROID_LOG_ERROR: i32 = 4;
+    let tag = c"NikoDesk".as_ptr();
+    let fmt = c"%s".as_ptr();
+    let text = CString::new(message.replace('\0', " ")).unwrap_or_default();
+    unsafe {
+        let _ = __android_log_print(ANDROID_LOG_ERROR, tag, fmt, text.as_ptr());
+    }
+}
+
+/// Debugging aid: the resolved private storage root, without weakening any
+/// path hardening. Only used in diagnostic log lines.
+pub fn favorites_root_display() -> Option<std::path::PathBuf> {
+    favorites::application_root().ok()
+}
+
 #[cfg(target_os = "android")]
 pub fn report_android_startup_failure(reason: &str) {
     use hbb_common::log;
@@ -851,13 +877,25 @@ fn verify_options_file(path: &std::path::Path, expected: &HashMap<String, String
 #[cfg(target_os = "android")]
 pub fn initialize_android(app_dir: &str) -> ResultType<()> {
     validate_android_directory(app_dir)?;
+    // Android hands out the per-user symlink form (/data/user/N, a link to
+    // /data/data). Storage hardening rejects symlinked path components, and
+    // the identity allowlist accepts both forms, so keep the resolved real
+    // path for every derived configuration, identity and peer-storage path.
+    let canonical = std::fs::canonicalize(app_dir)
+        .map_err(|_| anyhow!("NikoDesk's Android configuration directory is not accessible"))?;
+    let canonical = canonical
+        .to_str()
+        .ok_or_else(|| anyhow!("NikoDesk's Android configuration directory is not valid UTF-8"))?
+        .trim_end_matches('/')
+        .to_owned();
+    validate_android_directory(&canonical)?;
     let mut configured = config::APP_DIR
         .write()
         .map_err(|_| anyhow!("NikoDesk's Android configuration directory lock is poisoned"))?;
-    if !configured.is_empty() && configured.as_str() != app_dir {
+    if !configured.is_empty() && configured.as_str() != canonical {
         bail!("NikoDesk's Android configuration directory cannot change while running");
     }
-    *configured = app_dir.into();
+    *configured = canonical.into();
     drop(configured);
     initialize()
 }
@@ -879,6 +917,20 @@ fn validate_android_directory(app_dir: &str) -> ResultType<()> {
 
 pub fn is_saved_password_option(key: &str) -> bool {
     matches!(key, "os-password" | "rdp_password")
+}
+
+/// The session gate requires a typed password, or an authorized saved
+/// credential: a connection token is only issued after a successful
+/// authentication explicitly chose to remember that credential.
+pub fn credentials_gate_accepts(
+    password: &str,
+    conn_token: Option<&str>,
+) -> ResultType<()> {
+    let authorized_saved = conn_token.map(str::trim).is_some_and(|t| !t.is_empty());
+    if !authorized_saved {
+        validate_connection_credentials(password)?;
+    }
+    Ok(())
 }
 
 pub fn clear_saved_credentials(password: &mut Vec<u8>, options: &mut HashMap<String, String>) {
@@ -1282,6 +1334,15 @@ mod tests {
         }
         assert!(validate_connection_credentials(" synthetic-secret ").is_ok());
         assert!(!validate_connection_credentials("").unwrap_err().to_string().contains("synthetic-secret"));
+    }
+
+    #[test]
+    fn credentials_gate_accepts_an_authorized_saved_credential_token() {
+        assert!(credentials_gate_accepts("", Some("{\"session_id\":1}")).is_ok());
+        assert!(credentials_gate_accepts("", Some("  ")).is_err(),
+            "a whitespace token is not an authorization");
+        assert!(credentials_gate_accepts("", None).is_err());
+        assert!(credentials_gate_accepts("typed-password", None).is_ok());
     }
 
     #[test]

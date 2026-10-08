@@ -58,7 +58,21 @@ fn initialize(app_dir: &str, custom_client_config: &str) {
     // `APP_DIR` is set in `main_get_data_dir_ios()` on iOS.
     #[cfg(not(target_os = "ios"))]
     {
-        *config::APP_DIR.write().unwrap() = app_dir.to_owned();
+        // On Android, initialize_android has already stored the resolved,
+        // symlink-free form of the configuration directory; the raw
+        // /data/user/N handoff must not clobber it, or storage hardening
+        // rejects the path components again.
+        #[cfg(target_os = "android")]
+        {
+            let mut dir = config::APP_DIR.write().unwrap();
+            if dir.is_empty() {
+                *dir = app_dir.to_owned();
+            }
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            *config::APP_DIR.write().unwrap() = app_dir.to_owned();
+        }
     }
     // core_main's load_custom_client does not work for flutter since it is only applied to its load_library in main.c
     #[cfg(not(feature = "nikodesk"))]
@@ -223,7 +237,7 @@ pub fn session_add_nikodesk_sync(
         let result = (|| -> ResultType<()> {
             crate::nikodesk::connection_snapshot::validate_namespace(&expected_server_namespace)?;
             crate::nikodesk::validate_remote_id(&id)?;
-            crate::nikodesk::validate_connection_credentials(&password)?;
+            crate::nikodesk::credentials_gate_accepts(&password, conn_token.as_deref())?;
             if is_rdp || [is_file_transfer, is_view_camera, is_port_forward, is_terminal].iter().filter(|kind| **kind).count() > 1 || !switch_uuid.is_empty() {
                 hbb_common::bail!("NikoDesk supports one of desktop, file, camera, tunnel or terminal per session, without RDP");
             }

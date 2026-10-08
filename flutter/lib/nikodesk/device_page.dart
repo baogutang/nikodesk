@@ -87,6 +87,13 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
   bool get _credentialNative => _native || widget.credentialStatusLoader != null;
   Future<String> _credentialStatus(String namespace, String id) =>
       (widget.credentialStatusLoader ?? nikoCredentialStatus)(namespace, id);
+  // The store is created on first access, which can happen before the first
+  // gateway read activates the private-server scope; its namespace is then
+  // frozen empty for the lifetime of this page state. Connection dispatches
+  // must resolve the live scope instead of that frozen value — the first
+  // real-device launches failed exactly here.
+  String? get _dispatchNamespace =>
+      NikoServerScope.current ?? _store.serverNamespace;
   static const _onlineEvent = 'callback_query_onlines';
   static const _onlineHandler = 'nikodesk-device-page';
 
@@ -277,9 +284,9 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
       String? expectedNamespace,
       bool tunnel = false}) async {
     if (_connecting) return;
+    final namespace = expectedNamespace ?? _dispatchNamespace;
     final log = widget.sessionLog ??
-        SessionLogStore(_store.directory, serverNamespace: _store.serverNamespace);
-    final namespace = expectedNamespace ?? _store.serverNamespace;
+        SessionLogStore(_store.directory, serverNamespace: namespace);
     final alias = _devices
         .firstWhere((device) => device.id == id,
             orElse: () => DeviceEntry(id: id))
@@ -323,7 +330,7 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
               'Enter a numeric device ID with 6–16 digits.'));
       return;
     }
-    final namespace = _store.serverNamespace;
+    final namespace = _dispatchNamespace;
     NikoConnectAuth? auth;
     if (_credentialNative && namespace != null) {
       if (_password.text.trim().isEmpty) {

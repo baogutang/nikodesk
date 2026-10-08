@@ -4432,6 +4432,7 @@ class FFI {
         connToken: connToken,
       );
       if (const bool.fromEnvironment('NIKODESK') && addRes.isNotEmpty) {
+        debugPrint('NikoDesk session was rejected by the local gate: $addRes');
         _nikoStartFailure();
         return;
       }

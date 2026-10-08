@@ -3173,9 +3173,38 @@ impl LoginConfigHandler {
         #[cfg(feature = "nikodesk")]
         {
             self.peer_storage_key = snapshot.as_ref().and_then(|snapshot| snapshot.peer_key(&self.id));
-            self.peer_storage_lease = self.peer_storage_key.as_ref()
-                .and_then(|key| crate::nikodesk::peer_migration::acquire_lease(key.storage()).ok());
-            if self.peer_storage_lease.is_none() { self.peer_storage_key = None; }
+            self.peer_storage_lease = self.peer_storage_key.as_ref().and_then(|key| {
+                match crate::nikodesk::peer_migration::acquire_lease(key.storage()) {
+                    Ok(lease) => Some(lease),
+                    Err(err) => {
+                        let reason = format!(
+                            "NikoDesk peer storage lease failed for {} (id {}, root {:?}): {err}",
+                            key.storage(),
+                            self.id,
+                            crate::nikodesk::favorites_root_display()
+                        );
+                        hbb_common::log::error!("{}", reason);
+                        #[cfg(target_os = "android")]
+                        crate::nikodesk::log_android(&reason);
+                        None
+                    }
+                }
+            });
+            if self.peer_storage_lease.is_none() {
+                if self.peer_storage_key.is_some() {
+                    // The lease failure was logged with its cause above.
+                } else if snapshot.is_some() {
+                    let reason = format!(
+                        "NikoDesk peer storage key rejected for id {} in scope {:?}",
+                        self.id,
+                        snapshot.as_ref().map(|s| s.namespace().to_owned())
+                    );
+                    hbb_common::log::error!("{}", reason);
+                    #[cfg(target_os = "android")]
+                    crate::nikodesk::log_android(&reason);
+                }
+                self.peer_storage_key = None;
+            }
             self.connection_snapshot = snapshot;
         }
         self.conn_type = conn_type;
