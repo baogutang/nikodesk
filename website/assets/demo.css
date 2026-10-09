@@ -1,71 +1,115 @@
-/* Local, accessible interface example. No remote-control connection is made. */
-.nd-demo { --d-bg:#EEEAE2; --d-card:#E4DDD3; --d-input:#F8F6F2; --d-text:#2C2621; --d-muted:#65594D; --d-border:#D1C9BD; --d-action:#C24F29; --d-accent:#A44324; --d-soft:#EDDDCF; text-align:left; color:var(--d-text); background:var(--d-bg); border:1px solid var(--d-border); border-radius:18px; box-shadow:var(--shadow-shot); overflow:hidden; font-size:14px; line-height:1.5; }
-.nd-demo[data-theme=dark] { --d-bg:#101927; --d-card:#172435; --d-input:#1D2B3D; --d-text:#EDF2F7; --d-muted:#A9B6C8; --d-border:#354256; --d-action:#7389FF; --d-accent:#B2BEFF; --d-soft:#263657; }
-.nd-demo button, .nd-demo input { font:inherit; }
-.nd-demo button { cursor:pointer; color:var(--d-text); background:transparent; border:1px solid var(--d-border); border-radius:8px; padding:8px 12px; min-height:38px; transition:background .12s; }
-.nd-demo button:hover { background:var(--d-soft); }
-.nd-demo button:focus-visible, .nd-demo input:focus-visible { outline:3px solid var(--d-accent); outline-offset:2px; }
-.nd-demo button[aria-pressed=true], .nd-demo button[aria-current=page] { background:var(--d-soft); color:var(--d-accent); border-color:var(--d-accent); }
-.nd-demo .nd-primary { background:var(--d-action); color:#fff; border-color:var(--d-action); }
-.nd-demo[data-theme=dark] .nd-primary { color:#101927; }
-.nd-demo .nd-primary:hover { filter:brightness(.94); background:var(--d-action); }
-.nd-demo input { width:100%; min-width:0; border:1px solid var(--d-border); border-radius:8px; padding:10px 12px; color:var(--d-text); background:var(--d-input); }
-.nd-demo input::placeholder { color:var(--d-muted); opacity:1; }
-.nd-top { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding:14px 20px; border-bottom:1px solid var(--d-border); }
-.nd-brand { display:flex; align-items:center; gap:10px; font-size:17px; font-weight:600; }
-.nd-brand-mark { width:28px; height:28px; display:grid; place-items:center; border-radius:8px; background:var(--d-action); color:#fff; font-size:17px; }
-.nd-demo[data-theme=dark] .nd-brand-mark { color:var(--d-bg); }
-.nd-demo .nd-theme { display:flex; gap:4px; }
-.nd-demo .nd-theme button { padding:5px 10px; min-height:34px; font-size:12px; }
-.nd-example { font-size:11px; color:var(--d-muted); letter-spacing:.03em; }
-.nd-body { display:grid; grid-template-columns:164px minmax(0,1fr); min-height:430px; }
-.nd-nav { padding:20px 12px; border-right:1px solid var(--d-border); display:flex; flex-direction:column; gap:8px; }
-.nd-nav button { text-align:left; border-color:transparent; }
-.nd-nav-note { font-size:11px; color:var(--d-muted); margin-top:auto; padding:16px 8px 0; }
-.nd-main { padding:24px; min-width:0; }
-.nd-main h2 { font-size:22px; line-height:1.3; margin:0 0 4px; letter-spacing:-.02em; }
-.nd-muted { color:var(--d-muted); font-size:12px; }
-.nd-search { display:block; margin:20px 0 12px; }
-.nd-search > span { display:block; margin-bottom:6px; font-size:12px; color:var(--d-muted); }
-.nd-filters { display:flex; flex-wrap:wrap; gap:6px; margin:12px 0; }
-.nd-filters button { font-size:12px; min-height:32px; padding:5px 10px; }
-.nd-devices { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
-.nd-device { padding:16px; border-radius:12px; border:1px solid var(--d-border); background:var(--d-card); min-width:0; }
-.nd-device-top { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-.nd-device h3 { font-size:15px; margin:0; overflow-wrap:anywhere; }
-.nd-os { font-family:'Fira Code',monospace; color:var(--d-accent); font-size:11px; margin:8px 0 12px; }
-.nd-demo .nd-star { border-color:transparent; padding:0; min-width:32px; min-height:32px; font-size:21px; }
-.nd-device button.nd-primary { width:100%; margin-top:12px; font-size:12px; }
-.nd-session-head { display:flex; flex-wrap:wrap; justify-content:space-between; gap:10px; align-items:center; margin-bottom:16px; }
-.nd-chips { display:flex; flex-wrap:wrap; gap:6px; }
-.nd-chip { background:var(--d-soft); border-radius:5px; padding:4px 7px; color:var(--d-accent); font-size:11px; }
-.nd-space { border-radius:12px; border:1px solid var(--d-border); background:var(--d-input); padding:18px; min-height:130px; margin-bottom:14px; }
-.nd-space h3 { font-size:18px; margin:6px 0; }
-.nd-spaces { display:flex; gap:6px; margin:14px 0; }
-.nd-spaces span { flex:1; height:5px; border-radius:4px; background:var(--d-border); }
-.nd-spaces span.active { background:var(--d-action); }
-.nd-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin:14px 0; }
-.nd-actions button { text-align:left; min-width:0; }
-.nd-actions button span { display:block; font-size:12px; }
-.nd-actions button code { display:block; color:var(--d-accent); font-size:10px; margin-top:3px; font-family:'Fira Code',monospace; }
-.nd-setting { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding:16px 0; border-bottom:1px solid var(--d-border); }
-.nd-setting h3 { font-size:15px; margin:0 0 4px; }
-.nd-setting > div:first-child { flex:1; min-width:160px; }
-.nd-demo fieldset { border:0; margin:0; padding:0; }
-.nd-demo legend { font-size:12px; color:var(--d-muted); margin-bottom:8px; }
-.nd-status { min-height:52px; display:flex; align-items:center; padding:12px 20px; border-top:1px solid var(--d-border); color:var(--d-muted); font-size:12px; }
-.nd-empty { padding:24px; background:var(--d-input); border-radius:12px; color:var(--d-muted); grid-column:1 / -1; }
-@media (max-width:640px) {
-  .nd-top { padding:12px; }
-  .nd-example { width:100%; order:3; }
-  .nd-body { display:block; min-height:460px; }
-  .nd-nav { flex-direction:row; flex-wrap:wrap; border-right:0; border-bottom:1px solid var(--d-border); padding:10px; gap:4px; }
-  .nd-nav button { flex:1; text-align:center; font-size:12px; padding:6px; }
-  .nd-nav-note { display:none; }
-  .nd-main { padding:16px; }
-  .nd-devices { grid-template-columns:1fr; }
-  .nd-actions { grid-template-columns:repeat(2,minmax(0,1fr)); }
-  .nd-status { padding:12px; }
-  .nd-main h2 { font-size:20px; }
+/* ============================================================
+   Local, accessible interface example — warm editorial edition.
+   Warm paper light / "pixel rainy night" warm dark, terracotta
+   actions, pill controls. No remote-control connection is made.
+   Class contract is defined by assets/demo.js — do not rename.
+   ============================================================ */
+.nd-demo {
+  --d-bg: #F2ECDF; --d-card: #FFFDF7; --d-input: #FBF7EE;
+  --d-text: #2A2118; --d-muted: #7C7261; --d-border: #E2D8C4;
+  --d-action: #C24F29; --d-accent: #A44324; --d-soft: #F6E3D8;
+  --d-on-action: #FFF7EC;
+  text-align: left; color: var(--d-text); background: var(--d-bg);
+  border-radius: 17px; overflow: hidden;
+  font-size: 13px; line-height: 1.6;
 }
-@media (prefers-reduced-motion:reduce) { .nd-demo button { transition:none; } }
+.nd-demo[data-theme=dark] {
+  --d-bg: #1E1811; --d-card: #2B2317; --d-input: #251E13;
+  --d-text: #F0E7D6; --d-muted: #A99D87; --d-border: #3D3322;
+  --d-action: #E8946F; --d-accent: #E8946F; --d-soft: rgba(232,148,111,0.14);
+  --d-on-action: #241C12;
+}
+.nd-demo button, .nd-demo input { font: inherit; }
+.nd-demo button {
+  cursor: pointer; color: var(--d-text); background: var(--d-card);
+  border: 1px solid var(--d-border); border-radius: 999px;
+  padding: 7px 14px; min-height: 32px;
+  transition: background .25s cubic-bezier(.32,.72,0,1), color .25s cubic-bezier(.32,.72,0,1), border-color .25s cubic-bezier(.32,.72,0,1);
+}
+.nd-demo button:hover { background: var(--d-soft); border-color: var(--d-accent); }
+.nd-demo button:focus-visible, .nd-demo input:focus-visible { outline: 2px solid var(--d-action); outline-offset: 2px; }
+.nd-demo button[aria-pressed=true], .nd-demo button[aria-current=page] { background: var(--d-soft); color: var(--d-accent); border-color: var(--d-accent); }
+.nd-demo .nd-primary { background: var(--d-action); color: var(--d-on-action); border-color: var(--d-action); }
+.nd-demo .nd-primary:hover { background: var(--d-action); filter: brightness(.94); }
+.nd-demo input {
+  width: 100%; min-width: 0; border: 1px solid var(--d-border); border-radius: 10px;
+  padding: 9px 12px; color: var(--d-text); background: var(--d-card);
+}
+.nd-demo input::placeholder { color: var(--d-muted); opacity: 1; }
+
+/* top bar */
+.nd-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--d-border); }
+.nd-brand { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+.nd-brand-mark { width: 22px; height: 22px; border-radius: 6px; }
+.nd-example { font-size: 10px; color: var(--d-muted); letter-spacing: .08em; }
+.nd-demo .nd-theme { display: flex; gap: 3px; padding: 3px; border: 1px solid var(--d-border); border-radius: 999px; background: var(--d-bg); }
+.nd-demo .nd-theme button { padding: 5px 12px; min-height: 28px; font-size: 11px; border-radius: 999px; }
+.nd-demo .nd-theme button[aria-pressed=true] { background: var(--d-action); color: var(--d-on-action); }
+
+/* body: sidebar + main */
+.nd-body { display: grid; grid-template-columns: 168px minmax(0,1fr); min-height: 460px; }
+.nd-nav { padding: 14px 10px; border-right: 1px solid var(--d-border); display: flex; flex-direction: column; gap: 5px; }
+.nd-nav button { text-align: left; border-color: transparent; background: transparent; font-weight: 600; font-size: 12.5px; }
+.nd-nav button:hover { background: var(--d-card); border-color: var(--d-border); }
+.nd-nav button[aria-current=page] { background: var(--d-card); color: var(--d-action); border-color: var(--d-border); }
+.nd-nav-note { font-size: 10.5px; color: var(--d-muted); margin-top: auto; padding: 14px 8px 2px; line-height: 1.7; }
+.nd-main { padding: 20px 22px 22px; min-width: 0; }
+
+/* headings: keep page-level serif h2 from leaking in */
+.nd-main h2 { font-family: inherit; font-size: 17px; line-height: 1.4; margin: 0 0 4px; letter-spacing: -.01em; font-weight: 700; }
+.nd-muted { color: var(--d-muted); font-size: 11.5px; }
+
+/* devices page */
+.nd-search { display: block; margin: 16px 0 10px; }
+.nd-search > span { display: block; margin-bottom: 6px; font-size: 11px; color: var(--d-muted); }
+.nd-filters { display: flex; flex-wrap: wrap; gap: 7px; margin: 10px 0 12px; }
+.nd-filters button { font-size: 11.5px; min-height: 30px; padding: 5px 13px; }
+.nd-devices { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+.nd-device { position: relative; padding: 15px; border-radius: 12px; border: 1px solid var(--d-border); background: var(--d-card); min-width: 0; display: flex; flex-direction: column; }
+.nd-device-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.nd-device h3 { font-size: 13.5px; margin: 0; overflow-wrap: anywhere; font-weight: 700; }
+.nd-os { font-family: 'Fira Code', ui-monospace, monospace; color: var(--d-action); font-size: 10.5px; margin: 7px 0 10px; }
+.nd-demo .nd-star { border-color: transparent; background: transparent; padding: 2px 6px; min-width: 30px; min-height: 30px; font-size: 19px; line-height: 1; color: var(--d-muted); }
+.nd-demo .nd-star:hover { background: transparent; border-color: transparent; color: var(--d-action); }
+.nd-demo .nd-star[aria-pressed=true] { background: transparent; color: var(--d-action); }
+.nd-device button.nd-primary { width: 100%; margin-top: auto; font-size: 12px; font-weight: 600; border-radius: 9px; }
+
+/* session page */
+.nd-session-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 14px; }
+.nd-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.nd-chip { background: var(--d-soft); border-radius: 999px; padding: 4px 10px; color: var(--d-accent); font-size: 10.5px; }
+.nd-demo fieldset { border: 0; margin: 0; padding: 0; }
+.nd-demo legend { font-size: 11px; color: var(--d-muted); margin-bottom: 8px; }
+.nd-space { border-radius: 12px; border: 1px solid var(--d-border); background: var(--d-input); padding: 16px 18px; min-height: 120px; margin-bottom: 12px; }
+.nd-space h3 { font-size: 15px; margin: 6px 0; font-weight: 700; }
+.nd-spaces { display: flex; gap: 6px; margin: 12px 0 2px; }
+.nd-spaces span { flex: 1; height: 4px; border-radius: 4px; background: var(--d-border); }
+.nd-spaces span.active { background: var(--d-action); }
+.nd-actions { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; margin: 12px 0; }
+.nd-actions button { text-align: left; min-width: 0; border-radius: 10px; padding: 9px 12px; }
+.nd-actions button span { display: block; font-size: 12px; }
+.nd-actions button code { display: block; color: var(--d-action); font-size: 9.5px; margin-top: 3px; font-family: 'Fira Code', ui-monospace, monospace; }
+
+/* preferences */
+.nd-setting { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 0; border-bottom: 1px solid var(--d-border); }
+.nd-setting h3 { font-size: 13.5px; margin: 0 0 4px; font-weight: 700; }
+.nd-setting > div:first-child { flex: 1; min-width: 160px; }
+
+/* status + empty */
+.nd-status { min-height: 48px; display: flex; align-items: center; padding: 11px 18px; border-top: 1px solid var(--d-border); background: var(--d-input); color: var(--d-muted); font-size: 11.5px; }
+.nd-empty { padding: 20px; background: var(--d-input); border-radius: 12px; color: var(--d-muted); grid-column: 1 / -1; }
+
+@media (max-width: 640px) {
+  .nd-top { padding: 12px 14px; }
+  .nd-example { width: 100%; order: 3; }
+  .nd-body { display: block; min-height: 0; }
+  .nd-nav { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--d-border); padding: 10px; gap: 4px; }
+  .nd-nav button { flex: 1; text-align: center; font-size: 12px; white-space: nowrap; }
+  .nd-nav-note { display: none; }
+  .nd-main { padding: 16px 14px 18px; }
+  .nd-devices { grid-template-columns: 1fr; }
+  .nd-actions { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .nd-status { padding: 11px 14px; }
+  .nd-main h2 { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) { .nd-demo button { transition: none; } }
