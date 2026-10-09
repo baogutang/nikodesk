@@ -46,6 +46,10 @@ impl Connection {
             .map_err(|_| "privacy_worker_failed".to_owned())
             .and_then(|result| result.map_err(|error| error.to_string()))
         };
+        if let Err(error) = result.as_ref() {
+            hbb_common::throttled_log!(std::time::Duration::from_secs(10), warn,
+                "Privacy wallpaper request {} failed: {}", request_id, error);
+        }
         let mut notice = BackNotification::new();
         notice.nikodesk_style = Some(NikoPrivacyStyleResult {
             request_id,

@@ -196,16 +196,7 @@ pub(crate) unsafe fn paint(dc: HDC, rect: &RECT) -> bool {
     SetBkMode(dc, TRANSPARENT as i32);
     SetTextColor(dc, 0x00dddddd);
     let font = SelectObject(dc, GetStockObject(DEFAULT_GUI_FONT as i32));
-    if wallpaper.options.hint {
-        let text = "Esc 恢复".encode_utf16().collect::<Vec<_>>();
-        TextOutW(
-            dc,
-            24,
-            (height - 36).max(0),
-            text.as_ptr(),
-            text.len() as i32,
-        );
-    }
+    paint_status(dc, rect);
     if wallpaper.options.clock {
         let mut now: winapi::um::minwinbase::SYSTEMTIME = std::mem::zeroed();
         winapi::um::sysinfoapi::GetLocalTime(&mut now);
@@ -222,6 +213,52 @@ pub(crate) unsafe fn paint(dc: HDC, rect: &RECT) -> bool {
     }
     SelectObject(dc, font);
     true
+}
+pub(crate) unsafe fn paint_status(dc: HDC, rect: &RECT) {
+    let badge = RECT {
+        left: 24,
+        top: (rect.bottom - 124).max(0),
+        right: rect.right.min(664) - 24,
+        bottom: rect.bottom - 24,
+    };
+    let brush = CreateSolidBrush(0x001c1c1c);
+    FillRect(dc, &badge, brush);
+    DeleteObject(brush.cast());
+    let font = CreateFontW(
+        -22,
+        0,
+        0,
+        0,
+        FW_SEMIBOLD as i32,
+        0,
+        0,
+        0,
+        DEFAULT_CHARSET as u32,
+        OUT_DEFAULT_PRECIS as u32,
+        CLIP_DEFAULT_PRECIS as u32,
+        CLEARTYPE_QUALITY as u32,
+        DEFAULT_PITCH as u32,
+        "Segoe UI"
+            .encode_utf16()
+            .chain(Some(0))
+            .collect::<Vec<_>>()
+            .as_ptr(),
+    );
+    let saved = SelectObject(dc, font.cast());
+    SetBkMode(dc, TRANSPARENT as i32);
+    SetTextColor(dc, 0x00ffffff);
+    let text = super::unlock_windows::text("本机已开启隐私屏", "Privacy screen is on")
+        .encode_utf16()
+        .collect::<Vec<_>>();
+    TextOutW(dc, 40, badge.top + 14, text.as_ptr(), text.len() as i32);
+    SelectObject(dc, GetStockObject(DEFAULT_GUI_FONT as i32));
+    SetTextColor(dc, 0x00dddddd);
+    let hint = super::unlock_windows::text("Esc 退出 · 需系统登录密码", "Esc to exit · System login password required")
+        .encode_utf16()
+        .collect::<Vec<_>>();
+    TextOutW(dc, 40, badge.top + 58, hint.as_ptr(), hint.len() as i32);
+    SelectObject(dc, saved);
+    DeleteObject(font.cast());
 }
 
 pub(crate) struct Cleanup;

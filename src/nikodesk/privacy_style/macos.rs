@@ -24,14 +24,20 @@ extern "C" {
     fn NPSWindowsTick(pixels: *const u8, width: u32, height: u32) -> bool;
     fn NPSWindowsMotionAllowed() -> bool;
     fn NPSWindowsClose();
-    fn NikoMacStyledPrivacyInput(on: bool) -> bool;
+    fn NPSWindowsRequestUnlock() -> bool;
+    fn NPSWindowsUnlocked() -> bool;
+    fn NikoMacStyledPrivacyInput(on: bool, helper_pid: u32) -> bool;
     fn NikoMacStyledPrivacyInputRenew() -> bool;
+    fn NikoMacStyledPrivacyUnlockPending(consume: bool) -> bool;
 }
 pub(super) fn supported() -> bool {
     unsafe { NPSWindowSupported() }
 }
-pub(super) fn input(on: bool) -> bool {
-    unsafe { NikoMacStyledPrivacyInput(on) }
+pub(super) fn input(on: bool, helper_pid: u32) -> bool {
+    unsafe { NikoMacStyledPrivacyInput(on, helper_pid) }
+}
+pub(super) fn unlock_pending(consume: bool) -> bool {
+    unsafe { NikoMacStyledPrivacyUnlockPending(consume) }
 }
 pub(super) fn input_active() -> bool {
     unsafe { NikoMacStyledPrivacyInputRenew() }
@@ -98,6 +104,9 @@ pub(crate) fn run() -> ResultType<()> {
                         style = next;
                     }
                     Input::Heartbeat(_) => {}
+                    Input::Unlock(_) => {
+                        let _ = unsafe { NPSWindowsRequestUnlock() };
+                    }
                     Input::Ready(_, _) => bail!("invalid_frame"),
                 }
                 acknowledge = true;
@@ -106,6 +115,9 @@ pub(crate) fn run() -> ResultType<()> {
             Err(mpsc::TryRecvError::Empty) => {}
         }
         if lease.elapsed() > helper::LEASE {
+            break;
+        }
+        if unsafe { NPSWindowsUnlocked() } {
             break;
         }
         let mask = effects::frame(

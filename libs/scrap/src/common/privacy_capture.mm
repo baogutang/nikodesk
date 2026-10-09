@@ -46,21 +46,25 @@ extern "C" bool NPSCaptureSupported() {
     if(@available(macOS 12.3,*)) return CGPreflightScreenCaptureAccess();
     return false;
 }
-extern "C" void *NPSCaptureStart(uint32_t displayID,uint32_t pid,uint32_t width,uint32_t height) {
+extern "C" void *NPSCaptureStart(uint32_t displayID,uint32_t pid,uint32_t width,uint32_t height,uint32_t timeoutMS,uint32_t *failure) {
     @autoreleasepool {
+        *failure=1;
         if(!NPSCaptureSupported() || !pid || !width || !height) return nullptr;
         if(@available(macOS 12.3,*)) {
+            const dispatch_time_t deadline=dispatch_time(DISPATCH_TIME_NOW,static_cast<int64_t>(timeoutMS)*NSEC_PER_MSEC);
             __block SCShareableContent *content=nil;
+            __block bool listingFailed=false;
             dispatch_semaphore_t listed=dispatch_semaphore_create(0);
             [SCShareableContent getShareableContentExcludingDesktopWindows:NO onScreenWindowsOnly:NO
-                completionHandler:^(SCShareableContent *value,NSError *error){content=value;dispatch_semaphore_signal(listed);}];
-            if(dispatch_semaphore_wait(listed,dispatch_time(DISPATCH_TIME_NOW,1500*NSEC_PER_MSEC))) return nullptr;
+                completionHandler:^(SCShareableContent *value,NSError *error){content=value;listingFailed=error!=nil;dispatch_semaphore_signal(listed);}];
+            if(dispatch_semaphore_wait(listed,deadline)) {*failure=2;return nullptr;}
+            if(listingFailed || !content) {*failure=3;return nullptr;}
             SCDisplay *display=nil; SCRunningApplication *helper=nil;
             for(SCDisplay *value in content.displays) if(value.displayID==displayID) display=value;
             for(SCRunningApplication *value in content.applications) if(value.processID==(pid_t)pid) helper=value;
             // Never silently start an unfiltered stream if discovery misses the
             // hidden child. Exclusion is explicit and scoped to its process ID.
-            if(!display || !helper) return nullptr;
+            if(!display || !helper) {*failure=4;return nullptr;}
             SCContentFilter *filter=[[SCContentFilter alloc] initWithDisplay:display excludingApplications:@[helper] exceptingWindows:@[]];
             SCStreamConfiguration *config=[SCStreamConfiguration new];
             config.width=width; config.height=height; config.pixelFormat=kCVPixelFormatType_32BGRA;
@@ -69,7 +73,7 @@ extern "C" void *NPSCaptureStart(uint32_t displayID,uint32_t pid,uint32_t width,
             state.queue=dispatch_queue_create("io.nikodesk.privacy.capture",DISPATCH_QUEUE_SERIAL);
             state.stream=[[SCStream alloc] initWithFilter:filter configuration:config delegate:state];
             NSError *error=nil;
-            if(![state.stream addStreamOutput:state type:SCStreamOutputTypeScreen sampleHandlerQueue:state.queue error:&error]) return nullptr;
+            if(![state.stream addStreamOutput:state type:SCStreamOutputTypeScreen sampleHandlerQueue:state.queue error:&error]) {*failure=5;return nullptr;}
             dispatch_semaphore_t started=dispatch_semaphore_create(0);
             [state.stream startCaptureWithCompletionHandler:^(NSError *error){
                 bool cancel;
@@ -77,9 +81,10 @@ extern "C" void *NPSCaptureStart(uint32_t displayID,uint32_t pid,uint32_t width,
                 if(cancel) [state.stream stopCaptureWithCompletionHandler:^(NSError *error){(void)state;}];
                 dispatch_semaphore_signal(started);
             }];
-            if(dispatch_semaphore_wait(started,dispatch_time(DISPATCH_TIME_NOW,1500*NSEC_PER_MSEC))) {NPSStop(state);return nullptr;}
+            if(dispatch_semaphore_wait(started,deadline)) {*failure=6;NPSStop(state);return nullptr;}
             {std::lock_guard<std::mutex> guard(state->lock);if(state->failed){state->cancelled=true;}}
-            if(state->cancelled){NPSStop(state);return nullptr;}
+            if(state->cancelled){*failure=7;NPSStop(state);return nullptr;}
+            *failure=0;
             return (__bridge_retained void*)state;
         }
         return nullptr;

@@ -1458,6 +1458,8 @@ impl<T: InvokeUiSession> Remote<T> {
             return;
         }
         let lc = self.handler.lc.read().unwrap();
+        #[cfg(feature="nikodesk")]
+        if matches!(lc.get_option("nikodesk-privacy-auto-on").as_str(),"Y"|"N") { return; }
         if lc.version >= hbb_common::get_version_number("1.2.4")
             && lc.get_toggle_option("privacy-mode")
         {

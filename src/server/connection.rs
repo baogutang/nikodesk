@@ -2282,6 +2282,8 @@ impl Connection {
         }
         #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
         platform_additions.extend(crate::nikodesk::virtual_display::additions());
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        platform_additions.insert("nikodesk_privacy_password_exit".into(),json!(true));
 
         #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
         {

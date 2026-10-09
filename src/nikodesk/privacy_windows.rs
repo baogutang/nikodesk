@@ -37,6 +37,7 @@ const ARG: &str = "--niko-privacy-screen";
 const LEASE: Duration = Duration::from_secs(5);
 const WDA_EXCLUDE: DWORD = 0x11;
 const STOP: UINT = WM_APP + 0x351;
+const UNLOCK: UINT = WM_APP + 0x352;
 static WINDOW_THREAD: AtomicU32 = AtomicU32::new(0);
 
 #[link(name = "dwmapi")]
@@ -259,9 +260,13 @@ unsafe extern "system" fn keyboard(code: i32, event: WPARAM, data: LPARAM) -> LR
         if input.flags & LLKHF_INJECTED != 0 && input.dwExtraInfo == enigo::ENIGO_INPUT_EXTRA_VALUE {
             return CallNextHookEx(null_mut(), code, event, data);
         }
+        if input.flags & LLKHF_INJECTED == 0 && crate::nikodesk::privacy_style::unlock_windows::allows_keyboard(){
+            return CallNextHookEx(null_mut(),code,event,data);
+        }
         if input.flags & LLKHF_INJECTED == 0 && input.vkCode == VK_ESCAPE as DWORD
             && (event == WM_KEYDOWN as WPARAM || event == WM_SYSKEYDOWN as WPARAM) {
-            PostThreadMessageW(WINDOW_THREAD.load(Ordering::Acquire), STOP, 0, 0);
+            PostThreadMessageW(WINDOW_THREAD.load(Ordering::Acquire), UNLOCK, 0, 0);
+            return 1;
         }
         return 1;
     }
@@ -270,6 +275,9 @@ unsafe extern "system" fn keyboard(code: i32, event: WPARAM, data: LPARAM) -> LR
 unsafe extern "system" fn mouse(code: i32, event: WPARAM, data: LPARAM) -> LRESULT {
     if code >= 0 && data != 0 {
         let input = &*(data as *const MSLLHOOKSTRUCT);
+        if input.flags & LLMHF_INJECTED == 0 && crate::nikodesk::privacy_style::unlock_windows::allows_mouse(input.pt){
+            return CallNextHookEx(null_mut(),code,event,data);
+        }
         if input.flags & LLMHF_INJECTED == 0 || input.dwExtraInfo != enigo::ENIGO_INPUT_EXTRA_VALUE { return 1; }
     }
     CallNextHookEx(null_mut(), code, event, data)
@@ -288,8 +296,7 @@ unsafe extern "system" fn window(hwnd: HWND, event: UINT, w: WPARAM, l: LPARAM) 
             FillRect(dc, &rect, GetStockObject(BLACK_BRUSH as i32).cast());
             SetBkMode(dc, TRANSPARENT as i32);
             SetTextColor(dc, 0x00dddddd);
-            let text = wide("NikoDesk 隐私屏 / Privacy screen — 本机 Esc 恢复 / Local Esc to restore");
-            DrawTextW(dc, text.as_ptr(), text.len() as i32 - 1, &mut rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            crate::nikodesk::privacy_style::windows::paint_status(dc,&rect);
             EndPaint(hwnd, &paint);
             0
         }
@@ -301,6 +308,7 @@ unsafe extern "system" fn window(hwnd: HWND, event: UINT, w: WPARAM, l: LPARAM) 
 struct Windows { windows: Vec<HWND>, keyboard: HHOOK, mouse: HHOOK }
 impl Drop for Windows {
     fn drop(&mut self) {
+        crate::nikodesk::privacy_style::unlock_windows::close();
         unsafe {
             if !self.keyboard.is_null() { UnhookWindowsHookEx(self.keyboard); }
             if !self.mouse.is_null() { UnhookWindowsHookEx(self.mouse); }
@@ -390,12 +398,15 @@ fn helper() -> ResultType<()> {
         }
         if lease.elapsed() > LEASE || !default_desktop() || (system && !active_console_session())
             || !same_monitors(&rects, &monitor_rects()?) { break; }
+        if crate::nikodesk::privacy_style::unlock_windows::tick(){break;}
         unsafe {
             let mut composing = 0;
             if DwmIsCompositionEnabled(&mut composing) < 0 || composing == 0 { break; }
             let mut msg: MSG = std::mem::zeroed();
             while PeekMessageW(&mut msg, null_mut(), 0, 0, PM_REMOVE) != 0 {
                 if msg.message == STOP || msg.message == WM_QUIT { return Ok(()); }
+                if msg.message==UNLOCK{let _=crate::nikodesk::privacy_style::unlock_windows::show();continue;}
+                if crate::nikodesk::privacy_style::unlock_windows::dispatch_key(&msg){continue;}
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
@@ -408,6 +419,7 @@ fn helper() -> ResultType<()> {
                     bail!("Privacy screen could not retain monitor coverage");
                 }
             }
+            crate::nikodesk::privacy_style::unlock_windows::raise();
         }
         std::thread::sleep(Duration::from_millis(100));
     }
@@ -435,6 +447,7 @@ pub(crate) fn run_styled_helper()->ResultType<()> {
             Ok(frame) if frame.issued().elapsed()<Duration::from_secs(2)=>{
                 lease=frame.issued();
                 match frame{Input::Style(_,next)=>{windows::set(next)?;windows::tick(started.elapsed().as_secs_f32())?;},
+                    Input::Unlock(_)=>{let _=crate::nikodesk::privacy_style::unlock_windows::show();},
                     Input::Show(_)|Input::Heartbeat(_)=>{},Input::Ready(_,_)=>bail!("invalid_frame")}
                 acknowledge=true;
             }
@@ -443,6 +456,7 @@ pub(crate) fn run_styled_helper()->ResultType<()> {
         }
         if lease.elapsed()>LEASE || !default_desktop() || system && !active_console_session()
             || !same_monitors(&rects,&monitor_rects()?){break;}
+        if crate::nikodesk::privacy_style::unlock_windows::tick(){break;}
         windows::tick(started.elapsed().as_secs_f32())?;
         unsafe {
             let mut composing=0;
@@ -450,6 +464,8 @@ pub(crate) fn run_styled_helper()->ResultType<()> {
             let mut message:MSG=std::mem::zeroed();
             while PeekMessageW(&mut message,null_mut(),0,0,PM_REMOVE)!=0{
                 if message.message==STOP || message.message==WM_QUIT{return Ok(());}
+                if message.message==UNLOCK{let _=crate::nikodesk::privacy_style::unlock_windows::show();continue;}
+                if crate::nikodesk::privacy_style::unlock_windows::dispatch_key(&message){continue;}
                 TranslateMessage(&message);DispatchMessageW(&message);
             }
             for hwnd in &cover.windows{
@@ -460,6 +476,7 @@ pub(crate) fn run_styled_helper()->ResultType<()> {
                 }
                 InvalidateRect(*hwnd,null(),0);UpdateWindow(*hwnd);
             }
+            crate::nikodesk::privacy_style::unlock_windows::raise();
         }
         if acknowledge{windows::tick(started.elapsed().as_secs_f32())?;helper::respond(b'A')?;}
         std::thread::sleep(Duration::from_millis(33));

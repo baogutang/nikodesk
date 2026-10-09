@@ -14,6 +14,8 @@ CFMachPortRef nikoPrivacyEventTap = nullptr;
 CFRunLoopSourceRef nikoPrivacyRunLoopSource = nullptr;
 bool nikoPrivacyActive = false;
 bool nikoStyledPrivacyInput = false;
+pid_t nikoStyledPrivacyHelper = 0;
+bool nikoStyledUnlockRequested = false;
 std::chrono::steady_clock::time_point nikoStyledPrivacyDeadline;
 bool nikoPrivacyCallbackRegistered = false;
 uint64_t nikoPrivacyMonitorToken = 0;
@@ -58,6 +60,8 @@ bool NikoPrivacyTurnOff() {
     const bool wasActive = nikoPrivacyActive;
     nikoPrivacyActive = false;
     nikoStyledPrivacyInput = false;
+    nikoStyledPrivacyHelper = 0;
+    nikoStyledUnlockRequested = false;
     ++nikoPrivacyMonitorToken;
     ++nikoPrivacySessionToken;
     bool callbackRemoved = true;
@@ -89,8 +93,8 @@ CGEventRef NikoPrivacyInputCallback(CGEventTapProxy, CGEventType type, CGEventRe
     bool remote = CGEventGetIntegerValueField(event, kCGEventSourceUserData) == nikoRemoteInputMarker;
     bool physical = CGEventGetIntegerValueField(event, kCGEventSourceStateID) == kCGEventSourceStateHIDSystemState;
     CGEventFlags flags = CGEventGetFlags(event);
-    // macOS virtual key code 53 is Escape. This local shortcut is passed on
-    // while cleanup is queued, so privacy never consumes its emergency exit.
+    // macOS virtual key code 53 is Escape. Styled modes open local password
+    // verification; the legacy gamma mode retains its recovery shortcut.
     nikodesk_privacy::EmergencyReleaseKey emergency{
         physical, remote, type == kCGEventKeyDown,
         CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode) == 53,
@@ -98,6 +102,7 @@ CGEventRef NikoPrivacyInputCallback(CGEventTapProxy, CGEventType type, CGEventRe
         (flags & kCGEventFlagMaskShift) != 0, (flags & kCGEventFlagMaskCommand) != 0,
     };
     if (nikodesk_privacy::is_emergency_release(emergency)) {
+        if(nikoStyledPrivacyInput){nikoStyledUnlockRequested=true;return nullptr;}
         uint64_t token = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(context));
         dispatch_async(dispatch_get_main_queue(), ^{
             if (token == nikoPrivacySessionToken) NikoPrivacyTurnOff();
@@ -105,6 +110,8 @@ CGEventRef NikoPrivacyInputCallback(CGEventTapProxy, CGEventType type, CGEventRe
         return event;
     }
     if (remote) return event;
+    if(physical && nikoStyledPrivacyInput && nikoStyledPrivacyHelper>0 &&
+        CGEventGetIntegerValueField(event,kCGEventTargetUnixProcessID)==nikoStyledPrivacyHelper)return event;
     if (physical) {
         return nullptr;
     }
@@ -121,7 +128,7 @@ bool NikoPrivacySetupInput() {
         CGEventMaskBit(kCGEventMouseMoved) | CGEventMaskBit(kCGEventScrollWheel);
     // Session tap avoids relying on the documented root-only HID tap location.
     // Creation still requires the user's input/accessibility authorization.
-    nikoPrivacyEventTap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap,
+    nikoPrivacyEventTap = CGEventTapCreate(nikoStyledPrivacyHelper>0?kCGAnnotatedSessionEventTap:kCGSessionEventTap, kCGHeadInsertEventTap,
         kCGEventTapOptionDefault, mask, NikoPrivacyInputCallback,
         reinterpret_cast<void*>(static_cast<uintptr_t>(nikoPrivacySessionToken)));
     if (!nikoPrivacyEventTap) return false;
@@ -257,20 +264,28 @@ static void NikoStyledInputMonitor(uint64_t token) {
         NikoStyledInputMonitor(token);
     });
 }
-extern "C" bool NikoMacStyledPrivacyInput(bool on) {
+extern "C" bool NikoMacStyledPrivacyInput(bool on,uint32_t helperPID) {
     __block bool success=false;
     void (^operation)(void)=^{
         if(!on){if(nikoStyledPrivacyInput)NikoPrivacyTurnOff();success=true;return;}
         if(nikoPrivacyActive || nikoStyledPrivacyInput || nikoPrivacyCallbackRegistered ||
             nikoPrivacyGammas.has_pending_restore() || !AXIsProcessTrusted())return;
         ++nikoPrivacySessionToken;
-        if(!NikoPrivacySetupInput()){NikoPrivacyTeardownInput();return;}
+        if(!helperPID)return;
+        nikoStyledPrivacyHelper=static_cast<pid_t>(helperPID);
+        if(!NikoPrivacySetupInput()){NikoPrivacyTeardownInput();nikoStyledPrivacyHelper=0;return;}
         nikoStyledPrivacyInput=true;
         nikoStyledPrivacyDeadline=std::chrono::steady_clock::now()+std::chrono::seconds(3);
         NikoStyledInputMonitor(nikoPrivacySessionToken);success=true;
     };
     if(NSThread.isMainThread)operation();else dispatch_sync(dispatch_get_main_queue(),operation);
     return success;
+}
+extern "C" bool NikoMacStyledPrivacyUnlockPending(bool consume) {
+    __block bool pending=false;
+    void (^operation)(void)=^{pending=nikoStyledPrivacyInput && nikoStyledUnlockRequested;if(consume)nikoStyledUnlockRequested=false;};
+    if(NSThread.isMainThread)operation();else dispatch_sync(dispatch_get_main_queue(),operation);
+    return pending;
 }
 extern "C" bool NikoMacStyledPrivacyInputRenew() {
     __block bool active=false;

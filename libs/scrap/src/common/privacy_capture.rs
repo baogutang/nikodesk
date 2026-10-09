@@ -13,7 +13,7 @@ use std::{
 
 extern "C" {
     fn NPSCaptureSupported() -> bool;
-    fn NPSCaptureStart(display: u32, pid: u32, width: u32, height: u32) -> *mut std::ffi::c_void;
+    fn NPSCaptureStart(display: u32, pid: u32, width: u32, height: u32, timeout_ms: u32, failure: *mut u32) -> *mut std::ffi::c_void;
     fn NPSCaptureReady(pointer: *mut std::ffi::c_void) -> bool;
     fn NPSCaptureHealthy(pointer: *mut std::ffi::c_void) -> bool;
     fn NPSCapturePending(pointer: *mut std::ffi::c_void) -> bool;
@@ -70,11 +70,20 @@ pub fn prepare(pid: u32) -> io::Result<()> {
         {
             return Err(io::ErrorKind::InvalidData.into());
         }
-        let pointer = unsafe { NPSCaptureStart(id, pid, width as u32, height as u32) };
+        let mut failure = 0;
+        let remaining = deadline.saturating_duration_since(Instant::now()).as_millis() as u32;
+        let pointer = unsafe { NPSCaptureStart(id, pid, width as u32, height as u32, remaining, &mut failure) };
         if pointer.is_null() {
             return Err(io::Error::new(
                 io::ErrorKind::Other,
-                "excluded_capture_start_failed",
+                match failure {
+                    2 => "excluded_capture_content_timeout",
+                    3 => "excluded_capture_content_failed",
+                    4 => "excluded_capture_helper_unavailable",
+                    5 => "excluded_capture_output_failed",
+                    6 => "excluded_capture_start_timeout",
+                    _ => "excluded_capture_start_failed",
+                },
             ));
         }
         streams.insert(

@@ -45,6 +45,8 @@ class NikoSessionQuickActionsPanel extends StatefulWidget {
   final NikoPrivacyScreenStatus? privacyScreen;
   final Future<void> Function(bool)? onPrivacyScreen;
   final Widget? privacyStyle;
+  final Widget? privacyAuto;
+  final bool privacyPasswordExit;
   final VoidCallback onClose;
 
   const NikoSessionQuickActionsPanel(
@@ -67,6 +69,8 @@ class NikoSessionQuickActionsPanel extends StatefulWidget {
       this.privacyScreen,
       this.onPrivacyScreen,
       this.privacyStyle,
+      this.privacyAuto,
+      this.privacyPasswordExit = false,
       required this.onClose});
 
   @override
@@ -107,7 +111,8 @@ class _NikoSessionQuickActionsPanelState
         value: on,
         title: Text(nikoPrivacyScreenLabel(status)),
         subtitle: Text(nikoPrivacyScreenDetail(status, widget.peerPlatform,
-            styled: widget.privacyStyle != null)),
+            styled: widget.privacyStyle != null,
+            passwordExit: widget.privacyPasswordExit)),
         onChanged: _busy ||
                 widget.onPrivacyScreen == null ||
                 !nikoPrivacyScreenCanToggle(status)
@@ -122,12 +127,13 @@ class _NikoSessionQuickActionsPanelState
                 nikoText('请求没有发出。请确认会话仍在连接；多显示器的 Windows 被控端需要先切到显示器 1。',
                     'The request was not sent. Check that the session is still connected; a multi-display Windows remote needs display 1 selected first.')),
       ),
-      if (nikoPrivacyScreenCanToggle(status))
+      if (widget.privacyAuto == null && nikoPrivacyScreenCanToggle(status))
         Text(
             nikoText('断开时如果隐私屏开着，下次连接这台设备会自动再开启；想让它每次都开，保持开启即可。',
                 'If it is on when you disconnect, the next connection to this device turns it on again; leave it on to have it every time.'),
             style: Theme.of(context).textTheme.bodySmall),
       const Divider(),
+      if (widget.privacyAuto != null) widget.privacyAuto!,
       if (widget.privacyStyle != null) widget.privacyStyle!,
     ];
   }

@@ -11,6 +11,7 @@ import 'package:get/get.dart';
 
 import 'connection_progress.dart';
 import 'privacy_screen.dart';
+import 'privacy_connection.dart';
 import 'privacy_style.dart';
 import 'remote_resolution.dart';
 import 'session_quick_actions_view.dart';
@@ -216,6 +217,9 @@ class _NikoSessionQuickActionsState extends State<_NikoSessionQuickActions> {
             NikoSessionQuickActionsPanel(
           peerPlatform: widget.ffi.ffiModel.pi.platform,
           privacyScreen: privacyScreen,
+          privacyPasswordExit: nikoPrivacyPasswordExit(widget.ffi),
+          privacyAuto: _sessionCurrent && privacyScreen != null
+              ? NikoPrivacyAutoPreference(ffi: widget.ffi) : null,
           onPrivacyScreen: privacyScreen == null ? null : _setPrivacyScreen,
           privacyStyle: _sessionCurrent && widget.ffi.ffiModel.pi.features.privacyStyle &&
               widget.ffi.connType == ConnType.defaultConn

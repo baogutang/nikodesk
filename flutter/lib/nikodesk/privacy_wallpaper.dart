@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'privacy_style_model.dart';
+import 'ui.dart';
 
 String? nikoPrivacyAsset(NikoPrivacyPreset preset) => switch (preset) {
       NikoPrivacyPreset.snow => 'assets/privacy/snow-ridge.webp',
@@ -16,8 +17,13 @@ class NikoPrivacyWallpaper extends StatefulWidget {
   final NikoPrivacyStyle style;
   final bool animate;
   final bool mac;
+  final bool passwordExit;
   const NikoPrivacyWallpaper(
-      {super.key, required this.style, this.animate = true, this.mac = true});
+      {super.key,
+      required this.style,
+      this.animate = true,
+      this.mac = true,
+      this.passwordExit = true});
   @override
   State<NikoPrivacyWallpaper> createState() => _WallpaperState();
 }
@@ -97,14 +103,44 @@ class _WallpaperState extends State<NikoPrivacyWallpaper>
       const ColoredBox(color: Colors.black),
       picture,
       CustomPaint(painter: _Motion(style, motion ? _time : null)),
-      if (style.hint)
+      if (widget.passwordExit)
+        Positioned(
+            left: 12,
+            right: 12,
+            bottom: 12,
+            child: Align(
+                alignment: Alignment.bottomLeft,
+                child: DecoratedBox(
+                    decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(.72),
+                        borderRadius: BorderRadius.circular(8)),
+                    child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 9),
+                        child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(nikoText('本机已开启隐私屏', 'Privacy screen is on'),
+                                  style: const TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600)),
+                              Text(
+                                  nikoText(
+                                      widget.mac
+                                          ? '⌃⌥⇧ Esc 退出 · 需系统登录密码'
+                                          : 'Esc 退出 · 需系统登录密码',
+                                      '${widget.mac ? '⌃⌥⇧ Esc' : 'Esc'} to exit · System login password required'),
+                                  style: const TextStyle(
+                                      fontSize: 10, color: Colors.white70)),
+                            ]))))),
+      if (!widget.passwordExit && style.hint)
         Positioned(
             left: 12,
             bottom: 10,
             child: Text(widget.mac ? '⌃⌥⇧ Esc 恢复' : 'Esc 恢复',
-                style: const TextStyle(
-                    fontSize: 10,
-                    color: Colors.white70,
+                style: const TextStyle(fontSize: 10, color: Colors.white70,
                     shadows: [Shadow(blurRadius: 4, color: Colors.black54)]))),
       if (style.clock)
         Positioned(

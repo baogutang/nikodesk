@@ -13,6 +13,9 @@ pub(crate) fn native_helper_entry() -> Option<i32> {
     helper::helper_entry()
 }
 
+#[cfg(target_os = "macos")]
+#[path = "privacy_style/black.rs"]
+pub(crate) mod black;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 #[path = "privacy_style/effects.rs"]
 pub(crate) mod effects;
@@ -25,6 +28,9 @@ pub(crate) mod macos;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 #[path = "privacy_style/native.rs"]
 pub(crate) mod native;
+#[cfg(windows)]
+#[path = "privacy_style/unlock_windows.rs"]
+pub(crate) mod unlock_windows;
 #[cfg(windows)]
 #[path = "privacy_style/windows.rs"]
 pub(crate) mod windows;

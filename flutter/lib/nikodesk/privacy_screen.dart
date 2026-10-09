@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common.dart' show msgBox;
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart'
     show allowDisplaySwitchInPrivacyMode;
@@ -9,6 +10,7 @@ import 'package:get/get.dart';
 
 import 'privacy_screen_policy.dart';
 import 'privacy_style.dart';
+import 'privacy_style_events.dart';
 import 'session_toolbar.dart';
 import 'ui.dart';
 
@@ -20,6 +22,8 @@ RxString? nikoPrivacyScreenActive(String peerId) =>
     Get.isRegistered<RxString>(tag: PrivacyModeState.tag(peerId))
         ? PrivacyModeState.find(peerId)
         : null;
+bool nikoPrivacyPasswordExit(FFI ffi) =>
+    ffi.ffiModel.pi.platformAdditions['nikodesk_privacy_password_exit'] == true;
 
 NikoPrivacyScreenStatus nikoPrivacyScreenStatusOf(FFI ffi, String active) {
   final model = ffi.ffiModel;
@@ -99,7 +103,16 @@ class NikoPrivacyScreenButton extends StatelessWidget {
         animation: ffi.ffiModel,
         builder: (context, _) => Obx(() => NikoPrivacyScreenButtonView(
               status: nikoPrivacyScreenStatusOf(ffi, active.value),
-              onSwitch: (on) => nikoRequestPrivacyScreen(ffi, on: on),
+              onSwitch: (on) async {
+                final session = ffi.sessionId;
+                try {
+                  await nikoRequestPrivacyScreen(ffi, on: on);
+                } on NikoPrivacyStyleError catch (error) {
+                  if (!ffi.closed && ffi.sessionId == session)
+                    msgBox(session, 'custom-nook-nocancel-hasclose', 'info',
+                        nikoPrivacyStyleError(error), '', ffi.dialogManager);
+                }
+              },
               onExplain: onExplain,
             )));
   }

@@ -154,6 +154,9 @@ lazy_static::lazy_static! {
         #[cfg(target_os = "macos")]
         {
             map.insert(macos::PRIVACY_MODE_IMPL, |impl_key: &str| {
+                #[cfg(feature="nikodesk")]
+                {let _=impl_key;Box::new(crate::nikodesk::privacy_style::black::BlackPrivacy::new())}
+                #[cfg(not(feature="nikodesk"))]
                 Box::new(macos::PrivacyModeImpl::new(impl_key))
             });
         }

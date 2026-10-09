@@ -16,6 +16,8 @@ fn build_mac() {
         cc::Build::new().cpp(true).file("src/platform/macos_privacy_wallpaper.mm")
             .flag("-std=c++17").flag("-fobjc-arc").flag("-fblocks").compile("nikodesk_privacy_wallpaper");
         println!("cargo:rerun-if-changed=src/platform/macos_privacy_wallpaper.mm");
+        println!("cargo:rerun-if-changed=src/platform/macos_privacy_unlock.h");
+        println!("cargo:rustc-link-lib=framework=OpenDirectory");
         println!("cargo:rerun-if-changed=src/platform/macos_privacy_bridge.h");
         b.define("NIKODESK_BUILD", None);
         for file in [

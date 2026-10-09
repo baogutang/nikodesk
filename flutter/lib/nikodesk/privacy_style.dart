@@ -72,6 +72,17 @@ String nikoPrivacyStyleError(Object error) {
         'Remote privacy and input permission are required.'),
     'style_unsupported' => nikoText('被控端暂不支持样式，请检查版本和系统权限。',
         'Check the remote version and system permissions for wallpaper support.'),
+    'excluded_capture_content_timeout' ||
+    'excluded_capture_start_timeout' ||
+    'excluded_capture_not_ready' =>
+      nikoText('被控端屏幕采集尚未就绪。如果电脑上有屏幕录制提示，请先确认，再重试。',
+          'Remote screen capture is not ready. Confirm any screen-recording prompt on the computer, then retry.'),
+    'excluded_capture_content_failed' ||
+    'excluded_capture_helper_unavailable' ||
+    'excluded_capture_output_failed' ||
+    'excluded_capture_start_failed' =>
+      nikoText('被控端未能启动隐私屏采集，请检查电脑的屏幕录制权限后重试。',
+          'Remote privacy capture could not start. Check screen-recording permission on the computer, then retry.'),
     'confirmation_timeout' => nikoText('未收到应用确认，请查看隐私屏状态后重试。',
         'No confirmation received. Check privacy screen status before retrying.'),
     _ => nikoText('样式未确认应用，请检查会话后重试。',
@@ -115,12 +126,14 @@ class _PanelState extends State<NikoPrivacyStylePanel> {
           active:
               (nikoPrivacyScreenActive(widget.ffi.id)?.value ?? '').isNotEmpty,
           mac: widget.ffi.ffiModel.pi.platform == 'Mac OS',
+          passwordExit: nikoPrivacyPasswordExit(widget.ffi),
           onApply: (style) => nikoApplyPrivacyStyle(widget.ffi, style));
 }
 
 class NikoPrivacyStyleEditor extends StatefulWidget {
   final NikoPrivacyStyle initial;
   final bool allowed, active, mac;
+  final bool passwordExit;
   final Future<void> Function(NikoPrivacyStyle) onApply;
   const NikoPrivacyStyleEditor(
       {super.key,
@@ -128,6 +141,7 @@ class NikoPrivacyStyleEditor extends StatefulWidget {
       required this.allowed,
       required this.active,
       this.mac = true,
+      this.passwordExit = true,
       required this.onApply});
   @override
   State<NikoPrivacyStyleEditor> createState() => _EditorState();
@@ -261,6 +275,7 @@ class _EditorState extends State<NikoPrivacyStyleEditor> {
                                           aspectRatio: 1.6,
                                           child: NikoPrivacyWallpaper(
                                               animate: false,
+                                              passwordExit: false,
                                               style: _style.copyWith(
                                                   preset: preset,
                                                   effect: NikoPrivacyStyle
@@ -283,6 +298,7 @@ class _EditorState extends State<NikoPrivacyStyleEditor> {
                 child: NikoPrivacyWallpaper(
                     key: const Key('privacy-motion-preview'),
                     style: _style,
+                    passwordExit: widget.passwordExit,
                     mac: widget.mac))),
         if (_style.preset == NikoPrivacyPreset.custom) ...[
           const SizedBox(height: 8),
@@ -341,8 +357,9 @@ class _EditorState extends State<NikoPrivacyStyleEditor> {
                       : (value) => setState(() =>
                           _style = _style.copyWith(brightness: value.round()))))
         ]),
-        _toggle(nikoText('恢复提示', 'Restore hint'), _style.hint,
-            (value) => _style = _style.copyWith(hint: value)),
+        if (!widget.passwordExit)
+          _toggle(nikoText('恢复提示', 'Restore hint'), _style.hint,
+              (value) => _style = _style.copyWith(hint: value)),
         _toggle(nikoText('时钟', 'Clock'), _style.clock,
             (value) => _style = _style.copyWith(clock: value)),
         const SizedBox(height: 4),

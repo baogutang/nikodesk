@@ -71,7 +71,8 @@ String nikoPrivacyScreenLabel(NikoPrivacyScreenStatus status) =>
 /// What each state means for the person at the controller, and what to do
 /// about the ones that are not a simple switch.
 String nikoPrivacyScreenDetail(
-    NikoPrivacyScreenStatus status, String peerPlatform, {bool styled = false}) {
+    NikoPrivacyScreenStatus status, String peerPlatform,
+    {bool styled = false, bool passwordExit = false}) {
   final mac = peerPlatform == 'Mac OS';
   final black = mac && !styled;
   final exit = mac
@@ -79,6 +80,9 @@ String nikoPrivacyScreenDetail(
       : 'Esc';
   switch (status) {
     case NikoPrivacyScreenStatus.on:
+      if (passwordExit)
+        return nikoText('被控电脑已开启隐私屏。它本机按 $exit 后，需验证系统登录密码才能退出；控制端关闭或断开连接也会恢复。',
+            'The remote privacy screen is on. Press $exit locally and verify the system login password to exit. Turning it off from the controller or disconnecting also restores the screen.');
       return nikoText(
           '被控电脑的屏幕现在${black ? '是黑的' : '被遮住'}，它本机的键盘鼠标被暂停；你这边的画面和操作不受影响。在那台电脑上按 $exit 可以恢复，断开连接也会自动恢复。',
           'The remote screen is ${black ? 'black' : 'covered'} and its own keyboard and mouse are paused; your picture and input are unaffected. Pressing $exit at that computer restores it, and so does disconnecting.');

@@ -86,6 +86,7 @@ static void start_fixture() {
     fixture::input_enabled = true;
     nikoPrivacyGammas = nikodesk_privacy::GammaSession{};
     nikoPrivacyCallbackRegistered = false;
+    nikoStyledPrivacyInput=false;nikoStyledPrivacyHelper=0;nikoStyledUnlockRequested=false;
     nikoPrivacyRunLoopSource = nullptr;
     nikoPrivacyEventTap = reinterpret_cast<CFMachPortRef>(1);
     ++nikoPrivacySessionToken;
@@ -163,6 +164,25 @@ static void hotplug_without_callback_never_reports_protected() {
     assert(fixture::tables.at("new") == fixture::normal);
 }
 
+static void styled_shortcut_requests_password_without_releasing_cover() {
+    start_fixture();nikoStyledPrivacyInput=true;nikoStyledPrivacyHelper=77;
+    CGEventRef event=CGEventCreateKeyboardEvent(nullptr,53,true);
+    CGEventSetIntegerValueField(event,kCGEventSourceStateID,kCGEventSourceStateHIDSystemState);
+    CGEventSetFlags(event,kCGEventFlagMaskControl|kCGEventFlagMaskAlternate|kCGEventFlagMaskShift);
+    assert(NikoPrivacyInputCallback(nullptr,kCGEventKeyDown,event,nullptr)==nullptr);
+    assert(nikoStyledUnlockRequested && nikoStyledPrivacyInput && nikoPrivacyActive && fixture::input_enabled);
+    ::CFRelease(event);
+}
+static void password_input_stays_scoped_to_the_excluded_helper() {
+    start_fixture();nikoStyledPrivacyInput=true;nikoStyledPrivacyHelper=77;
+    CGEventRef event=CGEventCreateKeyboardEvent(nullptr,0,true);
+    CGEventSetIntegerValueField(event,kCGEventSourceStateID,kCGEventSourceStateHIDSystemState);
+    CGEventSetIntegerValueField(event,kCGEventTargetUnixProcessID,77);
+    assert(NikoPrivacyInputCallback(nullptr,kCGEventKeyDown,event,nullptr)==event);
+    CGEventSetIntegerValueField(event,kCGEventTargetUnixProcessID,88);
+    assert(NikoPrivacyInputCallback(nullptr,kCGEventKeyDown,event,nullptr)==nullptr);
+    ::CFRelease(event);
+}
 int main() {
     @autoreleasepool {
         continues_past_initial_window_without_repainting();
@@ -171,6 +191,8 @@ int main() {
         local_off_cancels_pending_checks_and_does_not_redarken();
         stale_monitor_cannot_stop_a_new_session();
         hotplug_without_callback_never_reports_protected();
+        styled_shortcut_requests_password_without_releasing_cover();
+        password_input_stays_scoped_to_the_excluded_helper();
     }
-    std::cout << "6 production privacy monitor callback tests passed; simulated providers only\n";
+    std::cout << "8 production privacy monitor/input callback tests passed; simulated providers only\n";
 }

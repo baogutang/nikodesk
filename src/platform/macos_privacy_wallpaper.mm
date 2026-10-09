@@ -2,6 +2,7 @@
 #import <ApplicationServices/ApplicationServices.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "macos_privacy_unlock.h"
 
 static NSArray<NSWindow*> *npsWindows;
 static NSArray<NSDictionary*> *npsScreens;
@@ -53,7 +54,13 @@ static CGImageRef NPSImage(const uint8_t *pixels,uint32_t width,uint32_t height)
     }
     NSDictionary *attributes=@{NSFontAttributeName:[NSFont systemFontOfSize:12 weight:NSFontWeightRegular],
         NSForegroundColorAttributeName:[NSColor colorWithWhite:1 alpha:.72]};
-    if(self.hint)[@"⌃⌥⇧ Esc 恢复" drawAtPoint:NSMakePoint(24,MAX(0,bounds.size.height-36)) withAttributes:attributes];
+    NSRect badge=NSMakeRect(24,MAX(0,bounds.size.height-112),MIN(480,MAX(0,bounds.size.width-48)),88);
+    [[NSColor colorWithWhite:.04 alpha:.78] setFill];
+    [[NSBezierPath bezierPathWithRoundedRect:badge xRadius:12 yRadius:12] fill];
+    NSDictionary *title=@{NSFontAttributeName:[NSFont systemFontOfSize:20 weight:NSFontWeightSemibold],NSForegroundColorAttributeName:NSColor.whiteColor};
+    [NPSLocalText(@"本机已开启隐私屏",@"Privacy screen is on") drawAtPoint:NSMakePoint(40,badge.origin.y+16) withAttributes:title];
+    [NPSLocalText(@"⌃⌥⇧ Esc 退出 · 需系统登录密码",@"⌃⌥⇧ Esc to exit · System login password required")
+        drawAtPoint:NSMakePoint(40,badge.origin.y+52) withAttributes:attributes];
     if(self.clock){
         NSDateFormatter *formatter=[NSDateFormatter new];formatter.dateFormat=@"HH:mm";
         NSString *clock=[formatter stringFromDate:[NSDate date]];
@@ -88,6 +95,7 @@ extern "C" bool NPSWindowsStyle(const uint8_t *pixels,uint32_t width,uint32_t he
     CGImageRelease(image);return npsWindows.count>0;
 }
 extern "C" void NPSWindowsClose() {
+    NPSUnlockClose();
     for(NSWindow *window in npsWindows){[window orderOut:nil];[window close];}
     npsWindows=nil;npsScreens=nil;npsShown=false;
 }
@@ -119,6 +127,8 @@ extern "C" bool NPSWindowsShow() {
     for(NSWindow *window in npsWindows){window.level=CGWindowLevelForKey(kCGScreenSaverWindowLevelKey)+1;[window orderFrontRegardless];}
     npsShown=true;return npsWindows.count>0;
 }
+extern "C" bool NPSWindowsRequestUnlock() {return npsShown && NPSUnlockShow();}
+extern "C" bool NPSWindowsUnlocked() {return npsUnlock.verified;}
 extern "C" bool NPSWindowsMotionAllowed() {
     return !NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion;
 }
@@ -136,6 +146,8 @@ extern "C" bool NPSWindowsTick(const uint8_t *pixels,uint32_t width,uint32_t hei
             NSEvent *event=[NSApp nextEventMatchingMask:NSEventMaskAny untilDate:[NSDate distantPast] inMode:NSDefaultRunLoopMode dequeue:YES];
             if(!event)break;[NSApp sendEvent:event];
         }
-        [NSApp updateWindows];return true;
+        [NSApp updateWindows];
+        CFRunLoopRunInMode(kCFRunLoopDefaultMode,0.001,true);
+        return true;
     }
 }

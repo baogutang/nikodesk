@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter_hbb/nikodesk/connection_progress_view.dart';
 import 'package:flutter_hbb/nikodesk/privacy_screen.dart';
+import 'package:flutter_hbb/nikodesk/privacy_connection.dart';
+import 'package:flutter_hbb/nikodesk/session_quick_actions.dart';
 import 'package:flutter_hbb/nikodesk/remote_resolution.dart';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -775,6 +777,9 @@ class _RemotePageState extends State<RemotePage>
                   child: getBodyForDesktop(context))),
           if (const bool.fromEnvironment('NIKODESK'))
             NikoPrivacyScreenBadge(peerId: widget.id),
+          if (const bool.fromEnvironment('NIKODESK'))
+            NikoPrivacyConnectionPrompt(ffi: _ffi,
+                onExplain: () => showNikoSessionQuickActions(_ffi)),
           Stack(
             children: [
               _ffi.ffiModel.pi.isSet.isTrue &&

@@ -13,3 +13,8 @@ xcrun clang++ -std=c++17 -fblocks -I src/platform \
   -framework AppKit -framework CoreGraphics -framework ColorSync -framework Security \
   -o "$privacy_test_dir/monitor"
 "$privacy_test_dir/monitor"
+xcrun clang++ -std=c++17 -fobjc-arc -fblocks -I src/platform \
+  .github/scripts/tests/native/test-macos-privacy-unlock.mm \
+  -framework AppKit -framework CoreGraphics -framework OpenDirectory \
+  -o "$privacy_test_dir/unlock"
+"$privacy_test_dir/unlock"

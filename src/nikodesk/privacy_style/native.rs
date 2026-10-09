@@ -95,7 +95,7 @@ impl StyledPrivacy {
 }
 impl PrivacyMode for StyledPrivacy {
     fn is_async_privacy_mode(&self) -> bool {
-        false
+        true
     }
     fn init(&self) -> ResultType<()> {
         Ok(())

@@ -23,6 +23,7 @@ const WAIT: Duration = Duration::from_secs(4);
 enum Operation {
     Heartbeat,
     Show,
+    Unlock,
     Style(Vec<u8>),
 }
 struct CommandFrame {
@@ -96,6 +97,7 @@ impl Screen {
                     match frame.operation {
                         Operation::Heartbeat => input.write_all(b"H"),
                         Operation::Show => input.write_all(b"V"),
+                        Operation::Unlock => input.write_all(b"U"),
                         Operation::Style(bytes) => input
                             .write_all(b"C")
                             .and_then(|_| write_style(&mut input, &bytes)),
@@ -134,7 +136,7 @@ impl Screen {
             // Every display's excluded capture must produce a frame before any
             // cover is shown. Quartz frames are suspended during this handoff.
             scrap::privacy_capture::prepare(screen.child.id())?;
-            if !super::macos::input(true) {
+            if !super::macos::input(true, screen.child.id()) {
                 bail!("input_permission_required");
             }
         }
@@ -194,12 +196,27 @@ impl Screen {
             let _ = self.stop();
             return false;
         }
+        #[cfg(target_os = "macos")]
+        let unlock = super::macos::unlock_pending(false);
+        #[cfg(not(target_os = "macos"))]
+        let unlock = false;
         match self.sender.try_send(CommandFrame {
             issued: Instant::now(),
-            operation: Operation::Heartbeat,
+            operation: if unlock {
+                Operation::Unlock
+            } else {
+                Operation::Heartbeat
+            },
             reply: None,
         }) {
-            Ok(()) | Err(mpsc::TrySendError::Full(_)) => true,
+            Ok(()) => {
+                #[cfg(target_os = "macos")]
+                if unlock {
+                    super::macos::unlock_pending(true);
+                }
+                true
+            }
+            Err(mpsc::TrySendError::Full(_)) => true,
             Err(_) => {
                 let _ = self.stop();
                 false
@@ -210,7 +227,7 @@ impl Screen {
         self.alive.store(false, Ordering::Release);
         #[cfg(target_os = "macos")]
         {
-            super::macos::input(false);
+            super::macos::input(false, 0);
         }
         if self.child.try_wait()?.is_none() {
             self.child.kill()?;
@@ -239,12 +256,17 @@ pub(crate) enum Input {
     Ready(Instant, Arc<Wallpaper>),
     Heartbeat(Instant),
     Show(Instant),
+    Unlock(Instant),
     Style(Instant, Arc<Wallpaper>),
 }
 impl Input {
     pub fn issued(&self) -> Instant {
         match self {
-            Self::Ready(t, _) | Self::Heartbeat(t) | Self::Show(t) | Self::Style(t, _) => *t,
+            Self::Ready(t, _)
+            | Self::Heartbeat(t)
+            | Self::Show(t)
+            | Self::Unlock(t)
+            | Self::Style(t, _) => *t,
         }
     }
 }
@@ -279,6 +301,7 @@ pub(crate) fn incoming() -> mpsc::Receiver<Input> {
             let frame = match byte[0] {
                 b'H' => Input::Heartbeat(Instant::now()),
                 b'V' => Input::Show(Instant::now()),
+                b'U' => Input::Unlock(Instant::now()),
                 b'C' => {
                     let Ok(style) = read_style(&mut input) else {
                         return;
