@@ -71,20 +71,21 @@ String nikoPrivacyScreenLabel(NikoPrivacyScreenStatus status) =>
 /// What each state means for the person at the controller, and what to do
 /// about the ones that are not a simple switch.
 String nikoPrivacyScreenDetail(
-    NikoPrivacyScreenStatus status, String peerPlatform) {
+    NikoPrivacyScreenStatus status, String peerPlatform, {bool styled = false}) {
   final mac = peerPlatform == 'Mac OS';
+  final black = mac && !styled;
   final exit = mac
       ? nikoText('Control + Option + Shift + Esc', 'Control + Option + Shift + Esc')
       : 'Esc';
   switch (status) {
     case NikoPrivacyScreenStatus.on:
       return nikoText(
-          '被控电脑的屏幕现在${mac ? '是黑的' : '被遮住'}，它本机的键盘鼠标被暂停；你这边的画面和操作不受影响。在那台电脑上按 $exit 可以恢复，断开连接也会自动恢复。',
-          'The remote screen is ${mac ? 'black' : 'covered'} and its own keyboard and mouse are paused; your picture and input are unaffected. Pressing $exit at that computer restores it, and so does disconnecting.');
+          '被控电脑的屏幕现在${black ? '是黑的' : '被遮住'}，它本机的键盘鼠标被暂停；你这边的画面和操作不受影响。在那台电脑上按 $exit 可以恢复，断开连接也会自动恢复。',
+          'The remote screen is ${black ? 'black' : 'covered'} and its own keyboard and mouse are paused; your picture and input are unaffected. Pressing $exit at that computer restores it, and so does disconnecting.');
     case NikoPrivacyScreenStatus.off:
       return nikoText(
-          '被控电脑的屏幕正常显示，旁边的人能看到你的操作。开启后它的屏幕${mac ? '变黑' : '被遮住'}、本机键鼠暂停。',
-          'The remote screen shows normally, so anyone beside it can watch. Turning this on ${mac ? 'blacks out' : 'covers'} that screen and pauses its own keyboard and mouse.');
+          '被控电脑的屏幕正常显示，旁边的人能看到你的操作。开启后它的屏幕${black ? '变黑' : '被遮住'}、本机键鼠暂停。',
+          'The remote screen shows normally, so anyone beside it can watch. Turning this on ${black ? 'blacks out' : 'covers'} that screen and pauses its own keyboard and mouse.');
     case NikoPrivacyScreenStatus.notAllowed:
       return nikoText(
           '需要先在被控电脑上允许：打开它的 NikoDesk「设置 → 会话安全」，开启"允许新连接使用隐私屏"，然后重新连接；或者在它的连接窗口里给本次连接打开隐私屏权限。这两步都可以通过当前的远程画面去操作。',

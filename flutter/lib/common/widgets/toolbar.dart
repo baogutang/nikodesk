@@ -13,6 +13,8 @@ import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/nikodesk/session_capability_connect.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
+import 'package:flutter_hbb/nikodesk/privacy_style_model.dart';
+import 'package:flutter_hbb/nikodesk/privacy_style.dart';
 import 'package:flutter_hbb/nikodesk/virtual_display.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
@@ -91,7 +93,8 @@ bool _isWindowsMode1PrivacyImpl(String privacyModeImpl) {
 bool allowDisplaySwitchInPrivacyMode(PeerInfo pi, String privacyModeImpl) {
   return pi.platform == kPeerPlatformMacOS ||
       (pi.platform == kPeerPlatformWindows &&
-          _isWindowsMode1PrivacyImpl(privacyModeImpl) &&
+          (_isWindowsMode1PrivacyImpl(privacyModeImpl) ||
+              privacyModeImpl == nikoPrivacyStyleImpl) &&
           versionCmp(pi.version, '1.4.8') >= 0);
 }
 
@@ -1061,7 +1064,9 @@ List<TToggleMenu> toolbarPrivacyMode(
   final pi = ffiModel.pi;
   final sessionId = ffi.sessionId;
   final hasPrivacyModePermission =
-      ffiModel.permissions['privacy_mode'] != false;
+      ffiModel.permissions['privacy_mode'] != false &&
+      (!const bool.fromEnvironment('NIKODESK') ||
+          (ffiModel.keyboard && ffiModel.permissions['keyboard'] != false));
 
   // Backend revocation already attempts to turn privacy mode off.
   // Still keep this menu when privacy mode is active, so users can turn it off
@@ -1141,13 +1146,23 @@ List<TToggleMenu> toolbarPrivacyMode(
           child: Text(translate(implName)),
           value: privacyModeState.value == implKey,
           onChanged: enabled
-              ? (value) {
+              ? (value) async {
                   if (value == null) return;
                   if (value && !hasPrivacyModePermission) return;
                   if (!checkDisplayAllowedForPrivacyMode(implKey, value)) {
                     return;
                   }
                   togglePrivacyModeTime = DateTime.now();
+                  if (const bool.fromEnvironment('NIKODESK') && value &&
+                      implKey == nikoPrivacyStyleImpl) {
+                    try {
+                      await nikoApplyPrivacyStyle(ffi, await nikoReadPrivacyStyle(ffi));
+                    } catch (error) {
+                      msgBox(sessionId, 'custom-nook-nocancel-hasclose', 'info',
+                          nikoPrivacyStyleError(error), '', ffi.dialogManager);
+                    }
+                    return;
+                  }
                   bind.sessionTogglePrivacyMode(
                       sessionId: sessionId, implKey: implKey, on: value);
                 }

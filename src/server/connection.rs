@@ -15,6 +15,9 @@ use super::{input_service::*, *};
 #[path="nikodesk_voice.rs"]
 mod nikodesk_voice;
 #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+#[path="nikodesk_privacy_style.rs"]
+mod nikodesk_privacy_style;
+#[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
 #[path="nikodesk_voice_policy.rs"]
 mod nikodesk_voice_policy;
 #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
@@ -2379,6 +2382,9 @@ impl Connection {
         pi.sas_enabled = sas_enabled;
         pi.features = Some(Features {
             privacy_mode: privacy_mode::is_privacy_mode_supported(),
+            #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+            nikodesk_privacy_style_v1: self.is_authed_remote_conn() && self.stream.is_secured()
+                && crate::nikodesk::privacy_style::native::supported(),
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             terminal,
             ..Default::default()
@@ -5288,6 +5294,19 @@ impl Connection {
     }
 
     async fn toggle_privacy_mode(&mut self, t: TogglePrivacyMode) {
+        if let Some(style)=t.nikodesk_style.into_option() {
+            #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+            self.apply_nikodesk_privacy_style(t.impl_key,t.on,style).await;
+            #[cfg(not(all(feature="nikodesk",any(target_os="macos",target_os="windows"))))]
+            {
+                let mut notice=BackNotification::new();
+                notice.nikodesk_style=Some(NikoPrivacyStyleResult {request_id:style.request_id,
+                    error:"style_unsupported".into(),..Default::default()}).into();
+                let mut misc=Misc::new();misc.set_back_notification(notice);
+                let mut message=Message::new();message.set_misc(misc);self.send(message).await;
+            }
+            return;
+        }
         if t.on {
             self.turn_on_privacy(t.impl_key).await;
         } else {
@@ -5719,7 +5738,7 @@ impl Connection {
                     log::error!("Failed to turn on privacy mode. {}", e);
                     if privacy_mode::is_in_privacy_mode() {
                         let _ = Self::turn_off_privacy_to_msg(
-                            privacy_mode::INVALID_PRIVACY_MODE_CONN_ID,
+                            self.inner.id,
                             String::new(),
                         );
                     }

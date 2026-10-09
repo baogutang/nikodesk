@@ -46,6 +46,8 @@ impl Capturer {
 
 impl crate::TraitCapturer for Capturer {
     fn frame<'a>(&'a mut self, _timeout_ms: std::time::Duration) -> io::Result<Frame<'a>> {
+        #[cfg(feature="nikodesk")]
+        if super::privacy_capture::reserved() {return Err(io::ErrorKind::WouldBlock.into());}
         match self.frame.try_lock() {
             Ok(mut handle) => {
                 let mut frame = None;
@@ -87,6 +89,7 @@ type PixelStorage = quartz::Frame;
 enum PixelStorage {
     Screen(quartz::Frame),
     Camera(super::camera::macos_camera::OwnedFrame),
+    Privacy(super::privacy_capture::PrivacyFrame),
 }
 #[cfg(feature = "nikodesk")]
 impl From<quartz::Frame> for PixelStorage {
@@ -94,11 +97,14 @@ impl From<quartz::Frame> for PixelStorage {
 }
 #[cfg(feature = "nikodesk")]
 impl PixelStorage {
-    fn data(&self) -> &[u8] { match self { Self::Screen(frame) => &*frame, Self::Camera(frame) => frame.data() } }
-    fn stride(&self) -> usize { match self { Self::Screen(frame) => frame.stride(), Self::Camera(frame) => frame.stride() } }
+    fn data(&self) -> &[u8] { match self { Self::Screen(frame) => &*frame, Self::Camera(frame) => frame.data(), Self::Privacy(frame)=>frame.data() } }
+    fn stride(&self) -> usize { match self { Self::Screen(frame) => frame.stride(), Self::Camera(frame) => frame.stride(), Self::Privacy(frame)=>frame.stride() } }
 }
 #[cfg(feature = "nikodesk")]
 impl PixelBuffer<'_> {
+    pub(super) fn from_privacy(frame:super::privacy_capture::PrivacyFrame)->Self {
+        Self{width:frame.width,height:frame.height,frame:PixelStorage::Privacy(frame),data:PhantomData}
+    }
     pub(crate) fn from_camera(frame: super::camera::macos_camera::OwnedFrame) -> Self {
         Self { width: frame.width(), height: frame.height(), frame: PixelStorage::Camera(frame), data: PhantomData }
     }

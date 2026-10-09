@@ -39,6 +39,8 @@ cfg_if! {
 }
 
 pub mod codec;
+#[cfg(all(feature="nikodesk",target_os="macos"))]
+pub mod privacy_capture;
 pub mod convert;
 #[cfg(feature = "hwcodec")]
 pub mod hwcodec;

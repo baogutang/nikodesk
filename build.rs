@@ -13,6 +13,10 @@ fn build_mac() {
     let file = "src/platform/macos.mm";
     let mut b = cc::Build::new();
     if std::env::var_os("CARGO_FEATURE_NIKODESK").is_some() {
+        cc::Build::new().cpp(true).file("src/platform/macos_privacy_wallpaper.mm")
+            .flag("-std=c++17").flag("-fobjc-arc").flag("-fblocks").compile("nikodesk_privacy_wallpaper");
+        println!("cargo:rerun-if-changed=src/platform/macos_privacy_wallpaper.mm");
+        println!("cargo:rerun-if-changed=src/platform/macos_privacy_bridge.h");
         b.define("NIKODESK_BUILD", None);
         for file in [
             "src/platform/macos_privacy_gamma.h",

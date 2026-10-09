@@ -165,6 +165,8 @@ message Features {
   bool nikodesk_tunnel_requests_allowed = 8;
   // The controller can receive a call initiated by this desktop's CM.
   bool nikodesk_voice_reverse_v1 = 9;
+  // Wallpaper privacy overlays with capture exclusion; never a permission grant.
+  bool nikodesk_privacy_style_v1 = 10;
 }
 
 message CodecAbility {
@@ -687,6 +689,29 @@ message ToggleVirtualDisplay {
 message TogglePrivacyMode {
   string impl_key = 1;
   bool on = 2;
+  NikoPrivacyStyle nikodesk_style = 3;
+}
+
+// Client-only, encrypted desktop-session extension. Presets are local resources;
+// custom images are bounded bytes, never paths, URLs, HTML or executable content.
+message NikoPrivacyStyle {
+  uint32 request_id = 1;
+  string preset = 2; // snow, paper, rain, custom
+  string effect = 3; // fog, light, rain, none (custom only)
+  bool motion = 4;
+  uint32 brightness = 5; // percent, 40..100
+  uint32 intensity = 6; // percent, 50..200
+  bool hint = 7;
+  bool clock = 8;
+  bytes image = 9; // PNG or JPEG normalized by the controller; custom only
+}
+
+message NikoPrivacyStyleResult {
+  uint32 request_id = 1;
+  bool applied = 2;
+  bool active = 3;
+  string preset = 4;
+  string error = 5;
 }
 
 message PermissionInfo {
@@ -852,6 +877,8 @@ message BackNotification {
   string details = 3;
   // The key of the implementation
   string impl_key = 4;
+  // Also returned on a rejected style update, without changing the active state.
+  NikoPrivacyStyleResult nikodesk_style = 5;
 }
 
 message ElevationRequestWithLogon {

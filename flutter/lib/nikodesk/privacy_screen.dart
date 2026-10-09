@@ -8,6 +8,7 @@ import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 
 import 'privacy_screen_policy.dart';
+import 'privacy_style.dart';
 import 'session_toolbar.dart';
 import 'ui.dart';
 
@@ -28,7 +29,8 @@ NikoPrivacyScreenStatus nikoPrivacyScreenStatusOf(FFI ffi, String active) {
       supported: ffi.connType == ConnType.defaultConn &&
           model.pi.features.privacyMode &&
           nikoPrivacyScreenImpl(offered, null) != null,
-      allowed: model.permissions['privacy_mode'] != false,
+      allowed: model.permissions['privacy_mode'] != false && model.keyboard &&
+          model.permissions['keyboard'] != false,
       viewOnly: model.viewOnly,
       active: active);
 }
@@ -41,6 +43,10 @@ Future<void> nikoRequestPrivacyScreen(FFI ffi, {required bool on}) async {
   final status = nikoPrivacyScreenStatusOf(ffi, active);
   if (ffi.closed || !nikoPrivacyScreenCanToggle(status)) {
     throw StateError('Privacy screen unavailable');
+  }
+  if (on && ffi.ffiModel.pi.features.privacyStyle) {
+    await nikoApplyPrivacyStyle(ffi, await nikoReadPrivacyStyle(ffi));
+    return;
   }
   if (on == active.isNotEmpty) return;
   final session = ffi.sessionId;

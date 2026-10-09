@@ -282,6 +282,9 @@ unsafe extern "system" fn window(hwnd: HWND, event: UINT, w: WPARAM, l: LPARAM) 
             let dc = BeginPaint(hwnd, &mut paint);
             let mut rect: RECT = std::mem::zeroed();
             GetClientRect(hwnd, &mut rect);
+            if crate::nikodesk::privacy_style::windows::paint(dc,&rect) {
+                EndPaint(hwnd,&paint);return 0;
+            }
             FillRect(dc, &rect, GetStockObject(BLACK_BRUSH as i32).cast());
             SetBkMode(dc, TRANSPARENT as i32);
             SetTextColor(dc, 0x00dddddd);
@@ -318,7 +321,7 @@ fn cover(rects: &[RECT]) -> ResultType<Windows> {
         if RegisterClassW(&definition) == 0 { bail!("Cannot register privacy screen windows"); }
         WINDOW_THREAD.store(GetCurrentThreadId(), Ordering::Release);
         for rect in rects {
-            let hwnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED,
+            let hwnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TRANSPARENT,
                 class.as_ptr(), wide("NikoDesk Privacy screen").as_ptr(), WS_POPUP,
                 rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top,
                 null_mut(), null_mut(), instance, null_mut());
@@ -407,6 +410,59 @@ fn helper() -> ResultType<()> {
             }
         }
         std::thread::sleep(Duration::from_millis(100));
+    }
+    Ok(())
+}
+
+/// The wallpaper variant shares the same monitor coverage, capture affinity,
+/// physical-input hooks and emergency Esc path as the black privacy helper.
+pub(crate) fn run_styled_helper()->ResultType<()> {
+    use crate::nikodesk::privacy_style::{helper::{self,Input},windows};
+    unsafe{
+        if GetFileType(GetStdHandle(STD_INPUT_HANDLE))!=3 || GetFileType(GetStdHandle(STD_OUTPUT_HANDLE))!=3 {
+            bail!("helper_pipe_required");
+        }
+    }
+    if !helper_supported(){bail!("style_unsupported");}
+    let receiver=helper::incoming();let style=helper::initial(&receiver)?;
+    windows::set(style)?;let _renderer=windows::Cleanup;windows::tick(0.)?;
+    let rects=monitor_rects()?;let cover=cover(&rects)?;
+    windows::tick(0.)?;helper::respond(b'R')?;
+    let system=system_token();let mut lease=Instant::now();let started=Instant::now();
+    loop {
+        let mut acknowledge=false;
+        match receiver.try_recv(){
+            Ok(frame) if frame.issued().elapsed()<Duration::from_secs(2)=>{
+                lease=frame.issued();
+                match frame{Input::Style(_,next)=>{windows::set(next)?;windows::tick(started.elapsed().as_secs_f32())?;},
+                    Input::Show(_)|Input::Heartbeat(_)=>{},Input::Ready(_,_)=>bail!("invalid_frame")}
+                acknowledge=true;
+            }
+            Ok(_)|Err(mpsc::TryRecvError::Disconnected)=>break,
+            Err(mpsc::TryRecvError::Empty)=>{},
+        }
+        if lease.elapsed()>LEASE || !default_desktop() || system && !active_console_session()
+            || !same_monitors(&rects,&monitor_rects()?){break;}
+        windows::tick(started.elapsed().as_secs_f32())?;
+        unsafe {
+            let mut composing=0;
+            if DwmIsCompositionEnabled(&mut composing)<0 || composing==0 {break;}
+            let mut message:MSG=std::mem::zeroed();
+            while PeekMessageW(&mut message,null_mut(),0,0,PM_REMOVE)!=0{
+                if message.message==STOP || message.message==WM_QUIT{return Ok(());}
+                TranslateMessage(&message);DispatchMessageW(&message);
+            }
+            for hwnd in &cover.windows{
+                let mut affinity=0;
+                if GetWindowDisplayAffinity(*hwnd,&mut affinity)==0 || affinity!=WDA_EXCLUDE
+                    || SetWindowPos(*hwnd,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE)==0 {
+                    bail!("monitor_cover_changed");
+                }
+                InvalidateRect(*hwnd,null(),0);UpdateWindow(*hwnd);
+            }
+        }
+        if acknowledge{windows::tick(started.elapsed().as_secs_f32())?;helper::respond(b'A')?;}
+        std::thread::sleep(Duration::from_millis(33));
     }
     Ok(())
 }

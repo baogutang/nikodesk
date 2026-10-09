@@ -216,6 +216,12 @@ abstract class Rustdesk {
 
   FlutterRustBridgeTaskConstMeta get kSessionTogglePrivacyModeConstMeta;
 
+  /// Queue a wallpaper request. The controlled side reports the applied result.
+  Future<String> sessionPrivacyStyle(
+      {required UuidValue sessionId, required String json, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kSessionPrivacyStyleConstMeta;
+
   Future<String?> sessionGetFlutterOption(
       {required UuidValue sessionId, required String k, dynamic hint});
 
@@ -2706,6 +2712,26 @@ class RustdeskImpl implements Rustdesk {
       const FlutterRustBridgeTaskConstMeta(
         debugName: "session_toggle_privacy_mode",
         argNames: ["sessionId", "implKey", "on"],
+      );
+
+  Future<String> sessionPrivacyStyle(
+      {required UuidValue sessionId, required String json, dynamic hint}) {
+    var arg0 = _platform.api2wire_Uuid(sessionId);
+    var arg1 = _platform.api2wire_String(json);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_session_privacy_style(port_, arg0, arg1),
+      parseSuccessData: _wire2api_String,
+      constMeta: kSessionPrivacyStyleConstMeta,
+      argValues: [sessionId, json],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kSessionPrivacyStyleConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "session_privacy_style",
+        argNames: ["sessionId", "json"],
       );
 
   Future<String?> sessionGetFlutterOption(
@@ -9072,6 +9098,139 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
           lookup)
       : _lookup = lookup;
 
+  bool NPSWindowSupported() {
+    return _NPSWindowSupported();
+  }
+
+  late final _NPSWindowSupportedPtr =
+      _lookup<ffi.NativeFunction<ffi.Bool Function()>>('NPSWindowSupported');
+  late final _NPSWindowSupported =
+      _NPSWindowSupportedPtr.asFunction<bool Function()>();
+
+  bool NPSWindowPipes() {
+    return _NPSWindowPipes();
+  }
+
+  late final _NPSWindowPipesPtr =
+      _lookup<ffi.NativeFunction<ffi.Bool Function()>>('NPSWindowPipes');
+  late final _NPSWindowPipes = _NPSWindowPipesPtr.asFunction<bool Function()>();
+
+  bool NPSWindowsCreate(
+    ffi.Pointer<ffi.Uint8> pixels,
+    int width,
+    int height,
+    bool hint,
+    bool clock,
+  ) {
+    return _NPSWindowsCreate(
+      pixels,
+      width,
+      height,
+      hint,
+      clock,
+    );
+  }
+
+  late final _NPSWindowsCreatePtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Bool Function(ffi.Pointer<ffi.Uint8>, ffi.Uint32, ffi.Uint32,
+              ffi.Bool, ffi.Bool)>>('NPSWindowsCreate');
+  late final _NPSWindowsCreate = _NPSWindowsCreatePtr.asFunction<
+      bool Function(ffi.Pointer<ffi.Uint8>, int, int, bool, bool)>();
+
+  bool NPSWindowsStyle(
+    ffi.Pointer<ffi.Uint8> pixels,
+    int width,
+    int height,
+    bool hint,
+    bool clock,
+  ) {
+    return _NPSWindowsStyle(
+      pixels,
+      width,
+      height,
+      hint,
+      clock,
+    );
+  }
+
+  late final _NPSWindowsStylePtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Bool Function(ffi.Pointer<ffi.Uint8>, ffi.Uint32, ffi.Uint32,
+              ffi.Bool, ffi.Bool)>>('NPSWindowsStyle');
+  late final _NPSWindowsStyle = _NPSWindowsStylePtr.asFunction<
+      bool Function(ffi.Pointer<ffi.Uint8>, int, int, bool, bool)>();
+
+  bool NPSWindowsShow() {
+    return _NPSWindowsShow();
+  }
+
+  late final _NPSWindowsShowPtr =
+      _lookup<ffi.NativeFunction<ffi.Bool Function()>>('NPSWindowsShow');
+  late final _NPSWindowsShow = _NPSWindowsShowPtr.asFunction<bool Function()>();
+
+  bool NPSWindowsTick(
+    ffi.Pointer<ffi.Uint8> pixels,
+    int width,
+    int height,
+  ) {
+    return _NPSWindowsTick(
+      pixels,
+      width,
+      height,
+    );
+  }
+
+  late final _NPSWindowsTickPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Bool Function(ffi.Pointer<ffi.Uint8>, ffi.Uint32,
+              ffi.Uint32)>>('NPSWindowsTick');
+  late final _NPSWindowsTick = _NPSWindowsTickPtr.asFunction<
+      bool Function(ffi.Pointer<ffi.Uint8>, int, int)>();
+
+  bool NPSWindowsMotionAllowed() {
+    return _NPSWindowsMotionAllowed();
+  }
+
+  late final _NPSWindowsMotionAllowedPtr =
+      _lookup<ffi.NativeFunction<ffi.Bool Function()>>(
+          'NPSWindowsMotionAllowed');
+  late final _NPSWindowsMotionAllowed =
+      _NPSWindowsMotionAllowedPtr.asFunction<bool Function()>();
+
+  void NPSWindowsClose() {
+    return _NPSWindowsClose();
+  }
+
+  late final _NPSWindowsClosePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function()>>('NPSWindowsClose');
+  late final _NPSWindowsClose =
+      _NPSWindowsClosePtr.asFunction<void Function()>();
+
+  bool NikoMacStyledPrivacyInput(
+    bool on1,
+  ) {
+    return _NikoMacStyledPrivacyInput(
+      on1,
+    );
+  }
+
+  late final _NikoMacStyledPrivacyInputPtr =
+      _lookup<ffi.NativeFunction<ffi.Bool Function(ffi.Bool)>>(
+          'NikoMacStyledPrivacyInput');
+  late final _NikoMacStyledPrivacyInput =
+      _NikoMacStyledPrivacyInputPtr.asFunction<bool Function(bool)>();
+
+  bool NikoMacStyledPrivacyInputRenew() {
+    return _NikoMacStyledPrivacyInputRenew();
+  }
+
+  late final _NikoMacStyledPrivacyInputRenewPtr =
+      _lookup<ffi.NativeFunction<ffi.Bool Function()>>(
+          'NikoMacStyledPrivacyInputRenew');
+  late final _NikoMacStyledPrivacyInputRenew =
+      _NikoMacStyledPrivacyInputRenewPtr.asFunction<bool Function()>();
+
   bool NikoMacVirtualDisplaySupported() {
     return _NikoMacVirtualDisplaySupported();
   }
@@ -10057,6 +10216,27 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
       _wire_session_toggle_privacy_modePtr.asFunction<
           void Function(int, ffi.Pointer<wire_uint_8_list>,
               ffi.Pointer<wire_uint_8_list>, bool)>();
+
+  void wire_session_privacy_style(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> session_id,
+    ffi.Pointer<wire_uint_8_list> json,
+  ) {
+    return _wire_session_privacy_style(
+      port_,
+      session_id,
+      json,
+    );
+  }
+
+  late final _wire_session_privacy_stylePtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>)>>('wire_session_privacy_style');
+  late final _wire_session_privacy_style =
+      _wire_session_privacy_stylePtr.asFunction<
+          void Function(int, ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>)>();
 
   void wire_session_get_flutter_option(
     int port_,

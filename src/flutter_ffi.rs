@@ -501,6 +501,14 @@ pub fn session_toggle_privacy_mode(session_id: SessionID, impl_key: String, on: 
     }
 }
 
+/// Queue a wallpaper request. The controlled side reports the applied result.
+pub fn session_privacy_style(session_id: SessionID, json: String) -> String {
+    #[cfg(feature = "nikodesk")]
+    { return crate::nikodesk::privacy_style::request(session_id, json); }
+    #[cfg(not(feature = "nikodesk"))]
+    { let _ = (session_id, json); "{\"ok\":false,\"error\":\"style_unsupported\"}".into() }
+}
+
 pub fn session_get_flutter_option(session_id: SessionID, k: String) -> Option<String> {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         Some(session.get_flutter_option(k))

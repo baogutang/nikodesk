@@ -96,6 +96,40 @@ impl Capturer {
 
 impl Drop for Capturer {
     fn drop(&mut self) {
+        #[cfg(feature = "nikodesk")]
+        {
+            // Privacy capture changes backend. A lost CG stop callback must
+            // not hang that transition or release a still-running stream.
+            let result = unsafe { CGDisplayStreamStop(self.stream) };
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+            while !*self.stopped.lock().unwrap() && std::time::Instant::now() < deadline {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            if *self.stopped.lock().unwrap() {
+                unsafe { CFRelease(self.stream); dispatch_release(self.queue); }
+            } else {
+                hbb_common::throttled_log!(std::time::Duration::from_secs(10), warn,
+                    "Capture stop callback delayed: {:?}", result);
+                let stream = self.stream as usize;
+                let queue = self.queue as usize;
+                let stopped = self.stopped.clone();
+                std::thread::spawn(move || {
+                    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+                    while !*stopped.lock().unwrap() && std::time::Instant::now() < deadline {
+                        std::thread::sleep(std::time::Duration::from_millis(30));
+                    }
+                    if *stopped.lock().unwrap() {
+                        unsafe { CFRelease(stream as _); dispatch_release(queue as _); }
+                    } else {
+                        // Keep the two CF references alive if stop never
+                        // confirms; releasing them could invalidate callbacks.
+                        hbb_common::throttled_log!(std::time::Duration::from_secs(10), warn,
+                            "Capture stop unconfirmed; retaining native references");
+                    }
+                });
+            }
+        }
+        #[cfg(not(feature = "nikodesk"))]
         unsafe {
             let _ = CGDisplayStreamStop(self.stream);
             loop {

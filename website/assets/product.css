@@ -43,6 +43,8 @@ h2 { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft Y
 .map-route img { width: 36px; height: 36px; margin: 0 auto 10px; border-radius: 9px; }
 .connection-map p { width: 100%; font-size: 10px; text-align: center; margin-top: 32px; color: var(--muted-fg); }
 .security-surface { padding: 46px; background: var(--card); border-radius: 18px; }
+/* Keep the two surfaces apart even when translated copy is shorter. */
+#why + #security { padding-top: 24px; }
 .sec-groups { gap: 42px; }
 .sec-group { border-top: 1px solid var(--border); padding-top: 21px; }
 .sec-group h3 { color: var(--fg); font-size: 18px; }

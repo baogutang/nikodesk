@@ -324,6 +324,10 @@ fn create_capturer(
     _current: usize,
     _portable_service_running: bool,
 ) -> ResultType<Box<dyn TraitCapturer>> {
+    #[cfg(all(feature="nikodesk",target_os="macos"))]
+    if privacy_mode_id>0 && scrap::privacy_capture::reserved() {
+        return Ok(Box::new(scrap::privacy_capture::PrivacyCapturer::new(display)?));
+    }
     #[cfg(not(windows))]
     let c: Option<Box<dyn TraitCapturer>> = None;
     #[cfg(windows)]

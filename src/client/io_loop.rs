@@ -1469,12 +1469,21 @@ impl<T: InvokeUiSession> Remote<T> {
             }
             let mut misc = Misc::new();
             misc.set_toggle_privacy_mode(TogglePrivacyMode {
+                #[cfg(feature = "nikodesk")]
+                nikodesk_style: if impl_key == crate::nikodesk::privacy_style::IMPL {
+                    if !lc.peer_info.as_ref().and_then(|pi| pi.features.as_ref())
+                        .is_some_and(|features| features.nikodesk_privacy_style_v1) { return; }
+                    let Ok(mut style) = crate::nikodesk::privacy_style::parse(&lc.get_option("nikodesk-privacy-style")) else { return; };
+                    style.request_id = u32::MAX;
+                    Some(style).into()
+                } else { None.into() },
                 impl_key,
                 on: true,
                 ..Default::default()
             });
             let mut msg_out = Message::new();
             msg_out.set_misc(misc);
+            drop(lc);
             allow_err!(peer.send(&msg_out).await);
         }
     }
@@ -2574,6 +2583,16 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     async fn handle_back_notification(&mut self, notification: BackNotification) -> bool {
+        #[cfg(all(feature = "nikodesk", feature = "flutter"))]
+        if let Some(style) = notification.nikodesk_style.as_ref() {
+            if style.applied {
+                self.update_privacy_mode(crate::nikodesk::privacy_style::IMPL.into(), true);
+            } else if !style.active {
+                self.update_privacy_mode(crate::nikodesk::privacy_style::IMPL.into(), false);
+            }
+            crate::nikodesk::privacy_style::complete(&self.handler.lc, style);
+            return true;
+        }
         match notification.union {
             Some(back_notification::Union::BlockInputState(state)) => {
                 self.handle_back_msg_block_input(

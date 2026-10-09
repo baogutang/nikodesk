@@ -44,6 +44,7 @@ class NikoSessionQuickActionsPanel extends StatefulWidget {
   /// Null hides the section: this kind of session has no privacy screen.
   final NikoPrivacyScreenStatus? privacyScreen;
   final Future<void> Function(bool)? onPrivacyScreen;
+  final Widget? privacyStyle;
   final VoidCallback onClose;
 
   const NikoSessionQuickActionsPanel(
@@ -65,6 +66,7 @@ class NikoSessionQuickActionsPanel extends StatefulWidget {
       this.onCaptureMode,
       this.privacyScreen,
       this.onPrivacyScreen,
+      this.privacyStyle,
       required this.onClose});
 
   @override
@@ -104,7 +106,8 @@ class _NikoSessionQuickActionsPanelState
         contentPadding: EdgeInsets.zero,
         value: on,
         title: Text(nikoPrivacyScreenLabel(status)),
-        subtitle: Text(nikoPrivacyScreenDetail(status, widget.peerPlatform)),
+        subtitle: Text(nikoPrivacyScreenDetail(status, widget.peerPlatform,
+            styled: widget.privacyStyle != null)),
         onChanged: _busy ||
                 widget.onPrivacyScreen == null ||
                 !nikoPrivacyScreenCanToggle(status)
@@ -125,6 +128,7 @@ class _NikoSessionQuickActionsPanelState
                 'If it is on when you disconnect, the next connection to this device turns it on again; leave it on to have it every time.'),
             style: Theme.of(context).textTheme.bodySmall),
       const Divider(),
+      if (widget.privacyStyle != null) widget.privacyStyle!,
     ];
   }
 

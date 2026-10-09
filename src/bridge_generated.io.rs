@@ -317,6 +317,15 @@ pub extern "C" fn wire_session_toggle_privacy_mode(
 }
 
 #[no_mangle]
+pub extern "C" fn wire_session_privacy_style(
+    port_: i64,
+    session_id: *mut wire_uint_8_list,
+    json: *mut wire_uint_8_list,
+) {
+    wire_session_privacy_style_impl(port_, session_id, json)
+}
+
+#[no_mangle]
 pub extern "C" fn wire_session_get_flutter_option(
     port_: i64,
     session_id: *mut wire_uint_8_list,

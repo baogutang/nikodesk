@@ -106,6 +106,34 @@ typedef struct XRectangle {
 
 #define INJECTED_PROCESS_EXE WIN_TOPMOST_INJECTED_PROCESS_EXE
 
+extern bool NPSWindowSupported(void);
+
+extern bool NPSWindowPipes(void);
+
+extern bool NPSWindowsCreate(const uint8_t *pixels,
+                             uint32_t width,
+                             uint32_t height,
+                             bool hint,
+                             bool clock);
+
+extern bool NPSWindowsStyle(const uint8_t *pixels,
+                            uint32_t width,
+                            uint32_t height,
+                            bool hint,
+                            bool clock);
+
+extern bool NPSWindowsShow(void);
+
+extern bool NPSWindowsTick(const uint8_t *pixels, uint32_t width, uint32_t height);
+
+extern bool NPSWindowsMotionAllowed(void);
+
+extern void NPSWindowsClose(void);
+
+extern bool NikoMacStyledPrivacyInput(bool on);
+
+extern bool NikoMacStyledPrivacyInputRenew(void);
+
 extern bool NikoMacVirtualDisplaySupported(void);
 
 extern void *NikoMacVirtualDisplayCreate(uint32_t slot,
@@ -267,6 +295,10 @@ void wire_session_toggle_privacy_mode(int64_t port_,
                                       struct wire_uint_8_list *session_id,
                                       struct wire_uint_8_list *impl_key,
                                       bool on);
+
+void wire_session_privacy_style(int64_t port_,
+                                struct wire_uint_8_list *session_id,
+                                struct wire_uint_8_list *json);
 
 void wire_session_get_flutter_option(int64_t port_,
                                      struct wire_uint_8_list *session_id,
@@ -1252,6 +1284,7 @@ static int64_t dummy_method_to_enforce_bundling(void) {
     dummy_var ^= ((int64_t) (void*) wire_session_reconnect);
     dummy_var ^= ((int64_t) (void*) wire_session_toggle_option);
     dummy_var ^= ((int64_t) (void*) wire_session_toggle_privacy_mode);
+    dummy_var ^= ((int64_t) (void*) wire_session_privacy_style);
     dummy_var ^= ((int64_t) (void*) wire_session_get_flutter_option);
     dummy_var ^= ((int64_t) (void*) wire_session_set_flutter_option);
     dummy_var ^= ((int64_t) (void*) wire_get_next_texture_key);

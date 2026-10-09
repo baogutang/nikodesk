@@ -234,6 +234,11 @@ fn main() {
     // there is problem with cfg(target_os) in build.rs, so use our workaround
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     if target_os == "macos" && env::var_os("CARGO_FEATURE_NIKODESK").is_some() {
+        cc::Build::new().cpp(true).flag("-std=c++17").flag("-fobjc-arc").flag("-fblocks")
+            .file("src/common/privacy_capture.mm").compile("nikodesk_privacy_capture");
+        println!("cargo:rerun-if-changed=src/common/privacy_capture.mm");
+        println!("cargo:rustc-link-lib=framework=ScreenCaptureKit");
+        println!("cargo:rustc-link-lib=framework=CoreGraphics");
         for file in ["src/common/macos_camera.mm", "src/common/macos_camera.h", "src/common/macos_camera_state.h"] {
             println!("cargo:rerun-if-changed={file}");
         }

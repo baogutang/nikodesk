@@ -66,6 +66,11 @@ pub trait PrivacyMode: Sync + Send {
     #[cfg(all(feature = "nikodesk", any(target_os="windows",target_os="macos")))]
     fn nikodesk_heartbeat(&mut self, _conn_id: i32, _permitted: bool) -> bool { false }
 
+    #[cfg(all(feature = "nikodesk", any(target_os="windows",target_os="macos")))]
+    fn nikodesk_apply_style(&mut self, _conn_id:i32, _style:base::message_proto::NikoPrivacyStyle) -> ResultType<bool> {
+        bail!("style_unsupported")
+    }
+
     #[inline]
     fn check_on_conn_id(&self, conn_id: i32) -> ResultType<bool> {
         let pre_conn_id = self.pre_conn_id();
@@ -176,6 +181,10 @@ lazy_static::lazy_static! {
                 Box::new(crate::nikodesk::privacy_windows::PrivacyModeImpl::new(key))
             });
         }
+        #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+        map.insert(crate::nikodesk::privacy_style::IMPL, |_| {
+            Box::new(crate::nikodesk::privacy_style::native::StyledPrivacy::new())
+        });
         Arc::new(Mutex::new(map))
     };
 }
@@ -321,6 +330,12 @@ pub fn turn_off_privacy(conn_id: i32, state: Option<PrivacyModeState>) -> Option
     )
 }
 
+#[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+pub(crate) fn apply_nikodesk_style(conn_id:i32, style:base::message_proto::NikoPrivacyStyle)->ResultType<bool> {
+    let mut mode=PRIVACY_MODE.lock().map_err(|_|anyhow!("privacy_lock_unavailable"))?;
+    crate::nikodesk::privacy_style::native::apply_owned(&mut mode, conn_id, style)
+}
+
 #[inline]
 pub fn check_on_conn_id(conn_id: i32) -> Option<ResultType<bool>> {
     Some(
@@ -349,7 +364,8 @@ pub fn get_supported_privacy_mode_impl() -> Vec<(&'static str, &'static str)> {
     #[cfg(all(target_os = "windows", feature = "nikodesk"))]
     {
         if crate::nikodesk::privacy_windows::supported() {
-            vec![(crate::nikodesk::privacy_windows::IMPL, "NikoDesk privacy screen")]
+            vec![(crate::nikodesk::privacy_windows::IMPL, "NikoDesk privacy screen"),
+                (crate::nikodesk::privacy_style::IMPL, "Privacy wallpaper")]
         } else { Vec::new() }
     }
     #[cfg(all(target_os = "windows", not(feature = "nikodesk")))]
@@ -381,7 +397,13 @@ pub fn get_supported_privacy_mode_impl() -> Vec<(&'static str, &'static str)> {
         // No translation is intended for privacy_mode_impl_macos_tip as it is a 
         // placeholder for macOS specific privacy mode implementation which currently
         // doesn't provide multiple modes like Windows does.
-        vec![(macos::PRIVACY_MODE_IMPL, "privacy_mode_impl_macos_tip")]
+        #[allow(unused_mut)]
+        let mut modes=vec![(macos::PRIVACY_MODE_IMPL, "privacy_mode_impl_macos_tip")];
+        #[cfg(feature="nikodesk")]
+        if crate::nikodesk::privacy_style::native::supported() {
+            modes.push((crate::nikodesk::privacy_style::IMPL, "Privacy wallpaper"));
+        }
+        modes
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {

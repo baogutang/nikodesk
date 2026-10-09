@@ -688,6 +688,24 @@ fn wire_session_toggle_privacy_mode_impl(
         },
     )
 }
+fn wire_session_privacy_style_impl(
+    port_: MessagePort,
+    session_id: impl Wire2Api<uuid::Uuid> + UnwindSafe,
+    json: impl Wire2Api<String> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "session_privacy_style",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_session_id = session_id.wire2api();
+            let api_json = json.wire2api();
+            move |task_callback| Ok(session_privacy_style(api_session_id, api_json))
+        },
+    )
+}
 fn wire_session_get_flutter_option_impl(
     port_: MessagePort,
     session_id: impl Wire2Api<uuid::Uuid> + UnwindSafe,

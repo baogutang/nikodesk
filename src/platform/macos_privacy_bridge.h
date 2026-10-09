@@ -13,6 +13,8 @@ nikodesk_privacy::watchdog::Client nikoPrivacyWatchdog;
 CFMachPortRef nikoPrivacyEventTap = nullptr;
 CFRunLoopSourceRef nikoPrivacyRunLoopSource = nullptr;
 bool nikoPrivacyActive = false;
+bool nikoStyledPrivacyInput = false;
+std::chrono::steady_clock::time_point nikoStyledPrivacyDeadline;
 bool nikoPrivacyCallbackRegistered = false;
 uint64_t nikoPrivacyMonitorToken = 0;
 uint64_t nikoPrivacySessionToken = 0;
@@ -55,6 +57,7 @@ void NikoPrivacyReconfigured(CGDirectDisplayID, CGDisplayChangeSummaryFlags, voi
 bool NikoPrivacyTurnOff() {
     const bool wasActive = nikoPrivacyActive;
     nikoPrivacyActive = false;
+    nikoStyledPrivacyInput = false;
     ++nikoPrivacyMonitorToken;
     ++nikoPrivacySessionToken;
     bool callbackRemoved = true;
@@ -239,5 +242,43 @@ extern "C" bool NikoMacPrivacyModeActive() {
     if ([NSThread isMainThread]) return nikoPrivacyActive;
     __block bool active = false;
     dispatch_sync(dispatch_get_main_queue(), ^{ active = nikoPrivacyActive; });
+    return active;
+}
+
+// Styled privacy changes no gamma tables. Its independent renderer and this
+// input tap each expire unless the authenticated owner renews their lease.
+static void NikoStyledInputMonitor(uint64_t token) {
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,200*NSEC_PER_MSEC),dispatch_get_main_queue(),^{
+        if(!nikoStyledPrivacyInput || token!=nikoPrivacySessionToken)return;
+        if(std::chrono::steady_clock::now()>nikoStyledPrivacyDeadline ||
+            !nikoPrivacyEventTap || !CGEventTapIsEnabled(nikoPrivacyEventTap)) {
+            NikoPrivacyTurnOff();return;
+        }
+        NikoStyledInputMonitor(token);
+    });
+}
+extern "C" bool NikoMacStyledPrivacyInput(bool on) {
+    __block bool success=false;
+    void (^operation)(void)=^{
+        if(!on){if(nikoStyledPrivacyInput)NikoPrivacyTurnOff();success=true;return;}
+        if(nikoPrivacyActive || nikoStyledPrivacyInput || nikoPrivacyCallbackRegistered ||
+            nikoPrivacyGammas.has_pending_restore() || !AXIsProcessTrusted())return;
+        ++nikoPrivacySessionToken;
+        if(!NikoPrivacySetupInput()){NikoPrivacyTeardownInput();return;}
+        nikoStyledPrivacyInput=true;
+        nikoStyledPrivacyDeadline=std::chrono::steady_clock::now()+std::chrono::seconds(3);
+        NikoStyledInputMonitor(nikoPrivacySessionToken);success=true;
+    };
+    if(NSThread.isMainThread)operation();else dispatch_sync(dispatch_get_main_queue(),operation);
+    return success;
+}
+extern "C" bool NikoMacStyledPrivacyInputRenew() {
+    __block bool active=false;
+    void (^operation)(void)=^{
+        active=nikoStyledPrivacyInput && AXIsProcessTrusted() && nikoPrivacyEventTap && CGEventTapIsEnabled(nikoPrivacyEventTap)
+            && std::chrono::steady_clock::now()<nikoStyledPrivacyDeadline;
+        if(active)nikoStyledPrivacyDeadline=std::chrono::steady_clock::now()+std::chrono::seconds(3);
+    };
+    if(NSThread.isMainThread)operation();else dispatch_sync(dispatch_get_main_queue(),operation);
     return active;
 }

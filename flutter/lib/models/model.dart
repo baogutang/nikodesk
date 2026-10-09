@@ -8,6 +8,7 @@ import 'package:flutter_hbb/nikodesk/tunnel_cleanup_view.dart';
 import 'package:flutter_hbb/nikodesk/connection_progress.dart';
 import 'package:flutter_hbb/nikodesk/connection_progress_view.dart';
 import 'package:flutter_hbb/nikodesk/remote_resolution.dart';
+import 'package:flutter_hbb/nikodesk/privacy_style_events.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -451,6 +452,8 @@ class FfiModel with ChangeNotifier {
         updateBlockInputState(evt, peerId);
       } else if (name == 'update_privacy_mode') {
         updatePrivacyMode(evt, sessionId, peerId);
+      } else if (const bool.fromEnvironment('NIKODESK') && name == 'nikodesk_privacy_style') {
+        NikoPrivacyStyleReplies.handle(sessionId, evt['payload']);
       } else if (name == 'show_elevation') {
         final show = evt['show'].toString() == 'true';
         parent.target?.serverModel.setShowElevation(show);
@@ -1558,6 +1561,7 @@ class FfiModel with ChangeNotifier {
       }
       Map<String, dynamic> features = json.decode(evt['features']);
       _pi.features.privacyMode = features['privacy_mode'] == true;
+      _pi.features.privacyStyle = features['nikodesk_privacy_style_v1'] == true;
       if (!isCache) {
         handleResolutions(peerId, evt["resolutions"]);
       }
@@ -4812,6 +4816,7 @@ class Resolution {
 
 class Features {
   bool privacyMode = false;
+  bool privacyStyle = false;
 }
 
 const kInvalidDisplayIndex = -1;

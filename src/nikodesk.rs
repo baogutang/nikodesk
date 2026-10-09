@@ -88,6 +88,8 @@ pub(crate) mod credentials;
 #[cfg(windows)]
 #[path = "nikodesk/privacy_windows.rs"]
 pub(crate) mod privacy_windows;
+#[path = "nikodesk/privacy_style.rs"]
+pub(crate) mod privacy_style;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 #[path = "nikodesk/virtual_display.rs"]
 pub(crate) mod virtual_display;
@@ -168,8 +170,8 @@ pub fn log_android(message: &str) {
             fmt: *const std::os::raw::c_char, ...) -> i32;
     }
     const ANDROID_LOG_ERROR: i32 = 4;
-    let tag = c"NikoDesk".as_ptr();
-    let fmt = c"%s".as_ptr();
+    let tag = b"NikoDesk\0".as_ptr().cast();
+    let fmt = b"%s\0".as_ptr().cast();
     let text = CString::new(message.replace('\0', " ")).unwrap_or_default();
     unsafe {
         let _ = __android_log_print(ANDROID_LOG_ERROR, tag, fmt, text.as_ptr());

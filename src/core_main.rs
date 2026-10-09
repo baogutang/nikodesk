@@ -30,6 +30,10 @@ macro_rules! my_println{
 /// If it returns [`Some`], then the process will continue, and flutter gui will be started.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn core_main() -> Option<Vec<String>> {
+    #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
+    if let Some(code)=crate::nikodesk::privacy_style::native_helper_entry() {
+        std::process::exit(code);
+    }
     #[cfg(all(feature = "nikodesk", windows))]
     if let Some(code) = crate::nikodesk::privacy_windows::helper_entry() {
         std::process::exit(code);
