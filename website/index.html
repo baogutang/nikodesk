@@ -60,7 +60,7 @@ section[id] { scroll-margin-top: 84px; }
 .skip-link { position: fixed; top: 10px; left: 16px; z-index: 70; background: var(--ink); color: var(--paper); padding: 10px 18px; border-radius: 999px; font-size: 13px; transform: translateY(-200%); transition: transform .3s var(--ease); }
 .skip-link:focus { transform: none; }
 /* grid children may shrink so long code/text cannot blow out tracks */
-.hero-grid > *, .phil > *, .deploy-grid > *, .faq-grid > *, .band-cols > *, .dl-rows > *, .foot > * { min-width: 0; }
+.hero-grid > *, .phil > *, .deploy-grid > *, .faq-grid > *, .band-cols > *, .dl-rows > *, .fit-grid > *, .foot > * { min-width: 0; }
 
 /* Film grain */
 .grain {
@@ -136,6 +136,8 @@ section[id] { scroll-margin-top: 84px; }
 .btn-text:hover, .btn-text:active { color: var(--acc); background: transparent; border-bottom-color: var(--acc); box-shadow: none; }
 .btn-text span:last-child { display: inline-block; transition: transform .45s var(--ease); }
 .btn-text:hover span:last-child { transform: translate(3px, -3px); }
+.hero-prereq { margin-top: 24px; display: flex; gap: 12px; align-items: baseline; font-family: var(--mono); font-size: 11.5px; letter-spacing: .04em; line-height: 1.9; color: var(--mut); max-width: 54ch; }
+.hero-prereq::before { content: ""; flex: 0 0 auto; width: 22px; height: 1px; background: var(--acc); transform: translateY(-4px); }
 
 /* ---------- Interactive example stage ---------- */
 .stage { position: relative; margin: 84px auto 0; max-width: 1020px; }
@@ -240,6 +242,21 @@ h2 { font-family: var(--serif); font-size: clamp(34px, 4.6vw, 58px); line-height
 .band-col a:hover { border-color: currentColor; }
 @media (max-width: 900px) { .band-in { padding: 56px 30px; } .band-cols { grid-template-columns: 1fr; gap: 30px; } }
 
+/* ---------- Who it's for (interlude) ---------- */
+.fit-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 26px; margin-top: 58px; }
+.fit-col { border: 1px solid var(--line); border-radius: 24px; background: var(--card); padding: 36px 36px 32px; }
+.fit-col.alt { background: transparent; }
+.fit-col .tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase; color: var(--acc); }
+.fit-col.alt .tag { color: var(--mut); }
+.fit-col ul { list-style: none; margin-top: 22px; }
+.fit-col li { position: relative; padding: 13px 0 13px 32px; border-top: 1px solid var(--line-soft); font-size: 14.5px; line-height: 1.9; color: var(--ink-2); }
+.fit-col li:last-child { border-bottom: 1px solid var(--line-soft); }
+.fit-col li::before { content: "✓"; position: absolute; left: 2px; top: 13px; color: var(--acc); font-weight: 700; }
+.fit-col.alt li { color: var(--mut); }
+.fit-col.alt li::before { content: "—"; color: var(--mut); font-weight: 400; }
+.fit-note { margin-top: 36px; max-width: 60ch; font-family: var(--serif); font-size: clamp(19px, 2.3vw, 26px); line-height: 1.8; font-weight: 700; }
+@media (max-width: 860px) { .fit-grid { grid-template-columns: 1fr; gap: 20px; } .fit-col { padding: 28px 24px 26px; } }
+
 /* ---------- Deploy ---------- */
 .deploy-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 70px; margin-top: 60px; align-items: center; }
 .dstep { display: flex; gap: 26px; padding: 30px 0; border-top: 1px solid var(--line); }
@@ -291,6 +308,8 @@ h2 { font-family: var(--serif); font-size: clamp(34px, 4.6vw, 58px); line-height
 .faq-item .plus { font-family: var(--sans); flex: 0 0 auto; width: 30px; height: 30px; border-radius: 999px; border: 1px solid var(--line); display: grid; place-items: center; font-size: 15px; color: var(--mut); transition: transform .5s var(--ease), background .5s var(--ease), color .5s var(--ease); }
 .faq-item[open] .plus { transform: rotate(45deg); background: var(--acc); border-color: var(--acc); color: #FFF7EC; }
 .faq-item .a { padding: 0 40px 28px 4px; color: var(--mut); font-size: 14.5px; line-height: 2.0; }
+.faq-item .a a { color: var(--acc); font-weight: 600; border-bottom: 1px solid rgba(194,79,41,.35); }
+.faq-item .a a:hover { border-color: currentColor; }
 @media (max-width: 900px) { .faq-grid { grid-template-columns: 1fr; gap: 40px; } }
 
 /* ---------- Finale ---------- */
@@ -346,6 +365,7 @@ footer { border-top: 1px solid var(--line); padding: 70px 0 46px; background: va
       <a href="#features">How it works</a>
       <a href="#why">The connection</a>
       <a href="#security">Trust</a>
+      <a href="#fit">Who it's for</a>
       <a href="#deploy">Self-hosting</a>
       <a href="#faq">FAQ</a>
     </nav>
@@ -362,11 +382,12 @@ footer { border-top: 1px solid var(--line); padding: 70px 0 46px; background: va
   <h1 class="rv" style="--d:.08s">Your familiar desktop.<br><em>Wherever you work.</em></h1>
   <div class="hero-grid">
     <div class="rv" style="--d:.16s">
-      <p class="sub">NikoDesk brings remote desktop back to what it should be — <b>open it, connect, and carry on with the work in front of you</b>. No accounts, no third-party cloud: the connection happens only between you and your own server.</p>
+      <p class="sub">Open NikoDesk, connect through <b>your own server</b>, and keep working on your computer from anywhere. No accounts — and no third party ever sees your screen or files.</p>
       <div class="cta-row">
         <a class="btn btn-primary" href="#download"><span>Get NikoDesk</span><span class="ic" aria-hidden="true">↗</span></a>
         <a class="btn btn-text" href="#features"><span>See how it works</span><span aria-hidden="true">↓</span></a>
       </div>
+      <p class="hero-prereq">Before you download · a server of your own (public address), two commands to set up; already running RustDesk Server? You're ready.</p>
     </div>
     <aside class="hero-side rv" style="--d:.24s" aria-label="Project facts">
       <div class="hero-fact"><span class="k">Core</span><span class="v">Native RustDesk</span></div>
@@ -395,7 +416,7 @@ footer { border-top: 1px solid var(--line); padding: 70px 0 46px; background: va
 
 <!-- ============ Features ============ -->
 <section id="features" class="wrap" tabindex="-1">
-  <div class="kicker rv"><span>Chapter 01 · How it works</span><span class="rule"></span><span>04 things</span></div>
+  <div class="kicker rv"><span>How it works</span><span class="rule"></span></div>
   <h2 class="rv">A different place.<br>The same familiar flow.</h2>
   <div class="work-list">
     <div class="work-row rv"><span class="no">01</span><h3>Back to your desktop</h3><p>Find a computer in your device list and keep working with your keyboard and mouse. Switch displays, go full screen and keep familiar shortcuts close.</p><span class="arrow" aria-hidden="true">→</span></div>
@@ -406,8 +427,8 @@ footer { border-top: 1px solid var(--line); padding: 70px 0 46px; background: va
 
   <blockquote class="quote rv">
     <span class="mark" aria-hidden="true">“</span>
-    <p>A good tool never asks for your attention. It feels like your own study — quiet, familiar, always ready.</p>
-    <cite>NikoDesk design notes</cite>
+    <p>A remote desktop shouldn't ask you to sign up or hand over your device list. If a service can be self-hosted, it should be.</p>
+    <cite>Why NikoDesk exists</cite>
   </blockquote>
 </section>
 
@@ -415,9 +436,9 @@ footer { border-top: 1px solid var(--line); padding: 70px 0 46px; background: va
 <section id="why" class="wrap" tabindex="-1">
   <div class="phil">
     <div class="phil-sticky">
-      <div class="kicker rv"><span>Chapter 02 · The connection</span><span class="rule"></span></div>
+      <div class="kicker rv"><span>The connection</span><span class="rule"></span></div>
       <h2 class="rv">A connection that<br>only concerns you.</h2>
-      <p class="sec-sub rv">Most remote desktops ask you to keep your device list, connection history and even your screen on someone else's servers. NikoDesk chooses the opposite: registration, discovery and relay all run on your own machines.</p>
+      <p class="sec-sub rv">Most services keep your device list and connection history, and relay your screen through their servers. NikoDesk works the other way: registration, discovery and relay all run on hardware you own.</p>
       <div class="map-card rv" style="--d:.1s; margin-top: 42px;">
         <div class="map-inner">
           <svg class="topo" viewBox="0 0 460 240" role="img" aria-label="Your server helps discover the remote computer, then a direct connection is attempted with relay as needed">
@@ -438,10 +459,10 @@ footer { border-top: 1px solid var(--line); padding: 70px 0 46px; background: va
       </div>
     </div>
     <div>
-      <div class="phil-item rv"><span class="no">I.</span><div><h3>Registration you own</h3><p>Your device list, online status and key exchange live only on your server. No accounts, no cloud sync, and no "platform" that can see what devices you have.</p></div></div>
-      <div class="phil-item rv" style="--d:.06s"><span class="no">II.</span><div><h3>Direct first</h3><p>Sessions try NAT traversal first, so both ends talk directly. When the network does not allow it, traffic falls back to your own relay. You never choose between speed and reachability.</p></div></div>
-      <div class="phil-item rv" style="--d:.12s"><span class="no">III.</span><div><h3>Never calls out</h3><p>Without private-server settings, the client connects to no public rendezvous server. That is not a promise — it is behaviour written into the code.</p></div></div>
-      <div class="phil-item rv" style="--d:.18s"><span class="no">IV.</span><div><h3>Leave anytime</h3><p>The server side is the open-source RustDesk Server OSS, with no data locked into any format. Self-host today, migrate tomorrow — the choice stays yours.</p></div></div>
+      <div class="phil-item rv"><span class="no">I.</span><div><h3>Registration you own</h3><p>Your device list, online status and keys live only on your server. No accounts, no cloud sync.</p></div></div>
+      <div class="phil-item rv" style="--d:.06s"><span class="no">II.</span><div><h3>Direct first</h3><p>If a direct connection can be punched through, it is. Only when the network says no does traffic fall back to your own relay.</p></div></div>
+      <div class="phil-item rv" style="--d:.12s"><span class="no">III.</span><div><h3>Never calls out</h3><p>Without private-server settings, the client contacts no public rendezvous server. Hard-coded, not promised.</p></div></div>
+      <div class="phil-item rv" style="--d:.18s"><span class="no">IV.</span><div><h3>Leave anytime</h3><p>The server side is the open-source RustDesk Server OSS — no proprietary formats. When you're done with it, replace it.</p></div></div>
     </div>
   </div>
 </section>
@@ -450,9 +471,9 @@ footer { border-top: 1px solid var(--line); padding: 70px 0 46px; background: va
 <section id="security" class="wrap" tabindex="-1">
   <div class="band rv">
     <div class="band-in">
-      <div class="kicker"><span>Chapter 03 · Trust</span><span class="rule"></span></div>
+      <div class="kicker"><span>Trust</span><span class="rule"></span></div>
       <h2>Trust, where you can see it.</h2>
-      <p class="sec-sub">A sense of safety comes from mechanisms, not promises. NikoDesk keeps every boundary in plain sight.</p>
+      <p class="sec-sub">"Secure" is a claim, not an argument. These three things you can check yourself.</p>
       <div class="band-cols">
         <div class="band-col"><span class="no">/ 01</span><h3>Choose who connects</h3><p>Manage passwords and access rules on the remote computer. Grant viewing, input and file permissions separately, and end a session at any time.</p></div>
         <div class="band-col"><span class="no">/ 02</span><h3>Permissions stay visible</h3><p>Screen capture, input, camera and microphone follow system permissions. Allow access when needed and revoke it afterwards.</p></div>
@@ -462,9 +483,36 @@ footer { border-top: 1px solid var(--line); padding: 70px 0 46px; background: va
   </div>
 </section>
 
+<!-- ============ Interlude: who it's for ============ -->
+<section id="fit" class="wrap" tabindex="-1">
+  <div class="kicker rv"><span>Who it's for</span><span class="rule"></span></div>
+  <h2 class="rv">Who it's for —<br>and who it isn't.</h2>
+  <p class="sec-sub rv">One thing first: NikoDesk needs a server that belongs to you. Not a flaw — the premise.</p>
+  <div class="fit-grid">
+    <div class="fit-col rv">
+      <span class="tag">It suits you if</span>
+      <ul>
+        <li>You have a machine with a public address — a VPS, a NAS or an always-on computer — or you'd gladly add one</li>
+        <li>You already run RustDesk Server and want a more considered client</li>
+        <li>You care where your device list and connection history live</li>
+        <li>You'd trade one setup session for lasting independence</li>
+      </ul>
+    </div>
+    <div class="fit-col alt rv" style="--d:.08s">
+      <span class="tag">Not yet, if</span>
+      <ul>
+        <li>You want to create an account and reach any computer right away</li>
+        <li>You'd rather not touch servers, Docker or the command line</li>
+        <li>You need things not yet offered, like controlling a phone or a web client</li>
+      </ul>
+    </div>
+  </div>
+  <p class="fit-note rv" style="--d:.12s">If the right column sounds like you, skip the install for now. Connections that never touch a third party need a server you run — a trade-off made on purpose, not a gap to close later.</p>
+</section>
+
 <!-- ============ Self-hosting ============ -->
 <section id="deploy" class="wrap" tabindex="-1">
-  <div class="kicker rv"><span>Chapter 04 · Get started</span><span class="rule"></span></div>
+  <div class="kicker rv"><span>Get started</span><span class="rule"></span></div>
   <h2 class="rv">Two processes are all<br>the server you need.</h2>
   <div class="deploy-grid">
     <div>
@@ -494,8 +542,8 @@ OeVuKk5nlHiXp+AppNnWyYwf1yNnKy=
 <section id="download" class="wrap" tabindex="-1">
   <div class="dl-head">
     <div>
-      <div class="kicker rv"><span>Chapter 05 · Download</span><span class="rule"></span></div>
-      <h2 class="rv">Choose your device.</h2>
+      <div class="kicker rv"><span>Download</span><span class="rule"></span></div>
+      <h2 class="rv">Choose your system.</h2>
     </div>
     <a class="ver-link rv" href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.10">v1.0.10 · Full release notes ↗</a>
   </div>
@@ -526,12 +574,12 @@ OeVuKk5nlHiXp+AppNnWyYwf1yNnKy=
 <section id="faq" class="wrap" tabindex="-1">
   <div class="faq-grid">
     <div>
-      <div class="kicker rv"><span>Chapter 06 · FAQ</span><span class="rule"></span></div>
+      <div class="kicker rv"><span>FAQ</span><span class="rule"></span></div>
       <h2 class="rv">Before you begin,<br>let's be clear.</h2>
-      <p class="sec-sub rv">We don't hide limitations. Four things people ask most about the current state of NikoDesk.</p>
+      <p class="sec-sub rv">A few limitations, stated up front. Also the questions we hear most.</p>
     </div>
     <div class="faq-list">
-      <details class="faq-item rv"><summary>Do I need my own server?<span class="plus">+</span></summary><div class="a">Yes: an accessible RustDesk Server OSS instance, including one you already run. NikoDesk does not connect to public rendezvous servers when private-server settings are absent.</div></details>
+      <details class="faq-item rv"><summary>Do I need my own server?<span class="plus">+</span></summary><div class="a">Yes — it is the one prerequisite. NikoDesk neither offers nor contacts any public rendezvous server: before your first connection you need a server of your own (reuse an existing RustDesk Server OSS, or set one up with two commands in <a href="#deploy">Get started</a>). Without one, the client connects to nothing and no one.</div></details>
       <details class="faq-item rv" style="--d:.05s"><summary>Do downloaded updates install automatically?<span class="plus">+</span></summary><div class="a">Updates currently require manual installation. Follow the installation steps after downloading: quit the old version, replace the app and reopen it. See the release page for details and signing information.</div></details>
       <details class="faq-item rv" style="--d:.1s"><summary>Can I control an Android phone remotely?<span class="plus">+</span></summary><div class="a">The Android app is a controller for your Windows or Mac computer. It does not expose the phone for remote control.</div></details>
       <details class="faq-item rv" style="--d:.15s"><summary>How is NikoDesk related to RustDesk?<span class="plus">+</span></summary><div class="a">NikoDesk is an independent open-source project built on the native RustDesk core under AGPL-3.0. It is not affiliated with or endorsed by RustDesk.</div></details>

@@ -58,7 +58,7 @@ section[id] { scroll-margin-top: 84px; }
 .skip-link { position: fixed; top: 10px; left: 16px; z-index: 70; background: var(--ink); color: var(--paper); padding: 10px 18px; border-radius: 999px; font-size: 13px; transform: translateY(-200%); transition: transform .3s var(--ease); }
 .skip-link:focus { transform: none; }
 /* grid 子项允许收缩，防止长代码/长文本撑爆轨道 */
-.hero-grid > *, .phil > *, .deploy-grid > *, .faq-grid > *, .band-cols > *, .dl-rows > *, .foot > * { min-width: 0; }
+.hero-grid > *, .phil > *, .deploy-grid > *, .faq-grid > *, .band-cols > *, .dl-rows > *, .fit-grid > *, .foot > * { min-width: 0; }
 
 /* 胶片颗粒 */
 .grain {
@@ -134,6 +134,8 @@ section[id] { scroll-margin-top: 84px; }
 .btn-text:hover, .btn-text:active { color: var(--acc); background: transparent; border-bottom-color: var(--acc); box-shadow: none; }
 .btn-text span:last-child { display: inline-block; transition: transform .45s var(--ease); }
 .btn-text:hover span:last-child { transform: translate(3px, -3px); }
+.hero-prereq { margin-top: 24px; display: flex; gap: 12px; align-items: baseline; font-family: var(--mono); font-size: 11.5px; letter-spacing: .04em; line-height: 1.9; color: var(--mut); max-width: 54ch; }
+.hero-prereq::before { content: ""; flex: 0 0 auto; width: 22px; height: 1px; background: var(--acc); transform: translateY(-4px); }
 
 /* ---------- 交互示例展台 ---------- */
 .stage { position: relative; margin: 84px auto 0; max-width: 1020px; }
@@ -238,6 +240,21 @@ h2 { font-family: var(--serif); font-size: clamp(34px, 4.6vw, 58px); line-height
 .band-col a:hover { border-color: currentColor; }
 @media (max-width: 900px) { .band-in { padding: 56px 30px; } .band-cols { grid-template-columns: 1fr; gap: 30px; } }
 
+/* ---------- 适合谁（间奏） ---------- */
+.fit-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 26px; margin-top: 58px; }
+.fit-col { border: 1px solid var(--line); border-radius: 24px; background: var(--card); padding: 36px 36px 32px; }
+.fit-col.alt { background: transparent; }
+.fit-col .tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase; color: var(--acc); }
+.fit-col.alt .tag { color: var(--mut); }
+.fit-col ul { list-style: none; margin-top: 22px; }
+.fit-col li { position: relative; padding: 13px 0 13px 32px; border-top: 1px solid var(--line-soft); font-size: 14.5px; line-height: 1.9; color: var(--ink-2); }
+.fit-col li:last-child { border-bottom: 1px solid var(--line-soft); }
+.fit-col li::before { content: "✓"; position: absolute; left: 2px; top: 13px; color: var(--acc); font-weight: 700; }
+.fit-col.alt li { color: var(--mut); }
+.fit-col.alt li::before { content: "—"; color: var(--mut); font-weight: 400; }
+.fit-note { margin-top: 36px; max-width: 60ch; font-family: var(--serif); font-size: clamp(19px, 2.3vw, 26px); line-height: 1.8; font-weight: 700; }
+@media (max-width: 860px) { .fit-grid { grid-template-columns: 1fr; gap: 20px; } .fit-col { padding: 28px 24px 26px; } }
+
 /* ---------- 部署 ---------- */
 .deploy-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 70px; margin-top: 60px; align-items: center; }
 .dstep { display: flex; gap: 26px; padding: 30px 0; border-top: 1px solid var(--line); }
@@ -289,6 +306,8 @@ h2 { font-family: var(--serif); font-size: clamp(34px, 4.6vw, 58px); line-height
 .faq-item .plus { font-family: var(--sans); flex: 0 0 auto; width: 30px; height: 30px; border-radius: 999px; border: 1px solid var(--line); display: grid; place-items: center; font-size: 15px; color: var(--mut); transition: transform .5s var(--ease), background .5s var(--ease), color .5s var(--ease); }
 .faq-item[open] .plus { transform: rotate(45deg); background: var(--acc); border-color: var(--acc); color: #FFF7EC; }
 .faq-item .a { padding: 0 40px 28px 4px; color: var(--mut); font-size: 14.5px; line-height: 2.0; }
+.faq-item .a a { color: var(--acc); font-weight: 600; border-bottom: 1px solid rgba(194,79,41,.35); }
+.faq-item .a a:hover { border-color: currentColor; }
 @media (max-width: 900px) { .faq-grid { grid-template-columns: 1fr; gap: 40px; } }
 
 /* ---------- 收尾 ---------- */
@@ -344,6 +363,7 @@ footer { border-top: 1px solid var(--line); padding: 70px 0 46px; background: va
       <a href="#features">工作方式</a>
       <a href="#why">连接哲学</a>
       <a href="#security">信任边界</a>
+      <a href="#fit">适合谁</a>
       <a href="#deploy">开始使用</a>
       <a href="#faq">问答</a>
     </nav>
@@ -360,11 +380,12 @@ footer { border-top: 1px solid var(--line); padding: 70px 0 46px; background: va
   <h1 class="rv" style="--d:.08s">把最熟悉的那台电脑，<br>带去<em>任何地方</em>。</h1>
   <div class="hero-grid">
     <div class="rv" style="--d:.16s">
-      <p class="sub">NikoDesk 让远程桌面回到它本该有的样子——<b>打开，连接，继续手里的工作</b>。没有账号，没有第三方云：连接只发生在你与自己的服务器之间。</p>
+      <p class="sub">打开 NikoDesk，连上<b>你自己的服务器</b>，就能接着操作家里或公司的电脑。没有账号，画面和文件也不经过任何第三方。</p>
       <div class="cta-row">
         <a class="btn btn-primary" href="#download"><span>免费下载</span><span class="ic" aria-hidden="true">↗</span></a>
         <a class="btn btn-text" href="#features"><span>看看它如何工作</span><span aria-hidden="true">↓</span></a>
       </div>
+      <p class="hero-prereq">上手前提 · 一台有公网地址的自有服务器，两行命令完成部署；已在运行 RustDesk Server 则开箱即用。</p>
     </div>
     <aside class="hero-side rv" style="--d:.24s" aria-label="项目要点">
       <div class="hero-fact"><span class="k">内核</span><span class="v">RustDesk 原生</span></div>
@@ -393,7 +414,7 @@ footer { border-top: 1px solid var(--line); padding: 70px 0 46px; background: va
 
 <!-- ============ 工作方式 ============ -->
 <section id="features" class="wrap" tabindex="-1">
-  <div class="kicker rv"><span>第一章 · 工作方式</span><span class="rule"></span><span>04 件事</span></div>
+  <div class="kicker rv"><span>工作方式</span><span class="rule"></span></div>
   <h2 class="rv">距离改变了，<br>工作方式不用变。</h2>
   <div class="work-list">
     <div class="work-row rv"><span class="no">01</span><h3>打开熟悉的桌面</h3><p>在设备目录中找到电脑，用键盘和鼠标接着操作。多屏切换、全屏与快捷键，让日常动作保持顺手。</p><span class="arrow" aria-hidden="true">→</span></div>
@@ -404,8 +425,8 @@ footer { border-top: 1px solid var(--line); padding: 70px 0 46px; background: va
 
   <blockquote class="quote rv">
     <span class="mark" aria-hidden="true">“</span>
-    <p>好的工具不索取注意力。它像自己的书房——安静，熟悉，随时可用。</p>
-    <cite>NikoDesk 设计笔记</cite>
+    <p>好的远程桌面不该要你注册账号、上传设备列表。能自己搭的服务，就自己搭。</p>
+    <cite>NikoDesk 的出发点</cite>
   </blockquote>
 </section>
 
@@ -413,9 +434,9 @@ footer { border-top: 1px solid var(--line); padding: 70px 0 46px; background: va
 <section id="why" class="wrap" tabindex="-1">
   <div class="phil">
     <div class="phil-sticky">
-      <div class="kicker rv"><span>第二章 · 连接哲学</span><span class="rule"></span></div>
+      <div class="kicker rv"><span>连接哲学</span><span class="rule"></span></div>
       <h2 class="rv">连接这件事，<br>只与你有关。</h2>
-      <p class="sec-sub rv">大多数远程桌面要求你把设备目录、连接记录乃至画面，寄存在别人的服务器上。NikoDesk 的选择相反：注册、发现、中继，全部运行在你自己的机器里。</p>
+      <p class="sec-sub rv">一般的服务会替你保管设备列表和连接记录，画面也要从别人的服务器走一遍。NikoDesk 反过来：注册、发现、中继，都跑在你自己的机器上。</p>
       <div class="map-card rv" style="--d:.1s; margin-top: 42px;">
         <div class="map-inner">
           <svg class="topo" viewBox="0 0 460 240" role="img" aria-label="本机通过自己的服务器发现远端电脑，随后优先直连，必要时中继">
@@ -436,10 +457,10 @@ footer { border-top: 1px solid var(--line); padding: 70px 0 46px; background: va
       </div>
     </div>
     <div>
-      <div class="phil-item rv"><span class="no">壹</span><div><h3>注册自主</h3><p>设备目录、在线状态与密钥交换只发生在你的服务器上。没有账号体系，没有云端同步，没有"平台"能看到你有什么设备。</p></div></div>
-      <div class="phil-item rv" style="--d:.06s"><span class="no">贰</span><div><h3>直连优先</h3><p>会话建立时优先 NAT 打洞，两端直接对话；网络不允许时，才回落到你自己的中继节点。速度与可达性，不必二选一。</p></div></div>
-      <div class="phil-item rv" style="--d:.12s"><span class="no">叁</span><div><h3>永不外连</h3><p>未配置私服时，客户端不会连接任何公共注册服务器。这不是一句承诺，而是写进代码的行为。</p></div></div>
-      <div class="phil-item rv" style="--d:.18s"><span class="no">肆</span><div><h3>随时离开</h3><p>服务端是开源的 RustDesk Server OSS，数据不锁定在任何格式里。今天自建，明天迁移，主动权一直在你手上。</p></div></div>
+      <div class="phil-item rv"><span class="no">壹</span><div><h3>注册自主</h3><p>设备列表、在线状态和密钥，只存在你的服务器上。没有账号，也没有云端同步。</p></div></div>
+      <div class="phil-item rv" style="--d:.06s"><span class="no">贰</span><div><h3>直连优先</h3><p>能打洞直连就直连，两端直接对话；实在不行，才走你自己的中继。</p></div></div>
+      <div class="phil-item rv" style="--d:.12s"><span class="no">叁</span><div><h3>永不外连</h3><p>没配私服时，客户端不会去连任何公共注册服务器。这是代码里写死的行为，不是口头承诺。</p></div></div>
+      <div class="phil-item rv" style="--d:.18s"><span class="no">肆</span><div><h3>随时离开</h3><p>服务端就是开源的 RustDesk Server OSS，没有私有格式。哪天不想用了，换掉就是。</p></div></div>
     </div>
   </div>
 </section>
@@ -448,9 +469,9 @@ footer { border-top: 1px solid var(--line); padding: 70px 0 46px; background: va
 <section id="security" class="wrap" tabindex="-1">
   <div class="band rv">
     <div class="band-in">
-      <div class="kicker"><span>第三章 · 信任边界</span><span class="rule"></span></div>
+      <div class="kicker"><span>信任边界</span><span class="rule"></span></div>
       <h2>信任，建立在看得见的地方。</h2>
-      <p class="sec-sub">安全感不来自承诺，来自机制。NikoDesk 把每一处边界都摆在明面上。</p>
+      <p class="sec-sub">光说安全没有用，得能自己验证。下面三件事，现在就可以去查。</p>
       <div class="band-cols">
         <div class="band-col"><span class="no">/ 01</span><h3>你决定谁能连接</h3><p>密码与接入策略由被控端管理。查看、操作和文件访问可以分别授权，会话也可以随时结束。</p></div>
         <div class="band-col"><span class="no">/ 02</span><h3>权限清楚可见</h3><p>屏幕录制、键鼠控制、相机和麦克风遵守系统权限。需要时授权，用完后可以撤回。</p></div>
@@ -460,9 +481,36 @@ footer { border-top: 1px solid var(--line); padding: 70px 0 46px; background: va
   </div>
 </section>
 
+<!-- ============ 间奏 · 适合谁 ============ -->
+<section id="fit" class="wrap" tabindex="-1">
+  <div class="kicker rv"><span>适合谁</span><span class="rule"></span></div>
+  <h2 class="rv">它适合谁，<br>不适合谁。</h2>
+  <p class="sec-sub rv">先说清楚一件事：NikoDesk 需要一台你自己的服务器。这不是缺点，是它的前提。</p>
+  <div class="fit-grid">
+    <div class="fit-col rv">
+      <span class="tag">它适合你，如果</span>
+      <ul>
+        <li>你有一台带公网地址的机器——云主机、NAS 或常开的电脑，或者愿意添置一台</li>
+        <li>你已经在运行 RustDesk Server，想换一个更顺手的客户端</li>
+        <li>你在意设备目录和连接记录存放在哪里</li>
+        <li>你愿意用一次部署，换长期的自主与安静</li>
+      </ul>
+    </div>
+    <div class="fit-col alt rv" style="--d:.08s">
+      <span class="tag">暂时不适合，如果</span>
+      <ul>
+        <li>你希望注册一个账号，立刻连接任何电脑</li>
+        <li>你不想接触服务器、Docker 与命令行</li>
+        <li>你需要手机被控、网页端等尚未提供的能力</li>
+      </ul>
+    </div>
+  </div>
+  <p class="fit-note rv" style="--d:.12s">更像右边那栏？现在先别装，省得折腾。连接永不经过第三方的代价，就是服务器得自己出——这是当初就想清楚的取舍，不是以后会补的功能。</p>
+</section>
+
 <!-- ============ 开始使用 ============ -->
 <section id="deploy" class="wrap" tabindex="-1">
-  <div class="kicker rv"><span>第四章 · 开始使用</span><span class="rule"></span></div>
+  <div class="kicker rv"><span>开始使用</span><span class="rule"></span></div>
   <h2 class="rv">两个进程，<br>就是完整的服务端。</h2>
   <div class="deploy-grid">
     <div>
@@ -492,8 +540,8 @@ OeVuKk5nlHiXp+AppNnWyYwf1yNnKy=
 <section id="download" class="wrap" tabindex="-1">
   <div class="dl-head">
     <div>
-      <div class="kicker rv"><span>第五章 · 下载</span><span class="rule"></span></div>
-      <h2 class="rv">按你的设备取用。</h2>
+      <div class="kicker rv"><span>下载</span><span class="rule"></span></div>
+      <h2 class="rv">选你的系统。</h2>
     </div>
     <a class="ver-link rv" href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.10">v1.0.10 · 完整版本说明 ↗</a>
   </div>
@@ -524,12 +572,12 @@ OeVuKk5nlHiXp+AppNnWyYwf1yNnKy=
 <section id="faq" class="wrap" tabindex="-1">
   <div class="faq-grid">
     <div>
-      <div class="kicker rv"><span>第六章 · 问答</span><span class="rule"></span></div>
+      <div class="kicker rv"><span>问答</span><span class="rule"></span></div>
       <h2 class="rv">上手之前，<br>把话说清楚。</h2>
-      <p class="sec-sub rv">我们不回避限制。以下是关于 NikoDesk 现状，最常被问到的四件事。</p>
+      <p class="sec-sub rv">有几个限制，先说在前面——也是被问得最多的。</p>
     </div>
     <div class="faq-list">
-      <details class="faq-item rv"><summary>需要自己的服务器吗？<span class="plus">+</span></summary><div class="a">需要可访问的 RustDesk Server OSS 服务，也可使用你已经部署的服务。NikoDesk 未配置私服时不会连接公共注册服务器。</div></details>
+      <details class="faq-item rv"><summary>需要自己的服务器吗？<span class="plus">+</span></summary><div class="a">是的——这是唯一的前提。NikoDesk 不提供、也不连接任何公共注册服务器：开始连接前，你需要一台自己的服务器（复用已有的 RustDesk Server OSS，或按「<a href="#deploy">开始使用</a>」两行命令部署）。没有服务端，客户端不会替你连接任何人。</div></details>
       <details class="faq-item rv" style="--d:.05s"><summary>下载更新后会自动安装吗？<span class="plus">+</span></summary><div class="a">目前需要手动安装。下载完成后，按应用中的安装提示退出旧版、替换应用并重新打开；具体步骤与签名说明见发布页。</div></details>
       <details class="faq-item rv" style="--d:.1s"><summary>Android 可以被远程控制吗？<span class="plus">+</span></summary><div class="a">当前 Android 版只作为控制端，连接你的 Windows 或 Mac 电脑，不提供手机被控能力。</div></details>
       <details class="faq-item rv" style="--d:.15s"><summary>和 RustDesk 是什么关系？<span class="plus">+</span></summary><div class="a">NikoDesk 是基于 RustDesk 原生内核的独立开源项目，遵循 AGPL-3.0，与 RustDesk 官方没有从属或背书关系。</div></details>
