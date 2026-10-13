@@ -49,7 +49,7 @@ pub fn reserve(pid: u32) {
     TARGET_PID.store(pid, Ordering::Release);
 }
 
-fn start_stream(
+fn start_resized_stream(
     id: u32,
     pid: u32,
     width: usize,
@@ -111,7 +111,39 @@ pub fn prepare(pid: u32) -> io::Result<()> {
             .parse::<u32>()
             .map_err(|_| io::ErrorKind::InvalidData)?;
         let (width, height) = (display.width(), display.height());
-        streams.insert(id, start_stream(id, pid, width, height, deadline)?);
+        if width == 0
+            || height == 0
+            || width
+                .checked_mul(height)
+                .is_none_or(|size| size > 64_000_000)
+            || Instant::now() > deadline
+        {
+            return Err(io::ErrorKind::InvalidData.into());
+        }
+        let mut failure = 0;
+        let remaining = deadline.saturating_duration_since(Instant::now()).as_millis() as u32;
+        let pointer = unsafe { NPSCaptureStart(id, pid, width as u32, height as u32, remaining, &mut failure) };
+        if pointer.is_null() {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                match failure {
+                    2 => "excluded_capture_content_timeout",
+                    3 => "excluded_capture_content_failed",
+                    4 => "excluded_capture_helper_unavailable",
+                    5 => "excluded_capture_output_failed",
+                    6 => "excluded_capture_start_timeout",
+                    _ => "excluded_capture_start_failed",
+                },
+            ));
+        }
+        streams.insert(
+            id,
+            Arc::new(Stream {
+                pointer: pointer as usize,
+                width,
+                height,
+            }),
+        );
     }
     if streams.is_empty() {
         return Err(io::ErrorKind::NotFound.into());
@@ -199,7 +231,7 @@ impl PrivacyCapturer {
             // only the explicitly excluded stream; never fall back to Quartz.
             let deadline = Instant::now() + Duration::from_secs(4);
             let replacement = (|| {
-                let next = start_stream(id, pid, width, height, deadline)?;
+                let next = start_resized_stream(id, pid, width, height, deadline)?;
                 while !unsafe { NPSCaptureReady(next.pointer as _) } {
                     if Instant::now() >= deadline
                         || !unsafe { NPSCaptureHealthy(next.pointer as _) }
