@@ -49,6 +49,56 @@ pub fn reserve(pid: u32) {
     TARGET_PID.store(pid, Ordering::Release);
 }
 
+fn start_stream(
+    id: u32,
+    pid: u32,
+    width: usize,
+    height: usize,
+    deadline: Instant,
+) -> io::Result<Arc<Stream>> {
+    if width == 0
+        || height == 0
+        || width
+            .checked_mul(height)
+            .is_none_or(|size| size > 64_000_000)
+        || Instant::now() >= deadline
+    {
+        return Err(io::ErrorKind::InvalidData.into());
+    }
+    let mut failure = 0;
+    let remaining = deadline
+        .saturating_duration_since(Instant::now())
+        .as_millis() as u32;
+    let pointer = unsafe {
+        NPSCaptureStart(
+            id,
+            pid,
+            width as u32,
+            height as u32,
+            remaining,
+            &mut failure,
+        )
+    };
+    if pointer.is_null() {
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            match failure {
+                2 => "excluded_capture_content_timeout",
+                3 => "excluded_capture_content_failed",
+                4 => "excluded_capture_helper_unavailable",
+                5 => "excluded_capture_output_failed",
+                6 => "excluded_capture_start_timeout",
+                _ => "excluded_capture_start_failed",
+            },
+        ));
+    }
+    Ok(Arc::new(Stream {
+        pointer: pointer as usize,
+        width,
+        height,
+    }))
+}
+
 pub fn prepare(pid: u32) -> io::Result<()> {
     if pid == 0 || TARGET_PID.load(Ordering::Acquire) != pid || !supported() {
         return Err(io::ErrorKind::PermissionDenied.into());
@@ -61,39 +111,7 @@ pub fn prepare(pid: u32) -> io::Result<()> {
             .parse::<u32>()
             .map_err(|_| io::ErrorKind::InvalidData)?;
         let (width, height) = (display.width(), display.height());
-        if width == 0
-            || height == 0
-            || width
-                .checked_mul(height)
-                .is_none_or(|size| size > 64_000_000)
-            || Instant::now() > deadline
-        {
-            return Err(io::ErrorKind::InvalidData.into());
-        }
-        let mut failure = 0;
-        let remaining = deadline.saturating_duration_since(Instant::now()).as_millis() as u32;
-        let pointer = unsafe { NPSCaptureStart(id, pid, width as u32, height as u32, remaining, &mut failure) };
-        if pointer.is_null() {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                match failure {
-                    2 => "excluded_capture_content_timeout",
-                    3 => "excluded_capture_content_failed",
-                    4 => "excluded_capture_helper_unavailable",
-                    5 => "excluded_capture_output_failed",
-                    6 => "excluded_capture_start_timeout",
-                    _ => "excluded_capture_start_failed",
-                },
-            ));
-        }
-        streams.insert(
-            id,
-            Arc::new(Stream {
-                pointer: pointer as usize,
-                width,
-                height,
-            }),
-        );
+        streams.insert(id, start_stream(id, pid, width, height, deadline)?);
     }
     if streams.is_empty() {
         return Err(io::ErrorKind::NotFound.into());
@@ -160,23 +178,53 @@ pub struct PrivacyCapturer {
 }
 impl PrivacyCapturer {
     pub fn new(display: Display) -> io::Result<Self> {
+        let pid = TARGET_PID.load(Ordering::Acquire);
+        if pid == 0 || FAILED_PID.load(Ordering::Acquire) == pid {
+            return Err(io::ErrorKind::PermissionDenied.into());
+        }
         let id = display
             .name()
             .parse::<u32>()
             .map_err(|_| io::ErrorKind::InvalidData)?;
-        let stream = STREAMS
+        let mut stream = STREAMS
             .lock()
             .map_err(|_| io::ErrorKind::Other)?
             .get(&id)
             .cloned()
             .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "excluded_capture_unavailable"))?;
-        if (stream.width, stream.height) != (display.width(), display.height()) {
-            // Restore through the owner rather than encode stale-size frames.
-            FAILED_PID.store(TARGET_PID.load(Ordering::Acquire), Ordering::Release);
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "excluded_capture_size_changed",
-            ));
+        let (width, height) = (display.width(), display.height());
+        if (stream.width, stream.height) != (width, height) {
+            // A controller's capture scale can change without changing the
+            // physical display. Keep its cover and input lease while replacing
+            // only the explicitly excluded stream; never fall back to Quartz.
+            let deadline = Instant::now() + Duration::from_secs(4);
+            let replacement = (|| {
+                let next = start_stream(id, pid, width, height, deadline)?;
+                while !unsafe { NPSCaptureReady(next.pointer as _) } {
+                    if Instant::now() >= deadline
+                        || !unsafe { NPSCaptureHealthy(next.pointer as _) }
+                    {
+                        return Err(io::Error::new(
+                            io::ErrorKind::TimedOut,
+                            "excluded_capture_not_ready",
+                        ));
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                let mut streams = STREAMS.lock().map_err(|_| io::ErrorKind::Other)?;
+                if TARGET_PID.load(Ordering::Acquire) != pid {
+                    return Err(io::ErrorKind::Interrupted.into());
+                }
+                streams.insert(id, next.clone());
+                Ok(next)
+            })();
+            match replacement {
+                Ok(next) => stream = next,
+                Err(error) => {
+                    FAILED_PID.store(pid, Ordering::Release);
+                    return Err(error);
+                }
+            }
         }
         Ok(Self {
             stream,

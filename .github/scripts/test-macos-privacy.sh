@@ -18,3 +18,6 @@ xcrun clang++ -std=c++17 -fobjc-arc -fblocks -I src/platform \
   -framework AppKit -framework CoreGraphics -framework OpenDirectory \
   -o "$privacy_test_dir/unlock"
 "$privacy_test_dir/unlock"
+rustc --edition=2021 --test .github/scripts/tests/native/test-macos-privacy-capture.rs \
+  -o "$privacy_test_dir/capture"
+"$privacy_test_dir/capture"
