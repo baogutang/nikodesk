@@ -13,6 +13,8 @@ using nikodesk_privacy::GammaTable;
 std::map<std::string, GammaTable> tables;
 std::vector<std::string> online;
 bool input_enabled = true;
+// Whether re-enabling a paused input filter takes effect.
+bool input_resumable = true;
 size_t reads = 0, writes = 0, stops = 0;
 struct Pending { dispatch_time_t delay; dispatch_block_t block; };
 std::deque<Pending> pending;
@@ -22,7 +24,7 @@ void after(dispatch_time_t delay, dispatch_queue_t, dispatch_block_t block) {
     pending.push_back({delay, [block copy]});
 }
 bool input_active(CFMachPortRef) { return input_enabled; }
-void input_enable(CFMachPortRef, bool enabled) { input_enabled = enabled; }
+void input_enable(CFMachPortRef, bool enabled) { if (!enabled || input_resumable) input_enabled = enabled; }
 void release(CFTypeRef) {}
 CGError remove_callback(CGDisplayReconfigurationCallBack, void*) { return kCGErrorSuccess; }
 void tick() {
@@ -84,6 +86,8 @@ static void start_fixture() {
     fixture::online = {"a", "b"};
     fixture::reads = fixture::writes = fixture::stops = 0;
     fixture::input_enabled = true;
+    fixture::input_resumable = true;
+    nikoPrivacyTapRecovery = {};
     nikoPrivacyGammas = nikodesk_privacy::GammaSession{};
     nikoPrivacyCallbackRegistered = false;
     nikoStyledPrivacyInput=false;nikoStyledPrivacyHelper=0;nikoStyledUnlockRequested=false;
@@ -125,14 +129,47 @@ static void late_external_gamma_change_releases_without_overwrite() {
     assert(fixture::pending.empty());
 }
 
-static void disabled_input_filter_releases_the_mode() {
+static void input_filter_that_cannot_resume_releases_the_mode() {
     start_fixture();
     NikoPrivacyStartMonitor();
     assert(fixture::pending.front().delay == 200 * NSEC_PER_MSEC);
+    fixture::input_resumable = false;
     fixture::input_enabled = false;
     fixture::tick();
     assert(!nikoPrivacyActive && fixture::stops == 1 && fixture::pending.empty());
     assert(fixture::tables.at("a") == fixture::normal);
+}
+
+static void paused_input_filter_is_resumed_without_releasing() {
+    start_fixture();
+    NikoPrivacyStartMonitor();
+    fixture::input_enabled = false;
+    fixture::tick();
+    assert(nikoPrivacyActive && fixture::input_enabled && fixture::stops == 0);
+    assert(fixture::pending.size() == 1);
+}
+
+static void input_filter_paused_repeatedly_releases_the_mode() {
+    start_fixture();
+    NikoPrivacyStartMonitor();
+    for (unsigned i = 0; i < 3; ++i) {
+        fixture::input_enabled = false;
+        fixture::tick();
+        assert(nikoPrivacyActive && fixture::input_enabled);
+    }
+    fixture::input_enabled = false;
+    fixture::tick();
+    assert(!nikoPrivacyActive && fixture::stops == 1 && fixture::pending.empty());
+}
+
+static void callback_resumes_a_paused_filter() {
+    start_fixture();
+    fixture::input_enabled = false;
+    CGEventRef event = CGEventCreate(nullptr);
+    void *context = reinterpret_cast<void*>(static_cast<uintptr_t>(nikoPrivacySessionToken));
+    assert(NikoPrivacyInputCallback(nullptr, kCGEventTapDisabledByTimeout, event, context) == event);
+    assert(nikoPrivacyActive && fixture::input_enabled && fixture::stops == 0);
+    ::CFRelease(event);
 }
 
 static void local_off_cancels_pending_checks_and_does_not_redarken() {
@@ -187,12 +224,15 @@ int main() {
     @autoreleasepool {
         continues_past_initial_window_without_repainting();
         late_external_gamma_change_releases_without_overwrite();
-        disabled_input_filter_releases_the_mode();
+        input_filter_that_cannot_resume_releases_the_mode();
+        paused_input_filter_is_resumed_without_releasing();
+        input_filter_paused_repeatedly_releases_the_mode();
+        callback_resumes_a_paused_filter();
         local_off_cancels_pending_checks_and_does_not_redarken();
         stale_monitor_cannot_stop_a_new_session();
         hotplug_without_callback_never_reports_protected();
         styled_shortcut_requests_password_without_releasing_cover();
         password_input_stays_scoped_to_the_excluded_helper();
     }
-    std::cout << "8 production privacy monitor/input callback tests passed; simulated providers only\n";
+    std::cout << "11 production privacy monitor/input callback tests passed; simulated providers only\n";
 }
