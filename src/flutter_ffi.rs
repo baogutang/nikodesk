@@ -1360,6 +1360,22 @@ pub fn main_get_fav() -> Vec<String> {
     get_fav()
 }
 
+/// The last unseen crash record (JSON), once; empty when there is none.
+pub fn main_take_nikodesk_crash_marker() -> SyncReturn<String> {
+    #[cfg(feature = "nikodesk")]
+    return SyncReturn(crate::nikodesk::crash_record::take_marker());
+    #[cfg(not(feature = "nikodesk"))]
+    SyncReturn(String::new())
+}
+
+/// Redacted native diagnostics (logs, crash records) as JSON.
+pub fn main_get_nikodesk_diagnostics() -> String {
+    #[cfg(feature = "nikodesk")]
+    return crate::nikodesk::crash_record::bundle();
+    #[cfg(not(feature = "nikodesk"))]
+    String::new()
+}
+
 pub fn main_get_nikodesk_capability_policy(expected_server_namespace: String) -> String {
     #[cfg(feature = "nikodesk")]
     return crate::nikodesk::capability_policy_api::get(&expected_server_namespace);
@@ -2585,6 +2601,33 @@ pub fn session_on_waiting_for_image_dialog_show(session_id: SessionID) {
 pub fn session_toggle_virtual_display(session_id: SessionID, index: i32, on: bool) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.toggle_virtual_display(index, on);
+        flutter::session_update_virtual_display(&session, index, on);
+    }
+}
+
+/// Turns a virtual display on or off; one turned on is made to this screen
+/// (physical pixels, scale x 1000, refresh rate x 1000, zero when unknown).
+pub fn session_toggle_nikodesk_virtual_display(
+    session_id: SessionID,
+    index: i32,
+    on: bool,
+    width: u32,
+    height: u32,
+    scale_milli: u32,
+    refresh_milli_hz: u32,
+) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        #[cfg(feature = "nikodesk")]
+        session.nikodesk_toggle_virtual_display(
+            index,
+            on,
+            crate::nikodesk::display_spec::spec(width, height, scale_milli, refresh_milli_hz),
+        );
+        #[cfg(not(feature = "nikodesk"))]
+        {
+            let _ = (width, height, scale_milli, refresh_milli_hz);
+            session.toggle_virtual_display(index, on);
+        }
         flutter::session_update_virtual_display(&session, index, on);
     }
 }

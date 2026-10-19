@@ -772,6 +772,16 @@ abstract class Rustdesk {
 
   FlutterRustBridgeTaskConstMeta get kMainGetFavConstMeta;
 
+  /// The last unseen crash record (JSON), once; empty when there is none.
+  String mainTakeNikodeskCrashMarker({dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kMainTakeNikodeskCrashMarkerConstMeta;
+
+  /// Redacted native diagnostics (logs, crash records) as JSON.
+  Future<String> mainGetNikodeskDiagnostics({dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kMainGetNikodeskDiagnosticsConstMeta;
+
   Future<String> mainGetNikodeskCapabilityPolicy(
       {required String expectedServerNamespace, dynamic hint});
 
@@ -1370,6 +1380,21 @@ abstract class Rustdesk {
       dynamic hint});
 
   FlutterRustBridgeTaskConstMeta get kSessionToggleVirtualDisplayConstMeta;
+
+  /// Turns a virtual display on or off; one turned on is made to this screen
+  /// (physical pixels, scale x 1000, refresh rate x 1000, zero when unknown).
+  Future<void> sessionToggleNikodeskVirtualDisplay(
+      {required UuidValue sessionId,
+      required int index,
+      required bool on,
+      required int width,
+      required int height,
+      required int scaleMilli,
+      required int refreshMilliHz,
+      dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta
+      get kSessionToggleNikodeskVirtualDisplayConstMeta;
 
   Future<void> sessionPrinterResponse(
       {required UuidValue sessionId,
@@ -4697,6 +4722,39 @@ class RustdeskImpl implements Rustdesk {
         argNames: [],
       );
 
+  String mainTakeNikodeskCrashMarker({dynamic hint}) {
+    return _platform.executeSync(FlutterRustBridgeSyncTask(
+      callFfi: () => _platform.inner.wire_main_take_nikodesk_crash_marker(),
+      parseSuccessData: _wire2api_String,
+      constMeta: kMainTakeNikodeskCrashMarkerConstMeta,
+      argValues: [],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kMainTakeNikodeskCrashMarkerConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "main_take_nikodesk_crash_marker",
+        argNames: [],
+      );
+
+  Future<String> mainGetNikodeskDiagnostics({dynamic hint}) {
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) =>
+          _platform.inner.wire_main_get_nikodesk_diagnostics(port_),
+      parseSuccessData: _wire2api_String,
+      constMeta: kMainGetNikodeskDiagnosticsConstMeta,
+      argValues: [],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kMainGetNikodeskDiagnosticsConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "main_get_nikodesk_diagnostics",
+        argNames: [],
+      );
+
   Future<String> mainGetNikodeskCapabilityPolicy(
       {required String expectedServerNamespace, dynamic hint}) {
     var arg0 = _platform.api2wire_String(expectedServerNamespace);
@@ -6787,6 +6845,56 @@ class RustdeskImpl implements Rustdesk {
         debugName: "session_toggle_virtual_display",
         argNames: ["sessionId", "index", "on"],
       );
+
+  Future<void> sessionToggleNikodeskVirtualDisplay(
+      {required UuidValue sessionId,
+      required int index,
+      required bool on,
+      required int width,
+      required int height,
+      required int scaleMilli,
+      required int refreshMilliHz,
+      dynamic hint}) {
+    var arg0 = _platform.api2wire_Uuid(sessionId);
+    var arg1 = api2wire_i32(index);
+    var arg2 = on;
+    var arg3 = api2wire_u32(width);
+    var arg4 = api2wire_u32(height);
+    var arg5 = api2wire_u32(scaleMilli);
+    var arg6 = api2wire_u32(refreshMilliHz);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) => _platform.inner
+          .wire_session_toggle_nikodesk_virtual_display(
+              port_, arg0, arg1, arg2, arg3, arg4, arg5, arg6),
+      parseSuccessData: _wire2api_unit,
+      constMeta: kSessionToggleNikodeskVirtualDisplayConstMeta,
+      argValues: [
+        sessionId,
+        index,
+        on,
+        width,
+        height,
+        scaleMilli,
+        refreshMilliHz
+      ],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta
+      get kSessionToggleNikodeskVirtualDisplayConstMeta =>
+          const FlutterRustBridgeTaskConstMeta(
+            debugName: "session_toggle_nikodesk_virtual_display",
+            argNames: [
+              "sessionId",
+              "index",
+              "on",
+              "width",
+              "height",
+              "scaleMilli",
+              "refreshMilliHz"
+            ],
+          );
 
   Future<void> sessionPrinterResponse(
       {required UuidValue sessionId,
@@ -9207,19 +9315,40 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
   late final _NPSWindowsClose =
       _NPSWindowsClosePtr.asFunction<void Function()>();
 
+  bool NPSWindowsRequestUnlock() {
+    return _NPSWindowsRequestUnlock();
+  }
+
+  late final _NPSWindowsRequestUnlockPtr =
+      _lookup<ffi.NativeFunction<ffi.Bool Function()>>(
+          'NPSWindowsRequestUnlock');
+  late final _NPSWindowsRequestUnlock =
+      _NPSWindowsRequestUnlockPtr.asFunction<bool Function()>();
+
+  bool NPSWindowsUnlocked() {
+    return _NPSWindowsUnlocked();
+  }
+
+  late final _NPSWindowsUnlockedPtr =
+      _lookup<ffi.NativeFunction<ffi.Bool Function()>>('NPSWindowsUnlocked');
+  late final _NPSWindowsUnlocked =
+      _NPSWindowsUnlockedPtr.asFunction<bool Function()>();
+
   bool NikoMacStyledPrivacyInput(
     bool on1,
+    int helper_pid,
   ) {
     return _NikoMacStyledPrivacyInput(
       on1,
+      helper_pid,
     );
   }
 
   late final _NikoMacStyledPrivacyInputPtr =
-      _lookup<ffi.NativeFunction<ffi.Bool Function(ffi.Bool)>>(
+      _lookup<ffi.NativeFunction<ffi.Bool Function(ffi.Bool, ffi.Uint32)>>(
           'NikoMacStyledPrivacyInput');
   late final _NikoMacStyledPrivacyInput =
-      _NikoMacStyledPrivacyInputPtr.asFunction<bool Function(bool)>();
+      _NikoMacStyledPrivacyInputPtr.asFunction<bool Function(bool, int)>();
 
   bool NikoMacStyledPrivacyInputRenew() {
     return _NikoMacStyledPrivacyInputRenew();
@@ -9230,6 +9359,20 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
           'NikoMacStyledPrivacyInputRenew');
   late final _NikoMacStyledPrivacyInputRenew =
       _NikoMacStyledPrivacyInputRenewPtr.asFunction<bool Function()>();
+
+  bool NikoMacStyledPrivacyUnlockPending(
+    bool consume,
+  ) {
+    return _NikoMacStyledPrivacyUnlockPending(
+      consume,
+    );
+  }
+
+  late final _NikoMacStyledPrivacyUnlockPendingPtr =
+      _lookup<ffi.NativeFunction<ffi.Bool Function(ffi.Bool)>>(
+          'NikoMacStyledPrivacyUnlockPending');
+  late final _NikoMacStyledPrivacyUnlockPending =
+      _NikoMacStyledPrivacyUnlockPendingPtr.asFunction<bool Function(bool)>();
 
   bool NikoMacVirtualDisplaySupported() {
     return _NikoMacVirtualDisplaySupported();
@@ -9296,6 +9439,72 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
           'NikoMacVirtualDisplayRelease');
   late final _NikoMacVirtualDisplayRelease = _NikoMacVirtualDisplayReleasePtr
       .asFunction<void Function(ffi.Pointer<ffi.Void>)>();
+
+  ffi.Pointer<ffi.Void> NikoMacVirtualDisplayCreateMatched(
+    int slot,
+    int width,
+    int height,
+    bool hidpi,
+    int refresh_hz,
+    ffi.Pointer<ffi.Uint32> display_id,
+    ffi.Pointer<ffi.Uint32> serial,
+    ffi.Pointer<ffi.Bool> applied,
+    ffi.Pointer<ffi.Int32> matched,
+  ) {
+    return _NikoMacVirtualDisplayCreateMatched(
+      slot,
+      width,
+      height,
+      hidpi,
+      refresh_hz,
+      display_id,
+      serial,
+      applied,
+      matched,
+    );
+  }
+
+  late final _NikoMacVirtualDisplayCreateMatchedPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Pointer<ffi.Void> Function(
+              ffi.Uint32,
+              ffi.Uint32,
+              ffi.Uint32,
+              ffi.Bool,
+              ffi.Uint32,
+              ffi.Pointer<ffi.Uint32>,
+              ffi.Pointer<ffi.Uint32>,
+              ffi.Pointer<ffi.Bool>,
+              ffi.Pointer<ffi.Int32>)>>('NikoMacVirtualDisplayCreateMatched');
+  late final _NikoMacVirtualDisplayCreateMatched =
+      _NikoMacVirtualDisplayCreateMatchedPtr.asFunction<
+          ffi.Pointer<ffi.Void> Function(
+              int,
+              int,
+              int,
+              bool,
+              int,
+              ffi.Pointer<ffi.Uint32>,
+              ffi.Pointer<ffi.Uint32>,
+              ffi.Pointer<ffi.Bool>,
+              ffi.Pointer<ffi.Int32>)>();
+
+  bool NikoMacOtherDisplayOnline(
+    ffi.Pointer<ffi.Uint32> excluded,
+    int count,
+  ) {
+    return _NikoMacOtherDisplayOnline(
+      excluded,
+      count,
+    );
+  }
+
+  late final _NikoMacOtherDisplayOnlinePtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Bool Function(ffi.Pointer<ffi.Uint32>,
+              ffi.Uint32)>>('NikoMacOtherDisplayOnline');
+  late final _NikoMacOtherDisplayOnline = _NikoMacOtherDisplayOnlinePtr
+      .asFunction<bool Function(ffi.Pointer<ffi.Uint32>, int)>();
 
   bool NikoMacBackgroundEnvironment() {
     return _NikoMacBackgroundEnvironment();
@@ -12132,6 +12341,31 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
   late final _wire_main_get_fav =
       _wire_main_get_favPtr.asFunction<void Function(int)>();
 
+  WireSyncReturn wire_main_take_nikodesk_crash_marker() {
+    return _wire_main_take_nikodesk_crash_marker();
+  }
+
+  late final _wire_main_take_nikodesk_crash_markerPtr =
+      _lookup<ffi.NativeFunction<WireSyncReturn Function()>>(
+          'wire_main_take_nikodesk_crash_marker');
+  late final _wire_main_take_nikodesk_crash_marker =
+      _wire_main_take_nikodesk_crash_markerPtr
+          .asFunction<WireSyncReturn Function()>();
+
+  void wire_main_get_nikodesk_diagnostics(
+    int port_,
+  ) {
+    return _wire_main_get_nikodesk_diagnostics(
+      port_,
+    );
+  }
+
+  late final _wire_main_get_nikodesk_diagnosticsPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int64)>>(
+          'wire_main_get_nikodesk_diagnostics');
+  late final _wire_main_get_nikodesk_diagnostics =
+      _wire_main_get_nikodesk_diagnosticsPtr.asFunction<void Function(int)>();
+
   void wire_main_get_nikodesk_capability_policy(
     int port_,
     ffi.Pointer<wire_uint_8_list> expected_server_namespace,
@@ -14096,6 +14330,44 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
   late final _wire_session_toggle_virtual_display =
       _wire_session_toggle_virtual_displayPtr.asFunction<
           void Function(int, ffi.Pointer<wire_uint_8_list>, int, bool)>();
+
+  void wire_session_toggle_nikodesk_virtual_display(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> session_id,
+    int index,
+    bool on1,
+    int width,
+    int height,
+    int scale_milli,
+    int refresh_milli_hz,
+  ) {
+    return _wire_session_toggle_nikodesk_virtual_display(
+      port_,
+      session_id,
+      index,
+      on1,
+      width,
+      height,
+      scale_milli,
+      refresh_milli_hz,
+    );
+  }
+
+  late final _wire_session_toggle_nikodesk_virtual_displayPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(
+              ffi.Int64,
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Int32,
+              ffi.Bool,
+              ffi.Uint32,
+              ffi.Uint32,
+              ffi.Uint32,
+              ffi.Uint32)>>('wire_session_toggle_nikodesk_virtual_display');
+  late final _wire_session_toggle_nikodesk_virtual_display =
+      _wire_session_toggle_nikodesk_virtual_displayPtr.asFunction<
+          void Function(int, ffi.Pointer<wire_uint_8_list>, int, bool, int, int,
+              int, int)>();
 
   void wire_session_printer_response(
     int port_,

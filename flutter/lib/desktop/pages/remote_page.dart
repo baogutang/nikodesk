@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_hbb/nikodesk/connection_progress_view.dart';
 import 'package:flutter_hbb/nikodesk/privacy_screen.dart';
 import 'package:flutter_hbb/nikodesk/privacy_connection.dart';
+import 'package:flutter_hbb/nikodesk/remote_permissions.dart';
 import 'package:flutter_hbb/nikodesk/session_quick_actions.dart';
 import 'package:flutter_hbb/nikodesk/remote_resolution.dart';
 
@@ -780,6 +781,8 @@ class _RemotePageState extends State<RemotePage>
           if (const bool.fromEnvironment('NIKODESK'))
             NikoPrivacyConnectionPrompt(ffi: _ffi,
                 onExplain: () => showNikoSessionQuickActions(_ffi)),
+          if (const bool.fromEnvironment('NIKODESK'))
+            NikoRemotePermissionNotice(ffi: _ffi),
           Stack(
             children: [
               _ffi.ffiModel.pi.isSet.isTrue &&

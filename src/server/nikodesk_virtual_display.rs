@@ -12,7 +12,7 @@ impl Connection {
         let result = if request.on && (!self.virtual_display_role()
             || Config::get_option("nikodesk-allow-virtual-display") != "Y") {
             Err("virtual_display_not_allowed")
-        } else if request.on && privacy_mode::get_privacy_mode_conn_id().is_some() {
+        } else if request.on && privacy_mode::is_in_privacy_mode() {
             Err("privacy_mode_active")
         } else {
             if self.niko_virtual_owner.is_none() && request.on {
@@ -20,11 +20,14 @@ impl Connection {
                     .and_then(|(namespace, nonce)| Owner::new(self.inner.id(), namespace, nonce));
             }
             if let Some(owner) = self.niko_virtual_owner.clone() {
-                tokio::task::spawn_blocking(move || virtual_display::toggle(&owner, request.display, request.on))
+                let plan = request.nikodesk_spec.as_ref().and_then(crate::nikodesk::display_spec::plan);
+                tokio::task::spawn_blocking(move || virtual_display::toggle(&owner, request.display, request.on, plan))
                     .await.unwrap_or(Err("worker_failed"))
             } else if request.on { Err("private_server_unavailable") } else { Ok(()) }
         };
         if let Err(reason) = result {
+            hbb_common::throttled_log!(std::time::Duration::from_secs(10), warn,
+                "Virtual display {} {} refused: {reason}", request.display, if request.on { "on" } else { "off" });
             let mut message = Message::new();
             message.set_message_box(MessageBox { msgtype: "nook-nocancel-hasclose".into(), title: "Virtual display".into(),
                 text: match reason {
@@ -34,6 +37,7 @@ impl Connection {
                     "display_owned_by_another_connection" => "This virtual display belongs to another connection.",
                     "cleanup_pending" => "Virtual display removal is not confirmed. Retry removal before creating another display.",
                     "backend_unavailable" => "Virtual displays are unavailable on this operating system.",
+                    "only_display" => "This virtual display is the controlled computer's only display. It is removed when the connection closes.",
                     _ => "Virtual display change was not confirmed."
                 }.into(), ..Default::default() });
             self.send(message).await;

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_hbb/nikodesk/connection_progress_view.dart';
 import 'package:flutter_hbb/nikodesk/privacy_screen.dart';
 import 'package:flutter_hbb/nikodesk/privacy_connection.dart';
+import 'package:flutter_hbb/nikodesk/remote_permissions.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -864,6 +865,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
             paints.add(NikoPrivacyScreenBadge(peerId: widget.id));
             paints.add(NikoPrivacyConnectionPrompt(ffi: gFFI,
                 onExplain: () => showNikoSessionQuickActions(gFFI)));
+            paints.add(NikoRemotePermissionNotice(ffi: gFFI));
           }
           return paints;
         }()));
@@ -883,6 +885,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       paints.add(NikoPrivacyScreenBadge(peerId: widget.id));
       paints.add(NikoPrivacyConnectionPrompt(ffi: gFFI,
           onExplain: () => showNikoSessionQuickActions(gFFI)));
+      paints.add(NikoRemotePermissionNotice(ffi: gFFI));
     }
     return Container(
         color: MyTheme.canvasColor, child: Stack(children: paints));

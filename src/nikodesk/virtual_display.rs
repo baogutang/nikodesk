@@ -74,7 +74,7 @@ fn remove_entry(book: &mut BTreeMap<u32, Entry>, slot: u32) -> Result<(), &'stat
     book.remove(&slot);
     Ok(())
 }
-pub(crate) fn toggle(owner: &Owner, slot: i32, on: bool) -> Result<(), &'static str> {
+pub(crate) fn toggle(owner: &Owner, slot: i32, on: bool, plan: Option<super::display_spec::Plan>) -> Result<(), &'static str> {
     if on && !(1..=4).contains(&slot) || !on && slot != -1 && !(1..=4).contains(&slot) {
         return Err("invalid_display_slot");
     }
@@ -86,6 +86,9 @@ pub(crate) fn toggle(owner: &Owner, slot: i32, on: bool) -> Result<(), &'static 
             && (slot == -1 || **index == slot as u32)).map(|(slot, _)| *slot).collect();
         if slot != -1 && book.get(&(slot as u32)).is_some_and(|entry| entry.owner != *owner) {
             return Err("display_owned_by_another_connection");
+        }
+        if !platform::keeps_a_display(&slots.iter().filter_map(|slot| book.get(slot)).map(|entry| &entry.screen).collect::<Vec<_>>()) {
+            return Err("only_display");
         }
         let mut result = Ok(());
         for slot in slots { if let Err(error) = remove_entry(&mut book, slot) { result = Err(error); } }
@@ -99,7 +102,7 @@ pub(crate) fn toggle(owner: &Owner, slot: i32, on: bool) -> Result<(), &'static 
         return Err("virtual_display_not_allowed");
     }
     if !platform::supported() { return Err("backend_unavailable"); }
-    let screen = platform::Screen::create(slot as u32)?;
+    let screen = platform::Screen::create(slot as u32, plan)?;
     book.insert(slot as u32, Entry { owner: owner.clone(), screen, cleanup: false });
     if ensure_cleanup().is_err() {
         let _=remove_entry(&mut book,slot as u32);

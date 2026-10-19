@@ -50,7 +50,12 @@ pub fn core_main() -> Option<Vec<String>> {
     }
     #[cfg(all(feature="nikodesk",target_os="macos"))]
     if std::env::args().skip(1).collect::<Vec<_>>() == ["--nikodesk-background-agent"] {
-        if crate::nikodesk::mac_background::run().is_err() {
+        // This branch returns before the logger below; without it the core
+        // serving unattended sessions would leave no log file at all.
+        hbb_common::init_log(false, "nikodesk-background-agent");
+        crate::nikodesk::crash_record::install();
+        if let Err(error) = crate::nikodesk::mac_background::run() {
+            log::error!("Background agent stopped: {error}");
             eprintln!("NikoDesk background agent could not start; check the private server, unattended policy and local permissions in NikoDesk.");
             std::process::exit(1);
         }
@@ -191,6 +196,8 @@ pub fn core_main() -> Option<Vec<String>> {
         }
     }
     hbb_common::init_log(false, &log_name);
+    #[cfg(feature = "nikodesk")]
+    crate::nikodesk::crash_record::install();
 
     // linux uni (url) go here.
     #[cfg(all(target_os = "linux", feature = "flutter"))]

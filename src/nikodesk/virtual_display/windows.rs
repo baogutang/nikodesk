@@ -12,6 +12,10 @@ static OWNED: AtomicUsize = AtomicUsize::new(0);
 fn os_supported() -> bool {
     base::platform::windows::is_windows_version_or_greater(10, 0, 19041, 0, 0)
 }
+/// The Amyuni monitors are not told apart from the physical ones here.
+pub(super) fn keeps_a_display(_removed: &[&Screen]) -> bool {
+    true
+}
 pub(super) fn supported() -> bool {
     os_supported()
         && if crate::nikodesk::background::is_system_worker() {
@@ -30,7 +34,7 @@ pub(super) struct Screen {
     removal_target: Option<usize>,
 }
 impl Screen {
-    pub(super) fn create(slot: u32) -> Result<Self, &'static str> {
+    pub(super) fn create(slot: u32, _plan: Option<crate::nikodesk::display_spec::Plan>) -> Result<Self, &'static str> {
         if !os_supported() {
             return Err("backend_unavailable");
         }
@@ -53,7 +57,7 @@ impl Screen {
         })
     }
     pub(super) fn probe() -> Result<(), &'static str> {
-        let mut screen = Self::create(1)?;
+        let mut screen = Self::create(1, None)?;
         let deadline = Instant::now() + Duration::from_secs(5);
         while !screen.online() && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(50));

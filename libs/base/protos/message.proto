@@ -684,6 +684,15 @@ message CaptureDisplays {
 message ToggleVirtualDisplay {
   int32 display = 1;
   bool on = 2;
+  NikoVirtualDisplaySpec nikodesk_spec = 60;
+}
+
+// The controller's screen, sent with a request to create a virtual display.
+message NikoVirtualDisplaySpec {
+  uint32 width = 1;             // physical pixels
+  uint32 height = 2;
+  uint32 scale_milli = 3;       // device pixels per logical pixel x 1000
+  uint32 refresh_milli_hz = 4;  // x 1000; 0 unknown
 }
 
 message TogglePrivacyMode {

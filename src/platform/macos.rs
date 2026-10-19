@@ -2056,7 +2056,10 @@ pub fn elevate(args: Vec<&str>, prompt: &str) -> ResultType<bool> {
     }
 }
 
-pub struct WakeLock(Option<keepawake::AwakeHandle>);
+pub struct WakeLock(
+    Option<keepawake::AwakeHandle>,
+    #[cfg(feature = "nikodesk")] Option<NikoActivity>,
+);
 
 impl WakeLock {
     pub fn new(display: bool, idle: bool, sleep: bool) -> Self {
@@ -2067,6 +2070,8 @@ impl WakeLock {
                 .sleep(sleep)
                 .create()
                 .ok(),
+            #[cfg(feature = "nikodesk")]
+            NikoActivity::begin(),
         )
     }
 
@@ -2118,4 +2123,54 @@ pub fn nikodesk_refresh_milli_hz(display_name: &str) -> u32 {
             0
         }
     })
+}
+
+/// A user-initiated, latency-critical activity for the life of a remote
+/// session. A power assertion keeps the Mac awake but does not stop App Nap
+/// from coalescing timers and lowering the priority of a hidden app, which
+/// would slow capture and encoding while NikoDesk's window is closed.
+/// System sleep stays under the wake lock's control.
+#[cfg(feature = "nikodesk")]
+pub struct NikoActivity(id);
+
+#[cfg(feature = "nikodesk")]
+unsafe impl Send for NikoActivity {}
+
+#[cfg(feature = "nikodesk")]
+impl NikoActivity {
+    // NSActivityUserInitiatedAllowingIdleSystemSleep | NSActivityLatencyCritical
+    const OPTIONS: u64 = 0x00EF_FFFF | 0xFF_0000_0000;
+
+    fn begin() -> Option<Self> {
+        autoreleasepool(|| unsafe {
+            let info: id = msg_send![class!(NSProcessInfo), processInfo];
+            if info.is_null() {
+                return None;
+            }
+            let reason = NSString::alloc(nil).init_str("NikoDesk remote session");
+            let activity: id =
+                msg_send![info, beginActivityWithOptions: Self::OPTIONS reason: reason];
+            let _: () = msg_send![reason, release];
+            if activity.is_null() {
+                hbb_common::log::warn!("Could not begin the remote session activity");
+                return None;
+            }
+            let activity: id = msg_send![activity, retain];
+            hbb_common::log::debug!("Began the remote session activity");
+            Some(Self(activity))
+        })
+    }
+}
+
+#[cfg(feature = "nikodesk")]
+impl Drop for NikoActivity {
+    fn drop(&mut self) {
+        autoreleasepool(|| unsafe {
+            let info: id = msg_send![class!(NSProcessInfo), processInfo];
+            if !info.is_null() {
+                let _: () = msg_send![info, endActivity: self.0];
+            }
+            let _: () = msg_send![self.0, release];
+        });
+    }
 }

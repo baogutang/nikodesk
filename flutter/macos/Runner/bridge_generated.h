@@ -130,9 +130,15 @@ extern bool NPSWindowsMotionAllowed(void);
 
 extern void NPSWindowsClose(void);
 
-extern bool NikoMacStyledPrivacyInput(bool on);
+extern bool NPSWindowsRequestUnlock(void);
+
+extern bool NPSWindowsUnlocked(void);
+
+extern bool NikoMacStyledPrivacyInput(bool on, uint32_t helper_pid);
 
 extern bool NikoMacStyledPrivacyInputRenew(void);
+
+extern bool NikoMacStyledPrivacyUnlockPending(bool consume);
 
 extern bool NikoMacVirtualDisplaySupported(void);
 
@@ -144,6 +150,18 @@ extern void *NikoMacVirtualDisplayCreate(uint32_t slot,
 extern bool NikoMacVirtualDisplayOnline(uint32_t display_id, uint32_t serial);
 
 extern void NikoMacVirtualDisplayRelease(void *display);
+
+extern void *NikoMacVirtualDisplayCreateMatched(uint32_t slot,
+                                                uint32_t width,
+                                                uint32_t height,
+                                                bool hidpi,
+                                                uint32_t refresh_hz,
+                                                uint32_t *display_id,
+                                                uint32_t *serial,
+                                                bool *applied,
+                                                int32_t *matched);
+
+extern bool NikoMacOtherDisplayOnline(const uint32_t *excluded, uint32_t count);
 
 extern bool NikoMacBackgroundEnvironment(void);
 
@@ -637,6 +655,10 @@ void wire_main_get_version(int64_t port_);
 
 void wire_main_get_fav(int64_t port_);
 
+WireSyncReturn wire_main_take_nikodesk_crash_marker(void);
+
+void wire_main_get_nikodesk_diagnostics(int64_t port_);
+
 void wire_main_get_nikodesk_capability_policy(int64_t port_,
                                               struct wire_uint_8_list *expected_server_namespace);
 
@@ -940,6 +962,15 @@ void wire_session_toggle_virtual_display(int64_t port_,
                                          struct wire_uint_8_list *session_id,
                                          int32_t index,
                                          bool on);
+
+void wire_session_toggle_nikodesk_virtual_display(int64_t port_,
+                                                  struct wire_uint_8_list *session_id,
+                                                  int32_t index,
+                                                  bool on,
+                                                  uint32_t width,
+                                                  uint32_t height,
+                                                  uint32_t scale_milli,
+                                                  uint32_t refresh_milli_hz);
 
 void wire_session_printer_response(int64_t port_,
                                    struct wire_uint_8_list *session_id,
@@ -1376,6 +1407,8 @@ static int64_t dummy_method_to_enforce_bundling(void) {
     dummy_var ^= ((int64_t) (void*) wire_main_get_license);
     dummy_var ^= ((int64_t) (void*) wire_main_get_version);
     dummy_var ^= ((int64_t) (void*) wire_main_get_fav);
+    dummy_var ^= ((int64_t) (void*) wire_main_take_nikodesk_crash_marker);
+    dummy_var ^= ((int64_t) (void*) wire_main_get_nikodesk_diagnostics);
     dummy_var ^= ((int64_t) (void*) wire_main_get_nikodesk_capability_policy);
     dummy_var ^= ((int64_t) (void*) wire_main_set_nikodesk_capability_policy);
     dummy_var ^= ((int64_t) (void*) wire_main_store_fav);
@@ -1487,6 +1520,7 @@ static int64_t dummy_method_to_enforce_bundling(void) {
     dummy_var ^= ((int64_t) (void*) wire_session_change_prefer_codec);
     dummy_var ^= ((int64_t) (void*) wire_session_on_waiting_for_image_dialog_show);
     dummy_var ^= ((int64_t) (void*) wire_session_toggle_virtual_display);
+    dummy_var ^= ((int64_t) (void*) wire_session_toggle_nikodesk_virtual_display);
     dummy_var ^= ((int64_t) (void*) wire_session_printer_response);
     dummy_var ^= ((int64_t) (void*) wire_main_set_home_dir);
     dummy_var ^= ((int64_t) (void*) wire_main_get_data_dir_ios);

@@ -21,6 +21,7 @@ bool nikoPrivacyCallbackRegistered = false;
 uint64_t nikoPrivacyMonitorToken = 0;
 uint64_t nikoPrivacySessionToken = 0;
 void* nikoPrivacyCallbackContext = nullptr;
+nikodesk_privacy::TapRecovery nikoPrivacyTapRecovery;
 constexpr int64_t nikoRemoteInputMarker = 100; // Matches the existing enigo ABI.
 
 bool NikoPrivacyDisplayUUIDs(std::vector<std::string>& uuids) {
@@ -56,6 +57,20 @@ void NikoPrivacyTeardownInput() {
 
 void NikoPrivacyReconfigured(CGDirectDisplayID, CGDisplayChangeSummaryFlags, void*);
 
+// Whether the input filter works, resuming it if the system paused it.
+bool NikoPrivacyInputLive() {
+    if (!nikoPrivacyEventTap) return false;
+    if (CGEventTapIsEnabled(nikoPrivacyEventTap)) return true;
+    if (!nikodesk_privacy::allow_tap_recovery(nikoPrivacyTapRecovery, CFAbsoluteTimeGetCurrent())) {
+        NSLog(@"Niko privacy input filter paused repeatedly; ending the privacy screen");
+        return false;
+    }
+    CGEventTapEnable(nikoPrivacyEventTap, true);
+    const bool resumed = CGEventTapIsEnabled(nikoPrivacyEventTap);
+    NSLog(@"Niko privacy input filter %s after the system paused it", resumed ? "resumed" : "could not resume");
+    return resumed;
+}
+
 bool NikoPrivacyTurnOff() {
     const bool wasActive = nikoPrivacyActive;
     nikoPrivacyActive = false;
@@ -82,9 +97,10 @@ bool NikoPrivacyTurnOff() {
 
 CGEventRef NikoPrivacyInputCallback(CGEventTapProxy, CGEventType type, CGEventRef event, void* context) {
     if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
+        uint64_t token = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(context));
+        if (token == nikoPrivacySessionToken && NikoPrivacyInputLive()) return event;
         // Losing the input filter invalidates the mode. Defer releasing the tap
         // until the callback has returned, rather than claiming protection.
-        uint64_t token = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(context));
         dispatch_async(dispatch_get_main_queue(), ^{
             if (token == nikoPrivacySessionToken) NikoPrivacyTurnOff();
         });
@@ -132,6 +148,7 @@ bool NikoPrivacySetupInput() {
         kCGEventTapOptionDefault, mask, NikoPrivacyInputCallback,
         reinterpret_cast<void*>(static_cast<uintptr_t>(nikoPrivacySessionToken)));
     if (!nikoPrivacyEventTap) return false;
+    nikoPrivacyTapRecovery = {};
     nikoPrivacyRunLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, nikoPrivacyEventTap, 0);
     if (!nikoPrivacyRunLoopSource) {
         NikoPrivacyTeardownInput();
@@ -143,14 +160,14 @@ bool NikoPrivacySetupInput() {
 }
 
 bool NikoPrivacyEnforceAll() {
-    if (!nikoPrivacyEventTap || !CGEventTapIsEnabled(nikoPrivacyEventTap)) return false;
+    if (!NikoPrivacyInputLive()) return false;
     std::vector<std::string> uuids;
     return NikoPrivacyDisplayUUIDs(uuids) &&
         nikoPrivacyGammas.enforce_all(uuids, NikoPrivacyReadGamma, NikoPrivacyWriteGamma, NikoPrivacyCheckpoint);
 }
 
 bool NikoPrivacyValidateAll() {
-    if (!nikoPrivacyEventTap || !CGEventTapIsEnabled(nikoPrivacyEventTap)) return false;
+    if (!NikoPrivacyInputLive()) return false;
     std::vector<std::string> uuids;
     return NikoPrivacyDisplayUUIDs(uuids) && nikoPrivacyGammas.verify_all(uuids, NikoPrivacyReadGamma);
 }
@@ -258,7 +275,7 @@ static void NikoStyledInputMonitor(uint64_t token) {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW,200*NSEC_PER_MSEC),dispatch_get_main_queue(),^{
         if(!nikoStyledPrivacyInput || token!=nikoPrivacySessionToken)return;
         if(std::chrono::steady_clock::now()>nikoStyledPrivacyDeadline ||
-            !nikoPrivacyEventTap || !CGEventTapIsEnabled(nikoPrivacyEventTap)) {
+            !NikoPrivacyInputLive()) {
             NikoPrivacyTurnOff();return;
         }
         NikoStyledInputMonitor(token);
@@ -290,7 +307,7 @@ extern "C" bool NikoMacStyledPrivacyUnlockPending(bool consume) {
 extern "C" bool NikoMacStyledPrivacyInputRenew() {
     __block bool active=false;
     void (^operation)(void)=^{
-        active=nikoStyledPrivacyInput && AXIsProcessTrusted() && nikoPrivacyEventTap && CGEventTapIsEnabled(nikoPrivacyEventTap)
+        active=nikoStyledPrivacyInput && AXIsProcessTrusted() && NikoPrivacyInputLive()
             && std::chrono::steady_clock::now()<nikoStyledPrivacyDeadline;
         if(active)nikoStyledPrivacyDeadline=std::chrono::steady_clock::now()+std::chrono::seconds(3);
     };

@@ -2459,6 +2459,26 @@ fn wire_main_get_fav_impl(port_: MessagePort) {
         move || move |task_callback| Ok(main_get_fav()),
     )
 }
+fn wire_main_take_nikodesk_crash_marker_impl() -> support::WireSyncReturn {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync(
+        WrapInfo {
+            debug_name: "main_take_nikodesk_crash_marker",
+            port: None,
+            mode: FfiCallMode::Sync,
+        },
+        move || Ok(main_take_nikodesk_crash_marker()),
+    )
+}
+fn wire_main_get_nikodesk_diagnostics_impl(port_: MessagePort) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "main_get_nikodesk_diagnostics",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || move |task_callback| Ok(main_get_nikodesk_diagnostics()),
+    )
+}
 fn wire_main_get_nikodesk_capability_policy_impl(
     port_: MessagePort,
     expected_server_namespace: impl Wire2Api<String> + UnwindSafe,
@@ -4134,6 +4154,44 @@ fn wire_session_toggle_virtual_display_impl(
                     api_session_id,
                     api_index,
                     api_on,
+                ))
+            }
+        },
+    )
+}
+fn wire_session_toggle_nikodesk_virtual_display_impl(
+    port_: MessagePort,
+    session_id: impl Wire2Api<uuid::Uuid> + UnwindSafe,
+    index: impl Wire2Api<i32> + UnwindSafe,
+    on: impl Wire2Api<bool> + UnwindSafe,
+    width: impl Wire2Api<u32> + UnwindSafe,
+    height: impl Wire2Api<u32> + UnwindSafe,
+    scale_milli: impl Wire2Api<u32> + UnwindSafe,
+    refresh_milli_hz: impl Wire2Api<u32> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, ()>(
+        WrapInfo {
+            debug_name: "session_toggle_nikodesk_virtual_display",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_session_id = session_id.wire2api();
+            let api_index = index.wire2api();
+            let api_on = on.wire2api();
+            let api_width = width.wire2api();
+            let api_height = height.wire2api();
+            let api_scale_milli = scale_milli.wire2api();
+            let api_refresh_milli_hz = refresh_milli_hz.wire2api();
+            move |task_callback| {
+                Ok(session_toggle_nikodesk_virtual_display(
+                    api_session_id,
+                    api_index,
+                    api_on,
+                    api_width,
+                    api_height,
+                    api_scale_milli,
+                    api_refresh_milli_hz,
                 ))
             }
         },

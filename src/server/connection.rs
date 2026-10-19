@@ -2284,6 +2284,16 @@ impl Connection {
         platform_additions.extend(crate::nikodesk::virtual_display::additions());
         #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="windows")))]
         platform_additions.insert("nikodesk_privacy_password_exit".into(),json!(true));
+        // Without these the controller would see an empty picture or input
+        // that does nothing, with no idea why.
+        #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+        platform_additions.insert(
+            "nikodesk_permissions".into(),
+            json!({
+                "screen_recording": crate::platform::is_can_screen_recording(false),
+                "accessibility": crate::platform::is_process_trusted(false),
+            }),
+        );
 
         #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
         {

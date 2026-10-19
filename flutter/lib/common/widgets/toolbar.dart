@@ -1300,7 +1300,7 @@ List<Widget> getVirtualDisplayMenuChildren(
           child: Text(nikoText('虚拟屏 $slot${screens.cleanup.contains(slot) ? '（待移除确认）' : ''}',
               'Virtual display $slot${screens.cleanup.contains(slot) ? ' (removal unconfirmed)' : ''}')),
           onChanged: privacyModeState.isNotEmpty || !screens.supported || !screens.allowed || screens.cleanup.contains(slot)
-              ? null : (value) { if (value == null) return; bind.sessionToggleVirtualDisplay(sessionId: ffi.sessionId, index: slot, on: value); clickCallBack?.call(); })),
+              ? null : (value) { if (value == null) return; nikoToggleVirtualDisplay(ffi.sessionId, slot, value, landscape: isMobile); clickCallBack?.call(); })),
       const Divider(),
       Obx(() => MenuButton(ffi: ffi, onPressed: privacyModeState.isNotEmpty || screens.active.isEmpty && screens.cleanup.isEmpty
           ? null : () { bind.sessionToggleVirtualDisplay(sessionId: ffi.sessionId, index: -1, on: false); clickCallBack?.call(); },

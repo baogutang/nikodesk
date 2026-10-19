@@ -8,6 +8,7 @@ import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'autostart.dart';
+import 'diagnostics_bundle.dart';
 import 'auto_lock_settings.dart';
 import 'privacy_settings.dart';
 import 'virtual_display_settings.dart';
@@ -683,6 +684,10 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
               ],
             ]),
             const SizedBox(height: 6),
+            if (_native && (Platform.isMacOS || Platform.isWindows))
+              const Align(
+                  alignment: Alignment.centerLeft,
+                  child: NikoDiagnosticsExportButton()),
             if (_updateStatus != null) ...[
               Text(_updateStatus!, key: const Key('nikodesk-update-status')),
               const SizedBox(height: 8),

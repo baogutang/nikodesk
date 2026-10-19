@@ -1109,6 +1109,16 @@ pub extern "C" fn wire_main_get_fav(port_: i64) {
 }
 
 #[no_mangle]
+pub extern "C" fn wire_main_take_nikodesk_crash_marker() -> support::WireSyncReturn {
+    wire_main_take_nikodesk_crash_marker_impl()
+}
+
+#[no_mangle]
+pub extern "C" fn wire_main_get_nikodesk_diagnostics(port_: i64) {
+    wire_main_get_nikodesk_diagnostics_impl(port_)
+}
+
+#[no_mangle]
 pub extern "C" fn wire_main_get_nikodesk_capability_policy(
     port_: i64,
     expected_server_namespace: *mut wire_uint_8_list,
@@ -1861,6 +1871,29 @@ pub extern "C" fn wire_session_toggle_virtual_display(
     on: bool,
 ) {
     wire_session_toggle_virtual_display_impl(port_, session_id, index, on)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_session_toggle_nikodesk_virtual_display(
+    port_: i64,
+    session_id: *mut wire_uint_8_list,
+    index: i32,
+    on: bool,
+    width: u32,
+    height: u32,
+    scale_milli: u32,
+    refresh_milli_hz: u32,
+) {
+    wire_session_toggle_nikodesk_virtual_display_impl(
+        port_,
+        session_id,
+        index,
+        on,
+        width,
+        height,
+        scale_milli,
+        refresh_milli_hz,
+    )
 }
 
 #[no_mangle]

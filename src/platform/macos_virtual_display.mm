@@ -102,3 +102,86 @@ void NikoMacVirtualDisplayRelease(void *display) {
     if (!display) return;
     @autoreleasepool { CFRelease(display); }
 }
+// macOS starts a new display in its largest 1x mode, so the mode made for the
+// controller is selected explicitly. 1: exact, 2: same size at a lower
+// refresh rate, 0: none.
+static int32_t selectMode(uint32_t displayID, uint32_t width, uint32_t height, uint32_t pixelWidth, uint32_t refreshHz) {
+    for (int i = 0; i < 80 && !CGDisplayIsOnline(displayID); i++) usleep(25000);
+    NSArray *modes = CFBridgingRelease(CGDisplayCopyAllDisplayModes(displayID,
+        (__bridge CFDictionaryRef)@{(__bridge NSString *)kCGDisplayShowDuplicateLowResolutionModes: @YES}));
+    CGDisplayModeRef exact = NULL, closest = NULL;
+    double closestRate = 0;
+    for (id item in modes) {
+        CGDisplayModeRef mode = (__bridge CGDisplayModeRef)item;
+        if (CGDisplayModeGetWidth(mode) != width || CGDisplayModeGetHeight(mode) != height
+            || CGDisplayModeGetPixelWidth(mode) != pixelWidth || !CGDisplayModeIsUsableForDesktopGUI(mode)) continue;
+        const double rate = CGDisplayModeGetRefreshRate(mode);
+        if (fabs(rate - refreshHz) < 0.5) { exact = mode; break; }
+        if (rate < refreshHz && rate > closestRate) { closest = mode; closestRate = rate; }
+    }
+    CGDisplayModeRef chosen = exact ? exact : closest;
+    if (!chosen || CGDisplaySetDisplayMode(displayID, chosen, NULL) != kCGErrorSuccess) return 0;
+    return exact ? 1 : 2;
+}
+void *NikoMacVirtualDisplayCreateMatched(uint32_t slot, uint32_t width, uint32_t height, bool hidpi,
+        uint32_t refreshHz, uint32_t *displayID, uint32_t *serial, bool *applied, int32_t *matched) {
+    if (!displayID || !serial || !applied || !matched || slot < 1 || slot > 4
+        || width == 0 || height == 0 || width > 8192 || height > 8192 || refreshHz == 0 || refreshHz > 240) return nullptr;
+    *displayID = 0;
+    *serial = 0;
+    *applied = false;
+    *matched = 0;
+    const uint32_t factor = hidpi ? 2 : 1;
+    const uint32_t pixelWidth = width * factor, pixelHeight = height * factor;
+    // About 110 pixels per inch at 1x and 220 for HiDPI.
+    const double millimetresPerPixel = 25.4 / (110.0 * factor);
+    @autoreleasepool {
+        @try {
+            if (!NikoMacVirtualDisplaySupported()) return nullptr;
+            uint32_t number = 0;
+            while (number == 0) arc4random_buf(&number, sizeof(number));
+            NikoCGDisplayDescriptor *descriptor = [[NSClassFromString(@"CGVirtualDisplayDescriptor") alloc] init];
+            descriptor.vendorID = 0x4e49;
+            descriptor.productID = slot;
+            descriptor.serialNum = number;
+            if ([descriptor respondsToSelector:NSSelectorFromString(@"setSerialNumber:")])
+                [descriptor setValue:@(number) forKey:@"serialNumber"];
+            descriptor.name = [NSString stringWithFormat:@"NikoDesk Virtual Display %u", slot];
+            descriptor.queue = dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0);
+            descriptor.maxPixelsWide = pixelWidth;
+            descriptor.maxPixelsHigh = pixelHeight;
+            descriptor.sizeInMillimeters = CGSizeMake(pixelWidth * millimetresPerPixel, pixelHeight * millimetresPerPixel);
+            descriptor.redPrimary = CGPointMake(0.64, 0.33);
+            descriptor.greenPrimary = CGPointMake(0.30, 0.60);
+            descriptor.bluePrimary = CGPointMake(0.15, 0.06);
+            descriptor.whitePoint = CGPointMake(0.3127, 0.3290);
+            NikoCGDisplay *display = [[NSClassFromString(@"CGVirtualDisplay") alloc] initWithDescriptor:descriptor];
+            if (!display) return nullptr;
+            NikoCGDisplaySettings *settings = [[NSClassFromString(@"CGVirtualDisplaySettings") alloc] init];
+            settings.hiDPI = hidpi ? 1 : 0;
+            id mode = [[NSClassFromString(@"CGVirtualDisplayMode") alloc]
+                initWithWidth:width height:height refreshRate:refreshHz];
+            if (!mode) return nullptr;
+            settings.modes = @[mode];
+            *applied = [display applySettings:settings];
+            *displayID = display.displayID;
+            *serial = number;
+            if (*applied) *matched = selectMode(*displayID, width, height, pixelWidth, refreshHz);
+            return (void *)CFBridgingRetain(display);
+        } @catch (NSException *) {
+            return nullptr;
+        }
+    }
+}
+// Whether a display other than these would remain.
+bool NikoMacOtherDisplayOnline(const uint32_t *excluded, uint32_t count) {
+    CGDirectDisplayID online[32];
+    uint32_t found = 0;
+    if (CGGetOnlineDisplayList(32, online, &found) != kCGErrorSuccess) return true;
+    for (uint32_t i = 0; i < found; i++) {
+        bool removed = false;
+        for (uint32_t j = 0; excluded && j < count; j++) removed |= online[i] == excluded[j];
+        if (!removed) return true;
+    }
+    return false;
+}

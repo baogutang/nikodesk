@@ -33,6 +33,22 @@ inline bool is_emergency_release(const EmergencyReleaseKey& key) {
            key.control && key.option && key.shift && !key.command;
 }
 
+// The system pauses an event tap whose callback was slow, or during secure
+// input. The privacy input filter is resumed in place up to three times in
+// ten seconds; one paused more often than that is given up.
+struct TapRecovery {
+    int recent = 0;
+    double window_start = 0;
+};
+
+inline bool allow_tap_recovery(TapRecovery& state, double now_seconds) {
+    if (now_seconds - state.window_start > 10.0 || now_seconds < state.window_start) {
+        state.window_start = now_seconds;
+        state.recent = 0;
+    }
+    return ++state.recent <= 3;
+}
+
 inline bool valid_table(const GammaTable& table) {
     if (table.empty() || table.size() % 3 != 0 || table.size() / 3 > 65536) {
         return false;

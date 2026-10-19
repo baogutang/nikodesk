@@ -39,6 +39,7 @@ pub(crate) mod session_audit;
 pub(crate) mod capability_audit;
 pub(crate) mod virtual_driver;
 pub(crate) mod mac_shortcuts;
+pub(crate) mod display_spec;
 
 #[path = "nikodesk/favorites.rs"]
 pub mod favorites;
@@ -113,6 +114,8 @@ pub(crate) mod tunnel_actor;
 pub(crate) mod video_metrics;
 #[path = "nikodesk/host_video_stats.rs"]
 pub(crate) mod host_video_stats;
+#[path = "nikodesk/crash_record.rs"]
+pub mod crash_record;
 #[path = "nikodesk/video_queue.rs"]
 pub(crate) mod video_queue;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

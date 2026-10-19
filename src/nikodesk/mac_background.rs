@@ -59,22 +59,52 @@ pub(crate) fn claim_core() -> ResultType<bool> {
     *owner = Some(file);
     Ok(true)
 }
-pub(crate) fn run() -> ResultType<()> {
-    if unsafe { libc::geteuid() } == 0 || !active_user() {
-        bail!("ordinary_aqua_session_required");
+/// Why the agent cannot serve yet, if anything. Every condition can change
+/// later through the app or the system, so the agent waits rather than exits.
+fn not_ready() -> Option<String> {
+    if !active_user() {
+        return Some("ordinary_aqua_session_required".into());
     }
-    super::validate_active_private_server()?;
+    if let Err(error) = super::validate_active_private_server() {
+        return Some(error.to_string());
+    }
     if !Config::has_permanent_password()
         || Config::get_option("approve-mode") != "password"
         || Config::get_option("verification-method") != "use-permanent-password"
     {
-        bail!("explicit_unattended_policy_required");
+        return Some("explicit_unattended_policy_required".into());
     }
     if !crate::platform::is_can_screen_recording(false)
         || !crate::platform::is_process_trusted(false)
     {
-        bail!("local_system_permissions_required");
+        return Some("local_system_permissions_required".into());
     }
+    None
+}
+
+/// Exiting here made launchd (KeepAlive) start the agent again every few
+/// seconds for as long as a condition stayed unmet, for example after an
+/// update cleared the privacy grants. Wait in the process instead, logging
+/// each new reason once, so a later fix still takes effect without a login.
+fn wait_until_ready() {
+    let mut logged: Option<String> = None;
+    while let Some(reason) = not_ready() {
+        if logged.as_deref() != Some(reason.as_str()) {
+            hbb_common::log::warn!("Background agent waiting: {reason}");
+            logged = Some(reason);
+        }
+        std::thread::sleep(Duration::from_secs(30));
+    }
+    if logged.is_some() {
+        hbb_common::log::info!("Background agent ready");
+    }
+}
+
+pub(crate) fn run() -> ResultType<()> {
+    if unsafe { libc::geteuid() } == 0 {
+        bail!("ordinary_aqua_session_required");
+    }
+    wait_until_ready();
     SELECTED.store(true, Ordering::Release);
     // This is the real upstream core, including authentication/2FA and CM.
     // The non-server branch attaches if the GUI already owns it.

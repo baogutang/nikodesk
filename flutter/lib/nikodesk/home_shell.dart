@@ -21,6 +21,7 @@ import 'voice_cleanup_panel.dart';
 import 'tunnel_cleanup_view.dart';
 import 'install_assistant.dart';
 import 'first_server_setup.dart';
+import 'diagnostics_bundle.dart';
 
 /// Product shell for the NikoDesk home window: navigation plus the device
 /// workspace. Replaces the stock RustDesk two-pane home while keeping every
@@ -85,6 +86,7 @@ class _NikoHomeShellState extends State<NikoHomeShell> {
         if (mounted) {
           NikoLinkInbox.attach(this, _handleLink);
           if (nikoInstallAssistantRequested()) showNikoInstallAssistant(context);
+          nikoShowCrashNotice(context);
         }
       });
     }
