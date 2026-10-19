@@ -106,6 +106,9 @@ pub mod io_loop;
 #[path = "client/nikodesk_credentials.rs"]
 mod nikodesk_credentials;
 #[cfg(feature = "nikodesk")]
+#[path = "client/nikodesk_privacy.rs"]
+mod nikodesk_privacy;
+#[cfg(feature = "nikodesk")]
 pub(crate) mod nikodesk_tunnel;
 #[cfg(feature = "nikodesk")]
 pub(crate) mod nikodesk_tunnel_cleanup;

@@ -1,5 +1,109 @@
 import 'dart:convert';
 
+import 'connection_progress.dart';
+
+/// The controlled side's own measurements for one display, as it reported
+/// them about once a second.
+class NikoHostVideo {
+  final int display, width, height;
+  final String encoder;
+  final bool hardware, captureIncludesWait;
+  final double? fps, limit, refreshHz, captureMs, convertMs, encodeMs;
+  const NikoHostVideo(
+      {required this.display,
+      required this.width,
+      required this.height,
+      this.encoder = '',
+      this.hardware = false,
+      this.captureIncludesWait = false,
+      this.fps,
+      this.limit,
+      this.refreshHz,
+      this.captureMs,
+      this.convertMs,
+      this.encodeMs});
+
+  /// New pictures a second this side's own per-picture work would allow.
+  /// Capture counts only where it does not include waiting for a new picture.
+  double? get processingMaxFps {
+    final convert = convertMs, encode = encodeMs;
+    if (convert == null || encode == null) return null;
+    final capture = captureIncludesWait ? 0.0 : captureMs;
+    if (capture == null) return null;
+    final total = capture + convert + encode;
+    return total > 0 ? 1000 / total : null;
+  }
+
+  static NikoHostVideo? parse(Object? raw) {
+    try {
+      if (raw is! String || raw.length > 2048) return null;
+      final json = jsonDecode(raw);
+      if (json is! Map<String, dynamic>) return null;
+      double? number(String key, double max) {
+        final value = json[key];
+        return value is num && value.isFinite && value >= 0 && value <= max
+            ? value.toDouble()
+            : null;
+      }
+
+      final display = json['display'], width = json['width'];
+      final height = json['height'], encoder = json['encoder'];
+      if (display is! int || display < 0 || display >= 64) return null;
+      if (width is! int || width < 1 || width > 16384) return null;
+      if (height is! int || height < 1 || height > 16384) return null;
+      return NikoHostVideo(
+          display: display,
+          width: width,
+          height: height,
+          encoder: encoder is String &&
+                  RegExp(r'^[A-Za-z0-9]{0,16}$').hasMatch(encoder)
+              ? encoder
+              : '',
+          hardware: json['hardware'] == true,
+          captureIncludesWait: json['captureIncludesWait'] == true,
+          fps: number('fps', 1000),
+          limit: number('limit', 1000),
+          refreshHz: number('refreshHz', 1000),
+          captureMs: number('captureMs', 60000),
+          convertMs: number('convertMs', 60000),
+          encodeMs: number('encodeMs', 60000));
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+/// What limits the frame rate: the controlled side's frame limit (the
+/// controller's setting, lowered by network adaptation), its display's
+/// refresh rate, its own per-picture work, or this side's decoding.
+enum NikoFrameCapReason { setting, display, hostProcessing, localDecode }
+
+class NikoFrameCap {
+  final double fps;
+  final NikoFrameCapReason reason;
+  const NikoFrameCap(this.fps, this.reason);
+}
+
+NikoFrameCap? nikoFrameCap(
+    {double? limit,
+    double? refreshHz,
+    double? hostMaxFps,
+    double? localDecodeMs}) {
+  final candidates = <NikoFrameCap>[
+    if (limit != null && limit > 0)
+      NikoFrameCap(limit, NikoFrameCapReason.setting),
+    if (refreshHz != null && refreshHz > 0)
+      NikoFrameCap(refreshHz, NikoFrameCapReason.display),
+    if (hostMaxFps != null && hostMaxFps > 0)
+      NikoFrameCap(hostMaxFps, NikoFrameCapReason.hostProcessing),
+    if (localDecodeMs != null && localDecodeMs > 0)
+      NikoFrameCap(1000 / localDecodeMs, NikoFrameCapReason.localDecode),
+  ];
+  if (candidates.isEmpty) return null;
+  // On a tie the earlier, more fundamental reason is named.
+  return candidates.reduce((a, b) => b.fps < a.fps ? b : a);
+}
+
 class MetricSample {
   final Object value;
   final DateTime sampledAt;
@@ -66,6 +170,10 @@ class SessionMetrics {
         'Counts and bounded duration histograms only while local diagnostics are enabled; the first window after a toggle may be partial; host capture/encode and actual presentation remain unavailable.'),
     'decodedChroma': MetricSpec('chroma', 'update_quality_status.chroma',
         'Decoded chroma format; 4:4:4 does not mean lossless.'),
+    'hostVideo': MetricSpec(
+        'per-display snapshot',
+        'controlled side NikoHostVideoStats, about once a second',
+        'Means per new picture over the window as the controlled side measured them; capture includes waiting for a new picture where captureIncludesWait is true; refresh rate is unknown when the system reports none.'),
   };
   final DateTime Function() _now;
   final Duration Function()? _tick;
@@ -79,6 +187,9 @@ class SessionMetrics {
   bool? websocketTls;
   DateTime? connectionSampledAt;
   DateTime? authenticatedAt;
+
+  /// Step durations of this connection, set once its first frame arrived.
+  NikoConnectionTimings? setup;
   bool connectionFromCache = false;
   BigInt? _nativeEpoch;
   BigInt? _highestNativeEpoch;
@@ -402,6 +513,7 @@ class SessionMetrics {
     websocketTls = null;
     connectionSampledAt = null;
     authenticatedAt = null;
+    setup = null;
     connectionFromCache = false;
   }
 
@@ -450,6 +562,16 @@ class SessionMetrics {
     if (value != null && value.isFinite) _put(name, value);
   }
 
+  void hostVideo(Object? raw) {
+    final stats = NikoHostVideo.parse(raw);
+    if (stats == null) return;
+    final previous = current('hostVideo');
+    _put('hostVideo', <String, NikoHostVideo>{
+      if (previous is Map<String, NikoHostVideo>) ...previous,
+      stats.display.toString(): stats,
+    });
+  }
+
   void update(Map<String, dynamic> event) {
     _number(event, 'speed', 'receiveKiBps', speed: true);
     _number(event, 'delay', 'applicationRttMs');
@@ -486,8 +608,27 @@ class SessionMetrics {
     }
   }
 
+  static Object? _exportValue(Object? value) =>
+      value is Map<String, NikoHostVideo>
+          ? {
+              for (final entry in value.entries)
+                entry.key: {
+                  'size': '${entry.value.width}x${entry.value.height}',
+                  'encoder': entry.value.encoder,
+                  'hardware': entry.value.hardware,
+                  'fps': entry.value.fps,
+                  'limit': entry.value.limit,
+                  'refreshHz': entry.value.refreshHz,
+                  'captureMs': entry.value.captureMs,
+                  'convertMs': entry.value.convertMs,
+                  'encodeMs': entry.value.encodeMs,
+                  'captureIncludesWait': entry.value.captureIncludesWait,
+                }
+            }
+          : value;
+
   Map<String, Object?> export() => {
-        'schemaVersion': 2,
+        'schemaVersion': 3,
         'application': 'NikoDesk',
         'exportedAt': _now().toUtc().toIso8601String(),
         'platforms':
@@ -509,6 +650,14 @@ class SessionMetrics {
           'websocketTls': websocketTls,
           'sampledAt': connectionSampledAt?.toIso8601String(),
           'authenticatedAt': authenticatedAt?.toIso8601String(),
+          'setupMs': setup == null
+              ? null
+              : {
+                  'transport': setup!.transport?.inMilliseconds,
+                  'authentication': setup!.authentication?.inMilliseconds,
+                  'userWait': setup!.userWait?.inMilliseconds,
+                  'firstFrame': setup!.firstFrame?.inMilliseconds,
+                },
           'source': connectionFromCache
               ? 'cached_peer_data; sample time is cache receipt, not a new handshake'
               : 'connection_ready; metadata reset on reconnect',
@@ -516,7 +665,7 @@ class SessionMetrics {
         'metrics': {
           for (final entry in specs.entries)
             entry.key: {
-              'value': current(entry.key),
+              'value': _exportValue(current(entry.key)),
               'state': sample(entry.key) == null
                   ? 'unknown'
                   : isStale(entry.key)
@@ -529,10 +678,7 @@ class SessionMetrics {
             },
         },
         'unsupported': [
-          'hardwareEncoder',
           'fallbackReason',
-          'captureTime',
-          'encodeTime',
           'decodeTime',
           'presentationTime',
           'inputToPhotonLatency',

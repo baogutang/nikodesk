@@ -15,6 +15,34 @@ void main() {
     NikoLanguage.english = false;
   });
 
+  test('step timings exclude waiting for the user and reset on reconnect', () {
+    var now = Duration.zero;
+    final timed = NikoConnectionProgress(clock: () => now);
+    addTearDown(timed.dispose);
+    timed.begin();
+    now += const Duration(milliseconds: 180);
+    timed.transportReady();
+    now += const Duration(milliseconds: 40);
+    timed.message('input-password', 'Password Required');
+    now += const Duration(seconds: 5);
+    timed.credentialsSubmitted();
+    now += const Duration(milliseconds: 60);
+    timed.authenticated(expectsFrame: true);
+    now += const Duration(milliseconds: 250);
+    timed.frameReceived();
+    final t = timed.timings;
+    expect(t.transport, const Duration(milliseconds: 180));
+    expect(t.userWait, const Duration(seconds: 5));
+    expect(t.authentication, const Duration(milliseconds: 100));
+    expect(t.firstFrame, const Duration(milliseconds: 250));
+
+    timed.begin(reconnecting: true);
+    final fresh = timed.timings;
+    expect(fresh.transport, isNull);
+    expect(fresh.authentication, isNull);
+    expect(fresh.firstFrame, isNull);
+  });
+
   // Event sequences exercise presentation, not native remote acceptance.
   test('transport, cached identity and early video cannot prove authentication', () {
     progress.begin();

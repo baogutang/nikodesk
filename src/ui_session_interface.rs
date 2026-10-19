@@ -1886,6 +1886,8 @@ impl<T: InvokeUiSession> Interface for Session<T> {
 
     fn handle_peer_info(&self, mut pi: PeerInfo) {
         log::debug!("handle_peer_info :{:?}", pi);
+        #[cfg(feature = "nikodesk")]
+        self.lc.write().unwrap().nikodesk_forget_privacy_mode();
         self.lc.write().unwrap().peer_info = Some(pi.clone());
         if pi.current_display as usize >= pi.displays.len() {
             pi.current_display = 0;

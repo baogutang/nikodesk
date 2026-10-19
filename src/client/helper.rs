@@ -7,6 +7,9 @@ use std::collections::HashMap;
 pub struct QualityStatus {
     #[cfg(feature = "nikodesk")]
     pub native_video: Option<crate::nikodesk::video_metrics::VideoSnapshot>,
+    /// The controlled side's own measurements, as JSON for the quality panel.
+    #[cfg(feature = "nikodesk")]
+    pub host_video: Option<String>,
     pub speed: Option<String>,
     pub fps: HashMap<usize, i32>,
     pub delay: Option<i32>,

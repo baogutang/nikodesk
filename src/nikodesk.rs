@@ -111,6 +111,8 @@ pub(crate) mod tunnel_wire;
 pub(crate) mod tunnel_actor;
 #[path = "nikodesk/video_metrics.rs"]
 pub(crate) mod video_metrics;
+#[path = "nikodesk/host_video_stats.rs"]
+pub(crate) mod host_video_stats;
 #[path = "nikodesk/video_queue.rs"]
 pub(crate) mod video_queue;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

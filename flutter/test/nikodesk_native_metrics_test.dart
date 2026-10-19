@@ -382,8 +382,7 @@ void main() {
     expect(report, isNot(contains('/private/device')));
     expect(report, contains('void API'));
     expect(report, contains('presentationTime'));
-    expect(report, contains('captureTime'));
-    expect(report, contains('encodeTime'));
+    expect(report, contains('hostVideo'));
     expect(report, isNot(contains('submittedFps')));
   });
   test(

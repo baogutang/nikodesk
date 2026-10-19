@@ -16,6 +16,71 @@ void main() {
     }
     expect(metrics.secure, isNull);
   });
+  test('controlled-side stats are bounded and name what caps the frame rate',
+      () {
+    metrics.hostVideo(jsonEncode({
+      'display': 0,
+      'width': 3200,
+      'height': 1800,
+      'encoder': 'H265',
+      'hardware': true,
+      'fps': 54.2,
+      'limit': 60.0,
+      'refreshHz': 75.0,
+      'captureMs': 3.0,
+      'convertMs': 2.0,
+      'encodeMs': 1.0,
+      'captureIncludesWait': false,
+    }));
+    final host =
+        (metrics.current('hostVideo') as Map<String, NikoHostVideo>)['0']!;
+    expect(host.processingMaxFps, closeTo(166.7, 0.1));
+    expect(
+        nikoFrameCap(
+                limit: host.limit,
+                refreshHz: host.refreshHz,
+                hostMaxFps: host.processingMaxFps)!
+            .reason,
+        NikoFrameCapReason.setting);
+    final display = nikoFrameCap(limit: 120, refreshHz: 75, hostMaxFps: 160)!;
+    expect((display.fps, display.reason), (75.0, NikoFrameCapReason.display));
+    expect(nikoFrameCap(limit: 120, refreshHz: 120, hostMaxFps: 90)!.reason,
+        NikoFrameCapReason.hostProcessing);
+    expect(nikoFrameCap(limit: 120, localDecodeMs: 12.5)!.reason,
+        NikoFrameCapReason.localDecode);
+    expect(nikoFrameCap(), isNull);
+
+    // Waiting for a new picture is not work: Windows capture excludes it.
+    final waiting = NikoHostVideo.parse(jsonEncode({
+      'display': 1,
+      'width': 3840,
+      'height': 2160,
+      'captureMs': 15.0,
+      'convertMs': 2.0,
+      'encodeMs': 2.0,
+      'captureIncludesWait': true,
+    }))!;
+    expect(waiting.processingMaxFps, 250);
+
+    for (final bad in [
+      'not json',
+      jsonEncode({'display': -1, 'width': 10, 'height': 10}),
+      jsonEncode({'display': 0, 'width': 0, 'height': 10}),
+      jsonEncode({'display': 0, 'width': 99999, 'height': 10}),
+    ]) {
+      expect(NikoHostVideo.parse(bad), isNull, reason: bad);
+    }
+    final odd = NikoHostVideo.parse(jsonEncode({
+      'display': 0,
+      'width': 10,
+      'height': 10,
+      'encoder': '<b>x</b>',
+      'fps': -3,
+      'refreshHz': 5000,
+    }))!;
+    expect((odd.encoder, odd.fps, odd.refreshHz), ('', null, null));
+  });
+
   test('quality event units preserve real values and per-display missingness',
       () {
     metrics.update({

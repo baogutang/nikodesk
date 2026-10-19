@@ -5673,6 +5673,10 @@ impl Connection {
     async fn turn_on_privacy(&mut self, impl_key: String) {
         if !self.is_authed_remote_conn() || !self.privacy_mode
             || cfg!(feature = "nikodesk") && (!self.stream.is_secured() || !self.peer_keyboard_enabled()) {
+            hbb_common::throttled_log!(std::time::Duration::from_secs(10), info,
+                "#{} privacy screen request denied: authed={} permitted={} secured={} keyboard={}",
+                self.inner.id, self.is_authed_remote_conn(), self.privacy_mode,
+                self.stream.is_secured(), self.peer_keyboard_enabled());
             let msg_out = crate::common::make_privacy_mode_msg(
                 back_notification::PrivacyModeState::PrvOnFailedDenied,
                 impl_key,

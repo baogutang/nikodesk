@@ -2101,3 +2101,21 @@ fn get_bundle_id() -> Option<String> {
         Some(bundle_id_str)
     }
 }
+
+/// The refresh rate of a display named by its CGDirectDisplayID, in thousandths
+/// of a hertz; 0 when macOS does not report one.
+#[cfg(feature = "nikodesk")]
+pub fn nikodesk_refresh_milli_hz(display_name: &str) -> u32 {
+    use core_graphics::display::CGDisplay;
+    let Ok(id) = display_name.parse::<u32>() else {
+        return 0;
+    };
+    CGDisplay::new(id).display_mode().map_or(0, |mode| {
+        let rate = mode.refresh_rate();
+        if rate.is_finite() && rate > 0. && rate < 1000. {
+            (rate * 1000.).round() as u32
+        } else {
+            0
+        }
+    })
+}

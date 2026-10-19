@@ -8,7 +8,14 @@ entitlements=$3
 
 sign_args=(--force --options runtime --sign "$identity")
 if [[ "$identity" != "-" ]]; then
-  sign_args+=(--timestamp)
+  # The fixed NikoDesk certificate is self-signed; Apple's timestamp service only
+  # serves Apple-issued identities. NIKODESK_CODESIGN_TIMESTAMP=apple restores it
+  # for a future Developer ID.
+  if [[ "${NIKODESK_CODESIGN_TIMESTAMP:-none}" == apple ]]; then
+    sign_args+=(--timestamp)
+  else
+    sign_args+=(--timestamp=none)
+  fi
 fi
 
 frameworks_path="$app_path/Contents/Frameworks"
@@ -53,4 +60,24 @@ if [[ "$bundle_id" == "io.nikodesk.macos" ]] && \
     echo "Missing com.apple.security.device.camera entitlement" >&2
     exit 1
   fi
+fi
+
+# A pinned certificate (given as its SHA-1) must end up in every designated
+# requirement, otherwise macOS would key privacy grants to something else.
+if [[ "$identity" =~ ^[0-9A-Fa-f]{40}$ ]]; then
+  pinned=$(tr '[:upper:]' '[:lower:]' <<<"$identity")
+  check_requirement() {
+    local requirement
+    requirement=$(codesign -d -r- "$1" 2>&1)
+    if [[ "$requirement" != *"certificate root = H\"$pinned\""* ]]; then
+      echo "Designated requirement of $1 is not bound to the pinned certificate" >&2
+      exit 1
+    fi
+  }
+  check_requirement "$app_path"
+  for code in "$watchdog_path" "$service_path"; do
+    if [[ -f "$code" ]]; then
+      check_requirement "$code"
+    fi
+  done
 fi

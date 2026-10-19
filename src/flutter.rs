@@ -769,6 +769,11 @@ impl InvokeUiSession for FlutterHandler {
     fn update_quality_status(&self, status: QualityStatus) {
         const NULL: String = String::new();
         #[cfg(feature = "nikodesk")]
+        if let Some(host) = status.host_video.as_ref() {
+            self.push_event("niko_host_video", &[("stats", host)], &[]);
+            return;
+        }
+        #[cfg(feature = "nikodesk")]
         if self.try_update_native_quality(&status) { return; }
         self.push_event(
             "update_quality_status",

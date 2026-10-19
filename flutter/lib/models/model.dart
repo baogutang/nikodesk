@@ -448,6 +448,8 @@ class FfiModel with ChangeNotifier {
         parent.target?.serverModel.onClientRemove(evt);
       } else if (name == 'update_quality_status') {
         parent.target?.qualityMonitorModel.updateQualityStatus(evt);
+      } else if (name == 'niko_host_video') {
+        parent.target?.qualityMonitorModel.nikoMetrics.hostVideo(evt['stats']);
       } else if (name == 'update_block_input_state') {
         updateBlockInputState(evt, peerId);
       } else if (name == 'update_privacy_mode') {
@@ -1204,6 +1206,14 @@ class FfiModel with ChangeNotifier {
     if (const bool.fromEnvironment('NIKODESK')) parent.target?.fileModel.nikoConnectionLost();
     if (_nikoMetricsActive) parent.target?.qualityMonitorModel.nikoMetrics.clear();
     if (const bool.fromEnvironment('NIKODESK')) parent.target?.nikoConnectionProgress.begin(reconnecting: true);
+    if (const bool.fromEnvironment('NIKODESK')) {
+      // The controlled side ends a privacy screen with the connection that
+      // owned it; until the new connection confirms one, show it as off.
+      final id = parent.target?.id;
+      if (id != null && Get.isRegistered<RxString>(tag: PrivacyModeState.tag(id))) {
+        PrivacyModeState.find(id).value = '';
+      }
+    }
     // Disable relative mouse mode before reconnecting to ensure cursor is released.
     parent.target?.inputModel.setRelativeMouseMode(false);
     _cancelPendingMonitorRestore();
@@ -4613,6 +4623,11 @@ class FFI {
 
   Future<void> onEvent2UIRgba() async {
     if (const bool.fromEnvironment('NIKODESK') && !closed) nikoConnectionProgress.frameReceived();
+    if (const bool.fromEnvironment('NIKODESK') &&
+        qualityMonitorModel.nikoMetrics.setup == null &&
+        nikoConnectionProgress.value.phase == NikoConnectionPhase.connected) {
+      qualityMonitorModel.nikoMetrics.setup = nikoConnectionProgress.timings;
+    }
     if (ffiModel.waitForImageDialogShow.isTrue) {
       ffiModel.waitForImageDialogShow.value = false;
       ffiModel.waitForImageTimer?.cancel();

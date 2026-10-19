@@ -738,12 +738,23 @@ fn run(vs: VideoService) -> ResultType<()> {
     let mut dev_stages = crate::nikodesk::DevVideoStages::default();
     #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
     let mut video_pulse = crate::nikodesk::VideoPulse::default();
+    #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
+    let mut host_stats = crate::nikodesk::host_video_stats::HostVideoStats::new(
+        display_idx,
+        display_service::try_get_displays()
+            .ok()
+            .and_then(|displays| displays.get(display_idx).map(|display| display.name())),
+    );
     #[cfg(all(feature = "nikodesk", target_os = "macos"))]
     let mut frame_due = None;
 
     while sp.ok() {
         #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
         video_pulse.report((capture_width, capture_height), codec_format, encoder.is_hardware(), spf, quality);
+        #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
+        if let Some(msg) = host_stats.take((capture_width, capture_height), codec_format, encoder.is_hardware(), spf) {
+            sp.send(msg);
+        }
         #[cfg(windows)]
         check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
         check_qos(
@@ -808,11 +819,11 @@ fn run(vs: VideoService) -> ResultType<()> {
 
         let time = now - start;
         let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
-        #[cfg(feature = "nikodesk-dev-profile")]
+        #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
         let dev_capture = Instant::now();
         let res = match c.frame(spf) {
             Ok(frame) => {
-                #[cfg(feature = "nikodesk-dev-profile")]
+                #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
                 let dev_capture = dev_capture.elapsed();
                 repeat_encode_counter = 0;
                 if frame.valid() {
@@ -863,10 +874,10 @@ fn run(vs: VideoService) -> ResultType<()> {
                         }
                     }
 
-                    #[cfg(feature = "nikodesk-dev-profile")]
+                    #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
                     let dev_convert = Instant::now();
                     let frame = frame.to(encoder.yuvfmt(), &mut yuv, &mut mid_data)?;
-                    #[cfg(feature = "nikodesk-dev-profile")]
+                    #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
                     let (dev_convert, dev_encode) = (dev_convert.elapsed(), Instant::now());
                     let send_conn_ids = handle_one_frame(
                         display_idx,
@@ -882,6 +893,8 @@ fn run(vs: VideoService) -> ResultType<()> {
                     )?;
                     #[cfg(feature = "nikodesk-dev-profile")]
                     dev_stages.add(dev_capture, dev_convert, dev_encode.elapsed());
+                    #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
+                    host_stats.add(dev_capture, dev_convert, dev_encode.elapsed());
                     #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
                     video_pulse.frame();
                     frame_controller.set_send(now, send_conn_ids);

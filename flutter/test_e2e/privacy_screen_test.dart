@@ -15,22 +15,7 @@ import 'package:flutter_hbb/nikodesk/privacy_screen_policy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/native.dart';
-
-// The brightest value in the main display's colour table: 0 while the Mac's
-// privacy screen has it blacked out. Both ends run on this machine, so the
-// test can look. Null when it cannot be read.
-Future<double?> _brightest() async {
-  final result = await Process.run('swift', [
-    '-e',
-    'import CoreGraphics; let d = CGMainDisplayID(); '
-        'let c = CGDisplayGammaTableCapacity(d); '
-        'var r = [CGGammaValue](repeating: 0, count: Int(c)); var g = r; var b = r; '
-        'var n: UInt32 = 0; '
-        'if CGGetDisplayTransferByTable(d, c, &r, &g, &b, &n) == .success '
-        '{ print(max(r.max() ?? 0, g.max() ?? 0, b.max() ?? 0)) }'
-  ]);
-  return result.exitCode == 0 ? double.tryParse('${result.stdout}'.trim()) : null;
-}
+import 'support/privacy_cover.dart';
 
 void main() {
   test('a privacy screen request reaches the controlled side and is answered',
@@ -97,11 +82,13 @@ void main() {
     if (turnedOn['text'] == 'Enter privacy mode') {
       expect(on(), isTrue);
       final framesWhileOn = session.frames;
-      final dark = await _brightest();
+      final covers = await nikoPrivacyCoverWindows();
       // ignore: avoid_print
-      print('E2E-PRIVACY while on: brightest colour value $dark');
-      if (Platform.isMacOS && dark != null) {
-        expect(dark, 0, reason: 'the controlled screen is not blacked out');
+      print('E2E-PRIVACY while on: cover windows $covers');
+      if (Platform.isMacOS) {
+        expect(covers, isNotNull, reason: 'the window list could not be read');
+        expect(covers, greaterThan(0),
+            reason: 'the controlled screen is not covered');
       }
       // The controller still gets the picture while the screen is black.
       await session.until(() => session.frames > framesWhileOn,
@@ -116,12 +103,11 @@ void main() {
           'text=${turnedOff['text']} state=${on() ? 'on' : 'off'}');
       expect(turnedOff['text'], 'Exit privacy mode');
       expect(on(), isFalse);
-      final restored = await _brightest();
+      final left = await nikoPrivacyCoverWindows();
       // ignore: avoid_print
-      print('E2E-PRIVACY after off: brightest colour value $restored');
-      if (Platform.isMacOS && restored != null) {
-        expect(restored, greaterThan(0.5),
-            reason: 'the controlled screen was left dark');
+      print('E2E-PRIVACY after off: cover windows $left');
+      if (Platform.isMacOS) {
+        expect(left, 0, reason: 'the controlled screen was left covered');
       }
     } else {
       // Refused or failed: the controller must not think it is on.

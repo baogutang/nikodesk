@@ -2208,6 +2208,13 @@ impl<T: InvokeUiSession> Remote<T> {
                     Some(misc::Union::ChatMessage(c)) => {
                         self.handler.new_message(c.text);
                     }
+                    #[cfg(feature = "nikodesk")]
+                    Some(misc::Union::NikodeskHostVideoStats(stats)) => {
+                        self.handler.update_quality_status(QualityStatus {
+                            host_video: crate::nikodesk::host_video_stats::to_ui_json(&stats),
+                            ..Default::default()
+                        });
+                    }
                     Some(misc::Union::PermissionInfo(p)) => {
                         log::info!("Change permission {:?} -> {}", p.permission, p.enabled);
                         // https://github.com/rustdesk/rustdesk/issues/3703#issuecomment-1474734754

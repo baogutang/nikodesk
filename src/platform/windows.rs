@@ -3085,6 +3085,25 @@ pub fn current_resolution(name: &str) -> ResultType<Resolution> {
     }
 }
 
+/// The refresh rate of a display, in thousandths of a hertz; 0 when Windows
+/// reports only the hardware default.
+#[cfg(feature = "nikodesk")]
+pub fn nikodesk_refresh_milli_hz(name: &str) -> u32 {
+    let device_name = str_to_device_name(name);
+    unsafe {
+        let mut dm: DEVMODEW = std::mem::zeroed();
+        dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
+        if EnumDisplaySettingsW(device_name.as_ptr(), ENUM_CURRENT_SETTINGS, &mut dm) == 0 {
+            return 0;
+        }
+        if dm.dmDisplayFrequency > 1 && dm.dmDisplayFrequency < 1000 {
+            dm.dmDisplayFrequency * 1000
+        } else {
+            0
+        }
+    }
+}
+
 pub(super) fn change_resolution_directly(
     name: &str,
     width: usize,

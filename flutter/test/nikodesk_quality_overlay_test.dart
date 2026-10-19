@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/nikodesk/connection_progress.dart';
 import 'package:flutter_hbb/nikodesk/metrics.dart';
 import 'package:flutter_hbb/nikodesk/quality_overlay.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
@@ -41,7 +42,56 @@ void main() {
     metrics.clear();
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('Expired'), findsNothing);
-    expect(find.text('Unknown'), findsNWidgets(13));
+    // 13 live samples, 4 connection rows and 5 controlled-side rows.
+    expect(find.text('Unknown'), findsNWidgets(22));
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('connection route and step timings are shown once known',
+      (tester) async {
+    final metrics = SessionMetrics()
+      ..connection(secure: true, direct: false, transport: 'TCP')
+      ..setup = const NikoConnectionTimings(
+          transport: Duration(milliseconds: 180),
+          authentication: Duration(milliseconds: 95),
+          userWait: Duration(seconds: 4),
+          firstFrame: Duration(milliseconds: 240));
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: NikoQualityOverlay(metrics: metrics))));
+    expect(find.text('Relay · TCP'), findsOneWidget);
+    expect(find.text('180 ms'), findsOneWidget);
+    expect(find.text('95 ms (+4000 ms waiting for input/approval)'),
+        findsOneWidget);
+    expect(find.text('240 ms'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('the controlled side section shows its numbers and the ceiling',
+      (tester) async {
+    final metrics = SessionMetrics()
+      ..hostVideo(jsonEncode({
+        'display': 0,
+        'width': 3200,
+        'height': 1800,
+        'encoder': 'H265',
+        'hardware': true,
+        'fps': 54.2,
+        'limit': 120.0,
+        'refreshHz': 75.0,
+        'captureMs': 3.1,
+        'convertMs': 2.6,
+        'encodeMs': 0.8,
+        'captureIncludesWait': false,
+      }));
+    await tester.pumpWidget(MaterialApp(
+        home:
+            Scaffold(body: NikoQualityOverlay(metrics: metrics, display: 0))));
+    expect(find.text('3200×1800 · H265 hardware'), findsOneWidget);
+    expect(find.text('54.2/s'), findsOneWidget);
+    expect(find.text('75 Hz'), findsOneWidget);
+    expect(
+        find.text('capture 3.1 · convert 2.6 · encode 0.8 ms'), findsOneWidget);
+    expect(find.text('75/s (controlled display refresh rate)'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -54,7 +104,8 @@ void main() {
       child: Scaffold(body: NikoQualityOverlay(metrics: metrics, display: 0)),
     )));
     expect(find.text('60 fps'), findsNothing);
-    expect(find.text('Unknown'), findsNWidgets(13));
+    // 13 live samples, 4 connection rows and 5 controlled-side rows.
+    expect(find.text('Unknown'), findsNWidgets(22));
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
