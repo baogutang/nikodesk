@@ -221,7 +221,11 @@ fn nikodesk_voice_capture_partial_stereo_downmix_is_bounded() {
     feed(&io, &[0.25], 1);
     eventually(|| owner.take_outgoing(binding()).unwrap().is_some());
     assert_eq!(io.capture(&[0.; 3], 2), Err(VoiceError::InvalidPcm));
-    assert_eq!(io.capture(&[f32::NAN], 1), Err(VoiceError::InvalidPcm));
+    // A well-formed length reaches the state lock, which the owner's worker
+    // may hold for a moment; Busy is not the answer under test.
+    let mut nan = Err(VoiceError::Busy);
+    eventually(|| { nan = io.capture(&[f32::NAN], 1); nan != Err(VoiceError::Busy) });
+    assert_eq!(nan, Err(VoiceError::InvalidPcm));
     owner.stop(Duration::from_secs(1)).unwrap();
 }
 #[test]
