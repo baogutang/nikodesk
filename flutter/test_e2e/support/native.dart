@@ -92,12 +92,22 @@ class NikoNative {
 }
 
 /// One controller session. Collects every event the app's models would see.
+class NikoFrameMark {
+  NikoFrameMark(this.at, this.display);
+  final DateTime at;
+  final int display;
+}
+
 class NikoSession {
   NikoSession._(this.native, this.id, this.peer);
   final NikoNative native;
   final UuidValue id;
   final String peer;
   final events = <Map<String, dynamic>>[];
+  /// When each entry of [events] arrived.
+  final eventTimes = <DateTime>[];
+  /// When each decoded frame arrived, and for which display.
+  final frameLog = <NikoFrameMark>[];
   int frames = 0;
   DateTime? firstFrame;
   final _changed = StreamController<void>.broadcast();
@@ -136,9 +146,11 @@ class NikoSession {
     if (message is EventToUI_Event) {
       try {
         events.add(jsonDecode(message.field0) as Map<String, dynamic>);
+        eventTimes.add(DateTime.now());
       } catch (_) {}
     } else if (message is EventToUI_Rgba) {
       frames++;
+      frameLog.add(NikoFrameMark(DateTime.now(), message.field0));
       firstFrame ??= DateTime.now();
       // The core holds the next frame until the previous one is released.
       native.bind.sessionNextRgba(sessionId: id, display: message.field0);

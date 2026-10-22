@@ -10,6 +10,9 @@ pub(crate) struct Wallpaper {
     pub pixels: Vec<u8>, // opaque BGRA, full source resolution
     pub width: u32,
     pub height: u32,
+    /// Drawn natively on macOS; Windows shows a still of it as the picture.
+    #[cfg_attr(windows, allow(dead_code))]
+    pub scene: Option<&'static str>,
 }
 
 pub(crate) fn supported() -> bool {
@@ -25,11 +28,33 @@ pub(crate) fn supported() -> bool {
 
 pub(crate) fn prepare(style: &NikoPrivacyStyle) -> ResultType<Arc<Wallpaper>> {
     validate(style)?;
-    let bytes: &[u8] = match style.preset.as_str() {
-        "snow" => include_bytes!("../../../res/privacy/snow-ridge.png"),
-        "paper" => include_bytes!("../../../res/privacy/paper-light.png"),
-        "rain" => include_bytes!("../../../res/privacy/pixel-rain.png"),
-        "custom" => &style.image,
+    let scene = super::scene(&style.preset);
+    let mut options = style.clone();
+    options.image.clear();
+    if scene.is_some() {
+        // A scene animates by itself; the first presets' mask effects are not drawn over it.
+        options.effect = "none".into();
+    }
+    #[cfg(target_os = "macos")]
+    if scene.is_some() {
+        return Ok(Arc::new(Wallpaper {
+            options,
+            pixels: vec![0, 0, 0, 255],
+            width: 1,
+            height: 1,
+            scene,
+        }));
+    }
+    let bytes: &[u8] = match scene {
+        #[cfg(windows)]
+        Some("nightline") => include_bytes!("../../../res/privacy/nightline.jpg"),
+        #[cfg(windows)]
+        Some("deepfield") => include_bytes!("../../../res/privacy/deepfield.jpg"),
+        #[cfg(windows)]
+        Some("aurora") => include_bytes!("../../../res/privacy/aurora.jpg"),
+        #[cfg(windows)]
+        Some("graphite") => include_bytes!("../../../res/privacy/graphite.jpg"),
+        None if style.preset == "custom" => &style.image,
         _ => bail!("unknown_style"),
     };
     if bytes.len() > MAX_IMAGE_BYTES {
@@ -71,13 +96,12 @@ pub(crate) fn prepare(style: &NikoPrivacyStyle) -> ResultType<Arc<Wallpaper>> {
         pixel[2] = r;
         pixel[3] = 255;
     }
-    let mut options = style.clone();
-    options.image.clear();
     Ok(Arc::new(Wallpaper {
         options,
         pixels,
         width,
         height,
+        scene,
     }))
 }
 
@@ -108,8 +132,8 @@ impl PrivacyMode for StyledPrivacy {
             conn_id,
             NikoPrivacyStyle {
                 request_id: 1,
-                preset: "snow".into(),
-                effect: "fog".into(),
+                preset: "nightline".into(),
+                effect: "none".into(),
                 motion: true,
                 brightness: 100,
                 intensity: 120,
@@ -220,9 +244,19 @@ mod tests {
         }
     }
     #[test]
-    fn all_selected_assets_decode_to_opaque_bgra() {
-        for (preset, effect) in [("snow", "fog"), ("paper", "light"), ("rain", "rain")] {
-            let image = prepare(&value(preset, effect)).expect("bundled wallpaper");
+    fn every_preset_prepares_its_scene_with_opaque_pixels() {
+        for (preset, effect, scene) in [
+            ("nightline", "none", "nightline"),
+            ("deepfield", "none", "deepfield"),
+            ("aurora", "none", "aurora"),
+            ("graphite", "none", "graphite"),
+            ("snow", "fog", "nightline"),
+            ("paper", "light", "graphite"),
+            ("rain", "rain", "deepfield"),
+        ] {
+            let image = prepare(&value(preset, effect)).expect("bundled scene");
+            assert_eq!(image.scene, Some(scene));
+            assert_eq!(image.options.effect, "none");
             assert_eq!(
                 image.pixels.len(),
                 image.width as usize * image.height as usize * 4

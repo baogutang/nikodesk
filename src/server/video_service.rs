@@ -317,6 +317,36 @@ pub fn new(source: VideoSource, idx: usize) -> GenericService {
     vs.sp
 }
 
+/// The ScreenCaptureKit capture (option nikodesk-sck-capture), handing
+/// IOSurfaces to the native encoder when it will encode and no screenshot is
+/// pending. None falls back to the CGDisplayStream paths.
+#[cfg(all(feature = "nikodesk", target_os = "macos"))]
+fn nikodesk_sck_capturer(display: &Display, current: usize) -> Option<Box<dyn TraitCapturer>> {
+    #[cfg(feature = "hwcodec")]
+    let texture = scrap::nikodesk_vt::texture_wanted(display.width(), display.height())
+        && !SCREENSHOTS
+            .lock()
+            .unwrap()
+            .contains_key(&(VideoSource::Monitor, current));
+    #[cfg(not(feature = "hwcodec"))]
+    let texture = {
+        let _ = current;
+        false
+    };
+    match scrap::nikodesk_sck::SckCapturer::new(display, texture) {
+        Ok(capturer) => {
+            hbb_common::throttled_log!(Duration::from_secs(30), info,
+                "ScreenCaptureKit capture of display {} (texture: {texture})", display.name());
+            Some(Box::new(capturer))
+        }
+        Err(error) => {
+            hbb_common::throttled_log!(Duration::from_secs(30), warn,
+                "ScreenCaptureKit capture unavailable, using CGDisplayStream: {error}");
+            None
+        }
+    }
+}
+
 // Capturer object is expensive, avoiding to create it frequently.
 fn create_capturer(
     privacy_mode_id: i32,
@@ -327,6 +357,28 @@ fn create_capturer(
     #[cfg(all(feature="nikodesk",target_os="macos"))]
     if privacy_mode_id>0 && scrap::privacy_capture::reserved() {
         return Ok(Box::new(scrap::privacy_capture::PrivacyCapturer::new(display)?));
+    }
+    #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+    if privacy_mode_id <= 0 && scrap::nikodesk_sck::wanted() {
+        if let Some(capturer) = nikodesk_sck_capturer(&display, _current) {
+            return Ok(capturer);
+        }
+    }
+    // Zero copy when the native VideoToolbox session will encode; a pending
+    // screenshot needs the pixels, so it gets the CPU capture.
+    #[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+    if privacy_mode_id <= 0
+        && scrap::nikodesk_vt::texture_wanted(display.width(), display.height())
+        && !SCREENSHOTS
+            .lock()
+            .unwrap()
+            .contains_key(&(VideoSource::Monitor, _current))
+    {
+        match scrap::nikodesk_texture::TextureCapturer::new(&display) {
+            Ok(capturer) => return Ok(Box::new(capturer)),
+            Err(error) => hbb_common::throttled_log!(Duration::from_secs(30), warn,
+                "Zero-copy capture unavailable, copying instead: {error}"),
+        }
     }
     #[cfg(not(windows))]
     let c: Option<Box<dyn TraitCapturer>> = None;
@@ -747,6 +799,8 @@ fn run(vs: VideoService) -> ResultType<()> {
     );
     #[cfg(all(feature = "nikodesk", target_os = "macos"))]
     let mut frame_due = None;
+    #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+    let mut display_events = crate::nikodesk::display_events::display_watch();
 
     while sp.ok() {
         #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
@@ -806,6 +860,12 @@ fn run(vs: VideoService) -> ResultType<()> {
             {
                 bail!("Desktop changed");
             }
+        }
+        // A reconfiguration reported by the system is checked at once rather
+        // than at the next periodic check below.
+        #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+        if vs.source.is_monitor() && display_events.changed() {
+            try_broadcast_display_changed(&sp, display_idx, &c, true)?;
         }
         let now = time::Instant::now();
         if vs.source.is_monitor() && last_check_displays.elapsed().as_millis() > 1000 {

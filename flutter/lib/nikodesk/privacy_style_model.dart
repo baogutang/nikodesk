@@ -5,7 +5,15 @@ const nikoPrivacyStyleOption = 'nikodesk-privacy-style';
 const nikoPrivacyStyleImpl = 'nikodesk_privacy_style_v1';
 const nikoPrivacyImageLimit = 4 * 1024 * 1024;
 
-enum NikoPrivacyPreset { snow, paper, rain, custom }
+/// Nightline scenes drawn by the controlled computer, and a custom picture.
+enum NikoPrivacyPreset { nightline, deepfield, aurora, graphite, custom }
+
+/// The first presets, still found in saved choices, and their replacements.
+const _nikoLegacyPresets = {
+  'snow': NikoPrivacyPreset.nightline,
+  'paper': NikoPrivacyPreset.graphite,
+  'rain': NikoPrivacyPreset.deepfield,
+};
 
 enum NikoPrivacyEffect { fog, light, rain, none }
 
@@ -16,8 +24,8 @@ class NikoPrivacyStyle {
   final int brightness, intensity;
   final Uint8List? image;
   const NikoPrivacyStyle(
-      {this.preset = NikoPrivacyPreset.snow,
-      this.effect = NikoPrivacyEffect.fog,
+      {this.preset = NikoPrivacyPreset.nightline,
+      this.effect = NikoPrivacyEffect.none,
       this.motion = true,
       this.hint = true,
       this.clock = false,
@@ -35,13 +43,10 @@ class NikoPrivacyStyle {
               image!.isNotEmpty &&
               image!.length <= nikoPrivacyImageLimit
           : effect == effectFor(preset));
+
+  /// Scenes animate by themselves; a custom picture is shown as it is.
   static NikoPrivacyEffect effectFor(NikoPrivacyPreset preset) =>
-      switch (preset) {
-        NikoPrivacyPreset.snow => NikoPrivacyEffect.fog,
-        NikoPrivacyPreset.paper => NikoPrivacyEffect.light,
-        NikoPrivacyPreset.rain => NikoPrivacyEffect.rain,
-        NikoPrivacyPreset.custom => NikoPrivacyEffect.none,
-      };
+      NikoPrivacyEffect.none;
   NikoPrivacyStyle copyWith(
           {NikoPrivacyPreset? preset,
           NikoPrivacyEffect? effect,
@@ -80,10 +85,14 @@ class NikoPrivacyStyle {
         encoded.length > nikoPrivacyImageLimit * 4 ~/ 3 + 2048) return null;
     try {
       final json = jsonDecode(encoded) as Map<String, dynamic>;
-      final preset = NikoPrivacyPreset.values.byName(json['preset'] as String);
+      final name = json['preset'] as String;
+      final legacy = _nikoLegacyPresets[name];
+      final preset = legacy ?? NikoPrivacyPreset.values.byName(name);
       final style = NikoPrivacyStyle(
           preset: preset,
-          effect: NikoPrivacyEffect.values.byName(json['effect'] as String),
+          effect: legacy != null
+              ? NikoPrivacyEffect.none
+              : NikoPrivacyEffect.values.byName(json['effect'] as String),
           motion: json['motion'] as bool,
           brightness: json['brightness'] as int,
           intensity: json['intensity'] as int,

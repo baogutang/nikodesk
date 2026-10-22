@@ -41,9 +41,15 @@ cfg_if! {
 pub mod codec;
 #[cfg(all(feature="nikodesk",target_os="macos"))]
 pub mod privacy_capture;
+#[cfg(all(feature = "nikodesk", target_os = "macos"))]
+pub mod nikodesk_sck;
 pub mod convert;
 #[cfg(feature = "hwcodec")]
 pub mod hwcodec;
+#[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+pub mod nikodesk_vt;
+#[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+pub mod nikodesk_texture;
 #[cfg(feature = "mediacodec")]
 pub mod mediacodec;
 pub mod vpxcodec;

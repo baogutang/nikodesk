@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import '../models/model.dart' show FFI, ConnType;
 import '../models/platform_model.dart';
 import 'connection_progress.dart';
+import 'nightline/tokens.dart';
 import 'privacy_screen.dart';
 import 'privacy_style.dart';
 import 'ui.dart';
@@ -13,8 +14,9 @@ const nikoPrivacyAutoOption = 'nikodesk-privacy-auto-on';
 class NikoPrivacyConnectionPrompt extends StatefulWidget {
   final FFI ffi;
   final VoidCallback onExplain;
+  final double top;
   const NikoPrivacyConnectionPrompt(
-      {super.key, required this.ffi, required this.onExplain});
+      {super.key, required this.ffi, required this.onExplain, this.top = 12});
   @override
   State<NikoPrivacyConnectionPrompt> createState() => _ArrivalState();
 }
@@ -137,7 +139,7 @@ class _ArrivalState extends State<NikoPrivacyConnectionPrompt> {
     return Positioned(
         left: 12,
         right: 12,
-        top: 12,
+        top: widget.top,
         child: active == null
             ? const SizedBox.shrink()
             : Obx(() => active.value.isNotEmpty
@@ -172,66 +174,80 @@ class NikoPrivacyArrivalView extends StatelessWidget {
       required this.onEnable,
       required this.onSkip});
   @override
-  Widget build(BuildContext context) => Material(
-      color: const Color(0xff24282e),
-      borderRadius: BorderRadius.circular(12),
-      elevation: 6,
-      child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                    nikoText(
-                        '开启被控电脑的隐私屏？', 'Turn on the remote privacy screen?'),
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600)),
-                const SizedBox(height: 5),
-                Text(
-                    allowed
-                        ? nikoText('电脑屏幕仍在显示你的远程操作。',
-                            'Your remote activity is still visible on that computer.')
-                        : nikoText('被控端尚未允许隐私屏，请在控制中心查看设置。',
-                            'Privacy screen is unavailable. Check permissions in Control center.'),
-                    style:
-                        const TextStyle(color: Colors.white70, fontSize: 13)),
-                CheckboxListTile(
-                    key: const Key('privacy-arrival-auto'),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    value: auto,
-                    onChanged: busy ? null : (value) => onAuto(value ?? false),
-                    title: Text(
-                        nikoText('以后连接这台电脑自动开启',
-                            'Turn on automatically for this computer'),
-                        style: const TextStyle(
-                            color: Colors.white70, fontSize: 13))),
-                if (error != null)
-                  Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(error!,
-                          style: const TextStyle(
-                              color: Color(0xffffc8a4), fontSize: 13))),
-                Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-                  TextButton(
-                      key: const Key('privacy-arrival-skip'),
-                      onPressed: busy ? null : onSkip,
-                      child: Text(nikoText('暂不开启', 'Not now'))),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                      key: const Key('privacy-arrival-enable'),
-                      onPressed: busy ? null : onEnable,
-                      child: Text(busy
-                          ? nikoText('开启中…', 'Turning on…')
-                          : allowed
-                              ? nikoText('开启', 'Turn on')
-                              : nikoText('查看设置', 'Check settings'))),
-                ]),
-              ])));
+  Widget build(BuildContext context) {
+    // Nightline colours when the session window runs on that theme; the
+    // fixed dark card otherwise.
+    final nl = NlColors.maybeOf(context);
+    final auto = CheckboxListTile(
+        key: const Key('privacy-arrival-auto'),
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        visualDensity: nl == null ? null : VisualDensity.compact,
+        value: this.auto,
+        onChanged: busy ? null : (value) => onAuto(value ?? false),
+        title: Text(
+            nikoText('以后连接这台电脑自动开启',
+                'Turn on automatically for this computer'),
+            style: TextStyle(color: nl?.fg2 ?? Colors.white70, fontSize: 13)));
+    return Material(
+        color: nl?.overlay ?? const Color(0xff24282e),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: nl == null ? BorderSide.none : BorderSide(color: nl.line2)),
+        elevation: 6,
+        child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                      nikoText(
+                          '开启被控电脑的隐私屏？', 'Turn on the remote privacy screen?'),
+                      style: TextStyle(
+                          color: nl?.fg ?? Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 5),
+                  Text(
+                      allowed
+                          ? nikoText('电脑屏幕仍在显示你的远程操作。',
+                              'Your remote activity is still visible on that computer.')
+                          : nikoText('被控端尚未允许隐私屏，请在控制中心查看设置。',
+                              'Privacy screen is unavailable. Check permissions in Control center.'),
+                      style: TextStyle(
+                          color: nl?.fg2 ?? Colors.white70, fontSize: 13)),
+                  nl == null
+                      ? auto
+                      : ListTileTheme(
+                          horizontalTitleGap: NlSpace.s1,
+                          minLeadingWidth: 0,
+                          child: auto),
+                  if (error != null)
+                    Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(error!,
+                            style: TextStyle(
+                                color: nl?.warnText ?? const Color(0xffffc8a4),
+                                fontSize: 13))),
+                  Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                    TextButton(
+                        key: const Key('privacy-arrival-skip'),
+                        onPressed: busy ? null : onSkip,
+                        child: Text(nikoText('暂不开启', 'Not now'))),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                        key: const Key('privacy-arrival-enable'),
+                        onPressed: busy ? null : onEnable,
+                        child: Text(busy
+                            ? nikoText('开启中…', 'Turning on…')
+                            : allowed
+                                ? nikoText('开启', 'Turn on')
+                                : nikoText('查看设置', 'Check settings'))),
+                  ]),
+                ])));
+  }
 }
 
 class NikoPrivacyAutoPreference extends StatefulWidget {

@@ -5,6 +5,7 @@ import 'package:flutter_hbb/nikodesk/session_quick_actions_view.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:flutter_hbb/nikodesk/nightline.dart';
 
 NikoPrivacyScreenStatus _status(
         {bool supported = true,
@@ -266,5 +267,23 @@ void main() {
     PrivacyModeState.find(peer).value = '';
     await tester.pump();
     expect(find.byKey(const Key('nikodesk-privacy-screen-badge')), findsNothing);
+  });
+
+  testWidgets('under Nightline the badge is the accent privacy chip',
+      (tester) async {
+    const peer = '223456789';
+    PrivacyModeState.init(peer);
+    await tester.pumpWidget(MaterialApp(
+        theme: nightlineTheme(Brightness.dark),
+        home: const Stack(children: [NikoPrivacyScreenBadge(peerId: peer)])));
+    PrivacyModeState.find(peer).value = 'privacy_mode_impl_macos';
+    await tester.pump();
+    final badge = tester.widget<DecoratedBox>(
+        find.byKey(const Key('nikodesk-privacy-screen-badge')));
+    expect((badge.decoration as BoxDecoration).color, NlColors.dark.accent);
+    final label = tester.widget<Text>(find.text('隐私屏已开启'));
+    expect(label.style!.color, NlColors.dark.onAccent);
+    PrivacyModeState.find(peer).value = '';
+    await tester.pump();
   });
 }

@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 
+import 'nightline/theme.dart';
+import 'nightline/tokens.dart';
+
 /// Warm paper and terracotta in light mode; navy and blue in dark mode.
 class NikoPalette {
   // shared
@@ -79,6 +82,17 @@ class NikoGlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final nightline = NlColors.maybeOf(context);
+    if (nightline != null) {
+      return Container(
+          margin: margin,
+          padding: padding,
+          decoration: BoxDecoration(
+              color: nightline.surface,
+              borderRadius: BorderRadius.circular(NlRadius.r3),
+              border: Border.all(color: nightline.ring)),
+          child: child);
+    }
     final light = nikoIsLight(context);
     final radius = BorderRadius.circular(NikoShapes.card);
     return Container(
@@ -115,9 +129,12 @@ class NikoPrimaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final light = nikoIsLight(context);
-    final radius = BorderRadius.circular(NikoShapes.control);
+    final nightline = NlColors.maybeOf(context);
+    final radius = BorderRadius.circular(
+        nightline != null ? NlRadius.r2 : NikoShapes.control);
     final disabled = onPressed == null;
-    final fg = light ? Colors.white : NikoPalette.darkOnPrimary;
+    final fg = nightline?.onAccent ??
+        (light ? Colors.white : NikoPalette.darkOnPrimary);
     return Semantics(
         button: true,
         enabled: !disabled,
@@ -128,8 +145,9 @@ class NikoPrimaryButton extends StatelessWidget {
                 child: Ink(
                     decoration: BoxDecoration(
                       borderRadius: radius,
-                      color: light ? NikoPalette.lightAction : NikoPalette.darkSeed,
-                      boxShadow: disabled
+                      color: nightline?.accent ??
+                          (light ? NikoPalette.lightAction : NikoPalette.darkSeed),
+                      boxShadow: disabled || nightline != null
                           ? null
                           : (light
                               ? const [BoxShadow(color: NikoPalette.lightShadow,
@@ -154,6 +172,9 @@ class NikoPrimaryButton extends StatelessWidget {
                                     heightFactor: 1,
                                     child: DefaultTextStyle(
                                         style: TextStyle(color: fg, fontWeight: FontWeight.w700,
+                                            fontFamily: nightline != null ? NlType.ui : null,
+                                            fontFamilyFallback:
+                                                nightline != null ? NlType.uiFallback : null,
                                             fontSize: compact ? 13 : 14),
                                         child: IconTheme.merge(
                                             data: IconThemeData(color: fg),
@@ -329,10 +350,24 @@ ThemeData nikoTheme(Brightness brightness) {
   );
 }
 
+/// Remote-control and camera windows are dark in both modes, as in the
+/// Nightline draft. Each window runs in its own isolate, which sets this once
+/// before its app starts.
+bool nikoSessionWindow = false;
+
+/// App-wide theme for NikoDesk windows. Desktop windows are on Nightline;
+/// mobile keeps [nikoTheme] until its own redesign.
+ThemeData nikoAppTheme(Brightness brightness) => isDesktop
+    ? nightlineTheme(nikoSessionWindow ? Brightness.dark : brightness)
+    : nikoTheme(brightness);
+
 /// Tabular digits keep long device ids from jittering while editing.
 TextStyle nikoIdStyle(BuildContext context,
         {double fontSize = 16, Color? color}) =>
-    Theme.of(context).textTheme.titleMedium!.copyWith(
+    NlColors.maybeOf(context) != null
+        ? NlType.monoText(fontSize,
+            weight: FontWeight.w500, color: color ?? NlColors.of(context).fg)
+        : Theme.of(context).textTheme.titleMedium!.copyWith(
         fontWeight: FontWeight.w700,
         fontSize: fontSize,
         letterSpacing: .4,

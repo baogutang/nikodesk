@@ -281,6 +281,8 @@ void runMultiWindow(
       // no such appType
       exit(0);
   }
+  nikoSessionWindow = appType == kAppTypeDesktopRemote ||
+      appType == kAppTypeDesktopViewCamera;
   _runApp(
     title,
     widget,
@@ -416,9 +418,9 @@ void _runApp(
       debugShowCheckedModeBanner: false,
       title: title,
       theme: bind.mainGetAppNameSync() == 'NikoDesk'
-          ? nikoTheme(Brightness.light) : MyTheme.lightTheme,
+          ? nikoAppTheme(Brightness.light) : MyTheme.lightTheme,
       darkTheme: bind.mainGetAppNameSync() == 'NikoDesk'
-          ? nikoTheme(Brightness.dark) : MyTheme.darkTheme,
+          ? nikoAppTheme(Brightness.dark) : MyTheme.darkTheme,
       themeMode: themeMode,
       home: home,
       localizationsDelegates: const [
@@ -555,9 +557,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
               ? '${bind.mainGetAppNameSync()} Web Client V2 (Preview)'
               : bind.mainGetAppNameSync(),
           theme: bind.mainGetAppNameSync() == 'NikoDesk'
-          ? nikoTheme(Brightness.light) : MyTheme.lightTheme,
+          ? nikoAppTheme(Brightness.light) : MyTheme.lightTheme,
           darkTheme: bind.mainGetAppNameSync() == 'NikoDesk'
-          ? nikoTheme(Brightness.dark) : MyTheme.darkTheme,
+          ? nikoAppTheme(Brightness.dark) : MyTheme.darkTheme,
           themeMode: MyTheme.currentThemeMode(),
           home: isDesktop
               ? const DesktopTabPage()

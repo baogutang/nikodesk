@@ -518,7 +518,13 @@ fn get_displays_msg() -> Option<Message> {
 }
 
 fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
+    #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+    let mut lock_events = crate::nikodesk::display_events::lock_watch();
     while sp.ok() {
+        #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+        if lock_events.changed() {
+            crate::nikodesk::display_events::log_lock_change();
+        }
         sp.snapshot(|sps| {
             if !TEMP_IGNORE_DISPLAYS_CHANGED.load(Ordering::Relaxed) {
                 if sps.has_subscribes() {

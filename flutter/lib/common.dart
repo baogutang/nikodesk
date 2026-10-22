@@ -45,6 +45,7 @@ import 'nikodesk/server_gateway.dart';
 import 'nikodesk/server_scope.dart';
 import 'nikodesk/mobile_file_owner.dart';
 import 'nikodesk/window_scope.dart';
+import 'nikodesk/nightline/tokens.dart';
 
 import 'package:flutter_hbb/native/win32.dart'
     if (dart.library.html) 'package:flutter_hbb/web/win32.dart';
@@ -3803,12 +3804,14 @@ class ComboBox extends StatelessWidget {
     }
     var ref = values[index].obs;
     current = keys[index];
+    final nightline = NlColors.maybeOf(context);
     return Container(
       decoration: BoxDecoration(
         border: Border.all(
-          color: enabled
-              ? MyTheme.color(context).border2 ?? MyTheme.border
-              : MyTheme.border,
+          color: nightline?.line2 ??
+              (enabled
+                  ? MyTheme.color(context).border2 ?? MyTheme.border
+                  : MyTheme.border),
         ),
         borderRadius:
             BorderRadius.circular(8), //border raiuds of dropdown button
@@ -3820,6 +3823,8 @@ class ComboBox extends StatelessWidget {
             elevation: 16,
             underline: Container(),
             style: TextStyle(
+                fontFamily: nightline == null ? null : NlType.ui,
+                fontFamilyFallback: nightline == null ? null : NlType.uiFallback,
                 color: enabled
                     ? Theme.of(context).textTheme.titleMedium?.color
                     : disabledTextColor(context, enabled)),

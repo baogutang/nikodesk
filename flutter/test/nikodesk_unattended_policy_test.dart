@@ -8,6 +8,7 @@ import 'package:flutter_hbb/nikodesk/mac_background_settings.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
 import 'package:flutter_hbb/nikodesk/unattended_policy.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_hbb/nikodesk/nightline.dart';
 
 // Native bridge and background-agent fixtures; no process, permission, disk
 // configuration, real password or login agent is accessed by these tests.
@@ -276,4 +277,22 @@ void main() {
     expect(bridge.operations, isNot(contains('agent-enable')));
     expect(tester.takeException(), isNull);
   });
+
+  for (final nightline in [false, true]) {
+    testWidgets('the section title appears once (nightline: $nightline)',
+        (tester) async {
+      await tester.pumpWidget(MaterialApp(
+          theme: nightline ? nightlineTheme(Brightness.light) : null,
+          home: Scaffold(
+              body: NikoMacBackgroundSettings(
+                  agent: _Agent(bridge.operations),
+                  policyGateway: gateway,
+                  permissionsGranted: () => true))));
+      await tester.pumpAndSettle();
+      // Under Nightline the settings page's section label is the only title.
+      expect(find.text('macOS unattended access and background recovery'),
+          nightline ? findsNothing : findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
 }

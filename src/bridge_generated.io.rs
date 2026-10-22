@@ -1119,6 +1119,16 @@ pub extern "C" fn wire_main_get_nikodesk_diagnostics(port_: i64) {
 }
 
 #[no_mangle]
+pub extern "C" fn wire_main_get_nikodesk_mac_service(port_: i64) {
+    wire_main_get_nikodesk_mac_service_impl(port_)
+}
+
+#[no_mangle]
+pub extern "C" fn wire_main_set_nikodesk_mac_service(port_: i64, install: bool) {
+    wire_main_set_nikodesk_mac_service_impl(port_, install)
+}
+
+#[no_mangle]
 pub extern "C" fn wire_main_get_nikodesk_capability_policy(
     port_: i64,
     expected_server_namespace: *mut wire_uint_8_list,

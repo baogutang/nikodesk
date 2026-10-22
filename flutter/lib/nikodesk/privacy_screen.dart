@@ -8,6 +8,7 @@ import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 
+import 'nightline/tokens.dart';
 import 'privacy_screen_policy.dart';
 import 'privacy_style.dart';
 import 'privacy_style_events.dart';
@@ -143,7 +144,7 @@ class NikoPrivacyScreenButtonView extends StatelessWidget {
       icon: Icon(
           on ? Icons.visibility_off_rounded : Icons.visibility_off_outlined),
       label: '${nikoPrivacyScreenLabel(status)}$hint',
-      tone: on ? NikoToolbarTone.danger : NikoToolbarTone.action,
+      tone: on ? NikoToolbarTone.engaged : NikoToolbarTone.action,
       selected: on,
       onPressed: () {
         if (!nikoPrivacyScreenCanToggle(status)) return onExplain();
@@ -165,6 +166,8 @@ class NikoPrivacyScreenBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final active = nikoPrivacyScreenActive(peerId);
     if (active == null) return const Offstage();
+    final nightline = NlColors.maybeOf(context) != null;
+    final ink = nightline ? NlColors.dark.onAccent : Colors.white;
     return Obx(() => active.value.isEmpty
         ? const Offstage()
         : Positioned(
@@ -175,20 +178,25 @@ class NikoPrivacyScreenBadge extends StatelessWidget {
                 label: nikoPrivacyScreenLabel(NikoPrivacyScreenStatus.on),
                 child: DecoratedBox(
                   key: const Key('nikodesk-privacy-screen-badge'),
-                  decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(.72),
-                      borderRadius: BorderRadius.circular(999)),
+                  decoration: nightline
+                      ? BoxDecoration(
+                          color: NlColors.dark.accent,
+                          borderRadius: BorderRadius.circular(NlRadius.r1),
+                          boxShadow: NlColors.dark.glow)
+                      : BoxDecoration(
+                          color: Colors.black.withOpacity(.72),
+                          borderRadius: BorderRadius.circular(999)),
                   child: Padding(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      const Icon(Icons.visibility_off_rounded,
-                          size: 16, color: Colors.white),
+                      Icon(Icons.visibility_off_rounded, size: 16, color: ink),
                       const SizedBox(width: 6),
                       Text(
                           nikoPrivacyScreenLabel(NikoPrivacyScreenStatus.on),
-                          style: const TextStyle(
-                              color: Colors.white,
+                          style: TextStyle(
+                              color: ink,
+                              fontFamily: nightline ? NlType.ui : null,
                               fontSize: 13,
                               decoration: TextDecoration.none,
                               fontWeight: FontWeight.w500)),

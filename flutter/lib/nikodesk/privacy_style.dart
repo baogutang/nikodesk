@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../models/platform_model.dart';
 import '../models/model.dart' show FFI;
+import 'nightline.dart';
 import 'privacy_screen.dart';
 import 'privacy_style_events.dart';
 import 'privacy_style_image.dart';
@@ -158,9 +159,10 @@ class _EditorState extends State<NikoPrivacyStyleEditor> {
   }
 
   String _name(NikoPrivacyPreset preset) => switch (preset) {
-        NikoPrivacyPreset.snow => nikoText('雪岭', 'Snow ridge'),
-        NikoPrivacyPreset.paper => nikoText('纸光', 'Paper light'),
-        NikoPrivacyPreset.rain => nikoText('像素雨夜', 'Pixel rain'),
+        NikoPrivacyPreset.nightline => nikoText('夜航', 'Nightline'),
+        NikoPrivacyPreset.deepfield => nikoText('深空', 'Deep field'),
+        NikoPrivacyPreset.aurora => nikoText('极光', 'Aurora'),
+        NikoPrivacyPreset.graphite => nikoText('石墨', 'Graphite'),
         NikoPrivacyPreset.custom => nikoText('自定义', 'Custom'),
       };
   Future<void> _pick() async {
@@ -197,9 +199,7 @@ class _EditorState extends State<NikoPrivacyStyleEditor> {
       if (mounted) {
         setState(() => _style = _style.copyWith(
             preset: NikoPrivacyPreset.custom,
-            effect: _style.preset == NikoPrivacyPreset.custom
-                ? _style.effect
-                : NikoPrivacyEffect.none,
+            effect: NikoPrivacyEffect.none,
             image: normalized));
       }
     } catch (error) {
@@ -231,12 +231,38 @@ class _EditorState extends State<NikoPrivacyStyleEditor> {
           title: Text(label),
           value: value,
           onChanged: _busy ? null : (value) => setState(() => change(value)));
+  /// Nightline only: accent corner brackets that frame the live preview.
+  Widget _framed(Widget preview) {
+    if (NlColors.maybeOf(context) == null) return preview;
+    Widget corner(Alignment at) => Align(
+        alignment: at,
+        child: Padding(
+            padding: const EdgeInsets.all(NlSpace.s2),
+            child: SizedBox(
+                width: 14,
+                height: 14,
+                child: CustomPaint(painter: _Bracket(at)))));
+    return Stack(children: [
+      preview,
+      for (final at in const [
+        Alignment.topLeft,
+        Alignment.topRight,
+        Alignment.bottomLeft,
+        Alignment.bottomRight
+      ])
+        Positioned.fill(child: IgnorePointer(child: corner(at))),
+    ]);
+  }
+
   @override
-  Widget build(BuildContext context) =>
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+  Widget build(BuildContext context) {
+    final nightline = NlColors.maybeOf(context);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const SizedBox(height: 12),
-        Text(nikoText('样式', 'Style'),
-            style: Theme.of(context).textTheme.titleSmall),
+        nightline != null
+            ? NlMonoLabel(nikoText('样式', 'Style'))
+            : Text(nikoText('样式', 'Style'),
+                style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 10),
         LayoutBuilder(
             builder: (context, bounds) =>
@@ -258,6 +284,9 @@ class _EditorState extends State<NikoPrivacyStyleEditor> {
                                     }),
                             child: Container(
                                 decoration: BoxDecoration(
+                                    // The glow is a filled shadow; an opaque
+                                    // tile keeps it outside the frame.
+                                    color: nightline?.surface,
                                     borderRadius: BorderRadius.circular(10),
                                     border: Border.all(
                                         color: _style.preset == preset
@@ -266,7 +295,11 @@ class _EditorState extends State<NikoPrivacyStyleEditor> {
                                                 .primary
                                             : Theme.of(context).dividerColor,
                                         width:
-                                            _style.preset == preset ? 2 : 1)),
+                                            _style.preset == preset ? 2 : 1),
+                                    boxShadow: nightline != null &&
+                                            _style.preset == preset
+                                        ? nightline.glow
+                                        : null),
                                 padding: const EdgeInsets.all(3),
                                 child: Column(children: [
                                   ClipRRect(
@@ -287,7 +320,19 @@ class _EditorState extends State<NikoPrivacyStyleEditor> {
                                       child: Text(_name(preset),
                                           style: Theme.of(context)
                                               .textTheme
-                                              .labelMedium))
+                                              .labelMedium
+                                              ?.copyWith(
+                                                  color: nightline != null &&
+                                                          _style.preset ==
+                                                              preset
+                                                      ? nightline.accentText
+                                                      : null,
+                                                  fontWeight: nightline !=
+                                                              null &&
+                                                          _style.preset ==
+                                                              preset
+                                                      ? FontWeight.w600
+                                                      : null)))
                                 ])))),
                 ])),
         const SizedBox(height: 12),
@@ -295,11 +340,11 @@ class _EditorState extends State<NikoPrivacyStyleEditor> {
             borderRadius: BorderRadius.circular(10),
             child: AspectRatio(
                 aspectRatio: 1.6,
-                child: NikoPrivacyWallpaper(
+                child: _framed(NikoPrivacyWallpaper(
                     key: const Key('privacy-motion-preview'),
                     style: _style,
                     passwordExit: widget.passwordExit,
-                    mac: widget.mac))),
+                    mac: widget.mac)))),
         if (_style.preset == NikoPrivacyPreset.custom) ...[
           const SizedBox(height: 8),
           OutlinedButton.icon(
@@ -307,34 +352,12 @@ class _EditorState extends State<NikoPrivacyStyleEditor> {
               onPressed: _busy ? null : _pick,
               icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
               label: Text(nikoText('选择图片', 'Choose image'))),
-          DropdownButtonFormField<NikoPrivacyEffect>(
-              value: _style.effect,
-              decoration: InputDecoration(labelText: nikoText('动效', 'Motion')),
-              items: [
-                for (final effect in NikoPrivacyEffect.values)
-                  DropdownMenuItem(
-                      value: effect,
-                      child: Text(switch (effect) {
-                        NikoPrivacyEffect.fog => nikoText('山雾', 'Mist'),
-                        NikoPrivacyEffect.light => nikoText('光影', 'Light'),
-                        NikoPrivacyEffect.rain => nikoText('雨滴', 'Rain'),
-                        NikoPrivacyEffect.none => nikoText('无', 'None'),
-                      }))
-              ],
-              onChanged: _busy
-                  ? null
-                  : (effect) {
-                      if (effect != null) {
-                        setState(
-                            () => _style = _style.copyWith(effect: effect));
-                      }
-                    }),
         ],
         _toggle(nikoText('动效', 'Animate'), _style.motion,
             (value) => _style = _style.copyWith(motion: value)),
-        if (_style.motion && _style.effect != NikoPrivacyEffect.none)
+        if (_style.preset != NikoPrivacyPreset.custom)
           Row(children: [
-            Text(nikoText('强度', 'Intensity')),
+            Text(nikoText('光感', 'Glow')),
             Expanded(
                 child: Slider(
                     value: _style.intensity.toDouble(),
@@ -379,4 +402,31 @@ class _EditorState extends State<NikoPrivacyStyleEditor> {
                   style: Theme.of(context).textTheme.bodySmall)),
         const SizedBox(height: 12),
       ]);
+  }
+}
+
+/// One accent corner of the preview frame, drawn at [corner].
+class _Bracket extends CustomPainter {
+  final Alignment corner;
+  const _Bracket(this.corner);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final x = corner.x < 0 ? 0.0 : size.width;
+    final y = corner.y < 0 ? 0.0 : size.height;
+    final paint = Paint()
+      ..color = NlColors.dark.accent
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.square;
+    canvas.drawPath(
+        Path()
+          ..moveTo(size.width - x, y)
+          ..lineTo(x, y)
+          ..lineTo(x, size.height - y),
+        paint);
+  }
+
+  @override
+  bool shouldRepaint(_Bracket old) => old.corner != corner;
 }

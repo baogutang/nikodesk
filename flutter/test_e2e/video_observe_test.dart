@@ -29,8 +29,23 @@ void main() {
       await native.bind
           .sessionSetImageQuality(sessionId: session.id, value: quality);
     }
-    // Let the stream settle before sampling.
-    await Future<void>.delayed(const Duration(seconds: 3));
+    // Optional baseline settings, as in host_video_stats_test.
+    final fps = Platform.environment['NIKODESK_E2E_FPS'] ?? '';
+    if (fps.isNotEmpty) {
+      await native.bind
+          .sessionSetCustomFps(sessionId: session.id, fps: int.parse(fps));
+    }
+    final width = Platform.environment['NIKODESK_E2E_CAPTURE_WIDTH'] ?? '';
+    if (width.isNotEmpty) {
+      await native.bind.sessionPeerOption(
+          sessionId: session.id, name: 'nikodesk-capture-width', value: width);
+      addTearDown(() => native.bind.sessionPeerOption(
+          sessionId: session.id, name: 'nikodesk-capture-width', value: ''));
+    }
+    // Let the stream settle before sampling; the frame limit ramps up for
+    // about fifteen seconds after a session starts.
+    await Future<void>.delayed(
+        Duration(seconds: fps.isNotEmpty || width.isNotEmpty ? 15 : 3));
 
     final arrivals = <int>[];
     final perSecond = <int>[];
@@ -60,7 +75,9 @@ void main() {
       ..sort();
     expect(arrivals, isNotEmpty, reason: 'no frames during the observation');
     // ignore: avoid_print
-    print('E2E-VIDEO seconds=$seconds quality=${quality.isEmpty ? 'default' : quality} '
+    print(
+        'E2E-VIDEO seconds=$seconds quality=${quality.isEmpty ? 'default' : quality} '
+        'fps_limit=${fps.isEmpty ? 'default' : fps} capture_width=${width.isEmpty ? 'default' : width} '
         'frames=${arrivals.length} '
         'interval_ms p50=${percentile(intervals, 0.5)} p95=${percentile(intervals, 0.95)} '
         'max=${intervals.isEmpty ? -1 : intervals.last} '

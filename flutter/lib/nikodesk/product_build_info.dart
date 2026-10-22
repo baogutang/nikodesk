@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'nightline.dart';
 import 'theme.dart';
 import 'ui.dart';
 
@@ -127,14 +128,18 @@ class NikoProductInfoRows extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final muted =
-        nikoIsLight(context) ? NikoPalette.lightMuted : NikoPalette.darkMuted;
+    final nightline = NlColors.maybeOf(context);
+    final muted = nightline?.fg2 ??
+        (nikoIsLight(context) ? NikoPalette.lightMuted : NikoPalette.darkMuted);
     Widget row(String label, String value) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(label, style: TextStyle(color: muted, fontSize: 12)),
           SelectableText(value,
-              style: const TextStyle(fontWeight: FontWeight.w600)),
+              style: nightline == null
+                  ? const TextStyle(fontWeight: FontWeight.w600)
+                  : NlType.monoText(NlType.s3,
+                      weight: FontWeight.w500, color: nightline.fg)),
         ]));
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       row(nikoText('产品版本 / 构建号', 'Product version / build'),
@@ -190,8 +195,10 @@ class _NikoProductAboutState extends State<NikoProductAbout> {
   Widget build(BuildContext context) => NikoGlassCard(
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(nikoText('关于 NikoDesk', 'About NikoDesk'),
-            style: Theme.of(context).textTheme.titleMedium),
+        NlColors.maybeOf(context) != null
+            ? NlMonoLabel(nikoText('关于 NikoDesk', 'About NikoDesk'))
+            : Text(nikoText('关于 NikoDesk', 'About NikoDesk'),
+                style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 12),
         FutureBuilder<ProductBuildInfo>(
             future: _info,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'nightline.dart';
 import 'theme.dart';
 import 'ui.dart';
 
@@ -19,7 +20,9 @@ class NikoCmPermissions extends StatelessWidget {
     required this.canModify, required this.onChange});
 
   @override
-  Widget build(BuildContext context) => NikoCard(
+  Widget build(BuildContext context) {
+    if (NlColors.maybeOf(context) != null) return _chips(context);
+    return NikoCard(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
       child: Column(mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -40,6 +43,30 @@ class NikoCmPermissions extends StatelessWidget {
               visualDensity: VisualDensity.standard,
             ),
         ]));
+  }
+
+  /// Nightline: one chip per permission, as in the draft's visitor card. An
+  /// unchecked chip is struck through so a revoked right reads as revoked.
+  Widget _chips(BuildContext context) => NlPanel(
+      child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            NlMonoLabel(nikoText('此会话的权限', 'Session permissions')),
+            const SizedBox(height: NlSpace.s3),
+            Wrap(spacing: NlSpace.s2, runSpacing: NlSpace.s2, children: [
+              for (final permission in permissions)
+                NlChip(
+                    key: ValueKey('cm-permission-${permission.name}'),
+                    label: permission.label,
+                    icon: permission.icon,
+                    selected: permission.enabled,
+                    strikeWhenOff: true,
+                    onChanged: canModify
+                        ? (value) => onChange(permission.name, value)
+                        : null),
+            ]),
+          ]));
 }
 
 class NikoCmRequestHeader extends StatelessWidget {
@@ -54,7 +81,10 @@ class NikoCmRequestHeader extends StatelessWidget {
     this.duration, this.trailing});
 
   @override
-  Widget build(BuildContext context) => NikoGlassCard(
+  Widget build(BuildContext context) {
+    final nightline = NlColors.maybeOf(context);
+    if (nightline != null) return _visitorCard(context, nightline);
+    return NikoGlassCard(
       padding: const EdgeInsets.all(16),
       child: Column(mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -74,6 +104,58 @@ class NikoCmRequestHeader extends StatelessWidget {
             if (duration != null) duration!,
           ]),
         ]));
+  }
+
+  /// Nightline visitor card: what is asked, who asks, and the state.
+  Widget _visitorCard(BuildContext context, NlColors nl) => NlPanel(
+      padding: const EdgeInsets.all(NlSpace.s4),
+      child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+              Expanded(child: NlMonoLabel(action, tone: NlTone.accent)),
+              if (trailing != null) trailing!,
+            ]),
+            const SizedBox(height: NlSpace.s3),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                      color: nl.surface2,
+                      borderRadius: BorderRadius.circular(NlRadius.r2)),
+                  child: Icon(Icons.laptop_mac_rounded,
+                      size: 20, color: nl.accentText)),
+              const SizedBox(width: NlSpace.s3),
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text(
+                        requester.isEmpty
+                            ? nikoText('远程设备', 'Remote device')
+                            : requester,
+                        style: NlType.text(NlType.s4,
+                            weight: FontWeight.w600, color: nl.fg)),
+                    SelectableText(peerId,
+                        style: NlType.monoText(NlType.s2, color: nl.fg2)),
+                  ])),
+            ]),
+            const SizedBox(height: NlSpace.s3),
+            Wrap(
+                spacing: NlSpace.s3,
+                runSpacing: NlSpace.s1,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(status, style: NlType.text(NlType.s3, color: nl.fg2)),
+                  if (duration != null)
+                    DefaultTextStyle.merge(
+                        style: NlType.monoText(NlType.s5,
+                            weight: FontWeight.w500, color: nl.fg),
+                        child: duration!),
+                ]),
+          ]));
 }
 
 class NikoCmSessionLayout extends StatelessWidget {

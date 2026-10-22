@@ -141,6 +141,19 @@ impl Encoder {
                 codec: Box::new(AomEncoder::new(config, i444)?),
             }),
 
+            #[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+            EncoderCfg::HWRAM(ref hw) if crate::nikodesk_vt::wanted(hw) => {
+                match crate::nikodesk_vt::NikoVtEncoder::new(config.clone(), i444) {
+                    Ok(native) => Ok(Encoder {
+                        codec: Box::new(native),
+                    }),
+                    Err(e) => {
+                        log::warn!("NikoDesk VideoToolbox session unavailable, using ffmpeg's: {e:?}");
+                        crate::nikodesk_vt::disable();
+                        Self::new(config, i444)
+                    }
+                }
+            }
             #[cfg(feature = "hwcodec")]
             EncoderCfg::HWRAM(_) => match HwRamEncoder::new(config, i444) {
                 Ok(hw) => Ok(Encoder {

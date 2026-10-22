@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'nightline.dart';
+import 'nightline_settings.dart';
 import 'policy.dart';
 import 'server_gateway.dart';
 import 'ui.dart';
@@ -203,16 +205,21 @@ class _NikoNetworkSettingsState extends State<NikoNetworkSettings> {
     });
   }
 
+  String get _summaryText => nikoText(
+      'NikoDesk 仅使用你配置的 OSS ID / 中继服务器。设备连接仍需独立认证与加密；系统权限由你在系统设置中授予。',
+      'NikoDesk uses your configured OSS ID / relay servers. Sessions still require authentication and encryption. Grant operating-system permissions in System Settings.');
+
   @override
-  Widget build(BuildContext context) => SingleChildScrollView(
+  Widget build(BuildContext context) {
+    final nightline = NlColors.maybeOf(context);
+    if (nightline != null) return _nightline(context, nightline);
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Text(nikoText('私有网络', 'Private network'),
             style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: 16),
-        Text(nikoText(
-            'NikoDesk 仅使用你配置的 OSS ID / 中继服务器。设备连接仍需独立认证与加密；系统权限由你在系统设置中授予。',
-            'NikoDesk uses your configured OSS ID / relay servers. Sessions still require authentication and encryption. Grant operating-system permissions in System Settings.')),
+        Text(_summaryText),
         const SizedBox(height: 24),
         FutureBuilder<ServerSnapshot>(
             future: _snapshot,
@@ -259,6 +266,68 @@ class _NikoNetworkSettingsState extends State<NikoNetworkSettings> {
                         },
                         child: Text(nikoText('配置服务器', 'Configure server'))),
                   ]));
+            }),
+      ]));
+  }
+
+  /// Nightline: one settings card, like the other tabs of the hosted page;
+  /// the same read, retry and configure paths as above.
+  Widget _nightline(BuildContext context, NlColors nl) => SingleChildScrollView(
+      padding: const EdgeInsets.only(bottom: NlSpace.s4),
+      child: NikoSettingsCard(title: nikoText('私有网络', 'Private network'), children: [
+        Text(_summaryText, style: NlType.text(NlType.s3, color: nl.fg2)),
+        const SizedBox(height: NlSpace.s3),
+        FutureBuilder<ServerSnapshot>(
+            future: _snapshot,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    const NlLed(NlLedState.warn),
+                    const SizedBox(width: NlSpace.s2),
+                    Text(nikoText('无法读取配置', 'Cannot read settings'),
+                        style: NlType.text(NlType.s3, weight: FontWeight.w500, color: nl.fg)),
+                  ]),
+                  const SizedBox(height: NlSpace.s1),
+                  Text(nikoText('现有配置状态未知，未进行更改。请重试读取。',
+                      'The existing configuration is unknown and has not been changed. Retry reading it.'),
+                      style: NlType.text(NlType.s3, color: nl.fg2)),
+                  const SizedBox(height: NlSpace.s3),
+                  NlButton.ghost(
+                      onPressed: _reload,
+                      icon: Icons.refresh,
+                      label: nikoText('重试', 'Retry')),
+                ]);
+              }
+              final value = snapshot.data!;
+              final valid = value.config.isValid;
+              return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  NlLed(valid ? NlLedState.ok : NlLedState.warn),
+                  const SizedBox(width: NlSpace.s2),
+                  Text(valid
+                      ? nikoText('配置完整', 'Configuration complete')
+                      : nikoText('尚未配置', 'Setup required'),
+                      style: NlType.text(NlType.s3, weight: FontWeight.w500, color: nl.fg)),
+                ]),
+                if (valid && value.registrationStatus == null) ...[
+                  const SizedBox(height: NlSpace.s2),
+                  Text(nikoText('注册状态未知。配置完整不代表远端在线。',
+                      'Registration status is unknown. Valid settings do not prove remote availability.'),
+                      style: NlType.text(NlType.s2, color: nl.fg2)),
+                ],
+                const SizedBox(height: NlSpace.s3),
+                NlButton(
+                    onPressed: () async {
+                      final saved = await showNikoServerSettings(
+                          context, _gateway, value.config);
+                      if (mounted && saved == true) _reload();
+                    },
+                    label: nikoText('配置服务器', 'Configure server')),
+              ]);
             }),
       ]));
 }

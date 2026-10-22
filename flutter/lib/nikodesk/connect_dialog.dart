@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 
+import 'nightline/tokens.dart';
 import 'policy.dart';
 import 'server_gateway.dart';
 import 'server_scope.dart';
@@ -51,8 +52,9 @@ class _ConnectPasswordDialogState extends State<_ConnectPasswordDialog> {
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                    color: nikoIsLight(context) ? NikoPalette.lightAction : null,
-                    gradient: nikoIsLight(context) ? null : LinearGradient(
+                    color: NlColors.maybeOf(context)?.surface2 ??
+                        (nikoIsLight(context) ? NikoPalette.lightAction : null),
+                    gradient: NlColors.maybeOf(context) != null || nikoIsLight(context) ? null : LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                         colors: NikoPalette.deviceAvatarGradient(widget.id)),
@@ -61,7 +63,7 @@ class _ConnectPasswordDialogState extends State<_ConnectPasswordDialog> {
                     widget.fileTransfer
                         ? Icons.folder_rounded
                         : Icons.desktop_windows_rounded,
-                    color: Colors.white,
+                    color: NlColors.maybeOf(context)?.accentText ?? Colors.white,
                     size: 17)),
             const SizedBox(width: 10),
             Expanded(

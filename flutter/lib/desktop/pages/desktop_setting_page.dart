@@ -17,6 +17,7 @@ import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/printer_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:flutter_hbb/nikodesk/nightline_settings.dart';
 import 'package:flutter_hbb/nikodesk/server_settings.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
 import 'package:flutter_hbb/nikodesk/product_build_info.dart';
@@ -314,6 +315,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
   }
 
   Widget _header(BuildContext context) {
+    if (bind.mainGetAppNameSync() == 'NikoDesk') return const NikoSettingsHeader();
     final settingsText = Text(
       translate('Settings'),
       textAlign: TextAlign.left,
@@ -361,6 +363,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
   }
 
   Widget _listItem({required _TabInfo tab}) {
+    if (bind.mainGetAppNameSync() == 'NikoDesk') return _nikoListItem(tab);
     return Obx(() {
       bool selected = tab.key == selectedTab.value;
       return SizedBox(
@@ -400,6 +403,24 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
       );
     });
   }
+
+  Widget _nikoListItem(_TabInfo tab) => Obx(() {
+        final selected = tab.key == selectedTab.value;
+        return NikoSettingsNavItem(
+            label: translate(tab.label),
+            icon: selected ? tab.selected : tab.unselected,
+            selected: selected,
+            onTap: () {
+              if (selectedTab.value != tab.key) {
+                int index = DesktopSettingPage.tabKeys.indexOf(tab.key);
+                if (index == -1) {
+                  return;
+                }
+                controller.jumpToPage(index);
+              }
+              selectedTab.value = tab.key;
+            });
+      });
 }
 
 //#region pages
@@ -424,8 +445,10 @@ class _GeneralState extends State<_General> {
       controller: scrollController,
       children: [
         if (!isWeb) service(),
-        theme(),
-        _Card(title: 'Language', children: [language()]),
+        // NikoDesk keeps theme and language in its own settings page.
+        if (bind.mainGetAppNameSync() != 'NikoDesk') theme(),
+        if (bind.mainGetAppNameSync() != 'NikoDesk')
+          _Card(title: 'Language', children: [language()]),
         if (!isWeb) hwcodec(),
         if (!isWeb) audio(context),
         if (!isWeb) record(context),
@@ -470,7 +493,7 @@ class _GeneralState extends State<_General> {
                 'Portable mode registers with the private server inside this app after valid server setup. A Windows system service requires a separate explicit installation below.')
             : nikoText('仅使用当前应用内的私服注册。服务器配置有效后才启用；不安装系统服务。',
                 'Private registration runs inside this app after valid server setup. No system service is installed.')),
-        _Button('Network',
+        _Button(nikoText('打开网络设置', 'Open network settings'),
             () => DesktopSettingPage.switch2page(SettingsTabKey.network)),
         if (isWindows)
           const Padding(
@@ -2615,10 +2638,14 @@ class _AboutState extends State<_About> {
   Widget build(BuildContext context) {
     if (bind.mainGetAppNameSync() == 'NikoDesk') {
       return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: NikoProductAbout(
-              loadInfo: () => ProductBuildInfo.read(
-                  nativeVersionLoader: bind.mainGetVersion)));
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+          child: Align(
+              alignment: Alignment.topLeft,
+              child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 680),
+                  child: NikoProductAbout(
+                      loadInfo: () => ProductBuildInfo.read(
+                          nativeVersionLoader: bind.mainGetVersion)))));
     }
     return futureBuilder(future: () async {
       final license = await bind.mainGetLicense();
@@ -2723,6 +2750,10 @@ Widget _Card(
     {required String title,
     required List<Widget> children,
     List<Widget>? title_suffix}) {
+  if (bind.mainGetAppNameSync() == 'NikoDesk') {
+    return NikoSettingsCard(
+        title: translate(title), titleSuffix: title_suffix, children: children);
+  }
   return Row(
     children: [
       Flexible(
@@ -2818,6 +2849,14 @@ Widget _OptionCheckBox(
     enabled = false;
   }
 
+  if (bind.mainGetAppNameSync() == 'NikoDesk') {
+    return Obx(() => NikoSettingsToggle(
+        label: translate(label),
+        value: ref.value,
+        checkedIcon: checkedIcon,
+        onChanged:
+            enabled && !isOptFixed ? (value) => onChanged(value) : null));
+  }
   return GestureDetector(
     child: Obx(
       () => Row(
@@ -2853,6 +2892,13 @@ Widget _Radio<T>(BuildContext context,
     required String label,
     required Function(T value)? onChanged,
     bool autoNewLine = true}) {
+  if (bind.mainGetAppNameSync() == 'NikoDesk') {
+    return NikoSettingsRadio<T>(
+        value: value,
+        groupValue: groupValue,
+        label: translate(label),
+        onChanged: onChanged == null ? null : (choice) => onChanged(choice));
+  }
   final onChange2 = onChanged != null
       ? (T? value) {
           if (value != null) {
@@ -3040,6 +3086,12 @@ class _WaylandCardState extends State<WaylandCard> {
 // ignore: non_constant_identifier_names
 Widget _Button(String label, Function() onPressed,
     {bool enabled = true, String? tip, ButtonStyle? style}) {
+  if (bind.mainGetAppNameSync() == 'NikoDesk') {
+    return NikoSettingsButton(
+        label: translate(label),
+        onPressed: enabled ? () => onPressed() : null,
+        tip: tip == null ? null : translate(tip));
+  }
   var button = ElevatedButton(
     onPressed: enabled ? onPressed : null,
     child: Text(
@@ -3060,6 +3112,12 @@ Widget _Button(String label, Function() onPressed,
 
 // ignore: non_constant_identifier_names
 Widget _SubButton(String label, Function() onPressed, [bool enabled = true]) {
+  if (bind.mainGetAppNameSync() == 'NikoDesk') {
+    return NikoSettingsButton(
+        label: translate(label),
+        onPressed: enabled ? () => onPressed() : null,
+        indent: true);
+  }
   return Row(
     children: [
       ElevatedButton(
@@ -3075,6 +3133,10 @@ Widget _SubButton(String label, Function() onPressed, [bool enabled = true]) {
 // ignore: non_constant_identifier_names
 Widget _SubLabeledWidget(BuildContext context, String label, Widget child,
     {bool enabled = true}) {
+  if (bind.mainGetAppNameSync() == 'NikoDesk') {
+    return NikoSettingsLabeled(
+        label: translate(label), enabled: enabled, child: child);
+  }
   return Row(
     children: [
       Text(

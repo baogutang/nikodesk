@@ -97,6 +97,15 @@ pub(crate) mod virtual_display;
 #[cfg(target_os = "macos")]
 #[path = "nikodesk/mac_background.rs"]
 pub(crate) mod mac_background;
+#[cfg(target_os = "macos")]
+#[path = "nikodesk/display_events.rs"]
+pub(crate) mod display_events;
+#[cfg(all(test, target_os = "macos"))]
+#[path = "nikodesk/sck_capture_test.rs"]
+mod sck_capture_test;
+#[cfg(target_os = "macos")]
+#[path = "nikodesk/mac_service/mod.rs"]
+pub(crate) mod mac_service;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[path = "nikodesk/terminal_cleanup.rs"]
 pub(crate) mod terminal_cleanup;

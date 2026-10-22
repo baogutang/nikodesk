@@ -69,6 +69,7 @@ flutter/.mimosa/
 !flutter/assets/readme-logo.png
 !website/assets/*.png
 !website/assets/*.jpg
-!res/privacy/snow-ridge.png
-!res/privacy/paper-light.png
-!res/privacy/pixel-rain.png
+!res/privacy/nightline.jpg
+!res/privacy/deepfield.jpg
+!res/privacy/aurora.jpg
+!res/privacy/graphite.jpg

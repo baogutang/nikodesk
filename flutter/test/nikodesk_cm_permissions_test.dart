@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/nikodesk/cm_permissions.dart';
+import 'package:flutter_hbb/nikodesk/nightline.dart';
 import 'package:flutter_hbb/nikodesk/theme.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -139,6 +140,64 @@ void main() {
         final contrast = a > b ? (a + .05) / (b + .05) : (b + .05) / (a + .05);
         expect(contrast, greaterThanOrEqualTo(4.5));
       }
+    });
+  }
+
+  testWidgets('Nightline permission chips ask without changing the confirmed state',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    final changes = <String>[];
+    Widget board(bool enabled, {bool canModify = true}) => MaterialApp(
+        theme: nightlineTheme(Brightness.dark),
+        home: Scaffold(body: NikoCmPermissions(
+            permissions: [NikoCmPermission('keyboard', 'Keyboard and mouse', Icons.keyboard, enabled)],
+            canModify: canModify, onChange: (name, value) => changes.add('$name:$value'))));
+    await tester.pumpWidget(board(true));
+    final chip = find.byKey(const ValueKey('cm-permission-keyboard'));
+    expect(find.byType(CheckboxListTile), findsNothing);
+    expect(tester.getSemantics(chip).hasFlag(SemanticsFlag.isToggled), isTrue);
+    await tester.tap(chip);
+    await tester.pump();
+    expect(changes, ['keyboard:false']);
+    expect(tester.widget<NlChip>(chip).selected, isTrue);
+    await tester.pumpWidget(board(false));
+    final label = tester.widget<Text>(find.text('Keyboard and mouse'));
+    expect(label.style!.decoration, TextDecoration.lineThrough);
+    await tester.pumpWidget(board(false, canModify: false));
+    await tester.tap(chip, warnIfMissed: false);
+    expect(changes, hasLength(1));
+    semantics.dispose();
+  });
+
+  for (final brightness in Brightness.values) {
+    testWidgets('Nightline visitor card stays usable at 280x480/200% $brightness', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(280, 480));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      var accepted = 0;
+      await tester.pumpWidget(MaterialApp(theme: nightlineTheme(brightness),
+        home: Builder(builder: (context) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(2)),
+          child: Scaffold(body: NikoCmSessionLayout(
+            header: const NikoCmRequestHeader(
+              requester: 'A remote computer with a long descriptive name',
+              peerId: '123456789123456789123456789', action: 'Screen and input control',
+              status: 'Waiting for local approval'),
+            permissions: NikoCmPermissions(canModify: true, onChange: (_, __) {},
+              permissions: [for (final name in ['Keyboard and mouse', 'Text clipboard',
+                'Device audio', 'File copy and paste', 'Remote restart', 'Session recording',
+                'Block local input', 'Privacy screen'])
+                  NikoCmPermission(name, name, Icons.keyboard, true)]),
+            controls: NikoCmActionButton(label: 'Allow this session',
+              onPressed: () => accepted++)))))));
+      expect(tester.takeException(), isNull);
+      expect(find.text('SCREEN AND INPUT CONTROL'), findsOneWidget);
+      final action = find.byType(FilledButton);
+      await tester.ensureVisible(action);
+      await tester.pumpAndSettle();
+      expect(tester.getSize(action).height, greaterThanOrEqualTo(48));
+      await tester.tap(action);
+      expect(accepted, 1);
+      expect(tester.takeException(), isNull);
     });
   }
 }

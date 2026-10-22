@@ -8,6 +8,7 @@ import 'package:flutter_hbb/nikodesk/privacy_wallpaper.dart';
 import 'package:flutter_hbb/nikodesk/session_quick_actions_view.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_hbb/nikodesk/nightline.dart';
 
 void main() {
   setUp(() => NikoLanguage.english = true);
@@ -107,9 +108,8 @@ void main() {
             child: NikoPrivacyWallpaper(
                 style: NikoPrivacyStyle(hint: false), animate: false))));
     expect(find.text('Privacy screen is on'), findsOneWidget);
-    expect(
-        find.textContaining('System login password required'), findsOneWidget);
-    expect(find.textContaining('⌃⌥⇧ Esc'), findsOneWidget);
+    expect(find.textContaining('local login password'), findsOneWidget);
+    expect(find.text('⌃ ⌥ ⇧ esc'), findsOneWidget);
   });
   testWidgets('old hosts do not claim a password-protected exit',
       (tester) async {
@@ -176,5 +176,42 @@ void main() {
     await tester.pumpWidget(editor(true));
     expect(find.text('Restore hint'), findsNothing);
     expect(find.text('Privacy screen is on'), findsOneWidget);
+  });
+
+  testWidgets('under Nightline the reminder uses the session tokens',
+      (tester) async {
+    var auto = false;
+    await tester.pumpWidget(MaterialApp(
+        theme: nightlineTheme(Brightness.dark),
+        home: Scaffold(
+            body: StatefulBuilder(
+                builder: (context, setState) => NikoPrivacyArrivalView(
+                    allowed: false,
+                    auto: auto,
+                    busy: false,
+                    onAuto: (value) => setState(() => auto = value),
+                    onEnable: () {},
+                    onSkip: () {})))));
+    const nl = NlColors.dark;
+    final card = tester.widget<Material>(find
+        .ancestor(
+            of: find.text('Turn on the remote privacy screen?'),
+            matching: find.byType(Material))
+        .first);
+    expect(card.color, nl.overlay);
+    expect(
+        tester
+            .widget<Text>(find.text('Turn on the remote privacy screen?'))
+            .style!
+            .color,
+        nl.fg);
+    final theme = tester.widget<ListTileTheme>(find.ancestor(
+        of: find.byKey(const Key('privacy-arrival-auto')),
+        matching: find.byType(ListTileTheme)).first);
+    expect(theme.data.horizontalTitleGap, NlSpace.s1);
+    await tester.tap(find.byKey(const Key('privacy-arrival-auto')));
+    await tester.pump();
+    expect(auto, isTrue);
+    expect(tester.takeException(), isNull);
   });
 }

@@ -35,6 +35,19 @@ pub(crate) mod unlock_windows;
 #[path = "privacy_style/windows.rs"]
 pub(crate) mod windows;
 
+/// The Nightline scene a preset is drawn as; None for a custom picture. The
+/// first presets (snow, paper, rain) still arrive from older controllers and
+/// are shown as the scenes that replaced them.
+pub(crate) fn scene(preset: &str) -> Option<&'static str> {
+    match preset {
+        "nightline" | "snow" => Some("nightline"),
+        "deepfield" | "rain" => Some("deepfield"),
+        "aurora" => Some("aurora"),
+        "graphite" | "paper" => Some("graphite"),
+        _ => None,
+    }
+}
+
 pub(crate) fn validate(style: &NikoPrivacyStyle) -> ResultType<()> {
     if style.compute_size() > MAX_FRAME_BYTES as u64 {
         bail!("image_size_limit");
@@ -49,6 +62,7 @@ pub(crate) fn validate(style: &NikoPrivacyStyle) -> ResultType<()> {
         "snow" => "fog",
         "paper" => "light",
         "rain" => "rain",
+        "nightline" | "deepfield" | "aurora" | "graphite" => "none",
         "custom" => style.effect.as_str(),
         _ => bail!("unknown_style"),
     };
@@ -198,11 +212,22 @@ mod tests {
     #[test]
     fn accepts_only_selected_presets_and_custom() {
         let mut value = style();
-        for (preset, effect) in [("snow", "fog"), ("paper", "light"), ("rain", "rain")] {
+        for (preset, effect) in [
+            ("snow", "fog"),
+            ("paper", "light"),
+            ("rain", "rain"),
+            ("nightline", "none"),
+            ("deepfield", "none"),
+            ("aurora", "none"),
+            ("graphite", "none"),
+        ] {
             value.preset = preset.into();
             value.effect = effect.into();
             assert!(validate(&value).is_ok());
         }
+        value.preset = "aurora".into();
+        value.effect = "fog".into();
+        assert!(validate(&value).is_err());
         for preset in ["ocean", "black", "https://host/image", "../image"] {
             value.preset = preset.into();
             assert!(validate(&value).is_err());
@@ -241,5 +266,14 @@ mod tests {
         value.image = vec![1].into();
         assert!(validate(&value).is_err());
         assert!(parse(r#"{"path":"/private/file"}"#).is_err());
+    }
+    #[test]
+    fn first_presets_are_shown_as_the_scenes_that_replaced_them() {
+        assert_eq!(scene("snow"), Some("nightline"));
+        assert_eq!(scene("paper"), Some("graphite"));
+        assert_eq!(scene("rain"), Some("deepfield"));
+        assert_eq!(scene("aurora"), Some("aurora"));
+        assert_eq!(scene("custom"), None);
+        assert_eq!(scene("black"), None);
     }
 }

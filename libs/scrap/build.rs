@@ -237,6 +237,20 @@ fn main() {
         cc::Build::new().cpp(true).flag("-std=c++17").flag("-fobjc-arc").flag("-fblocks")
             .file("src/common/privacy_capture.mm").compile("nikodesk_privacy_capture");
         println!("cargo:rerun-if-changed=src/common/privacy_capture.mm");
+        cc::Build::new().cpp(true).flag("-std=c++17").flag("-fobjc-arc").flag("-fblocks")
+            .file("src/common/nikodesk_sck.mm").compile("nikodesk_sck");
+        println!("cargo:rerun-if-changed=src/common/nikodesk_sck.mm");
+        if env::var_os("CARGO_FEATURE_HWCODEC").is_some() {
+            cc::Build::new().cpp(true).flag("-std=c++17").flag("-fobjc-arc").flag("-fblocks")
+                .file("src/common/nikodesk_vt.mm").compile("nikodesk_vt");
+            println!("cargo:rerun-if-changed=src/common/nikodesk_vt.mm");
+            cc::Build::new().cpp(true).flag("-std=c++17").flag("-fobjc-arc").flag("-fblocks")
+                .file("src/common/nikodesk_texture.mm").compile("nikodesk_texture");
+            println!("cargo:rerun-if-changed=src/common/nikodesk_texture.mm");
+            for framework in ["VideoToolbox", "CoreMedia", "CoreVideo"] {
+                println!("cargo:rustc-link-lib=framework={framework}");
+            }
+        }
         println!("cargo:rustc-link-lib=framework=ScreenCaptureKit");
         println!("cargo:rustc-link-lib=framework=CoreGraphics");
         for file in ["src/common/macos_camera.mm", "src/common/macos_camera.h", "src/common/macos_camera_state.h"] {

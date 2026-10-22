@@ -18,10 +18,10 @@ void main() {
   setUp(() => NikoLanguage.english = true);
   tearDown(() => NikoLanguage.english = false);
 
-  test('only the three selected presets and custom are saved', () {
+  test('only the four Nightline scenes and custom are saved', () {
     expect(NikoPrivacyPreset.values.map((value) => value.name),
-        ['snow', 'paper', 'rain', 'custom']);
-    for (final preset in NikoPrivacyPreset.values.take(3)) {
+        ['nightline', 'deepfield', 'aurora', 'graphite', 'custom']);
+    for (final preset in NikoPrivacyPreset.values.take(4)) {
       final style = NikoPrivacyStyle(
           preset: preset, effect: NikoPrivacyStyle.effectFor(preset));
       expect(style.valid, isTrue);
@@ -38,7 +38,8 @@ void main() {
     for (final style in [
       const NikoPrivacyStyle(brightness: 39),
       const NikoPrivacyStyle(intensity: 201),
-      const NikoPrivacyStyle(preset: NikoPrivacyPreset.paper),
+      const NikoPrivacyStyle(
+          preset: NikoPrivacyPreset.aurora, effect: NikoPrivacyEffect.fog),
       const NikoPrivacyStyle(preset: NikoPrivacyPreset.custom),
       NikoPrivacyStyle(
           preset: NikoPrivacyPreset.custom,
@@ -54,9 +55,26 @@ void main() {
     expect(
         custom
             .copyWith(
-                preset: NikoPrivacyPreset.snow, effect: NikoPrivacyEffect.fog)
+                preset: NikoPrivacyPreset.nightline,
+                effect: NikoPrivacyEffect.none)
             .command(7)['image_base64'],
         '');
+  });
+  test('saved first presets read back as the scenes that replaced them', () {
+    for (final (name, effect, replacement) in [
+      ('snow', 'fog', NikoPrivacyPreset.nightline),
+      ('paper', 'light', NikoPrivacyPreset.graphite),
+      ('rain', 'rain', NikoPrivacyPreset.deepfield),
+    ]) {
+      final saved =
+          jsonDecode(const NikoPrivacyStyle().saved()) as Map<String, dynamic>
+            ..['preset'] = name
+            ..['effect'] = effect;
+      final style = NikoPrivacyStyle.read(jsonEncode(saved))!;
+      expect(style.preset, replacement);
+      expect(style.effect, NikoPrivacyEffect.none);
+      expect(style.valid, isTrue);
+    }
   });
 
   test('stale, malformed and other-session replies cannot confirm a request',
@@ -132,7 +150,7 @@ void main() {
                       width: 400,
                       child: NikoPrivacyStyleEditor(
                           allowed: allowed, active: false, onApply: apply)))));
-  testWidgets('selection has four choices and waits for remote confirmation',
+  testWidgets('selection has five choices and waits for remote confirmation',
       (tester) async {
     final confirmation = Completer<void>();
     NikoPrivacyStyle? requested;
@@ -144,13 +162,15 @@ void main() {
       expect(find.byKey(ValueKey('privacy-preset-${preset.name}')),
           findsOneWidget);
     }
-    await tester.tap(find.byKey(const ValueKey('privacy-preset-paper')));
+    await tester
+        .ensureVisible(find.byKey(const ValueKey('privacy-preset-graphite')));
+    await tester.tap(find.byKey(const ValueKey('privacy-preset-graphite')));
     await tester.pump();
     final button = find.byKey(const Key('privacy-apply-style'));
     await tester.ensureVisible(button);
     await tester.tap(button);
     await tester.pump();
-    expect(requested!.preset, NikoPrivacyPreset.paper);
+    expect(requested!.preset, NikoPrivacyPreset.graphite);
     expect(find.text('Applied'), findsNothing);
     expect(tester.widget<FilledButton>(button).onPressed, isNull);
     confirmation.complete();
@@ -165,6 +185,8 @@ void main() {
     expect(tester.widget<FilledButton>(button).onPressed, isNull);
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(editor((_) async {}));
+    await tester
+        .ensureVisible(find.byKey(const ValueKey('privacy-preset-custom')));
     await tester.tap(find.byKey(const ValueKey('privacy-preset-custom')));
     await tester.pump();
     expect(find.byKey(const Key('privacy-custom-image')), findsOneWidget);
@@ -172,7 +194,7 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  for (final preset in NikoPrivacyPreset.values.take(3)) {
+  for (final preset in NikoPrivacyPreset.values.take(4)) {
     testWidgets(
         '${preset.name} renders real motion and respects reduced motion',
         (tester) async {

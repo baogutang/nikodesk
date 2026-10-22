@@ -8,6 +8,7 @@ import 'package:flutter_hbb/models/platform_model.dart';
 import 'connect_dialog.dart';
 import 'credential_connect_dialog.dart';
 import 'device_store.dart';
+import 'nightline.dart';
 import 'policy.dart';
 import 'server_gateway.dart';
 import 'server_settings.dart';
@@ -654,6 +655,32 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
     }
   }
 
+  /// Nightline only: the accent tile in front of the quick-connect row.
+  Widget? _quickConnectBadge(BuildContext context) {
+    final nightline = NlColors.maybeOf(context);
+    if (nightline == null) return null;
+    return Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+            color: nightline.accentSoft,
+            borderRadius: BorderRadius.circular(NlRadius.r2)),
+        child: Icon(Icons.bolt_rounded, size: 18, color: nightline.accentText));
+  }
+
+  NlLedState _registrationLed() {
+    if (_server == null) return NlLedState.off;
+    if (widget.controllerOnly) {
+      return _server?.enabled == true ? NlLedState.ok : NlLedState.warn;
+    }
+    if (_server?.enabled != true) return NlLedState.warn;
+    return switch (_server?.registrationStatus) {
+      1 => NlLedState.ok,
+      null => NlLedState.off,
+      _ => NlLedState.warn,
+    };
+  }
+
   String _registration() {
     if (_server == null) return nikoText('状态未知', 'Status unknown');
     if (widget.controllerOnly) {
@@ -772,10 +799,21 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
                               padding: EdgeInsets.zero,
                               child: ExpansionTile(
                                   key: const Key('nikodesk-quick-connect'),
+                                  leading: _quickConnectBadge(context),
                                   title: Text(nikoText('快速连接', 'Quick connect'),
                                       key: const Key(
-                                          'nikodesk-quick-connect-toggle')),
-                                  subtitle: Text(_registration()),
+                                          'nikodesk-quick-connect-toggle'),
+                                      style: NlColors.maybeOf(context) == null
+                                          ? null
+                                          : const TextStyle(
+                                              fontWeight: FontWeight.w600)),
+                                  subtitle: NlColors.maybeOf(context) == null
+                                      ? Text(_registration())
+                                      : Row(children: [
+                                          NlLed(_registrationLed()),
+                                          const SizedBox(width: NlSpace.s2),
+                                          Flexible(child: Text(_registration())),
+                                        ]),
                                   maintainState: true,
                                   onExpansionChanged: (expanded) {
                                     setState(() => _quickExpanded = expanded);
@@ -1062,8 +1100,9 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
                 decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: configured
-                        ? NikoPalette.success
-                        : NikoPalette.warning)),
+                        ? NlColors.maybeOf(context)?.ok ?? NikoPalette.success
+                        : NlColors.maybeOf(context)?.warn ??
+                            NikoPalette.warning)),
             const SizedBox(width: 8),
             Expanded(
                 child: Text(
@@ -1115,12 +1154,14 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-                color: nikoIsLight(context) ? NikoPalette.lightAction : null,
-                gradient: nikoIsLight(context) ? null : LinearGradient(
+                color: NlColors.maybeOf(context)?.surface2 ??
+                    (nikoIsLight(context) ? NikoPalette.lightAction : null),
+                gradient: NlColors.maybeOf(context) != null || nikoIsLight(context) ? null : LinearGradient(
                     colors: NikoPalette.deviceAvatarGradient('nikodesk-empty')),
                 borderRadius: BorderRadius.circular(NikoShapes.avatar)),
-            child: const Icon(Icons.devices_rounded,
-                color: Colors.white, size: 28)),
+            child: Icon(Icons.devices_rounded,
+                color: NlColors.maybeOf(context)?.accentText ?? Colors.white,
+                size: 28)),
         const SizedBox(height: 16),
         Text(
             _devices.isEmpty
@@ -1162,16 +1203,19 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
                             width: 42,
                             height: 42,
                             decoration: BoxDecoration(
-                                color: nikoIsLight(context) ? NikoPalette.lightAction : null,
-                                gradient: nikoIsLight(context) ? null : LinearGradient(
+                                color: NlColors.maybeOf(context)?.surface2 ??
+                                    (nikoIsLight(context) ? NikoPalette.lightAction : null),
+                                gradient: NlColors.maybeOf(context) != null || nikoIsLight(context) ? null : LinearGradient(
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
                                     colors: NikoPalette.deviceAvatarGradient(
                                         device.id)),
                                 borderRadius:
                                     BorderRadius.circular(NikoShapes.avatar)),
-                            child: const Icon(Icons.desktop_mac_rounded,
-                                color: Colors.white, size: 21)),
+                            child: Icon(Icons.desktop_mac_rounded,
+                                color: NlColors.maybeOf(context)?.accentText ??
+                                    Colors.white,
+                                size: 21)),
                         const SizedBox(width: 12),
                         Expanded(
                             child: Column(
@@ -1248,9 +1292,10 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
                                 onTap: () => _edit(device)),
                             PopupMenuButton<String>(
                                 tooltip: nikoText('更多', 'More'),
-                                color: nikoIsLight(context)
-                                    ? NikoPalette.lightField
-                                    : NikoPalette.darkCard,
+                                color: NlColors.maybeOf(context)?.overlay ??
+                                    (nikoIsLight(context)
+                                        ? NikoPalette.lightField
+                                        : NikoPalette.darkCard),
                                 onSelected: (value) => value == 'tunnel'
                                     ? _connectWithDialog(device, tunnel: true)
                                     : value == 'wake'
@@ -1292,7 +1337,8 @@ class _NikoDevicePageState extends State<NikoDevicePage> {
   }
 
   Color _muted(BuildContext context) =>
-      nikoIsLight(context) ? NikoPalette.lightMuted : NikoPalette.darkMuted;
+      NlColors.maybeOf(context)?.fg2 ??
+      (nikoIsLight(context) ? NikoPalette.lightMuted : NikoPalette.darkMuted);
 
   String _date(DateTime date) {
     final local = date.toLocal();
@@ -1318,7 +1364,10 @@ class _StarButton extends StatelessWidget {
               : nikoText('收藏', 'Favorite'),
           onPressed: onTap,
           icon: Icon(favorite ? Icons.star_rounded : Icons.star_outline_rounded,
-              size: 20, color: favorite ? NikoPalette.warning : null)));
+              size: 20,
+              color: favorite
+                  ? NlColors.maybeOf(context)?.warn ?? NikoPalette.warning
+                  : null)));
 }
 
 class _IconAction extends StatelessWidget {
@@ -1331,6 +1380,7 @@ class _IconAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final light = nikoIsLight(context);
+    final nightline = NlColors.maybeOf(context);
     return IconButton(
         constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
         visualDensity: VisualDensity.standard,
@@ -1340,14 +1390,14 @@ class _IconAction extends StatelessWidget {
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              color: light
-                  ? NikoPalette.lightField
-                  : const Color(0xFF232A38),
+              color: nightline?.surface2 ??
+                  (light ? NikoPalette.lightField : const Color(0xFF232A38)),
               borderRadius: BorderRadius.circular(9),
             ),
             child: Icon(icon,
                 size: 16,
-                color: light ? NikoPalette.lightSeed : NikoPalette.darkSeed)));
+                color: nightline?.fg2 ??
+                    (light ? NikoPalette.lightSeed : NikoPalette.darkSeed))));
   }
 }
 
@@ -1360,7 +1410,7 @@ class _OnlineDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color color;
+    Color color;
     final String label;
     if (state == true) {
       color = NikoPalette.success;
@@ -1372,7 +1422,21 @@ class _OnlineDot extends StatelessWidget {
       color = NikoPalette.warning;
       label = nikoText('在线未知', 'Availability unknown');
     }
-    final foreground = !nikoIsLight(context)
+    final nightline = NlColors.maybeOf(context);
+    if (nightline != null) {
+      color = state == true
+          ? nightline.ok
+          : state == false
+              ? nightline.fg3
+              : nightline.warn;
+    }
+    final foreground = nightline != null
+        ? (state == true
+            ? nightline.okText
+            : state == false
+                ? nightline.fg2
+                : nightline.warnText)
+        : !nikoIsLight(context)
         ? color
         : state == true
             ? NikoPalette.lightSuccessText

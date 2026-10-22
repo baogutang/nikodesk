@@ -918,16 +918,16 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
         ? SizedBox(width: _ToolbarTheme.buttonHMargin * 2)
         : SizedBox(height: _ToolbarTheme.buttonHMargin * 2);
     final toolbarMaterial = Material(
-      elevation: _ToolbarTheme.elevation,
+      elevation: nikoDockStyled(context) ? 0 : _ToolbarTheme.elevation,
       shadowColor: MyTheme.color(context).shadow,
       borderRadius: toolbarBorderRadius,
-      color: Theme.of(context)
+      color: nikoDockStyled(context) ? Colors.transparent : Theme.of(context)
           .menuBarTheme
           .style
           ?.backgroundColor
           ?.resolve(MaterialState.values.toSet()),
       child: const bool.fromEnvironment('NIKODESK')
-          ? Theme(data: themeData(), child: _ToolbarTheme.borderWrapper(
+          ? Theme(data: themeData(), child: _nikoToolbarFrame(
               context, NikoSessionToolbar(
                   direction: innerAxis, actions: _nikoToolbarActions(edge),
                   endSession: _CloseMenu(id: widget.id, ffi: widget.ffi)),
@@ -3148,6 +3148,13 @@ class _CloseMenu extends StatelessWidget {
     );
   }
 }
+
+/// The Nightline dock draws its own frame; otherwise keep the upstream one.
+Widget _nikoToolbarFrame(
+        BuildContext context, Widget toolbar, BorderRadius borderRadius) =>
+    nikoDockStyled(context)
+        ? toolbar
+        : _ToolbarTheme.borderWrapper(context, toolbar, borderRadius);
 
 NikoToolbarTone _nikoToolbarTone(Color color) {
   if (color == _ToolbarTheme.redColor) return NikoToolbarTone.danger;

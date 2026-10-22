@@ -2479,6 +2479,32 @@ fn wire_main_get_nikodesk_diagnostics_impl(port_: MessagePort) {
         move || move |task_callback| Ok(main_get_nikodesk_diagnostics()),
     )
 }
+fn wire_main_get_nikodesk_mac_service_impl(port_: MessagePort) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "main_get_nikodesk_mac_service",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || move |task_callback| Ok(main_get_nikodesk_mac_service()),
+    )
+}
+fn wire_main_set_nikodesk_mac_service_impl(
+    port_: MessagePort,
+    install: impl Wire2Api<bool> + UnwindSafe,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap::<_, _, _, String>(
+        WrapInfo {
+            debug_name: "main_set_nikodesk_mac_service",
+            port: Some(port_),
+            mode: FfiCallMode::Normal,
+        },
+        move || {
+            let api_install = install.wire2api();
+            move |task_callback| Ok(main_set_nikodesk_mac_service(api_install))
+        },
+    )
+}
 fn wire_main_get_nikodesk_capability_policy_impl(
     port_: MessagePort,
     expected_server_namespace: impl Wire2Api<String> + UnwindSafe,

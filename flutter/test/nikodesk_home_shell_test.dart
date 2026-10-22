@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_hbb/nikodesk/device_store.dart';
 import 'package:flutter_hbb/nikodesk/home_shell.dart';
+import 'package:flutter_hbb/nikodesk/nightline.dart';
 import 'package:flutter_hbb/nikodesk/policy.dart';
 import 'package:flutter_hbb/nikodesk/server_gateway.dart';
 import 'package:flutter_hbb/nikodesk/session_log.dart';
@@ -362,4 +363,117 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  Future<void> loadThemedShell(WidgetTester tester, NikoHomeShell shell,
+      {required Brightness brightness, bool reduceMotion = false}) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.runAsync(() async {
+      await tester.pumpWidget(MaterialApp(
+          theme: ThemeData(brightness: brightness),
+          builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(disableAnimations: reduceMotion),
+              child: child!),
+          home: Scaffold(body: shell)));
+      for (var i = 0; i < 250; i++) {
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        if (find
+            .byType(CircularProgressIndicator, skipOffstage: false)
+            .evaluate()
+            .isEmpty) break;
+      }
+    });
+    await tester.pumpAndSettle();
+  }
+
+  for (final brightness in Brightness.values) {
+    testWidgets('shell hosts its pages in the Nightline ${brightness.name} theme',
+        (tester) async {
+      final gateway = _ServerDouble(ServerSnapshot(
+          PrivateServerConfig('private.example', 'private.example:21117',
+              base64Encode(List.filled(32, 1))),
+          1,
+          true));
+      await loadThemedShell(tester, shell(gateway), brightness: brightness);
+      final page = tester.element(find.text('我的设备'));
+      expect(NlColors.maybeOf(page), same(NlColors.forBrightness(brightness)));
+      expect(find.byType(NlMark), findsOneWidget);
+      expect(find.text('DEVICES'), findsOneWidget);
+      expect(find.text('READY'), findsOneWidget);
+      expect(find.text('private.example'), findsOneWidget);
+      await tester.tap(find.text('会话'));
+      await tester.pumpAndSettle();
+      expect(find.text('SESSIONS'), findsOneWidget);
+      expect(find.text('还没有连接记录'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  for (final reduceMotion in [false, true]) {
+    testWidgets(
+        'page switch ${reduceMotion ? 'is instant with reduced motion' : 'slides in'}',
+        (tester) async {
+      final gateway = _ServerDouble(ServerSnapshot(
+          PrivateServerConfig('private.example', 'private.example:21117',
+              base64Encode(List.filled(32, 1))),
+          1,
+          true));
+      await loadThemedShell(tester, shell(gateway),
+          brightness: Brightness.dark, reduceMotion: reduceMotion);
+      double opacity() => tester
+          .widget<Opacity>(find.byKey(const ValueKey('nikodesk-shell-page')))
+          .opacity;
+      expect(opacity(), 1);
+      await tester.tap(find.text('设置'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
+      if (reduceMotion) {
+        expect(opacity(), 1);
+      } else {
+        expect(opacity(), lessThan(1));
+      }
+      await tester.pumpAndSettle();
+      expect(opacity(), 1);
+      expect(find.text('配置服务器'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  testWidgets('settings and history pages render in Nightline inside the shell',
+      (tester) async {
+    await tester.runAsync(() => sessionLog.record(SessionLogEntry(
+        id: '123456',
+        alias: 'Office',
+        forceRelay: true,
+        startedAt: DateTime.utc(2026, 9, 29, 1, 2, 3))));
+    final gateway = _ServerDouble(ServerSnapshot(
+        PrivateServerConfig('private.example', 'private.example:21117',
+            base64Encode(List.filled(32, 1))),
+        1,
+        true));
+    await loadThemedShell(tester, shell(gateway), brightness: Brightness.dark);
+    await tester.tap(find.text('设置'));
+    await tester.pumpAndSettle();
+    expect(find.ancestor(of: find.text('外观'), matching: find.byType(NlMonoLabel)),
+        findsOneWidget);
+    expect(find.ancestor(of: find.text('外观'), matching: find.byType(NlPanel)),
+        findsOneWidget);
+    await tester.runAsync(() async {
+      await tester.tap(find.text('会话'));
+      for (var i = 0; i < 20; i++) {
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    });
+    await tester.pumpAndSettle();
+    expect(find.ancestor(of: find.text('Office'), matching: find.byType(NlPanel)),
+        findsOneWidget);
+    expect(find.text('中继'), findsOneWidget);
+    expect(find.widgetWithText(NlButton, '连接'), findsOneWidget);
+    expect(find.byTooltip('删除该记录'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
 }

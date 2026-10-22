@@ -4,15 +4,14 @@ import 'package:flutter/scheduler.dart';
 import 'privacy_style_model.dart';
 import 'ui.dart';
 
-String? nikoPrivacyAsset(NikoPrivacyPreset preset) => switch (preset) {
-      NikoPrivacyPreset.snow => 'assets/privacy/snow-ridge.webp',
-      NikoPrivacyPreset.paper => 'assets/privacy/paper-light.webp',
-      NikoPrivacyPreset.rain => 'assets/privacy/pixel-rain.webp',
-      NikoPrivacyPreset.custom => null,
-    };
+/// A frame of the scene as the controlled Mac draws it (it animates there).
+String? nikoPrivacyAsset(NikoPrivacyPreset preset) =>
+    preset == NikoPrivacyPreset.custom
+        ? null
+        : 'assets/privacy/${preset.name}.webp';
 
-/// Local selection preview. Native cover windows draw the same fog/light/rain
-/// over the full-resolution image; this widget never blocks or captures a screen.
+/// Local selection preview. The controlled computer draws the scene itself;
+/// this widget never blocks or captures a screen.
 class NikoPrivacyWallpaper extends StatefulWidget {
   final NikoPrivacyStyle style;
   final bool animate;
@@ -48,7 +47,8 @@ class _WallpaperState extends State<NikoPrivacyWallpaper>
         _foreground &&
         TickerMode.of(context) &&
         !MediaQuery.of(context).disableAnimations &&
-        widget.style.effect != NikoPrivacyEffect.none;
+        (widget.style.effect != NikoPrivacyEffect.none ||
+            widget.style.preset != NikoPrivacyPreset.custom);
     if (moving && !_ticker.isActive) {
       _ticker.start();
     }
@@ -98,10 +98,21 @@ class _WallpaperState extends State<NikoPrivacyWallpaper>
     final motion = widget.animate &&
         style.motion &&
         !MediaQuery.of(context).disableAnimations;
+    // The controlled Mac animates the scene itself; the preview drifts its
+    // frame slowly so the choice reads as a moving one.
+    final drift = motion && asset != null;
+    final t = _time;
     return ClipRect(
         child: Stack(fit: StackFit.expand, children: [
       const ColoredBox(color: Colors.black),
-      picture,
+      drift
+          ? Transform(
+              alignment: Alignment.center,
+              transform: Matrix4.identity()
+                ..translate(math.sin(t * .21) * 6, math.cos(t * .17) * 4)
+                ..scale(1.05 + .03 * math.sin(t * .35)),
+              child: picture)
+          : picture,
       CustomPaint(painter: _Motion(style, motion ? _time : null)),
       if (widget.passwordExit)
         Positioned(
@@ -109,38 +120,19 @@ class _WallpaperState extends State<NikoPrivacyWallpaper>
             right: 12,
             bottom: 12,
             child: Align(
-                alignment: Alignment.bottomLeft,
-                child: DecoratedBox(
-                    decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(.72),
-                        borderRadius: BorderRadius.circular(8)),
-                    child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 9),
-                        child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(nikoText('本机已开启隐私屏', 'Privacy screen is on'),
-                                  style: const TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w600)),
-                              Text(
-                                  nikoText(
-                                      widget.mac
-                                          ? '⌃⌥⇧ Esc 退出 · 需系统登录密码'
-                                          : 'Esc 退出 · 需系统登录密码',
-                                      '${widget.mac ? '⌃⌥⇧ Esc' : 'Esc'} to exit · System login password required'),
-                                  style: const TextStyle(
-                                      fontSize: 10, color: Colors.white70)),
-                            ]))))),
+                alignment: Alignment.bottomCenter,
+                child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: _NikoPrivacyPill(
+                        keys: widget.mac ? '⌃ ⌥ ⇧ esc' : 'esc')))),
       if (!widget.passwordExit && style.hint)
         Positioned(
             left: 12,
             bottom: 10,
             child: Text(widget.mac ? '⌃⌥⇧ Esc 恢复' : 'Esc 恢复',
-                style: const TextStyle(fontSize: 10, color: Colors.white70,
+                style: const TextStyle(
+                    fontSize: 10,
+                    color: Colors.white70,
                     shadows: [Shadow(blurRadius: 4, color: Colors.black54)]))),
       if (style.clock)
         Positioned(
@@ -230,4 +222,42 @@ class _Motion extends CustomPainter {
   @override
   bool shouldRepaint(covariant _Motion old) =>
       old.time != time || old.style != style;
+}
+
+/// The controlled computer's status pill, at preview size.
+class _NikoPrivacyPill extends StatelessWidget {
+  final String keys;
+  const _NikoPrivacyPill({required this.keys});
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+      decoration: BoxDecoration(
+          color: const Color(0xB80B0D10),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: const Color(0x14FFFFFF))),
+      child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            ...[
+              Container(
+                  width: 5,
+                  height: 5,
+                  decoration: const BoxDecoration(
+                      color: Color(0xFF2FD8EE), shape: BoxShape.circle)),
+              const SizedBox(width: 6),
+              Text(nikoText('隐私屏已开启', 'Privacy screen is on'),
+                  style: const TextStyle(
+                      fontSize: 10,
+                      color: Color(0xFFE6EDF2),
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(width: 8),
+            ],
+            Text(keys,
+                style: const TextStyle(
+                    fontSize: 9,
+                    fontFamily: 'monospace',
+                    color: Color(0xFF93A1AD))),
+            const SizedBox(width: 6),
+            Text(nikoText('退出 · 需本机登录密码', 'to exit · local login password'),
+                style: const TextStyle(fontSize: 9, color: Color(0xFF93A1AD))),
+          ])));
 }

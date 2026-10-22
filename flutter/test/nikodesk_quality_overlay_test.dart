@@ -7,6 +7,7 @@ import 'package:flutter_hbb/nikodesk/quality_overlay.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'nikodesk_native_metrics_test.dart' as native_fixture;
+import 'package:flutter_hbb/nikodesk/nightline.dart';
 
 void main() {
   setUp(() => NikoLanguage.english = true);
@@ -135,6 +136,33 @@ void main() {
     await tester.drag(
         find.byType(SingleChildScrollView), const Offset(0, -500));
     await tester.pump();
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('Nightline telemetry HUD leads with FPS, RTT and Mbit/s',
+      (tester) async {
+    final metrics = SessionMetrics()
+      ..connection(secure: true, direct: true, transport: 'UDP')
+      ..update({'fps': '{"0":59}', 'delay': '24', 'speed': '845.2kB/s'});
+    await tester.pumpWidget(MaterialApp(
+        theme: nightlineTheme(Brightness.light),
+        home: Scaffold(body: NikoQualityOverlay(metrics: metrics, display: 0))));
+    expect(find.byKey(const Key('nikodesk-telemetry-hud')), findsOneWidget);
+    expect(find.text('59'), findsOneWidget);
+    expect(find.text('24'), findsOneWidget);
+    expect(find.text('6.9'), findsOneWidget);
+    // The detailed rows are the same as in the plain panel.
+    expect(find.text('59 fps'), findsOneWidget);
+    expect(find.text('24 ms'), findsOneWidget);
+    expect(find.text('845.20 KiB/s'), findsOneWidget);
+    expect(find.text('Direct · UDP'), findsNWidgets(2));
+    final hud = tester.widget<Container>(find.byKey(const Key('nikodesk-telemetry-hud')));
+    expect((hud.decoration! as BoxDecoration).color, NlDock.background);
+
+    metrics.clear();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('—'), findsNWidgets(3));
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });

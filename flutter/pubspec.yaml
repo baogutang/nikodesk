@@ -160,6 +160,7 @@ flutter:
   assets:
     - assets/
     - assets/privacy/
+    - assets/fonts/licenses/
 
   fonts:
     - family: GestureIcons
@@ -183,6 +184,16 @@ flutter:
     - family: More
       fonts:
         - asset: assets/more.ttf
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+    - family: JetBrains Mono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono-Regular.ttf
+        - asset: assets/fonts/JetBrainsMono-Medium.ttf
+          weight: 500
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware.

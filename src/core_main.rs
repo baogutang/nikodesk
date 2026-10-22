@@ -38,6 +38,15 @@ pub fn core_main() -> Option<Vec<String>> {
     if let Some(code) = crate::nikodesk::privacy_windows::helper_entry() {
         std::process::exit(code);
     }
+    #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+    if std::env::args().skip(1).collect::<Vec<_>>() == ["--nikodesk-service"] {
+        std::process::exit(crate::nikodesk::mac_service::daemon::main());
+    }
+    #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+    if std::env::args().skip(1).collect::<Vec<_>>() == ["--nikodesk-loginwindow-probe"] {
+        crate::nikodesk::mac_service::probe_login_window();
+        std::process::exit(0);
+    }
     #[cfg(feature = "nikodesk")]
     if let Err(err) = crate::nikodesk::validate_cli_args(std::env::args().skip(1))
         .and_then(|_| crate::nikodesk::initialize())

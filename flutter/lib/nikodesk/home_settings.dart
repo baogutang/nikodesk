@@ -14,6 +14,8 @@ import 'privacy_settings.dart';
 import 'virtual_display_settings.dart';
 import 'wake_proxy_settings.dart';
 import 'mac_background_settings.dart';
+import 'mac_service_settings.dart';
+import 'nightline.dart';
 import 'policy.dart';
 import 'updater.dart';
 import 'server_gateway.dart';
@@ -513,8 +515,8 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
 
   @override
   Widget build(BuildContext context) {
-    final muted =
-        nikoIsLight(context) ? NikoPalette.lightMuted : NikoPalette.darkMuted;
+    final muted = NlColors.maybeOf(context)?.fg2 ??
+        (nikoIsLight(context) ? NikoPalette.lightMuted : NikoPalette.darkMuted);
     return FocusTraversalGroup(
         child: ListView(
             padding: const EdgeInsets.all(NikoTokens.pagePadding),
@@ -556,7 +558,7 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
           const SizedBox(height: 16),
           if (_native && (Platform.isMacOS || Platform.isWindows)) ...[
             if (Platform.isMacOS) ...[
-              _section(context, nikoText('无人值守', 'Unattended access'), [const NikoMacBackgroundSettings()]),
+              _section(context, nikoText('无人值守', 'Unattended access'), [const NikoMacBackgroundSettings(), const NikoMacServiceSettings()]),
               const SizedBox(height: 16),
             ],
             _section(context, nikoText('会话安全', 'Session security'), [
@@ -825,7 +827,17 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
   }
 
   Widget _section(BuildContext context, String title, List<Widget> children) =>
-      NikoGlassCard(
+      NlColors.maybeOf(context) != null
+          ? NlPanel(
+              padding: const EdgeInsets.all(NlSpace.s5),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    NlMonoLabel(title),
+                    const SizedBox(height: NlSpace.s3),
+                    ...children,
+                  ]))
+          : NikoGlassCard(
           padding: const EdgeInsets.all(20),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -839,8 +851,8 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
           ]));
 
   Widget _row(BuildContext context, String label, String value) {
-    final muted =
-        nikoIsLight(context) ? NikoPalette.lightMuted : NikoPalette.darkMuted;
+    final muted = NlColors.maybeOf(context)?.fg2 ??
+        (nikoIsLight(context) ? NikoPalette.lightMuted : NikoPalette.darkMuted);
     return Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -850,8 +862,11 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
                   Text(label, style: TextStyle(fontSize: 12.5, color: muted))),
           Expanded(
               child: Text(value,
-                  style: const TextStyle(
-                      fontSize: 12.5, fontWeight: FontWeight.w600))),
+                  style: NlColors.maybeOf(context) != null
+                      ? NlType.monoText(NlType.s2,
+                          color: NlColors.of(context).fg)
+                      : const TextStyle(
+                          fontSize: 12.5, fontWeight: FontWeight.w600))),
         ]));
   }
 }

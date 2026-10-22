@@ -140,7 +140,9 @@ void main() {
     // The script compiles before it draws.
     await Future<void>.delayed(const Duration(seconds: 4));
     final start = session.events.length;
+    final decodedAtStart = session.frames;
     await Future<void>.delayed(Duration(seconds: seconds));
+    final decoded = (session.frames - decodedAtStart) / seconds;
     await motion.exitCode
         .timeout(const Duration(seconds: 10), onTimeout: () => -1);
     // ignore: avoid_print
@@ -161,7 +163,17 @@ void main() {
           'encode=${report.encodeMs}');
     }
     // ignore: avoid_print
+    print(
+        'E2E-VIRTUAL-DECODED ${decoded.toStringAsFixed(1)} frames/s at the controller');
+    // ignore: avoid_print
     print('E2E-VIRTUAL-DEBUG ${session.summary()}');
+    final delays = session
+        .named('update_quality_status')
+        .map((event) => '${event['delay'] ?? ''}')
+        .where((delay) => delay.isNotEmpty && delay != 'null')
+        .toList();
+    // ignore: avoid_print
+    print('E2E-VIRTUAL-QUALITY delays=$delays last=${session.quality()}');
     expect(reports, isNotEmpty, reason: 'the new display was not streamed');
     expect(reports.last.refreshHz?.round(), refresh);
     // The moving picture must come through, not a few repeated frames.

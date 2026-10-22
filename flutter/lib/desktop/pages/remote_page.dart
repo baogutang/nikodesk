@@ -779,7 +779,8 @@ class _RemotePageState extends State<RemotePage>
           if (const bool.fromEnvironment('NIKODESK'))
             NikoPrivacyScreenBadge(peerId: widget.id),
           if (const bool.fromEnvironment('NIKODESK'))
-            NikoPrivacyConnectionPrompt(ffi: _ffi,
+            // Below the session dock and its handle at the default top edge.
+            NikoPrivacyConnectionPrompt(ffi: _ffi, top: 96,
                 onExplain: () => showNikoSessionQuickActions(_ffi)),
           if (const bool.fromEnvironment('NIKODESK'))
             NikoRemotePermissionNotice(ffi: _ffi),

@@ -17,9 +17,22 @@ extern "C" {
         height: u32,
         hint: bool,
         clock: bool,
+        scene: *const std::ffi::c_char,
+        motion: bool,
+        brightness: u32,
+        intensity: u32,
     ) -> bool;
-    fn NPSWindowsStyle(pixels: *const u8, width: u32, height: u32, hint: bool, clock: bool)
-        -> bool;
+    fn NPSWindowsStyle(
+        pixels: *const u8,
+        width: u32,
+        height: u32,
+        hint: bool,
+        clock: bool,
+        scene: *const std::ffi::c_char,
+        motion: bool,
+        brightness: u32,
+        intensity: u32,
+    ) -> bool;
     fn NPSWindowsShow() -> bool;
     fn NPSWindowsTick(pixels: *const u8, width: u32, height: u32) -> bool;
     fn NPSWindowsMotionAllowed() -> bool;
@@ -51,22 +64,33 @@ impl Drop for Windows {
     }
 }
 fn apply(style: &Arc<Wallpaper>, initial: bool) -> bool {
+    let scene = style.scene.map(|scene| std::ffi::CString::new(scene).unwrap_or_default());
+    let scene = scene.as_ref().map_or(std::ptr::null(), |scene| scene.as_ptr());
+    let o = &style.options;
     unsafe {
         if initial {
             NPSWindowsCreate(
                 style.pixels.as_ptr(),
                 style.width,
                 style.height,
-                style.options.hint,
-                style.options.clock,
+                o.hint,
+                o.clock,
+                scene,
+                o.motion,
+                o.brightness,
+                o.intensity,
             )
         } else {
             NPSWindowsStyle(
                 style.pixels.as_ptr(),
                 style.width,
                 style.height,
-                style.options.hint,
-                style.options.clock,
+                o.hint,
+                o.clock,
+                scene,
+                o.motion,
+                o.brightness,
+                o.intensity,
             )
         }
     }
@@ -120,14 +144,20 @@ pub(crate) fn run() -> ResultType<()> {
         if unsafe { NPSWindowsUnlocked() } {
             break;
         }
-        let mask = effects::frame(
-            &style.options,
-            640,
-            400,
-            started.elapsed().as_secs_f32(),
-            shown && unsafe { NPSWindowsMotionAllowed() },
-        );
-        if !unsafe { NPSWindowsTick(mask.as_ptr(), 640, 400) } {
+        // A scene animates in the window server; only a picture needs a mask.
+        let (mask, width, height) = if style.scene.is_some() {
+            (vec![0; 4], 1, 1)
+        } else {
+            let mask = effects::frame(
+                &style.options,
+                640,
+                400,
+                started.elapsed().as_secs_f32(),
+                shown && unsafe { NPSWindowsMotionAllowed() },
+            );
+            (mask, 640, 400)
+        };
+        if !unsafe { NPSWindowsTick(mask.as_ptr(), width, height) } {
             return Err(anyhow!("monitor_cover_changed"));
         }
         if acknowledge {

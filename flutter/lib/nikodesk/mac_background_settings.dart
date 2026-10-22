@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'mac_background_agent.dart';
+import 'mac_service_settings.dart';
+import 'nightline/tokens.dart';
 import 'unattended_policy.dart';
 import 'ui.dart';
 
@@ -8,10 +10,25 @@ class NikoMacBackgroundSettings extends StatefulWidget {
   final NikoMacBackgroundAgent? agent;
   final NativeUnattendedPolicyGateway? policyGateway;
   final bool Function()? permissionsGranted;
+
+  /// Whether the system background service runs the core instead.
+  final Future<bool> Function()? systemServiceInstalled;
   const NikoMacBackgroundSettings(
-      {super.key, this.agent, this.policyGateway, this.permissionsGranted});
+      {super.key,
+      this.agent,
+      this.policyGateway,
+      this.permissionsGranted,
+      this.systemServiceInstalled});
   @override
   State<NikoMacBackgroundSettings> createState() => _SettingsState();
+}
+
+Future<bool> _systemServiceInstalled() async {
+  try {
+    return (await const NikoMacServiceGateway().state()).installed;
+  } catch (_) {
+    return false;
+  }
 }
 
 class _SettingsState extends State<NikoMacBackgroundSettings> {
@@ -19,7 +36,7 @@ class _SettingsState extends State<NikoMacBackgroundSettings> {
   late final _policyGateway =
       widget.policyGateway ?? NativeUnattendedPolicyGateway();
   final _password = TextEditingController();
-  bool _configured = false, _owned = false, _busy = true;
+  bool _configured = false, _owned = false, _system = false, _busy = true;
   String? _notice;
   @override
   void initState() {
@@ -30,10 +47,13 @@ class _SettingsState extends State<NikoMacBackgroundSettings> {
   Future<void> _refresh() async {
     final enabled = await _agent.configured();
     final owned = await _agent.hasOwnedConfiguration();
+    final system =
+        await (widget.systemServiceInstalled ?? _systemServiceInstalled)();
     if (mounted) {
       setState(() {
         _configured = enabled;
         _owned = owned;
+        _system = system;
         _busy = false;
       });
     }
@@ -112,14 +132,21 @@ class _SettingsState extends State<NikoMacBackgroundSettings> {
   @override
   Widget build(BuildContext context) =>
       Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text(
-            nikoText('macOS 无人值守与后台恢复',
-                'macOS unattended access and background recovery'),
-            style: Theme.of(context).textTheme.titleMedium),
+        // The NikoDesk settings page already labels this section.
+        if (NlColors.maybeOf(context) == null)
+          Text(
+              nikoText('macOS 无人值守与后台恢复',
+                  'macOS unattended access and background recovery'),
+              style: Theme.of(context).textTheme.titleMedium),
         Text(nikoText(
             '登录后保持真实远控核心运行，异常退出后恢复。需明确设置服务密码并授予系统权限；注销后、FileVault 解锁前不提供被控。',
             'Keep the real remote-control core running after login and recover after a crash. An explicit service password and system permissions are required. Control is unavailable after logout or before FileVault unlock.')),
-        if (!_configured) ...[
+        if (_system)
+          Text(
+              key: const Key('niko-mac-background-by-service'),
+              nikoText('后台恢复已由下方的系统后台服务接管。',
+                  'Background recovery is provided by the system background service below.')),
+        if (!_system && !_configured) ...[
           TextField(
               controller: _password,
               enabled: !_busy,
@@ -135,11 +162,11 @@ class _SettingsState extends State<NikoMacBackgroundSettings> {
               child: Text(nikoText('确认无人值守并注册后台恢复',
                   'Confirm unattended access and register recovery')))
         ],
-        if (_owned)
+        if (!_system && _owned)
           OutlinedButton(
               onPressed: _busy ? null : _disable,
               child: Text(nikoText('停用后台恢复', 'Disable background recovery'))),
-        if (_owned && !_configured)
+        if (!_system && _owned && !_configured)
           Text(nikoText('已有后台配置与当前应用路径不一致。可以重新确认更新配置，或停用原任务。',
               'An existing background configuration uses a different application path. Confirm again to update it, or disable the previous job.')),
         TextButton(

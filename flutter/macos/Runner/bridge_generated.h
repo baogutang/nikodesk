@@ -114,13 +114,21 @@ extern bool NPSWindowsCreate(const uint8_t *pixels,
                              uint32_t width,
                              uint32_t height,
                              bool hint,
-                             bool clock);
+                             bool clock,
+                             const char *scene,
+                             bool motion,
+                             uint32_t brightness,
+                             uint32_t intensity);
 
 extern bool NPSWindowsStyle(const uint8_t *pixels,
                             uint32_t width,
                             uint32_t height,
                             bool hint,
-                            bool clock);
+                            bool clock,
+                            const char *scene,
+                            bool motion,
+                            uint32_t brightness,
+                            uint32_t intensity);
 
 extern bool NPSWindowsShow(void);
 
@@ -166,6 +174,28 @@ extern bool NikoMacOtherDisplayOnline(const uint32_t *excluded, uint32_t count);
 extern bool NikoMacBackgroundEnvironment(void);
 
 extern void NikoMacBackgroundRunLoop(void);
+
+extern void NikoDisplayEventsStart(void);
+
+extern bool NikoDisplayEventsRegistered(void);
+
+extern uint64_t NikoDisplayEventsGeneration(void);
+
+extern uint64_t NikoLockEventsGeneration(void);
+
+extern int32_t NikoScreenLockedState(void);
+
+extern int32_t NikoPeerAllowed(int32_t fd,
+                               const char *requirement,
+                               uint32_t *euid,
+                               char *path,
+                               uintptr_t length);
+
+extern int32_t NikoBundleAllowed(const char *path, const char *requirement);
+
+extern int32_t NikoLaunchSocket(const char *name);
+
+extern bool NikoSelfCdhashRequirement(char *out, uintptr_t length);
 
 extern int32_t NKVoiceMicrophoneAuthorization(void);
 
@@ -658,6 +688,10 @@ void wire_main_get_fav(int64_t port_);
 WireSyncReturn wire_main_take_nikodesk_crash_marker(void);
 
 void wire_main_get_nikodesk_diagnostics(int64_t port_);
+
+void wire_main_get_nikodesk_mac_service(int64_t port_);
+
+void wire_main_set_nikodesk_mac_service(int64_t port_, bool install);
 
 void wire_main_get_nikodesk_capability_policy(int64_t port_,
                                               struct wire_uint_8_list *expected_server_namespace);
@@ -1409,6 +1443,8 @@ static int64_t dummy_method_to_enforce_bundling(void) {
     dummy_var ^= ((int64_t) (void*) wire_main_get_fav);
     dummy_var ^= ((int64_t) (void*) wire_main_take_nikodesk_crash_marker);
     dummy_var ^= ((int64_t) (void*) wire_main_get_nikodesk_diagnostics);
+    dummy_var ^= ((int64_t) (void*) wire_main_get_nikodesk_mac_service);
+    dummy_var ^= ((int64_t) (void*) wire_main_set_nikodesk_mac_service);
     dummy_var ^= ((int64_t) (void*) wire_main_get_nikodesk_capability_policy);
     dummy_var ^= ((int64_t) (void*) wire_main_set_nikodesk_capability_policy);
     dummy_var ^= ((int64_t) (void*) wire_main_store_fav);

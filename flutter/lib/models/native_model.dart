@@ -60,6 +60,11 @@ class PlatformFFI {
   final _toAndroidChannel = const MethodChannel('mChannel');
 
   RustdeskImpl get ffiBind => _ffiBind;
+
+  /// NikoDesk widget tests render native-backed pages with an in-memory bridge.
+  @visibleForTesting
+  set ffiBindForTesting(RustdeskImpl value) => _ffiBind = value;
+
   F3? _session_get_rgba;
 
   static get localeName => Platform.localeName;

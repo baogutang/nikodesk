@@ -101,8 +101,13 @@ fn wait_until_ready() {
 }
 
 pub(crate) fn run() -> ResultType<()> {
+    // The system agent (mac_service) also loads in the login window, as root.
+    // That session is not served yet; exiting cleanly keeps launchd from
+    // restarting it every few seconds.
     if unsafe { libc::geteuid() } == 0 {
-        bail!("ordinary_aqua_session_required");
+        hbb_common::log::info!("Login window session: not served yet");
+        super::mac_service::probe_login_window();
+        return Ok(());
     }
     wait_until_ready();
     SELECTED.store(true, Ordering::Release);

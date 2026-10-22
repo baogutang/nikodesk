@@ -1376,6 +1376,34 @@ pub fn main_get_nikodesk_diagnostics() -> String {
     String::new()
 }
 
+/// The privileged macOS service as JSON: installed, app_signed (the running
+/// app carries the fixed certificate), reachable (its daemon answers).
+pub fn main_get_nikodesk_mac_service() -> String {
+    #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+    return crate::nikodesk::mac_service::state_json();
+    #[cfg(not(all(feature = "nikodesk", target_os = "macos")))]
+    "{}".to_owned()
+}
+
+/// Installs (after the system administrator prompt) or removes the privileged
+/// macOS service; an error code, or empty on success.
+pub fn main_set_nikodesk_mac_service(install: bool) -> String {
+    #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+    {
+        let result = if install {
+            crate::nikodesk::mac_service::install()
+        } else {
+            crate::nikodesk::mac_service::uninstall()
+        };
+        return result.err().map(|error| error.to_string()).unwrap_or_default();
+    }
+    #[cfg(not(all(feature = "nikodesk", target_os = "macos")))]
+    {
+        let _ = install;
+        "unsupported".to_owned()
+    }
+}
+
 pub fn main_get_nikodesk_capability_policy(expected_server_namespace: String) -> String {
     #[cfg(feature = "nikodesk")]
     return crate::nikodesk::capability_policy_api::get(&expected_server_namespace);

@@ -5,6 +5,7 @@ import 'server_scope.dart';
 
 import 'session_log.dart';
 import 'session_audit_view.dart';
+import 'nightline.dart';
 import 'theme.dart';
 import 'ui.dart';
 
@@ -161,8 +162,9 @@ class _NikoSessionHistoryPageState extends State<NikoSessionHistoryPage> {
               onReconnect: _reconnectResult)),
       ]));
     }
-    final muted =
-        nikoIsLight(context) ? NikoPalette.lightMuted : NikoPalette.darkMuted;
+    final nightline = NlColors.maybeOf(context);
+    final muted = nightline?.fg2 ??
+        (nikoIsLight(context) ? NikoPalette.lightMuted : NikoPalette.darkMuted);
     return FocusTraversalGroup(
         child: ListView(
             padding: const EdgeInsets.all(NikoTokens.pagePadding),
@@ -238,9 +240,112 @@ class _NikoSessionHistoryPageState extends State<NikoSessionHistoryPage> {
                       textAlign: TextAlign.center,
                       style: TextStyle(color: muted, fontSize: 12.5)),
                 ]))
+          else if (nightline != null)
+            ..._nightlineGroups(context, nightline)
           else
             ..._grouped(context, muted),
         ]));
+  }
+
+  Future<void> _delete(SessionLogEntry entry) async {
+    try {
+      await _store.removeAt(entry.startedAt);
+      await _refresh();
+    } catch (_) {}
+  }
+
+  /// Nightline: one panel per day with compact rows, as in the draft's
+  /// recent-sessions table. The route is shown only when it was forced to
+  /// the relay; anything else is not known here and is not claimed.
+  List<Widget> _nightlineGroups(BuildContext context, NlColors nl) {
+    final groups = <String, List<SessionLogEntry>>{};
+    for (final entry in _entries) {
+      final local = entry.startedAt.toLocal();
+      final key =
+          '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}';
+      groups.putIfAbsent(key, () => []).add(entry);
+    }
+    Widget row(SessionLogEntry entry, bool first) {
+      final details = Row(children: [
+        Text(_time(entry.startedAt),
+            style: NlType.monoText(NlType.s2, color: nl.fg3)),
+        const SizedBox(width: NlSpace.s4),
+        Icon(entry.fileTransfer
+                ? Icons.folder_outlined
+                : Icons.desktop_windows_outlined,
+            size: 16, color: nl.fg3),
+        const SizedBox(width: NlSpace.s2),
+        Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(entry.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: NlType.text(NlType.s3, weight: FontWeight.w500, color: nl.fg)),
+          Text(entry.id, style: NlType.monoText(NlType.s1, color: nl.fg3)),
+        ])),
+        if (entry.forceRelay) ...[
+          const SizedBox(width: NlSpace.s2),
+          Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: NlSpace.s2, vertical: 1),
+              decoration: BoxDecoration(
+                  color: nl.surface2,
+                  borderRadius: BorderRadius.circular(NlRadius.r1)),
+              child: Text(nikoText('中继', 'RELAY'),
+                  style: NlType.monoText(NlType.s1, color: nl.fg2))),
+        ],
+      ]);
+      final actions = Row(mainAxisSize: MainAxisSize.min, children: [
+        NlButton.ghost(
+            small: true,
+            icon: entry.fileTransfer
+                ? Icons.folder_open_rounded
+                : Icons.arrow_forward_rounded,
+            onPressed: () => _reconnect(entry),
+            label: nikoText(entry.fileTransfer ? '传文件' : '连接',
+                entry.fileTransfer ? 'Files' : 'Connect')),
+        const SizedBox(width: NlSpace.s1),
+        NlIconButton(
+            icon: Icons.close_rounded,
+            tooltip: nikoText('删除该记录', 'Delete record'),
+            onPressed: () => _delete(entry)),
+      ]);
+      return Container(
+          constraints: const BoxConstraints(minHeight: 52),
+          padding: const EdgeInsets.symmetric(vertical: NlSpace.s2),
+          decoration: BoxDecoration(
+              border: first ? null : Border(top: BorderSide(color: nl.line))),
+          child: LayoutBuilder(builder: (context, constraints) {
+            if (constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1) <
+                500) {
+              return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                details,
+                const SizedBox(height: NlSpace.s2),
+                Align(alignment: Alignment.centerRight, child: actions),
+              ]);
+            }
+            return Row(children: [
+              Expanded(child: details),
+              const SizedBox(width: NlSpace.s3),
+              actions,
+            ]);
+          }));
+    }
+
+    return [
+      for (final day in groups.keys) ...[
+        Padding(
+            padding: const EdgeInsets.only(top: NlSpace.s3, bottom: NlSpace.s2),
+            child: NlMonoLabel(day)),
+        NlPanel(
+            padding: const EdgeInsets.symmetric(
+                horizontal: NlSpace.s4, vertical: NlSpace.s1),
+            child: Column(children: [
+              for (var i = 0; i < groups[day]!.length; i++)
+                row(groups[day]![i], i == 0),
+            ])),
+      ]
+    ];
   }
 
   List<Widget> _grouped(BuildContext context, Color muted) {

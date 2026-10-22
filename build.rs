@@ -17,6 +17,8 @@ fn build_mac() {
             .flag("-std=c++17").flag("-fobjc-arc").flag("-fblocks").compile("nikodesk_privacy_wallpaper");
         println!("cargo:rerun-if-changed=src/platform/macos_privacy_wallpaper.mm");
         println!("cargo:rerun-if-changed=src/platform/macos_privacy_unlock.h");
+        println!("cargo:rerun-if-changed=src/platform/macos_privacy_scene.h");
+        println!("cargo:rustc-link-lib=framework=QuartzCore");
         println!("cargo:rustc-link-lib=framework=OpenDirectory");
         println!("cargo:rerun-if-changed=src/platform/macos_privacy_bridge.h");
         b.define("NIKODESK_BUILD", None);
@@ -45,6 +47,17 @@ fn build_mac() {
         println!("cargo:rustc-link-lib=framework=CoreGraphics");
         println!("cargo:rerun-if-changed=src/platform/macos_virtual_display.mm");
         println!("cargo:rerun-if-changed=src/platform/macos_virtual_display.h");
+        cc::Build::new().cpp(true).file("src/platform/macos_service.mm")
+            .flag("-std=c++17").flag("-fobjc-arc")
+            .compile("nikodesk_service");
+        println!("cargo:rustc-link-lib=framework=Security");
+        println!("cargo:rustc-link-lib=framework=Carbon");
+        println!("cargo:rustc-link-lib=bsm");
+        println!("cargo:rerun-if-changed=src/platform/macos_service.mm");
+        cc::Build::new().cpp(true).file("src/platform/macos_display_events.mm")
+            .flag("-std=c++17").flag("-fobjc-arc").flag("-fblocks")
+            .compile("nikodesk_display_events");
+        println!("cargo:rerun-if-changed=src/platform/macos_display_events.mm");
         cc::Build::new().cpp(true).file("src/platform/macos_background.mm")
             .flag("-fobjc-arc").compile("nikodesk_macos_background");
         println!("cargo:rustc-link-lib=framework=SystemConfiguration");
