@@ -9,8 +9,8 @@
 <link rel="apple-touch-icon" href="assets/logo.png?v=5">
 <meta property="og:title" content="NikoDesk - Remote desktop on your own server">
 <meta property="og:description" content="Your familiar desktop. Wherever you work. Remote access on your own terms.">
-<meta property="og:image" content="https://baogutang.github.io/nikodesk/assets/app-light.png?v=102">
-<meta property="og:image:alt" content="NikoDesk warm light workspace, production Flutter widgets with synthetic example data">
+<meta property="og:image" content="https://baogutang.github.io/nikodesk/assets/og-2.0.png?v=200">
+<meta property="og:image:alt" content="NikoDesk 2.0 Nightline interface: device list and self-check, invented data">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://baogutang.github.io/nikodesk/">
 <link rel="canonical" href="https://baogutang.github.io/nikodesk/">
@@ -21,8 +21,8 @@
    NikoDesk site · warm editorial edition
    Magazine serif headlines, chaptered layout, film grain,
    warm paper + terracotta brand family.
-   The interactive example is driven by assets/demo.js
-   (visuals live in assets/demo.css).
+   The hero shows 2.0 interface screenshots; the theme switch
+   lives in assets/demo.js and assets/demo.css.
    ============================================================ */
 @font-face { font-family: "Fira Code"; src: url("assets/fonts/fira-code-400.woff2?v=5") format("woff2"); font-weight: 400; font-display: swap; }
 
@@ -139,7 +139,7 @@ section[id] { scroll-margin-top: 84px; }
 .hero-prereq { margin-top: 24px; display: flex; gap: 12px; align-items: baseline; font-family: var(--mono); font-size: 11.5px; letter-spacing: .04em; line-height: 1.9; color: var(--mut); max-width: 54ch; }
 .hero-prereq::before { content: ""; flex: 0 0 auto; width: 22px; height: 1px; background: var(--acc); transform: translateY(-4px); }
 
-/* ---------- Interactive example stage ---------- */
+/* ---------- Hero screenshot stage ---------- */
 .stage { position: relative; margin: 84px auto 0; max-width: 1020px; }
 .stage .back-card {
   position: absolute; inset: 4% -3% auto auto; width: 62%; height: 88%;
@@ -347,7 +347,7 @@ footer { border-top: 1px solid var(--line); padding: 70px 0 46px; background: va
   .band { border-radius: 24px; }
 }
 </style>
-<link rel="stylesheet" href="assets/demo.css?v=110">
+<link rel="stylesheet" href="assets/demo.css?v=200">
 </head>
 <body>
 <a class="skip-link" href="#content">Skip to content</a>
@@ -359,7 +359,7 @@ footer { border-top: 1px solid var(--line); padding: 70px 0 46px; background: va
     <a class="masthead" href="#top">
       <img src="assets/logo.png?v=5" alt="NikoDesk logo">
       <span class="name">NikoDesk</span>
-      <span class="issue">VOL. 1.0.11</span>
+      <span class="issue">VOL. 2.0.0</span>
     </a>
     <nav class="nav-links" aria-label="Main navigation">
       <a href="#features">How it works</a>
@@ -378,7 +378,7 @@ footer { border-top: 1px solid var(--line); padding: 70px 0 46px; background: va
 
 <!-- ============ Hero ============ -->
 <section class="hero wrap" id="top" tabindex="-1">
-  <p class="hero-eyebrow rv"><a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.11">Self-hosted remote desktop</a><span class="ver">— v1.0.11 is out</span></p>
+  <p class="hero-eyebrow rv"><a href="https://github.com/baogutang/nikodesk/releases/tag/v2.0.0">Self-hosted remote desktop</a><span class="ver">— v2.0.0 is out</span></p>
   <h1 class="rv" style="--d:.08s">Your familiar desktop.<br><em>Wherever you work.</em></h1>
   <div class="hero-grid">
     <div class="rv" style="--d:.16s">
@@ -401,15 +401,18 @@ footer { border-top: 1px solid var(--line); padding: 70px 0 46px; background: va
     <div class="back-card" aria-hidden="true"><span>Fig. 01 — Workspace</span></div>
     <div class="shot-shell">
       <div class="shot-inner">
-        <div id="nikodesk-demo" class="nd-demo" data-lang="en" data-theme="light"><noscript>Enable JavaScript to explore the preview. Downloads work independently.</noscript></div>
+        <div id="nikodesk-demo" class="nd-shot" data-lang="en" data-theme="dark">
+          <img class="nd-dark" src="assets/app-home-dark-en.webp?v=200" width="1440" height="900" alt="NikoDesk 2.0, dark: device list, quick connect, this device's ID and self-check, invented data">
+          <img class="nd-light" src="assets/app-home-light-en.webp?v=200" width="1440" height="900" loading="lazy" alt="NikoDesk 2.0, light: device list, quick connect, this device's ID and self-check, invented data">
+        </div>
       </div>
     </div>
-    <div class="shot-cap"><span>FIG. 01 — NIKODESK / INTERACTIVE EXAMPLE</span><span>Operable · Invented data · No real connections</span></div>
+    <div class="shot-cap"><span>FIG. 01 — NIKODESK 2.0 / NIGHTLINE</span><span>Real interface · Invented data</span></div>
   </div>
 
   <div class="marquee rv" aria-hidden="true">
     <div class="mq-track" id="mq">
-      <span>Remote control</span><span>File transfer</span><span>Clipboard sync</span><span>Multi-monitor</span><span>Keyboard mapping</span><span>Privacy screen</span><span>Adaptive quality</span><span>End-to-end encryption</span>
+      <span>Nightline interface</span><span>Remote control</span><span>File transfer</span><span>Clipboard sync</span><span>Multi-monitor</span><span>Keyboard mapping</span><span>Privacy screen</span><span>Adaptive quality</span><span>End-to-end encryption</span><span>Verified updates</span>
     </div>
   </div>
 </section>
@@ -422,7 +425,8 @@ footer { border-top: 1px solid var(--line); padding: 70px 0 46px; background: va
     <div class="work-row rv"><span class="no">01</span><h3>Back to your desktop</h3><p>Find a computer in your device list and keep working with your keyboard and mouse. Switch displays, go full screen and keep familiar shortcuts close.</p><span class="arrow" aria-hidden="true">→</span></div>
     <div class="work-row rv" style="--d:.05s"><span class="no">02</span><h3>Bring your files along</h3><p>Move files and copy text between computers without breaking your flow. You stay in control of transfer and access permissions.</p><span class="arrow" aria-hidden="true">→</span></div>
     <div class="work-row rv" style="--d:.1s"><span class="no">03</span><h3>A view that fits the task</h3><p>Choose clarity for reading or responsiveness for interaction. See connection details and adjust the picture while you work.</p><span class="arrow" aria-hidden="true">→</span></div>
-    <div class="work-row rv" style="--d:.15s"><span class="no">04</span><h3>Give the screen a different view</h3><p>Choose an animated preset or your own picture. Use a connection reminder or automatic activation. The controlled screen shows its privacy status; local exit requires the system login password.</p><span class="arrow" aria-hidden="true">→</span></div>
+    <div class="work-row rv" style="--d:.15s"><span class="no">04</span><h3>Give the screen a different view</h3><p>Choose Nightline, Deep field, Aurora, Graphite or your own picture, with adjustable animation and glow. Use a connection reminder or automatic activation. The controlled screen shows its privacy status; local exit requires the system login password.</p><span class="arrow" aria-hidden="true">→</span></div>
+    <div class="work-row rv" style="--d:.2s"><span class="no">05</span><h3>Ready on first launch, easy to keep current</h3><p>A guide takes you through the two system permissions on first launch, and the menu bar shows whether this Mac can be reached. New versions are checked against the publisher signature and can install themselves while nobody is connected.</p><span class="arrow" aria-hidden="true">→</span></div>
   </div>
 
   <blockquote class="quote rv">
@@ -476,7 +480,7 @@ footer { border-top: 1px solid var(--line); padding: 70px 0 46px; background: va
       <p class="sec-sub">"Secure" is a claim, not an argument. These three things you can check yourself.</p>
       <div class="band-cols">
         <div class="band-col"><span class="no">/ 01</span><h3>Choose who connects</h3><p>Manage passwords and access rules on the remote computer. Grant viewing, input and file permissions separately, and end a session at any time.</p></div>
-        <div class="band-col"><span class="no">/ 02</span><h3>Permissions stay visible</h3><p>Screen capture, input, camera and microphone follow system permissions. Allow access when needed and revoke it afterwards.</p></div>
+        <div class="band-col"><span class="no">/ 02</span><h3>Permissions stay visible</h3><p>Screen capture, input, camera and microphone follow system permissions. A missing permission is pointed out at launch, and the controller says what will not work; revoke access when you are done.</p></div>
         <div class="band-col"><span class="no">/ 03</span><h3>Open for inspection</h3><p>Built on the native RustDesk core under AGPL-3.0. Source code, build instructions and release notes are available on <a href="https://github.com/baogutang/nikodesk" target="_blank" rel="noopener">GitHub</a>.</p></div>
       </div>
     </div>
@@ -545,29 +549,29 @@ OeVuKk5nlHiXp+AppNnWyYwf1yNnKy=
       <div class="kicker rv"><span>Download</span><span class="rule"></span></div>
       <h2 class="rv">Choose your system.</h2>
     </div>
-    <a class="ver-link rv" href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.11">v1.0.11 · Full release notes ↗</a>
+    <a class="ver-link rv" href="https://github.com/baogutang/nikodesk/releases/tag/v2.0.0">v2.0.0 · Full release notes ↗</a>
   </div>
   <div class="dl-rows">
-    <a class="dl-row rv" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.11/NikoDesk-macos-arm64.dmg">
+    <a class="dl-row rv" href="https://github.com/baogutang/nikodesk/releases/download/v2.0.0/NikoDesk-macos-arm64.dmg">
       <span class="plat">macOS</span>
       <span class="arch">Apple Silicon<br>macOS 12.3+ · DMG</span>
-      <span class="note">DMG package. Not Developer ID signed or notarized; read the release notes before installing.</span>
+      <span class="note">DMG package. Signed with the fixed NikoDesk certificate, not notarized by Apple. Upgrading from 1.0.x needs permissions granted once more, at the Mac.</span>
       <span class="go" aria-hidden="true">↗</span>
     </a>
-    <a class="dl-row rv" style="--d:.05s" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.11/NikoDesk-windows-x64.exe">
+    <a class="dl-row rv" style="--d:.05s" href="https://github.com/baogutang/nikodesk/releases/download/v2.0.0/NikoDesk-windows-x64.exe">
       <span class="plat">Windows</span>
       <span class="arch">x64 · Portable<br>Standalone EXE</span>
       <span class="note">Currently unsigned; Windows may show a security notice. Installation notes are on the release page.</span>
       <span class="go" aria-hidden="true">↗</span>
     </a>
-    <a class="dl-row rv" style="--d:.1s" href="https://github.com/baogutang/nikodesk/releases/download/v1.0.11/NikoDesk-android-arm64.apk">
+    <a class="dl-row rv" style="--d:.1s" href="https://github.com/baogutang/nikodesk/releases/download/v2.0.0/NikoDesk-android-arm64.apk">
       <span class="plat">Android</span>
       <span class="arch">ARM64 · Controller<br>Release-key signed APK</span>
       <span class="note">Connect to your computer from your phone. Remote control of the phone is not supported.</span>
       <span class="go" aria-hidden="true">↗</span>
     </a>
   </div>
-  <p class="dl-note rv">Changes, compatibility and known limitations: <a href="https://github.com/baogutang/nikodesk/releases/tag/v1.0.11">release notes</a> · Try the <a href="https://github.com/baogutang/nikodesk/releases/tag/nightly">nightly preview</a> · <a href="https://github.com/baogutang/nikodesk#current-status">Platform support</a></p>
+  <p class="dl-note rv">Changes, compatibility and known limitations: <a href="https://github.com/baogutang/nikodesk/releases/tag/v2.0.0">release notes</a> · Try the <a href="https://github.com/baogutang/nikodesk/releases/tag/nightly">nightly preview</a> · <a href="https://github.com/baogutang/nikodesk#current-status">Platform support</a></p>
 </section>
 
 <!-- ============ FAQ ============ -->
@@ -580,7 +584,7 @@ OeVuKk5nlHiXp+AppNnWyYwf1yNnKy=
     </div>
     <div class="faq-list">
       <details class="faq-item rv"><summary>Do I need my own server?<span class="plus">+</span></summary><div class="a">Yes — it is the one prerequisite. NikoDesk neither offers nor contacts any public rendezvous server: before your first connection you need a server of your own (reuse an existing RustDesk Server OSS, or set one up with two commands in <a href="#deploy">Get started</a>). Without one, the client connects to nothing and no one.</div></details>
-      <details class="faq-item rv" style="--d:.05s"><summary>Do downloaded updates install automatically?<span class="plus">+</span></summary><div class="a">Updates currently require manual installation. Follow the installation steps after downloading: quit the old version, replace the app and reopen it. See the release page for details and signing information.</div></details>
+      <details class="faq-item rv" style="--d:.05s"><summary>Do downloaded updates install automatically?<span class="plus">+</span></summary><div class="a">On a Mac, from 2.0.0 they can. Install the system background service under Settings → Unattended access: new versions are downloaded, checked against the publisher signature, installed while no remote session is active, and NikoDesk reopens. The previous version can be restored. Without the service you are told when to replace the app yourself. Moving from 1.0.x to 2.0.0 is a manual download, and Windows and Android still install manually.</div></details>
       <details class="faq-item rv" style="--d:.1s"><summary>Can I control an Android phone remotely?<span class="plus">+</span></summary><div class="a">The Android app is a controller for your Windows or Mac computer. It does not expose the phone for remote control.</div></details>
       <details class="faq-item rv" style="--d:.15s"><summary>How is NikoDesk related to RustDesk?<span class="plus">+</span></summary><div class="a">NikoDesk is an independent open-source project built on the native RustDesk core under AGPL-3.0. It is not affiliated with or endorsed by RustDesk.</div></details>
     </div>
@@ -721,6 +725,6 @@ OeVuKk5nlHiXp+AppNnWyYwf1yNnKy=
   io.observe(pre);
 })();
 </script>
-<script defer src="assets/demo.js?v=108"></script>
+<script defer src="assets/demo.js?v=200"></script>
 </body>
 </html>

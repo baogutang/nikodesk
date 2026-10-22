@@ -64,8 +64,7 @@ flutter/.mimosa/
 !res/nikodesk-tray.png
 !res/nikodesk-brand/**
 !flutter/assets/nikodesk.png
-!flutter/assets/readme-light.png
-!flutter/assets/readme-dark.png
+!docs/images/*.png
 !flutter/assets/readme-logo.png
 !website/assets/*.png
 !website/assets/*.jpg
