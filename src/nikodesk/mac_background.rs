@@ -14,7 +14,7 @@ static SELECTED: AtomicBool = AtomicBool::new(false);
 static CORE_OWNER: Mutex<Option<File>> = Mutex::new(None);
 extern "C" {
     fn NikoMacBackgroundEnvironment() -> bool;
-    fn NikoMacBackgroundRunLoop();
+    fn NikoMacBackgroundRunLoop(reopen: extern "C" fn());
 }
 pub(crate) fn selected() -> bool {
     SELECTED.load(Ordering::Acquire)
@@ -57,6 +57,7 @@ pub(crate) fn claim_core() -> ResultType<bool> {
         return Err(error.into());
     }
     *owner = Some(file);
+    super::mac_menu_bar::start();
     Ok(true)
 }
 /// Why the agent cannot serve yet, if anything. Every condition can change
@@ -101,12 +102,11 @@ fn wait_until_ready() {
 }
 
 pub(crate) fn run() -> ResultType<()> {
-    // The system agent (mac_service) also loads in the login window, as root.
-    // That session is not served yet; exiting cleanly keeps launchd from
-    // restarting it every few seconds.
+    // The agent of the system service only loads in signed-in desktops, as
+    // their user. The core never runs as root from here; exiting cleanly keeps
+    // launchd from restarting it.
     if unsafe { libc::geteuid() } == 0 {
-        hbb_common::log::info!("Login window session: not served yet");
-        super::mac_service::probe_login_window();
+        hbb_common::log::info!("Background agent started as root: not served");
         return Ok(());
     }
     wait_until_ready();
@@ -127,7 +127,7 @@ pub(crate) fn run() -> ResultType<()> {
     // ScreenCaptureKit and the privacy/permission bridges need the real main
     // AppKit loop. A sleeping Rust main thread would deadlock their callbacks.
     unsafe {
-        NikoMacBackgroundRunLoop();
+        NikoMacBackgroundRunLoop(super::mac_menu_bar::reopen);
     }
     bail!("background_main_loop_ended")
 }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'cm_capability_frame.dart';
+import 'nightline.dart';
 import 'ui.dart';
 import 'voice_session_model.dart';
 
@@ -241,7 +243,8 @@ class _VoicePanelState extends State<NikoCmVoicePanel> {
   Widget _button(String key, String text, String op, {bool enabled = true}) =>
       OutlinedButton(
           key: ValueKey(key),
-          style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+          style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48))
+              .merge(op == 'revoke' ? nikoCmStopStyle(context) : null),
           onPressed: enabled && !_model.busy ? () => _model.send(op) : null,
           child: Text(text));
 
@@ -332,6 +335,134 @@ class _VoicePanelState extends State<NikoCmVoicePanel> {
     final cleanup = _model.cleanupUnconfirmed ||
         status.phase == 'RecoveryRequired' ||
         status.phase == 'Revoking';
+    final nightline = NlColors.maybeOf(context) != null;
+    final heading = widget.controller
+        ? nikoText('语音通话', 'Voice call')
+        : nikoText('本机语音授权', 'Local voice approval');
+    final title = Semantics(
+        liveRegion: true,
+        child: Text(_phaseText(status, widget.controller),
+            key: const ValueKey('niko-voice-phase'),
+            style: nightline ? null : Theme.of(context).textTheme.titleSmall));
+    final children = <Widget>[
+      if (widget.controller) ...[
+        const SizedBox(height: 8),
+        Text(nikoText('本机音频：${status.localReady ? '已就绪' : '尚未就绪'}',
+            'Local audio: ${status.localReady ? 'ready' : 'not ready'}')),
+        Text(nikoText('对端接听：${status.peerAccepted ? '已确认' : '未确认'}',
+            'Peer acceptance: ${status.peerAccepted ? 'confirmed' : 'unconfirmed'}')),
+      ],
+      if (availability.isNotEmpty) Text(availability),
+      if (status.reason.isNotEmpty) Text(nikoVoiceReasonText(status.reason)),
+      if (_model.operationMessage != null)
+        Semantics(
+            liveRegion: true,
+            child: Text(nikoVoiceReasonText(_model.operationMessage!))),
+      if (_model.approvalUnconfirmed)
+        Text(nikoText('批准结果未确认，暂不能重复准备音频。请读取当前状态。',
+            'Approval is unconfirmed. Audio preparation cannot be repeated. Read the current status.')),
+      if (cleanup)
+        Text(nikoText('音频可能仍在使用中。确认停止前，不能重新选择设备或呼叫。',
+            'Audio may still be in use. Device selection and new calls remain blocked until shutdown is confirmed.')),
+      if (status.phase == 'Running')
+        Text(status.muted
+            ? nikoText('已静音：不发送声音，麦克风仍在使用中。',
+                'Muted: audio is not sent. The microphone remains open.')
+            : nikoText('本机麦克风正在使用中。静音不会释放麦克风。',
+                'The local microphone is open. Muting does not release it.')),
+      if (maySelect) ...[
+        const SizedBox(height: 12),
+        Text(_permissionText(status.microphonePermission,
+            android: _model.androidController)),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          _button('niko-voice-enumerate',
+              nikoText('读取本机音频设备', 'Read local audio devices'), 'enumerate',
+              enabled: _model.mayPrepare),
+          if (status.microphonePermission == 'NotDetermined')
+            _button(
+                'niko-voice-permission',
+                nikoText('请求本机麦克风许可', 'Request local microphone permission'),
+                'request_permission',
+                enabled: _model.mayRequestPermission),
+        ]),
+        if (_model.catalog != null) ...[
+          const SizedBox(height: 16),
+          _deviceSelector('capture'),
+          const SizedBox(height: 16),
+          _deviceSelector('playback'),
+          const SizedBox(height: 12),
+          Text(nikoText('设备和格式由你手动选择；更改后需要重新选择。',
+              'Choose devices and formats manually. Select again after a change.')),
+          if (_model.androidController &&
+              _model.catalog!.androidClientFormat) ...[
+            Text(nikoText('所选格式为应用通话格式；是否可用仍需开始时确认。部分蓝牙设备暂不支持。',
+                'These are application call formats. Availability is confirmed when audio starts. Some Bluetooth devices are unsupported.')),
+            CheckboxListTile(
+                key: const ValueKey('niko-voice-background'),
+                contentPadding: EdgeInsets.zero,
+                value: _allowBackground,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: Text(nikoText('离开应用后继续通话（显示通话通知）',
+                    'Continue calls outside the app (show a call notification)')),
+                subtitle: Text(nikoText(
+                    '首次可能需要系统通知授权；通知中可停止当前通话。未允许时可取消此勾选，继续前台通话。',
+                    'The first use may request notification permission. Stop the call from its notification. If permission is denied, clear this option to use a foreground call.')),
+                onChanged: _model.mayPrepare && !_model.busy
+                    ? (value) =>
+                        setState(() => _allowBackground = value == true)
+                    : null),
+          ],
+          if (!_model.catalog!.devices.any((d) => d.direction == 'capture') ||
+              !_model.catalog!.devices.any((d) => d.direction == 'playback'))
+            Text(nikoText('未找到可用的麦克风或扬声器，请检查本机设备后重新读取。',
+                'No usable microphone or speaker was found. Check this computer’s devices and reload.')),
+        ],
+        const SizedBox(height: 12),
+        FilledButton(
+            key: const ValueKey('niko-voice-approve'),
+            style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+            onPressed:
+                !_model.busy && _model.mayApprove(_selection) ? _approve : null,
+            child: Text(
+                nikoText('允许此会话使用本机音频', 'Allow local audio for this session')))
+      ],
+      const SizedBox(height: 8),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        _button('niko-voice-query', nikoText('读取当前状态', 'Read current status'),
+            'query'),
+        if (!cleanup && !_model.cleanupOnly && status.phase == 'Pending')
+          _button(
+              'niko-voice-deny', nikoText('拒绝本次通话', 'Deny this call'), 'deny'),
+        if (!cleanup &&
+            !_model.cleanupOnly &&
+            {'Starting', 'Running'}.contains(status.phase))
+          _button(
+              'niko-voice-end', nikoText('结束语音通话', 'End voice call'), 'revoke'),
+        if (cleanup && status.phase != 'Stopped')
+          _button('niko-voice-cleanup',
+              nikoText('重试音频清理', 'Retry audio cleanup'), 'retry_cleanup'),
+        if (!cleanup && !_model.cleanupOnly && status.phase == 'Running')
+          _button(
+              'niko-voice-mute',
+              status.muted
+                  ? nikoText('取消静音', 'Unmute')
+                  : nikoText('静音', 'Mute'),
+              status.muted ? 'unmute' : 'mute',
+              enabled: !status.muted ||
+                  _model.availability == NikoVoiceAvailability.enabled),
+      ]),
+    ];
+    if (nightline) {
+      return NikoCmCapabilityFrame(
+          label: heading,
+          icon: Icons.mic_none_rounded,
+          // Local audio is ready but the peer has not answered yet.
+          tone: status.phase == 'Running' && !status.callRunning
+              ? NlTone.warn
+              : nikoCmPhaseTone(status.phase),
+          title: title,
+          children: children);
+    }
     return Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -340,137 +471,11 @@ class _VoicePanelState extends State<NikoCmVoicePanel> {
             children: [
               Semantics(
                   header: true,
-                  child: Text(
-                      widget.controller
-                          ? nikoText('语音通话', 'Voice call')
-                          : nikoText('本机语音授权', 'Local voice approval'),
+                  child: Text(heading,
                       style: Theme.of(context).textTheme.titleMedium)),
               const SizedBox(height: 8),
-              Semantics(
-                  liveRegion: true,
-                  child: Text(_phaseText(status, widget.controller),
-                      key: const ValueKey('niko-voice-phase'),
-                      style: Theme.of(context).textTheme.titleSmall)),
-              if (widget.controller) ...[
-                const SizedBox(height: 8),
-                Text(nikoText('本机音频：${status.localReady ? '已就绪' : '尚未就绪'}',
-                    'Local audio: ${status.localReady ? 'ready' : 'not ready'}')),
-                Text(nikoText('对端接听：${status.peerAccepted ? '已确认' : '未确认'}',
-                    'Peer acceptance: ${status.peerAccepted ? 'confirmed' : 'unconfirmed'}')),
-              ],
-              if (availability.isNotEmpty) Text(availability),
-              if (status.reason.isNotEmpty)
-                Text(nikoVoiceReasonText(status.reason)),
-              if (_model.operationMessage != null)
-                Semantics(
-                    liveRegion: true,
-                    child: Text(nikoVoiceReasonText(_model.operationMessage!))),
-              if (_model.approvalUnconfirmed)
-                Text(nikoText('批准结果未确认，暂不能重复准备音频。请读取当前状态。',
-                    'Approval is unconfirmed. Audio preparation cannot be repeated. Read the current status.')),
-              if (cleanup)
-                Text(nikoText('音频可能仍在使用中。确认停止前，不能重新选择设备或呼叫。',
-                    'Audio may still be in use. Device selection and new calls remain blocked until shutdown is confirmed.')),
-              if (status.phase == 'Running')
-                Text(status.muted
-                    ? nikoText('已静音：不发送声音，麦克风仍在使用中。',
-                        'Muted: audio is not sent. The microphone remains open.')
-                    : nikoText('本机麦克风正在使用中。静音不会释放麦克风。',
-                        'The local microphone is open. Muting does not release it.')),
-              if (maySelect) ...[
-                const SizedBox(height: 12),
-                Text(_permissionText(status.microphonePermission,
-                    android: _model.androidController)),
-                Wrap(spacing: 8, runSpacing: 8, children: [
-                  _button(
-                      'niko-voice-enumerate',
-                      nikoText('读取本机音频设备', 'Read local audio devices'),
-                      'enumerate',
-                      enabled: _model.mayPrepare),
-                  if (status.microphonePermission == 'NotDetermined')
-                    _button(
-                        'niko-voice-permission',
-                        nikoText(
-                            '请求本机麦克风许可', 'Request local microphone permission'),
-                        'request_permission',
-                        enabled: _model.mayRequestPermission),
-                ]),
-                if (_model.catalog != null) ...[
-                  const SizedBox(height: 16),
-                  _deviceSelector('capture'),
-                  const SizedBox(height: 16),
-                  _deviceSelector('playback'),
-                  const SizedBox(height: 12),
-                  Text(nikoText('设备和格式由你手动选择；更改后需要重新选择。',
-                      'Choose devices and formats manually. Select again after a change.')),
-                  if (_model.androidController &&
-                      _model.catalog!.androidClientFormat) ...[
-                    Text(nikoText('所选格式为应用通话格式；是否可用仍需开始时确认。部分蓝牙设备暂不支持。',
-                        'These are application call formats. Availability is confirmed when audio starts. Some Bluetooth devices are unsupported.')),
-                    CheckboxListTile(
-                        key: const ValueKey('niko-voice-background'),
-                        contentPadding: EdgeInsets.zero,
-                        value: _allowBackground,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        title: Text(nikoText('离开应用后继续通话（显示通话通知）',
-                            'Continue calls outside the app (show a call notification)')),
-                        subtitle: Text(nikoText(
-                            '首次可能需要系统通知授权；通知中可停止当前通话。未允许时可取消此勾选，继续前台通话。',
-                            'The first use may request notification permission. Stop the call from its notification. If permission is denied, clear this option to use a foreground call.')),
-                        onChanged: _model.mayPrepare && !_model.busy
-                            ? (value) =>
-                                setState(() => _allowBackground = value == true)
-                            : null),
-                  ],
-                  if (!_model.catalog!.devices
-                          .any((d) => d.direction == 'capture') ||
-                      !_model.catalog!.devices
-                          .any((d) => d.direction == 'playback'))
-                    Text(nikoText('未找到可用的麦克风或扬声器，请检查本机设备后重新读取。',
-                        'No usable microphone or speaker was found. Check this computer’s devices and reload.')),
-                ],
-                const SizedBox(height: 12),
-                FilledButton(
-                    key: const ValueKey('niko-voice-approve'),
-                    style:
-                        FilledButton.styleFrom(minimumSize: const Size(48, 48)),
-                    onPressed: !_model.busy && _model.mayApprove(_selection)
-                        ? _approve
-                        : null,
-                    child: Text(nikoText(
-                        '允许此会话使用本机音频', 'Allow local audio for this session')))
-              ],
-              const SizedBox(height: 8),
-              Wrap(spacing: 8, runSpacing: 8, children: [
-                _button('niko-voice-query',
-                    nikoText('读取当前状态', 'Read current status'), 'query'),
-                if (!cleanup &&
-                    !_model.cleanupOnly &&
-                    status.phase == 'Pending')
-                  _button('niko-voice-deny',
-                      nikoText('拒绝本次通话', 'Deny this call'), 'deny'),
-                if (!cleanup &&
-                    !_model.cleanupOnly &&
-                    {'Starting', 'Running'}.contains(status.phase))
-                  _button('niko-voice-end',
-                      nikoText('结束语音通话', 'End voice call'), 'revoke'),
-                if (cleanup && status.phase != 'Stopped')
-                  _button(
-                      'niko-voice-cleanup',
-                      nikoText('重试音频清理', 'Retry audio cleanup'),
-                      'retry_cleanup'),
-                if (!cleanup &&
-                    !_model.cleanupOnly &&
-                    status.phase == 'Running')
-                  _button(
-                      'niko-voice-mute',
-                      status.muted
-                          ? nikoText('取消静音', 'Unmute')
-                          : nikoText('静音', 'Mute'),
-                      status.muted ? 'unmute' : 'mute',
-                      enabled: !status.muted ||
-                          _model.availability == NikoVoiceAvailability.enabled),
-              ]),
+              title,
+              ...children,
             ]));
   }
 }

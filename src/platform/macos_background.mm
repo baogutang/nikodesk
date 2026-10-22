@@ -16,9 +16,27 @@ extern "C" bool NikoMacBackgroundEnvironment(void) {
         return active;
     }
 }
-extern "C" void NikoMacBackgroundRunLoop(void) {
+// LaunchServices treats the agent as a running instance of the bundle, so
+// opening NikoDesk from Finder, the Dock or Spotlight reopens the agent rather
+// than starting the window app.
+@interface NikoBackgroundDelegate : NSObject <NSApplicationDelegate>
+@property(nonatomic) void (*reopen)(void);
+@end
+@implementation NikoBackgroundDelegate
+- (BOOL)applicationShouldHandleReopen:(NSApplication *)sender hasVisibleWindows:(BOOL)flag {
+    self.reopen();
+    return NO;
+}
+@end
+
+static NikoBackgroundDelegate *backgroundDelegate;
+
+extern "C" void NikoMacBackgroundRunLoop(void (*reopen)(void)) {
     @autoreleasepool {
         NSApplication *application = [NSApplication sharedApplication];
+        backgroundDelegate = [NikoBackgroundDelegate new];
+        backgroundDelegate.reopen = reopen;
+        application.delegate = backgroundDelegate;
         [application setActivationPolicy:NSApplicationActivationPolicyAccessory];
         [application run];
     }

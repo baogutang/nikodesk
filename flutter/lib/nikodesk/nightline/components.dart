@@ -72,12 +72,14 @@ class _NlButtonState extends State<NlButton> {
     final hovered = enabled && _hovered;
     final (Color fill, Color ink) = switch (widget.tone) {
       NlButtonTone.primary => (nl.accent, nl.onAccent),
-      NlButtonTone.danger => (nl.danger, nl.onDanger),
+      NlButtonTone.danger => (nl.dangerFill, nl.onDanger),
       NlButtonTone.ghost => (Colors.transparent, nl.fg),
     };
+    // Hover moves the fill toward the text colour of the mode, which keeps
+    // the label contrast at or above its resting value in both modes.
     final background = widget.tone == NlButtonTone.ghost
         ? (hovered ? nl.surface2 : fill)
-        : (hovered ? Color.lerp(fill, Colors.white, .08)! : fill);
+        : (hovered ? Color.lerp(fill, nl.fg, .08)! : fill);
     final size = widget.small ? NlType.s2 : NlType.s3;
     return Semantics(
         button: true,
@@ -222,7 +224,15 @@ class NlSegment<T> {
 
   /// Small mono figure after the label, e.g. a filter's item count.
   final String? count;
-  const NlSegment({required this.value, required this.label, this.icon, this.count});
+
+  /// Key of the segment's button, for callers that address one segment.
+  final Key? key;
+  const NlSegment(
+      {required this.value,
+      required this.label,
+      this.icon,
+      this.count,
+      this.key});
 }
 
 /// One-of-many switcher on a single track.
@@ -250,6 +260,7 @@ class NlSegmented<T> extends StatelessWidget {
       for (var i = 0; i < segments.length; i++) ...[
         if (i > 0) const SizedBox(width: 2),
         _wrap(_SegmentButton<T>(
+            key: segments[i].key,
             segment: segments[i],
             selected: segments[i].value == selected,
             small: small,

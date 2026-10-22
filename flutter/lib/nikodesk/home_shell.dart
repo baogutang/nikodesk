@@ -21,6 +21,7 @@ import 'voice_cleanup_panel.dart';
 import 'tunnel_cleanup_view.dart';
 import 'install_assistant.dart';
 import 'first_server_setup.dart';
+import 'permission_guide.dart';
 import 'diagnostics_bundle.dart';
 
 /// Product shell for the NikoDesk home window: navigation plus the device
@@ -71,6 +72,9 @@ class _NikoHomeShellState extends State<NikoHomeShell>
   bool _showPassword = false;
   bool _canScreen = true;
   bool _canAccessibility = true;
+
+  /// Decided at the first status read; the health rows open it again.
+  bool? _guide;
   Timer? _timer;
   int _statusReadGeneration = 0;
   late final _enter =
@@ -152,8 +156,41 @@ class _NikoHomeShellState extends State<NikoHomeShell>
       _canAccessibility = canAccessibility;
       _temporaryPassword = password;
       _server = server;
+      _guide ??= Platform.isMacOS &&
+          (_native || widget.screenRecordingProbe != null) &&
+          !(canScreen && canAccessibility) &&
+          !_guideSilenced;
     });
   }
+
+  bool get _guideSilenced {
+    if (!_native) return false;
+    try {
+      return bind.mainGetLocalOption(key: nikoPermissionGuideOption) == 'off';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void _leaveGuide({bool silence = false}) {
+    if (silence && _native) {
+      bind.mainSetLocalOption(key: nikoPermissionGuideOption, value: 'off');
+    }
+    setState(() => _guide = false);
+    _refreshStatus();
+  }
+
+  Widget _permissionGuide() => NikoPermissionGuide(
+      screenRecording: () =>
+          widget.screenRecordingProbe?.call() ??
+          (_native && bind.mainIsCanScreenRecording(prompt: false)),
+      accessibility: () =>
+          widget.accessibilityProbe?.call() ??
+          (_native && bind.mainIsProcessTrusted(prompt: false)),
+      requestScreenRecording: _requestScreenRecording,
+      requestAccessibility: _requestAccessibility,
+      onContinue: _leaveGuide,
+      onSilence: () => _leaveGuide(silence: true));
 
   String get _deviceId {
     if (widget.deviceIdProvider != null) return widget.deviceIdProvider!();
@@ -170,11 +207,14 @@ class _NikoHomeShellState extends State<NikoHomeShell>
     nikoNotice(context, nikoText('已复制$label', '$label copied'));
   }
 
+  // Asking first puts NikoDesk in the list; the system shows its own prompt
+  // only once, so the pane is opened as well.
   Future<void> _requestScreenRecording() async {
     if (widget.screenRecordingRequest != null) {
       widget.screenRecordingRequest!(true);
     } else if (_native) {
       bind.mainIsCanScreenRecording(prompt: true);
+      await nikoOpenPrivacyPane(nikoScreenRecordingPane);
     }
     await _refreshStatus();
   }
@@ -184,6 +224,7 @@ class _NikoHomeShellState extends State<NikoHomeShell>
       widget.accessibilityRequest!(true);
     } else if (_native) {
       bind.mainIsProcessTrusted(prompt: true);
+      await nikoOpenPrivacyPane(nikoAccessibilityPane);
     }
     await _refreshStatus();
   }
@@ -280,7 +321,7 @@ class _NikoHomeShellState extends State<NikoHomeShell>
             _go(_HomeDestination.devices);
             _refreshStatus();
           },
-          child: LayoutBuilder(builder: (context, constraints) {
+          child: _guide == true ? _permissionGuide() : LayoutBuilder(builder: (context, constraints) {
           final nl = NlColors.of(context);
           final compact = constraints.maxWidth < 840 ||
               constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1) < 640;
@@ -603,10 +644,10 @@ class _NikoHomeShellState extends State<NikoHomeShell>
       if (Platform.isMacOS) ...[
         _permissionRow(nl, nikoText('屏幕录制', 'Screen recording'),
             nikoText('被控画面必需', 'Required to be controlled'), _canScreen,
-            _requestScreenRecording),
+            _openGuide),
         _permissionRow(nl, nikoText('辅助功能', 'Accessibility'),
             nikoText('远端键鼠必需', 'Required for remote input'),
-            _canAccessibility, _requestAccessibility),
+            _canAccessibility, _openGuide),
       ],
     ];
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -682,6 +723,11 @@ class _NikoHomeShellState extends State<NikoHomeShell>
           textAlign: TextAlign.center,
           style: NlType.text(NlType.s1, color: nl.fg3)),
     ]);
+  }
+
+  Future<void> _openGuide() async {
+    _scaffoldKey.currentState?.closeDrawer();
+    setState(() => _guide = true);
   }
 
   Widget _permissionRow(NlColors nl, String title, String reason, bool granted,

@@ -133,6 +133,14 @@ ThemeData nightlineTheme(Brightness brightness) {
           selectedTabBackgroundColor: nl.surface2),
     ],
     dividerTheme: DividerThemeData(color: nl.line, thickness: 1, space: 1),
+    // Upstream panes (file transfer, connection manager) tint their SVG
+    // icons with the tab label colour; without it the icons draw black.
+    tabBarTheme: TabBarTheme(labelColor: nl.fg2, unselectedLabelColor: nl.fg3),
+    // Column headers read like the draft's table heads.
+    dataTableTheme: DataTableThemeData(
+        headingTextStyle: NlType.monoText(NlType.s1,
+                weight: FontWeight.w500, color: nl.fg3)
+            .copyWith(letterSpacing: NlType.s1 * NlType.labelTracking)),
     iconTheme: IconThemeData(color: nl.fg2, size: 18),
     appBarTheme: AppBarTheme(
         backgroundColor: nl.bg,
@@ -187,7 +195,7 @@ ThemeData nightlineTheme(Brightness brightness) {
           states.contains(WidgetState.disabled)
               ? nl.accent.withOpacity(.4)
               : states.contains(WidgetState.hovered)
-                  ? Color.lerp(nl.accent, Colors.white, .08)
+                  ? Color.lerp(nl.accent, nl.fg, .08)
                   : nl.accent),
       foregroundColor: WidgetStateProperty.resolveWith((states) =>
           states.contains(WidgetState.disabled)

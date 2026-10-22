@@ -15,6 +15,8 @@ import 'virtual_display_settings.dart';
 import 'wake_proxy_settings.dart';
 import 'mac_background_settings.dart';
 import 'mac_service_settings.dart';
+import 'mac_update_install.dart' show nikoRelaunch;
+import 'mac_update_settings.dart';
 import 'nightline.dart';
 import 'policy.dart';
 import 'updater.dart';
@@ -558,7 +560,7 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
           const SizedBox(height: 16),
           if (_native && (Platform.isMacOS || Platform.isWindows)) ...[
             if (Platform.isMacOS) ...[
-              _section(context, nikoText('无人值守', 'Unattended access'), [const NikoMacBackgroundSettings(), const NikoMacServiceSettings()]),
+              _section(context, nikoText('无人值守', 'Unattended access'), [const NikoMacBackgroundSettings(), const NikoMacServiceSettings(relaunch: nikoRelaunch)]),
               const SizedBox(height: 16),
             ],
             _section(context, nikoText('会话安全', 'Session security'), [
@@ -650,6 +652,7 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
                           setState(() => _updateChannel = channel);
                         }
                       }),
+            if (_native && Platform.isMacOS) const NikoUpdateModeSettings(),
             const SizedBox(height: 10),
             Row(children: [
               Icon(Icons.system_update_rounded, color: muted),
@@ -701,9 +704,12 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
                   : nikoText('保留了 $_stagedMacVersion 的文件，安装前需重新校验',
                       '$_stagedMacVersion files retained; recheck before installation'),
                   style: const TextStyle(fontWeight: FontWeight.w600)),
+              if (_stagedMacReady && _native && Platform.isMacOS)
+                NikoMacUpdateInstallButton(
+                    staging: _stagedMacUpdate!, onStatus: _showUpdateStatus),
               if (_stagedMacReady)
-                Text(nikoText('1. 保存工作并结束远控会话，然后手动退出 NikoDesk。\n2. 在 Finder 将准备好的 NikoDesk.app 复制到原安装位置，按系统提示确认替换。\n3. 从原安装位置重新打开 NikoDesk，在本页核对版本。应用不会自动替换或重启。\n升级可能需要重新授予 macOS 权限；请保留备用远控入口。',
-                    '1. Save your work and end remote sessions, then quit NikoDesk manually.\n2. In Finder, copy the prepared NikoDesk.app to its original installation location and confirm replacement when prompted.\n3. Reopen NikoDesk from that location and check the version here. The app will not replace itself or restart automatically.\nmacOS permissions may need to be granted again; keep a backup remote-access path.'))
+                Text(nikoText('1. 保存工作并结束远控会话，然后手动退出 NikoDesk。\n2. 在 Finder 将准备好的 NikoDesk.app 复制到原安装位置，按系统提示确认替换。\n3. 从原安装位置重新打开 NikoDesk，在本页核对版本。手动安装时应用不会自行替换或重启。\n升级可能需要重新授予 macOS 权限；请保留备用远控入口。',
+                    '1. Save your work and end remote sessions, then quit NikoDesk manually.\n2. In Finder, copy the prepared NikoDesk.app to its original installation location and confirm replacement when prompted.\n3. Reopen NikoDesk from that location and check the version here. When installing by hand, the app does not replace itself or restart.\nmacOS permissions may need to be granted again; keep a backup remote-access path.'))
               else
                 Text(nikoText('请先重新校验并在 Finder 显示，成功前不要安装这些文件。也可从发布页重新下载。',
                     'Recheck and show the files in Finder before installation. Do not install them until this succeeds, or download again from the release page.')),

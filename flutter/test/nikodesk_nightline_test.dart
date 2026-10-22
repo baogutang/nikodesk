@@ -62,7 +62,19 @@ void main() {
           ('fg/bg', nl.fg, nl.bg, 4.5),
           ('fg-2/bg', nl.fg2, nl.bg, 4.5),
           ('fg-2/surface', nl.fg2, nl.surface, 4.5),
-          ('fg-3/surface', nl.fg3, nl.surface, 3),
+          // AA for small text everywhere fg-3 is drawn (the draft only
+          // asked 3:1 here).
+          ('fg-3/bg', nl.fg3, nl.bg, 4.5),
+          ('fg-3/bg-2', nl.fg3, nl.bg2, 4.5),
+          ('fg-3/surface', nl.fg3, nl.surface, 4.5),
+          ('fg-3/surface-2', nl.fg3, nl.surface2, 4.5),
+          ('fg-3/overlay', nl.fg3, nl.overlay, 4.5),
+          ('on-danger/danger-fill', nl.onDanger, nl.dangerFill, 4.5),
+          ('on-danger/danger-fill hover', nl.onDanger,
+              Color.lerp(nl.dangerFill, nl.fg, .08)!, 4.5),
+          ('on-accent/accent hover', nl.onAccent,
+              Color.lerp(nl.accent, nl.fg, .08)!, 4.5),
+          ('danger-fill/surface (UI)', nl.dangerFill, nl.surface, 3),
           ('accent-text/bg', nl.accentText, nl.bg, 4.5),
           ('accent-text/surface', nl.accentText, nl.surface, 4.5),
           ('on-accent/accent', nl.onAccent, nl.accent, 4.5),
@@ -305,7 +317,7 @@ void main() {
       expect(ghost.color, Colors.transparent);
       expect(ghost.border, Border.all(color: nl.line2));
       expect(_decorationOf(tester, find.byKey(const Key('danger'))).color,
-          nl.danger);
+          nl.dangerFill);
       expect(tester.getSize(find.byKey(const Key('small'))).height,
           NlButton.smallHeight);
       final off = tester.getSemantics(find.byKey(const Key('off')));

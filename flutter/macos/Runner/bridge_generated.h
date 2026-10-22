@@ -185,17 +185,7 @@ extern uint64_t NikoLockEventsGeneration(void);
 
 extern int32_t NikoScreenLockedState(void);
 
-extern int32_t NikoPeerAllowed(int32_t fd,
-                               const char *requirement,
-                               uint32_t *euid,
-                               char *path,
-                               uintptr_t length);
-
-extern int32_t NikoBundleAllowed(const char *path, const char *requirement);
-
-extern int32_t NikoLaunchSocket(const char *name);
-
-extern bool NikoSelfCdhashRequirement(char *out, uintptr_t length);
+extern bool NikoLoginWindowProbe(char *out, uintptr_t length);
 
 extern int32_t NKVoiceMicrophoneAuthorization(void);
 
@@ -690,6 +680,10 @@ WireSyncReturn wire_main_take_nikodesk_crash_marker(void);
 void wire_main_get_nikodesk_diagnostics(int64_t port_);
 
 void wire_main_get_nikodesk_mac_service(int64_t port_);
+
+void wire_main_nikodesk_mac_service_call(int64_t port_,
+                                         struct wire_uint_8_list *op,
+                                         struct wire_uint_8_list *bundle);
 
 void wire_main_set_nikodesk_mac_service(int64_t port_, bool install);
 
@@ -1444,6 +1438,7 @@ static int64_t dummy_method_to_enforce_bundling(void) {
     dummy_var ^= ((int64_t) (void*) wire_main_take_nikodesk_crash_marker);
     dummy_var ^= ((int64_t) (void*) wire_main_get_nikodesk_diagnostics);
     dummy_var ^= ((int64_t) (void*) wire_main_get_nikodesk_mac_service);
+    dummy_var ^= ((int64_t) (void*) wire_main_nikodesk_mac_service_call);
     dummy_var ^= ((int64_t) (void*) wire_main_set_nikodesk_mac_service);
     dummy_var ^= ((int64_t) (void*) wire_main_get_nikodesk_capability_policy);
     dummy_var ^= ((int64_t) (void*) wire_main_set_nikodesk_capability_policy);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'nightline.dart';
 import 'server_gateway.dart';
 import 'server_settings.dart';
 import 'theme.dart';
@@ -85,6 +86,41 @@ class _NikoFirstServerSetupState extends State<NikoFirstServerSetup> {
             onSaved: _saved,
             onCancelled: _defer,
           );
+        }
+        // The desktop home hosts this in Nightline; mobile keeps its card.
+        final nl = NlColors.maybeOf(context);
+        if (nl != null) {
+          return ColoredBox(
+              color: nl.page,
+              child: SafeArea(
+                  child: Center(
+                      child: Padding(
+                          padding: const EdgeInsets.all(NlSpace.s6),
+                          child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 560),
+                              child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    Row(children: [
+                                      const NlMark(size: 28),
+                                      const SizedBox(width: NlSpace.s3),
+                                      Expanded(
+                                          child: NlMonoLabel(nikoText(
+                                              '首次设置', 'First-time setup'))),
+                                      NlButton.ghost(
+                                          small: true,
+                                          onPressed: widget.onLanguageChanged,
+                                          label: NikoLanguage.english
+                                              ? '中文'
+                                              : 'English'),
+                                    ]),
+                                    const SizedBox(height: NlSpace.s4),
+                                    Flexible(
+                                        child: NlPanel(
+                                            padding: EdgeInsets.zero,
+                                            child: content)),
+                                  ]))))));
         }
         final light = nikoIsLight(context);
         return DecoratedBox(

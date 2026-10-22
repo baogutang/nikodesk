@@ -168,7 +168,43 @@ def verify_voice_metadata(app, info):
     verify_coreaudio_licenses(app)
 
 
-def verify_bundle(app, require_privacy_watchdog=False, require_camera=False, require_voice=False):
+# Root runs this daemon, so it stays small: system libraries only, none of
+# the interface frameworks, Flutter or the remote-control core.
+SERVICE_LIBRARIES = (
+    "/System/Library/Frameworks/Foundation.framework/",
+    "/System/Library/Frameworks/CoreFoundation.framework/",
+    "/System/Library/Frameworks/Security.framework/",
+    "/usr/lib/libSystem.B.dylib",
+    "/usr/lib/libc++.1.dylib",
+    "/usr/lib/libobjc.A.dylib",
+    "/usr/lib/libbsm.0.dylib",
+    "/usr/lib/libiconv.2.dylib",
+)
+
+
+def verify_service(app, required):
+    service = app / "Contents/MacOS/nikodesk-service"
+    present = service.exists() or service.is_symlink()
+    if required and not present:
+        raise ValueError("This build requires its privileged service daemon")
+    if not present:
+        return False
+    if service.is_symlink() or not service.is_file() or not os.access(service, os.X_OK):
+        raise ValueError("The service daemon must be an ordinary bundled executable")
+    description = command("file", "-b", str(service))
+    if "Mach-O" not in description or "executable" not in description:
+        raise ValueError(f"Invalid service daemon: {description.strip()}")
+    if command("lipo", "-archs", str(service)).strip() != "arm64":
+        raise ValueError("Expected an ARM64 service daemon")
+    for line in command("otool", "-L", str(service)).splitlines()[1:]:
+        dependency = line.strip().split(" (", 1)[0]
+        if not dependency.startswith(SERVICE_LIBRARIES):
+            raise ValueError(f"The service daemon must not load {dependency}")
+    command("codesign", "--verify", "--strict", "-R", '=identifier "io.nikodesk.service"', str(service))
+    return True
+
+
+def verify_bundle(app, require_privacy_watchdog=False, require_camera=False, require_voice=False, require_service=False):
     app = app.resolve()
     with (app / "Contents/Info.plist").open("rb") as stream:
         info = plistlib.load(stream)
@@ -207,7 +243,8 @@ def verify_bundle(app, require_privacy_watchdog=False, require_camera=False, req
     if b"NIKODESK_DEV_PROFILE" in core.read_bytes():
         raise ValueError("A core built with the development-profile switch must never be packaged")
     if (app / "Contents/MacOS/service").exists():
-        raise ValueError("This user-mode package must not include a privileged service")
+        raise ValueError("This package must not include the upstream privileged service")
+    service_present = verify_service(app, require_service)
 
     frameworks = app / "Contents/Frameworks"
     for binary in [executable, *([helper] if helper_present else []), *(p for p in frameworks.rglob("*") if p.is_file())]:
@@ -250,6 +287,8 @@ def verify_bundle(app, require_privacy_watchdog=False, require_camera=False, req
         "architecture": "arm64",
         "bundle_and_signature_verified": True,
         "privacy_watchdog_present": helper_present,
+        "privileged_service_present": service_present,
+        "privileged_service_runtime_verified": False,
         "privacy_watchdog_protocol_version": 1 if helper_present else None,
         "privacy_gamma_recovery_runtime_verified": False,
         "privacy_input_recovery_runtime_verified": False,
@@ -265,8 +304,8 @@ def verify_bundle(app, require_privacy_watchdog=False, require_camera=False, req
     }
 
 
-def package(app, output, require_privacy_watchdog=False, require_camera=False, require_voice=False):
-    verification = verify_bundle(app, require_privacy_watchdog, require_camera, require_voice)
+def package(app, output, require_privacy_watchdog=False, require_camera=False, require_voice=False, require_service=False):
+    verification = verify_bundle(app, require_privacy_watchdog, require_camera, require_voice, require_service)
     output.mkdir(parents=True, exist_ok=True)
     zip_path = output / "NikoDesk-macos-arm64.zip"
     dmg_path = output / "NikoDesk-macos-arm64.dmg"
@@ -286,7 +325,7 @@ def package(app, output, require_privacy_watchdog=False, require_camera=False, r
         command("ditto", "-x", "-k", str(zip_path), str(extracted))
         if sorted(p.name for p in extracted.iterdir() if p.name != "__MACOSX") != ["NikoDesk.app"]:
             raise ValueError("The updater ZIP must contain exactly one NikoDesk.app")
-        verify_bundle(extracted / "NikoDesk.app", require_privacy_watchdog, require_camera, require_voice)
+        verify_bundle(extracted / "NikoDesk.app", require_privacy_watchdog, require_camera, require_voice, require_service)
 
         command("hdiutil", "create", "-srcfolder", str(stage), "-volname", "NikoDesk",
                 "-format", "UDZO", str(dmg_path))
@@ -298,7 +337,7 @@ def package(app, output, require_privacy_watchdog=False, require_camera=False, r
         try:
             if not (mounted / "Applications").is_symlink() or os.readlink(mounted / "Applications") != "/Applications":
                 raise ValueError("The DMG is missing its Applications shortcut")
-            verify_bundle(mounted / "NikoDesk.app", require_privacy_watchdog, require_camera, require_voice)
+            verify_bundle(mounted / "NikoDesk.app", require_privacy_watchdog, require_camera, require_voice, require_service)
         finally:
             command("hdiutil", "detach", str(mounted))
 
@@ -331,18 +370,20 @@ def main():
                         help="Require signed camera metadata for this new build; never opens a camera or requests TCC")
     parser.add_argument("--require-voice", action="store_true",
                         help="Require signed microphone metadata and fixed CPAL/CoreAudio notices; never opens audio devices")
+    parser.add_argument("--require-service", action="store_true",
+                        help="Require the signed privileged service daemon; never installs or starts it")
     args = parser.parse_args()
     if args.prepare_coreaudio_licenses:
-        if args.output is not None or args.require_privacy_watchdog or args.require_camera or args.require_voice:
+        if args.output is not None or args.require_privacy_watchdog or args.require_camera or args.require_voice or args.require_service:
             parser.error("Preparation takes only an app path and must occur before signing")
         prepare_coreaudio_licenses(args.app)
         return
     if args.verify_only:
-        print(json.dumps(verify_bundle(args.app, args.require_privacy_watchdog, args.require_camera, args.require_voice), indent=2))
+        print(json.dumps(verify_bundle(args.app, args.require_privacy_watchdog, args.require_camera, args.require_voice, args.require_service), indent=2))
     else:
         if args.output is None:
             parser.error("An output directory is required when packaging")
-        package(args.app.resolve(), args.output.resolve(), args.require_privacy_watchdog, args.require_camera, args.require_voice)
+        package(args.app.resolve(), args.output.resolve(), args.require_privacy_watchdog, args.require_camera, args.require_voice, args.require_service)
 
 
 if __name__ == "__main__":

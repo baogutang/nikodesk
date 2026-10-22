@@ -45,6 +45,24 @@ class NikoSettingsCard extends StatelessWidget {
                       ])))));
 }
 
+/// Explanatory text above a tab's cards, aligned and measured like them.
+class NikoSettingsNote extends StatelessWidget {
+  final String text;
+  const NikoSettingsNote(this.text, {super.key});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+      padding: const EdgeInsets.fromLTRB(
+          NlSpace.s6, NlSpace.s4, NlSpace.s6, 0),
+      child: Align(
+          alignment: Alignment.topLeft,
+          child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 680),
+              child: Text(text,
+                  style: NlType.text(NlType.s3,
+                      color: NlColors.of(context).fg2)))));
+}
+
 /// An on/off option: label on the left, switch on the right; the whole row
 /// toggles. [checkedIcon] is shown next to the switch while it is on.
 class NikoSettingsToggle extends StatelessWidget {
@@ -197,7 +215,7 @@ class NikoSettingsHeader extends StatelessWidget {
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const NlMonoLabel('Advanced'),
+                  NlMonoLabel(nikoText('设置', 'Settings')),
                   const SizedBox(height: NlSpace.s1),
                   Text(nikoText('高级设置', 'Advanced settings'),
                       style: NlType.text(NlType.s5,

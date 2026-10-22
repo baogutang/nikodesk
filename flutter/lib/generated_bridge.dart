@@ -788,6 +788,14 @@ abstract class Rustdesk {
 
   FlutterRustBridgeTaskConstMeta get kMainGetNikodeskMacServiceConstMeta;
 
+  /// One operation of the privileged macOS service: `status`, `install_update`
+  /// of the staged `bundle` (its canonical path), `restore_update` or `sync`.
+  /// The answer as JSON `{ok, code, detail}`.
+  Future<String> mainNikodeskMacServiceCall(
+      {required String op, required String bundle, dynamic hint});
+
+  FlutterRustBridgeTaskConstMeta get kMainNikodeskMacServiceCallConstMeta;
+
   /// Installs (after the system administrator prompt) or removes the privileged
   /// macOS service; an error code, or empty on success.
   Future<String> mainSetNikodeskMacService(
@@ -4783,6 +4791,26 @@ class RustdeskImpl implements Rustdesk {
       const FlutterRustBridgeTaskConstMeta(
         debugName: "main_get_nikodesk_mac_service",
         argNames: [],
+      );
+
+  Future<String> mainNikodeskMacServiceCall(
+      {required String op, required String bundle, dynamic hint}) {
+    var arg0 = _platform.api2wire_String(op);
+    var arg1 = _platform.api2wire_String(bundle);
+    return _platform.executeNormal(FlutterRustBridgeTask(
+      callFfi: (port_) => _platform.inner
+          .wire_main_nikodesk_mac_service_call(port_, arg0, arg1),
+      parseSuccessData: _wire2api_String,
+      constMeta: kMainNikodeskMacServiceCallConstMeta,
+      argValues: [op, bundle],
+      hint: hint,
+    ));
+  }
+
+  FlutterRustBridgeTaskConstMeta get kMainNikodeskMacServiceCallConstMeta =>
+      const FlutterRustBridgeTaskConstMeta(
+        debugName: "main_nikodesk_mac_service_call",
+        argNames: ["op", "bundle"],
       );
 
   Future<String> mainSetNikodeskMacService(
@@ -9659,81 +9687,22 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
   late final _NikoScreenLockedState =
       _NikoScreenLockedStatePtr.asFunction<int Function()>();
 
-  int NikoPeerAllowed(
-    int fd,
-    ffi.Pointer<ffi.Char> requirement,
-    ffi.Pointer<ffi.Uint32> euid,
-    ffi.Pointer<ffi.Char> path,
-    int length,
-  ) {
-    return _NikoPeerAllowed(
-      fd,
-      requirement,
-      euid,
-      path,
-      length,
-    );
-  }
-
-  late final _NikoPeerAllowedPtr = _lookup<
-      ffi.NativeFunction<
-          ffi.Int32 Function(
-              ffi.Int32,
-              ffi.Pointer<ffi.Char>,
-              ffi.Pointer<ffi.Uint32>,
-              ffi.Pointer<ffi.Char>,
-              ffi.UintPtr)>>('NikoPeerAllowed');
-  late final _NikoPeerAllowed = _NikoPeerAllowedPtr.asFunction<
-      int Function(int, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Uint32>,
-          ffi.Pointer<ffi.Char>, int)>();
-
-  int NikoBundleAllowed(
-    ffi.Pointer<ffi.Char> path,
-    ffi.Pointer<ffi.Char> requirement,
-  ) {
-    return _NikoBundleAllowed(
-      path,
-      requirement,
-    );
-  }
-
-  late final _NikoBundleAllowedPtr = _lookup<
-      ffi.NativeFunction<
-          ffi.Int32 Function(ffi.Pointer<ffi.Char>,
-              ffi.Pointer<ffi.Char>)>>('NikoBundleAllowed');
-  late final _NikoBundleAllowed = _NikoBundleAllowedPtr.asFunction<
-      int Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>)>();
-
-  int NikoLaunchSocket(
-    ffi.Pointer<ffi.Char> name,
-  ) {
-    return _NikoLaunchSocket(
-      name,
-    );
-  }
-
-  late final _NikoLaunchSocketPtr =
-      _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<ffi.Char>)>>(
-          'NikoLaunchSocket');
-  late final _NikoLaunchSocket =
-      _NikoLaunchSocketPtr.asFunction<int Function(ffi.Pointer<ffi.Char>)>();
-
-  bool NikoSelfCdhashRequirement(
+  bool NikoLoginWindowProbe(
     ffi.Pointer<ffi.Char> out,
     int length,
   ) {
-    return _NikoSelfCdhashRequirement(
+    return _NikoLoginWindowProbe(
       out,
       length,
     );
   }
 
-  late final _NikoSelfCdhashRequirementPtr = _lookup<
+  late final _NikoLoginWindowProbePtr = _lookup<
       ffi.NativeFunction<
-          ffi.Bool Function(ffi.Pointer<ffi.Char>,
-              ffi.UintPtr)>>('NikoSelfCdhashRequirement');
-  late final _NikoSelfCdhashRequirement = _NikoSelfCdhashRequirementPtr
-      .asFunction<bool Function(ffi.Pointer<ffi.Char>, int)>();
+          ffi.Bool Function(
+              ffi.Pointer<ffi.Char>, ffi.UintPtr)>>('NikoLoginWindowProbe');
+  late final _NikoLoginWindowProbe = _NikoLoginWindowProbePtr.asFunction<
+      bool Function(ffi.Pointer<ffi.Char>, int)>();
 
   int NKVoiceMicrophoneAuthorization() {
     return _NKVoiceMicrophoneAuthorization();
@@ -12588,6 +12557,28 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
           'wire_main_get_nikodesk_mac_service');
   late final _wire_main_get_nikodesk_mac_service =
       _wire_main_get_nikodesk_mac_servicePtr.asFunction<void Function(int)>();
+
+  void wire_main_nikodesk_mac_service_call(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> op,
+    ffi.Pointer<wire_uint_8_list> bundle,
+  ) {
+    return _wire_main_nikodesk_mac_service_call(
+      port_,
+      op,
+      bundle,
+    );
+  }
+
+  late final _wire_main_nikodesk_mac_service_callPtr = _lookup<
+          ffi.NativeFunction<
+              ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>,
+                  ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_main_nikodesk_mac_service_call');
+  late final _wire_main_nikodesk_mac_service_call =
+      _wire_main_nikodesk_mac_service_callPtr.asFunction<
+          void Function(int, ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>)>();
 
   void wire_main_set_nikodesk_mac_service(
     int port_,

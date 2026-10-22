@@ -49,10 +49,9 @@ fn build_mac() {
         println!("cargo:rerun-if-changed=src/platform/macos_virtual_display.h");
         cc::Build::new().cpp(true).file("src/platform/macos_service.mm")
             .flag("-std=c++17").flag("-fobjc-arc")
-            .compile("nikodesk_service");
+            .compile("nikodesk_loginwindow_probe");
         println!("cargo:rustc-link-lib=framework=Security");
         println!("cargo:rustc-link-lib=framework=Carbon");
-        println!("cargo:rustc-link-lib=bsm");
         println!("cargo:rerun-if-changed=src/platform/macos_service.mm");
         cc::Build::new().cpp(true).file("src/platform/macos_display_events.mm")
             .flag("-std=c++17").flag("-fobjc-arc").flag("-fblocks")
@@ -63,6 +62,9 @@ fn build_mac() {
         println!("cargo:rustc-link-lib=framework=SystemConfiguration");
         println!("cargo:rustc-link-lib=framework=AppKit");
         println!("cargo:rerun-if-changed=src/platform/macos_background.mm");
+        cc::Build::new().cpp(true).file("src/platform/macos_menu_bar.mm")
+            .flag("-fobjc-arc").flag("-fblocks").compile("nikodesk_menu_bar");
+        println!("cargo:rerun-if-changed=src/platform/macos_menu_bar.mm");
         cc::Build::new()
             .cpp(true)
             .file("src/nikodesk/voice/macos_permission.mm")

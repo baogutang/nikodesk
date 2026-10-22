@@ -31,7 +31,7 @@ path = "src/nikodesk/background/setup_main.rs"
 required-features = ["nikodesk"]
 
 [features]
-nikodesk = ["scrap/nikodesk", "dep:nikodesk-cpal", "dep:security-framework", "dep:nikodesk-wol-agent"]
+nikodesk = ["scrap/nikodesk", "dep:nikodesk-cpal", "dep:security-framework", "dep:nikodesk-wol-agent", "dep:nikodesk-service"]
 # Development only: lets NIKODESK_DEV_PROFILE select a second, separate local
 # identity for end-to-end tests. Never enable this in a packaged build.
 nikodesk-dev-profile = ["nikodesk"]
@@ -196,6 +196,7 @@ nikodesk-cpal = { package = "cpal", path = "libs/nikodesk_cpal", optional = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = { version = "=2.10.0", optional = true }
+nikodesk-service = { path = "libs/nikodesk_service", optional = true }
 objc = "0.2"
 cocoa = "0.24"
 dispatch = "0.2"
@@ -252,7 +253,7 @@ jni = "0.21"
 android-wakelock = { git = "https://github.com/rustdesk-org/android-wakelock" }
 
 [workspace]
-members = ["libs/scrap", "libs/hbb_common", "libs/base", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/portable", "libs/remote_printer", "libs/wol-agent"]
+members = ["libs/scrap", "libs/hbb_common", "libs/base", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/portable", "libs/remote_printer", "libs/wol-agent", "libs/nikodesk_service"]
 exclude = ["vdi/host", "libs/nikodesk_cpal", "libs/nikodesk_coreaudio"]
 
 # Patch libxdo-sys to use a stub implementation that doesn't require libxdo

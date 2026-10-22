@@ -34,8 +34,10 @@ const double _kTabWidth = 200;
 const double _kTabHeight = 42;
 const double _kCardFixedWidth = 540;
 const double _kCardLeftMargin = 15;
-const double _kContentHMargin = 15;
-const double _kContentHSubMargin = _kContentHMargin + 33;
+// NikoDesk cards pad their own content, so hosted controls such as the
+// dropdowns start at the card label instead of 15 px further in.
+double get _kContentHMargin => bind.mainGetAppNameSync() == 'NikoDesk' ? 0 : 15;
+double get _kContentHSubMargin => _kContentHMargin + 33;
 const double _kCheckBoxLeftMargin = 10;
 const double _kRadioLeftMargin = 10;
 const double _kListViewBottomMargin = 15;
@@ -1052,12 +1054,9 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
               block: locked,
               child: Column(children: [
                 if (bind.mainGetAppNameSync() == 'NikoDesk')
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(nikoText(
-                        '终端、隧道、摄像头和语音默认关闭。请在 NikoDesk 设置的“高级功能请求”中分别开启，并在连接时明确批准。远程重启需在本次连接中单独授予权限。',
-                        'Terminal, tunnels, camera and voice are disabled by default. Enable them individually in NikoDesk Advanced capability requests and explicitly approve each request. Remote restart requires separate permission for the current connection.')),
-                  ),
+                  NikoSettingsNote(nikoText(
+                      '终端、隧道、摄像头和语音默认关闭。请在 NikoDesk 设置的“高级功能请求”中分别开启，并在连接时明确批准。远程重启需在本次连接中单独授予权限。',
+                      'Terminal, tunnels, camera and voice are disabled by default. Enable them individually in NikoDesk Advanced capability requests and explicitly approve each request. Remote restart requires separate permission for the current connection.')),
                 permissions(context),
                 password(context),
                 _Card(title: '2FA', children: [tfa()]),

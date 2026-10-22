@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'cm_capability_frame.dart';
 import 'cm_voice_panel.dart';
+import 'nightline.dart';
 import 'ui.dart';
 import 'voice_session_model.dart';
 
@@ -25,9 +27,12 @@ class NikoVoiceCallPanel extends StatelessWidget {
             }
             // The owner supplies a fresh preparation after native shutdown ACK.
             // This view never resets or reuses the previous preparation context.
-            return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [panel, _preparePanel(preparation!)]);
+            return Column(mainAxisSize: MainAxisSize.min, children: [
+              panel,
+              if (NlColors.maybeOf(context) != null)
+                const SizedBox(height: NlSpace.s3),
+              _preparePanel(preparation!)
+            ]);
           });
     }
     final preparing = preparation;
@@ -58,6 +63,29 @@ class NikoVoiceCallPanel extends StatelessWidget {
           _ => nikoText('通话尚未准备。请明确选择本机设备并允许麦克风访问。',
               'The call is not prepared. Local devices and microphone permission require your choice.')
         };
+        final title = Semantics(liveRegion: true, child: Text(phase));
+        final children = <Widget>[
+          if (explanation.isNotEmpty) Text(explanation),
+          const SizedBox(height: 12),
+          FilledButton(
+              key: const ValueKey('niko-voice-prepare'),
+              style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+              onPressed: preparing.mayPrepare ? preparing.start : null,
+              child: Text(nikoText('准备通话', 'Prepare call')))
+        ];
+        if (NlColors.maybeOf(context) != null) {
+          // Inside the connection manager's call offer the outer card
+          // already names the call.
+          if (NikoCmCapabilityFrame.contains(context)) {
+            return NikoCmCapabilityFrame.bare([title, ...children]);
+          }
+          return NikoCmCapabilityFrame(
+              label: nikoText('语音通话', 'Voice call'),
+              icon: Icons.mic_none_rounded,
+              tone: NlTone.neutral,
+              title: title,
+              children: children);
+        }
         return Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
@@ -69,15 +97,8 @@ class NikoVoiceCallPanel extends StatelessWidget {
                       child: Text(nikoText('语音通话', 'Voice call'),
                           style: Theme.of(context).textTheme.titleMedium)),
                   const SizedBox(height: 8),
-                  Semantics(liveRegion: true, child: Text(phase)),
-                  if (explanation.isNotEmpty) Text(explanation),
-                  const SizedBox(height: 12),
-                  FilledButton(
-                      key: const ValueKey('niko-voice-prepare'),
-                      style: FilledButton.styleFrom(
-                          minimumSize: const Size(48, 48)),
-                      onPressed: preparing.mayPrepare ? preparing.start : null,
-                      child: Text(nikoText('准备通话', 'Prepare call')))
+                  title,
+                  ...children,
                 ]));
       });
 }

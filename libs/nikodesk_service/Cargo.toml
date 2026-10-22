@@ -1,0 +1,18 @@
+[package]
+name = "nikodesk-service"
+version = "1.0.0"
+edition = "2021"
+license = "AGPL-3.0-only"
+description = "The NikoDesk privileged macOS service, kept apart from the remote-control core"
+
+[[bin]]
+name = "nikodesk-service"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+libc = "0.2"
+
+[build-dependencies]
+cc = "1.0"

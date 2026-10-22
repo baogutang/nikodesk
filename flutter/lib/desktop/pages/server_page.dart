@@ -1013,15 +1013,19 @@ class _CmControlPanel extends StatelessWidget {
         client.type_() == ClientType.portForward) {
       final model = Provider.of<ServerModel>(context);
       final tunnel = model.nikoTunnel(client);
-      return Column(mainAxisSize: MainAxisSize.min, children: [
+      return Column(mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         if (tunnel != null)
           NikoCmTunnelPanel(model: tunnel)
         else
           Text(nikoText('尚未确认此隧道的授权状态；可以退出连接。',
               'Tunnel approval has not been confirmed. You can leave the connection.')),
         if (tunnel == null || !tunnel.cleanupOnly)
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+          // Leaving ends the connection, as Disconnect does on other cards.
+          NikoCmActionButton(
+            danger: true,
+            icon: const Icon(Icons.link_off_rounded, size: 14),
+            label: nikoText('退出连接', 'Leave connection'),
             onPressed: () async {
               if (tunnel == null) {
                 handleDisconnect();
@@ -1031,15 +1035,13 @@ class _CmControlPanel extends StatelessWidget {
                         'Leaving is unconfirmed. Check the status or retry cleanup.'))));
               }
             },
-            child: Text(nikoText('退出连接', 'Leave connection')),
-          ),
+          ).paddingAll(4),
         if (tunnel?.cleanupOnly == true && tunnel!.status.phase == 'Stopped' &&
             !tunnel.cleanupUnconfirmed)
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+          NikoCmActionButton(
+            label: nikoText('关闭记录', 'Close record'),
             onPressed: handleClose,
-            child: Text(nikoText('关闭记录', 'Close record')),
-          ),
+          ).paddingAll(4),
       ]).marginOnly(bottom: buttonBottomMargin);
     }
     if (client.nikoCameraCleanup || client.nikoVoiceCleanup) return buildDisconnected(context);
@@ -1378,7 +1380,8 @@ class _CmControlPanel extends StatelessWidget {
       final button = NikoCmActionButton(
         label: translate(text), icon: icon,
         outlined: border != null || color == Colors.transparent,
-        danger: color == Colors.red,
+        // Disconnect passes redAccent.
+        danger: color == Colors.red || color == Colors.redAccent,
         onPressed: () => checkClickTime(client.id, onClick),
       );
       return Padding(padding: const EdgeInsets.all(4),

@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 
+import 'cm_capability_frame.dart';
 import 'cm_voice_panel.dart';
+import 'nightline.dart';
 import 'ui.dart';
 import 'voice_call_panel.dart';
 import 'voice_session_model.dart';
@@ -142,17 +144,29 @@ class _NikoCmVoiceStartState extends State<NikoCmVoiceStart> {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text(nikoText('向主控端发起语音', 'Call the controller')),
-        Text(nikoText('双方都需要开启语音请求，并明确选择本机设备、同意通话。',
-            'Both sides must enable voice requests, select their local devices and approve the call.')),
-        if (!_failed) NikoVoiceCallPanel(preparation: _preparation),
-        if (_reason != null && _reason != 'available')
-          Text(nikoVoiceReasonText(_reason!)),
-        OutlinedButton(
-            onPressed: _reading ? null : _read,
-            child: Text(nikoText('检查语音可用性', 'Check voice availability'))),
-        if (_reading) const LinearProgressIndicator(),
-      ]);
+  Widget build(BuildContext context) {
+    final title = Text(nikoText('向主控端发起语音', 'Call the controller'));
+    final children = <Widget>[
+      Text(nikoText('双方都需要开启语音请求，并明确选择本机设备、同意通话。',
+          'Both sides must enable voice requests, select their local devices and approve the call.')),
+      if (!_failed) NikoVoiceCallPanel(preparation: _preparation),
+      if (_reason != null && _reason != 'available')
+        Text(nikoVoiceReasonText(_reason!)),
+      OutlinedButton(
+          onPressed: _reading ? null : _read,
+          child: Text(nikoText('检查语音可用性', 'Check voice availability'))),
+      if (_reading) const LinearProgressIndicator(),
+    ];
+    if (NlColors.maybeOf(context) != null) {
+      return NikoCmCapabilityFrame(
+          label: nikoText('语音通话', 'Voice call'),
+          icon: Icons.mic_none_rounded,
+          tone: NlTone.neutral,
+          title: title,
+          children: children);
+    }
+    return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [title, ...children]);
+  }
 }

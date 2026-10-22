@@ -205,7 +205,11 @@ class NikoCmActionButton extends StatelessWidget {
     final style = FilledButton.styleFrom(
       minimumSize: const Size(48, 48),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      backgroundColor: outlined ? Colors.transparent : danger ? colors.error : colors.primary,
+      backgroundColor: outlined
+          ? Colors.transparent
+          : danger
+              ? NlColors.maybeOf(context)?.dangerFill ?? colors.error
+              : colors.primary,
       foregroundColor: foreground,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(NikoShapes.control)),
     );

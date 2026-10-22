@@ -1385,6 +1385,19 @@ pub fn main_get_nikodesk_mac_service() -> String {
     "{}".to_owned()
 }
 
+/// One operation of the privileged macOS service: `status`, `install_update`
+/// of the staged `bundle` (its canonical path), `restore_update` or `sync`.
+/// The answer as JSON `{ok, code, detail}`.
+pub fn main_nikodesk_mac_service_call(op: String, bundle: String) -> String {
+    #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+    return crate::nikodesk::mac_service::call_json(&op, &bundle);
+    #[cfg(not(all(feature = "nikodesk", target_os = "macos")))]
+    {
+        let _ = (op, bundle);
+        r#"{"ok":false,"code":"unsupported"}"#.to_owned()
+    }
+}
+
 /// Installs (after the system administrator prompt) or removes the privileged
 /// macOS service; an error code, or empty on success.
 pub fn main_set_nikodesk_mac_service(install: bool) -> String {

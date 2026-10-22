@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart' show CustomAlertDialog;
 
+import 'nightline.dart';
 import 'ui.dart';
 
 // OverlayDialogManager accepts CustomAlertDialog. Override its build so Enter
@@ -71,8 +72,22 @@ class NikoFileConflictDialog extends CustomAlertDialog {
                       onPressed: () => onDecision(null),
                       child: Text(nikoText('跳过', 'Skip'))),
                   FilledButton(
+                      style: _overwriteStyle(context),
                       onPressed: () => onDecision(true),
                       child: Text(nikoText('覆盖', 'Overwrite'))),
                 ],
               )));
+
+  /// Overwrite destroys the destination, so Nightline gives it the danger
+  /// fill, with the same hover as other destructive buttons.
+  static ButtonStyle? _overwriteStyle(BuildContext context) {
+    final nl = NlColors.maybeOf(context);
+    if (nl == null) return null;
+    return ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.hovered)
+                ? Color.lerp(nl.dangerFill, nl.fg, .08)
+                : nl.dangerFill),
+        foregroundColor: WidgetStatePropertyAll(nl.onDanger));
+  }
 }

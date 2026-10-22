@@ -39,10 +39,6 @@ pub fn core_main() -> Option<Vec<String>> {
         std::process::exit(code);
     }
     #[cfg(all(feature = "nikodesk", target_os = "macos"))]
-    if std::env::args().skip(1).collect::<Vec<_>>() == ["--nikodesk-service"] {
-        std::process::exit(crate::nikodesk::mac_service::daemon::main());
-    }
-    #[cfg(all(feature = "nikodesk", target_os = "macos"))]
     if std::env::args().skip(1).collect::<Vec<_>>() == ["--nikodesk-loginwindow-probe"] {
         crate::nikodesk::mac_service::probe_login_window();
         std::process::exit(0);

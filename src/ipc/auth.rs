@@ -1039,6 +1039,9 @@ mod tests {
 #[cfg(all(feature="nikodesk",any(target_os="macos",target_os="linux")))]
 impl<T> ConnectionTmpl<T> where T: AsyncRead+AsyncWrite+std::marker::Unpin+std::os::unix::io::AsRawFd {
     pub(crate) fn verify_nikodesk_cm_peer(&self,_server_side:bool)->ResultType<()> {
+        #[cfg(target_os="macos")]
+        return crate::nikodesk::cm_peer::verify_macos(self.inner.get_ref().as_raw_fd());
+        #[cfg(target_os="linux")]
         crate::nikodesk::cm_peer::verify_unix(self.peer_uid(),self.peer_pid())
     }
 }

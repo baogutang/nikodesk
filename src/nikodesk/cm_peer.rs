@@ -2,7 +2,7 @@
 #[cfg(unix)]
 use hbb_common::anyhow::anyhow;
 use hbb_common::{bail, ResultType};
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 pub(crate) fn verify_unix(uid: Option<u32>, pid: Option<u32>) -> ResultType<()> {
     use std::{fs, os::unix::fs::MetadataExt};
     let ours = unsafe { hbb_common::libc::geteuid() };
@@ -12,27 +12,64 @@ pub(crate) fn verify_unix(uid: Option<u32>, pid: Option<u32>) -> ResultType<()> 
     let pid = pid
         .filter(|pid| *pid > 0)
         .ok_or_else(|| anyhow!("cm_peer_pid_unavailable"))?;
-    #[cfg(target_os = "linux")]
     let peer = fs::canonicalize(fs::read_link(format!("/proc/{}/exe", pid))?)?;
-    #[cfg(target_os = "macos")]
-    let peer = {
-        let mut bytes = vec![0u8; hbb_common::libc::PROC_PIDPATHINFO_MAXSIZE as usize];
-        let length = unsafe {
-            hbb_common::libc::proc_pidpath(pid as _, bytes.as_mut_ptr() as _, bytes.len() as _)
-        };
-        if length <= 0 {
-            bail!("cm_peer_image_unavailable");
-        }
-        bytes.truncate(length as usize);
-        fs::canonicalize(String::from_utf8(bytes).map_err(|_| anyhow!("cm_peer_image_invalid"))?)?
-    };
     let current = fs::canonicalize(std::env::current_exe()?)?;
-    #[cfg(target_os = "linux")]
     let (a, b) = (
         fs::metadata(format!("/proc/{}/exe", pid))?,
         fs::metadata("/proc/self/exe")?,
     );
-    #[cfg(target_os = "macos")]
+    if peer != current
+        || !a.is_file()
+        || a.dev() != b.dev()
+        || a.ino() != b.ino()
+        || a.nlink() != 1
+        || b.nlink() != 1
+    {
+        bail!("cm_peer_image_mismatch");
+    }
+    Ok(())
+}
+/// Every fact comes from one audit token, so all of them describe the same
+/// process instance: after an exec, or with the process ID reused, the path
+/// and code lookups no longer match the token. XNU reports the token of the
+/// socket's last user as it is when asked, so this does not prove who wrote
+/// data already in the socket; that would take a challenge in the CM protocol.
+#[cfg(target_os = "macos")]
+pub(crate) fn verify_macos(fd: std::os::fd::RawFd) -> ResultType<()> {
+    use hbb_common::libc;
+    use std::{fs, os::unix::fs::MetadataExt};
+    extern "C" {
+        fn proc_pidpath_audittoken(token: *const [u32; 8], buffer: *mut libc::c_void, size: u32) -> libc::c_int;
+    }
+    let mut token = [0u32; 8];
+    let mut size = std::mem::size_of_val(&token) as libc::socklen_t;
+    let status = unsafe {
+        libc::getsockopt(
+            fd,
+            libc::SOL_LOCAL,
+            libc::LOCAL_PEERTOKEN,
+            token.as_mut_ptr().cast(),
+            &mut size,
+        )
+    };
+    if status != 0 || size as usize != std::mem::size_of_val(&token) {
+        bail!("cm_peer_token_unavailable");
+    }
+    let ours = unsafe { libc::geteuid() };
+    // val[1] is the effective user ID (audit_token_to_euid).
+    if ours == 0 || token[1] != ours {
+        bail!("cm_peer_user_mismatch");
+    }
+    let mut bytes = vec![0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
+    let length =
+        unsafe { proc_pidpath_audittoken(&token, bytes.as_mut_ptr().cast(), bytes.len() as u32) };
+    if length <= 0 {
+        bail!("cm_peer_image_unavailable");
+    }
+    bytes.truncate(length as usize);
+    let peer =
+        fs::canonicalize(String::from_utf8(bytes).map_err(|_| anyhow!("cm_peer_image_invalid"))?)?;
+    let current = fs::canonicalize(std::env::current_exe()?)?;
     let (a, b) = (fs::metadata(&peer)?, fs::metadata(&current)?);
     if peer != current
         || !a.is_file()
@@ -43,23 +80,20 @@ pub(crate) fn verify_unix(uid: Option<u32>, pid: Option<u32>) -> ResultType<()> 
     {
         bail!("cm_peer_image_mismatch");
     }
-    #[cfg(target_os = "macos")]
-    verify_macos_code(pid)?;
-    Ok(())
+    verify_macos_code(&token)
 }
 #[cfg(target_os = "macos")]
-fn verify_macos_code(pid: u32) -> ResultType<()> {
+fn verify_macos_code(token: &[u32; 8]) -> ResultType<()> {
     use core_foundation::{
         base::{CFType, CFTypeRef, TCFType},
         data::CFData,
         dictionary::{CFDictionary, CFDictionaryRef},
-        number::CFNumber,
         string::{CFString, CFStringRef},
     };
     type Code = CFTypeRef;
     #[link(name = "Security", kind = "framework")]
     extern "C" {
-        static kSecGuestAttributePid: CFStringRef;
+        static kSecGuestAttributeAudit: CFStringRef;
         static kSecCodeInfoUnique: CFStringRef;
         fn SecCodeCopyGuestWithAttributes(
             host: Code,
@@ -103,10 +137,11 @@ fn verify_macos_code(pid: u32) -> ResultType<()> {
             Ok(data.bytes().to_vec())
         }
     }
+    let token: Vec<u8> = token.iter().flat_map(|word| word.to_ne_bytes()).collect();
     let attributes = unsafe {
         CFDictionary::from_CFType_pairs(&[(
-            CFString::wrap_under_get_rule(kSecGuestAttributePid).as_CFType(),
-            CFNumber::from(pid as i64).as_CFType(),
+            CFString::wrap_under_get_rule(kSecGuestAttributeAudit).as_CFType(),
+            CFData::from_buffer(&token).as_CFType(),
         )])
     };
     let mut peer = std::ptr::null();
@@ -318,7 +353,7 @@ pub(crate) fn verify_windows(
     win::verify(pipe, server_side)
 }
 
-#[cfg(all(test, unix))]
+#[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
     #[test]
@@ -332,5 +367,38 @@ mod tests {
         let uid = unsafe { hbb_common::libc::geteuid() };
         assert!(verify_unix(Some(uid), None).is_err());
         assert!(verify_unix(Some(uid), Some(0)).is_err());
+    }
+}
+#[cfg(all(test, target_os = "macos"))]
+mod macos_tests {
+    use super::*;
+    use std::{
+        io::{Read, Write},
+        os::{
+            fd::{AsRawFd, OwnedFd},
+            unix::net::UnixStream,
+        },
+    };
+    #[test]
+    fn a_peer_running_this_code_is_accepted() {
+        let (ours, _theirs) = UnixStream::pair().unwrap();
+        verify_macos(ours.as_raw_fd()).unwrap();
+    }
+    #[test]
+    fn a_peer_running_other_code_is_refused() {
+        let (ours, theirs) = UnixStream::pair().unwrap();
+        let mut cat = std::process::Command::new("/bin/cat")
+            .stdin(OwnedFd::from(theirs.try_clone().unwrap()))
+            .stdout(OwnedFd::from(theirs))
+            .spawn()
+            .unwrap();
+        // Once cat has echoed a byte, it is the last user of its end.
+        (&ours).write_all(b"x").unwrap();
+        let mut echo = [0u8; 1];
+        (&ours).read_exact(&mut echo).unwrap();
+        let error = verify_macos(ours.as_raw_fd()).unwrap_err().to_string();
+        assert_eq!(error, "cm_peer_image_mismatch");
+        drop(ours);
+        cat.wait().unwrap();
     }
 }

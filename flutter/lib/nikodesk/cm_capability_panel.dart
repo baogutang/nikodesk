@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'cm_capabilities.dart';
+import 'cm_capability_frame.dart';
+import 'nightline.dart';
 import 'ui.dart';
 
 String _reasonLabel(String reason) {
@@ -148,34 +150,53 @@ class _PanelState extends State<NikoTerminalCapabilityPanel> {
       'RecoveryRequired': nikoText('终端清理尚未确认', 'Terminal cleanup unconfirmed'),
       'Stopped': nikoText('终端已停止', 'Terminal stopped')
     }[phase]!;
+    final nightline = NlColors.maybeOf(context) != null;
+    final title = Text(label,
+        style: nightline ? null : Theme.of(context).textTheme.titleSmall);
+    final children = <Widget>[
+      Text(widget.status.scope),
+      Text(_reasonLabel(widget.status.reason)),
+      if (_message != null) Text(_message!),
+      Wrap(spacing: 8, runSpacing: nightline ? 8 : 0, children: [
+        if (phase == 'Pending') ...[
+          FilledButton(
+              onPressed: _busy ? null : () => _send(approve: true),
+              child: Text(nikoText('允许此会话', 'Allow this session'))),
+          // Nightline outlines Deny, as the other request panels do.
+          if (nightline)
+            OutlinedButton(
+                onPressed: _busy ? null : () => _send(approve: false),
+                child: Text(nikoText('拒绝', 'Deny')))
+          else
+            TextButton(
+                onPressed: _busy ? null : () => _send(approve: false),
+                child: Text(nikoText('拒绝', 'Deny'))),
+        ],
+        if ({'Starting', 'Running', 'Revoking', 'RecoveryRequired'}
+            .contains(phase))
+          OutlinedButton(
+              style:
+                  phase == 'RecoveryRequired' ? null : nikoCmStopStyle(context),
+              onPressed: _busy ? null : () => _send(),
+              child: Text(phase == 'RecoveryRequired'
+                  ? nikoText('重试清理', 'Retry cleanup')
+                  : nikoText('撤销终端访问', 'Revoke terminal access'))),
+      ]),
+    ];
+    if (nightline) {
+      return NikoCmCapabilityFrame(
+          label: nikoText('本机终端授权', 'Local terminal approval'),
+          icon: Icons.terminal_rounded,
+          tone: nikoCmPhaseTone(phase),
+          title: title,
+          children: children);
+    }
     return Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(label, style: Theme.of(context).textTheme.titleSmall),
-            Text(widget.status.scope),
-            Text(_reasonLabel(widget.status.reason)),
-            if (_message != null) Text(_message!),
-            Wrap(spacing: 8, children: [
-              if (phase == 'Pending') ...[
-                FilledButton(
-                    onPressed: _busy ? null : () => _send(approve: true),
-                    child: Text(nikoText('允许此会话', 'Allow this session'))),
-                TextButton(
-                    onPressed: _busy ? null : () => _send(approve: false),
-                    child: Text(nikoText('拒绝', 'Deny'))),
-              ],
-              if ({'Starting', 'Running', 'Revoking', 'RecoveryRequired'}
-                  .contains(phase))
-                OutlinedButton(
-                    onPressed: _busy ? null : () => _send(),
-                    child: Text(phase == 'RecoveryRequired'
-                        ? nikoText('重试清理', 'Retry cleanup')
-                        : nikoText('撤销终端访问', 'Revoke terminal access'))),
-            ]),
-          ],
+          children: [title, ...children],
         ));
   }
 }

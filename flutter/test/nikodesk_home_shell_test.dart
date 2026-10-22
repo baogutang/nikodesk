@@ -476,4 +476,44 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('missing macOS permissions show the guide before the workspace',
+      (tester) async {
+    final gateway = _ServerDouble(ServerSnapshot(
+        PrivateServerConfig('private.example', 'private.example:21117',
+            base64Encode(List.filled(32, 1))),
+        1,
+        true));
+    await loadShell(
+        tester,
+        NikoHomeShell(
+            store: store,
+            gateway: gateway,
+            sessionLog: sessionLog,
+            deviceIdProvider: () => '1000000001',
+            temporaryPasswordProvider: () async => '12345678',
+            screenRecordingProbe: () => false,
+            accessibilityProbe: () => true));
+    expect(find.text('让这台 Mac 可以被远程控制'), findsOneWidget);
+    expect(find.text('1000000001'), findsNothing);
+    await tester.tap(find.text('跳过，进入 NikoDesk'));
+    // The device page reads its store from disk once it is shown.
+    await tester.runAsync(() async {
+      for (var i = 0; i < 250; i++) {
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        if (find
+            .byType(CircularProgressIndicator, skipOffstage: false)
+            .evaluate()
+            .isEmpty) break;
+      }
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('让这台 Mac 可以被远程控制'), findsNothing);
+    expect(find.text('1000000001'), findsOneWidget);
+    await tester.tap(find.text('授权'));
+    await tester.pumpAndSettle();
+    expect(find.text('让这台 Mac 可以被远程控制'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  }, skip: !Platform.isMacOS);
 }

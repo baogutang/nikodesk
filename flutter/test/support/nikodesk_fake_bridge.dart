@@ -15,6 +15,10 @@ class NikoFakeBridge implements RustdeskImpl {
   String appName = 'NikoDesk';
 
   @override
+  bool cmCanElevate({dynamic hint}) => false;
+  @override
+  int getDoubleClickTime({dynamic hint}) => 500;
+  @override
   String getLocalFlutterOption({required String k, dynamic hint}) => local[k] ?? '';
   @override
   bool isCustomClient({dynamic hint}) => false;
@@ -178,6 +182,8 @@ class NikoFakeBridge implements RustdeskImpl {
   Future<void> sendUrlScheme({required String url, dynamic hint}) async {}
   @override
   String sessionGetPeerOptionSync({required UuidValue sessionId, required String name, dynamic hint}) => '';
+  @override
+  Future<String> sessionGetPlatform({required UuidValue sessionId, required bool isRemote, dynamic hint}) async => isRemote ? 'Windows' : 'Mac OS';
   @override
   Future<void> sessionPeerOption({required UuidValue sessionId, required String name, required String value, dynamic hint}) async {}
   @override

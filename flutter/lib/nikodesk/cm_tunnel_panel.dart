@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'cm_capability_frame.dart';
 import 'cm_tunnel.dart';
+import 'nightline.dart';
 import 'ui.dart';
 
 String nikoTunnelReasonText(String code) => switch (code) {
@@ -151,7 +153,8 @@ class _TunnelPanelState extends State<NikoCmTunnelPanel> {
 
   Widget _action(String op, String chinese, String english) => OutlinedButton(
       key: ValueKey('niko-tunnel-$op'),
-      style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+      style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48))
+          .merge(op == 'revoke' ? nikoCmStopStyle(context) : null),
       onPressed: _model.maySend(op) ? () => _model.send(op) : null,
       child: Text(nikoText(chinese, english)));
 
@@ -161,16 +164,9 @@ class _TunnelPanelState extends State<NikoCmTunnelPanel> {
     final pending = status.phase == 'Pending' && !_model.cleanupOnly;
     final selected = status.addresses.where((a) => a.value == _selected);
     final nonLoopback = selected.isNotEmpty && !selected.first.loopback;
-    return NikoCard(
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Semantics(
-          header: true,
-          child: Text(nikoText('本机隧道授权', 'Local tunnel approval'),
-              style: Theme.of(context).textTheme.titleMedium)),
-      const SizedBox(height: 12),
-      Semantics(liveRegion: true, child: Text(_phase(_model))),
-      const SizedBox(height: 8),
+    final heading = nikoText('本机隧道授权', 'Local tunnel approval');
+    final title = Semantics(liveRegion: true, child: Text(_phase(_model)));
+    final children = <Widget>[
       Text(nikoText('请求目标：${status.target.label}',
           'Requested target: ${status.target.label}')),
       if (status.selectedAddress != null)
@@ -196,8 +192,12 @@ class _TunnelPanelState extends State<NikoCmTunnelPanel> {
               itemHeight: null,
               decoration:
                   nikoInput(nikoText('选择实际地址', 'Choose an actual address')),
-              hint: Text(nikoText(
-                  '请选择，不会自动批准', 'Choose an address; approval is manual')),
+              // A dense field has one line; a wrapped hint was clipped.
+              hint: Text(
+                  nikoText(
+                      '请选择，不会自动批准', 'Choose an address; approval is manual'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
               items: status.addresses
                   .map((a) => DropdownMenuItem(
                       value: a.value,
@@ -266,6 +266,29 @@ class _TunnelPanelState extends State<NikoCmTunnelPanel> {
             liveRegion: true,
             child: Text(nikoTunnelReasonText(_model.operationMessage!))),
       ],
+    ];
+    if (NlColors.maybeOf(context) != null) {
+      return NikoCmCapabilityFrame(
+          label: heading,
+          icon: Icons.swap_horiz_rounded,
+          // A previous session's tunnel that still runs is waiting for
+          // cleanup, as its title says, not live.
+          tone: _model.cleanupOnly && status.phase == 'Running'
+              ? NlTone.warn
+              : nikoCmPhaseTone(status.phase),
+          title: title,
+          children: children);
+    }
+    return NikoCard(
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Semantics(
+          header: true,
+          child: Text(heading, style: Theme.of(context).textTheme.titleMedium)),
+      const SizedBox(height: 12),
+      title,
+      const SizedBox(height: 8),
+      ...children,
     ]));
   }
 }

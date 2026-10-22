@@ -98,6 +98,9 @@ pub(crate) mod virtual_display;
 #[path = "nikodesk/mac_background.rs"]
 pub(crate) mod mac_background;
 #[cfg(target_os = "macos")]
+#[path = "nikodesk/mac_menu_bar.rs"]
+pub(crate) mod mac_menu_bar;
+#[cfg(target_os = "macos")]
 #[path = "nikodesk/display_events.rs"]
 pub(crate) mod display_events;
 #[cfg(all(test, target_os = "macos"))]

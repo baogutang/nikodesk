@@ -106,6 +106,31 @@ void main() {
     await unload(tester);
   });
 
+  testWidgets('a dropdown starts where its card label starts', (tester) async {
+    await load(tester, SettingsTabKey.safety);
+    final card = find.ancestor(
+        of: find.byType(DropdownButton<String>).first,
+        matching: find.byType(NikoSettingsCard));
+    final label = find.descendant(of: card, matching: find.byType(NlMonoLabel));
+    final box = find.ancestor(
+        of: find.byType(DropdownButton<String>).first,
+        matching: find.byType(Container)).first;
+    expect(tester.getTopLeft(box).dx, tester.getTopLeft(label).dx);
+    await unload(tester);
+  });
+
+  testWidgets('the page header is in the interface language', (tester) async {
+    await load(tester, SettingsTabKey.general);
+    expect(find.text('SETTINGS'), findsOneWidget);
+    expect(find.text('ADVANCED'), findsNothing);
+    await unload(tester);
+    NikoLanguage.english = false;
+    await load(tester, SettingsTabKey.general);
+    expect(find.text('设置'), findsOneWidget);
+    expect(find.text('高级设置'), findsOneWidget);
+    await unload(tester);
+  });
+
   testWidgets('without the NikoDesk build the upstream cards stay',
       (tester) async {
     bridge.appName = 'RustDesk';

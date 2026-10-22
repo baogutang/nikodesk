@@ -18,6 +18,7 @@ import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_hbb/nikodesk/file_tasks.dart';
 import 'package:flutter_hbb/nikodesk/file_drop.dart';
+import 'package:flutter_hbb/nikodesk/file_pane.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
@@ -186,7 +187,8 @@ class _FileManagerPageState extends State<FileManagerPage>
               ? NikoFileWorkspace(
                   local: dropArea(FileManagerView(model.localController, _ffi, _mouseFocusScope)),
                   remote: dropArea(FileManagerView(model.remoteController, _ffi, _mouseFocusScope)),
-                  tasks: NikoFileTasks(controller: jobController))
+                  tasks: NikoFileTasks(controller: jobController),
+                  jobs: jobController.jobTable)
               : Row(
             children: [
               if (!isWeb)
@@ -602,6 +604,13 @@ class _FileManagerViewState extends State<FileManagerView> {
       child: Column(
         children: [
           // symbols
+          if (const bool.fromEnvironment('NIKODESK'))
+            NikoFilePaneHeader(
+                local: isLocal,
+                peerId: isLocal ? null : _ffi.id,
+                platform: bind.sessionGetPlatform(
+                    sessionId: _ffi.sessionId, isRemote: !isLocal))
+          else
           PreferredSize(
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -980,6 +989,9 @@ class _FileManagerViewState extends State<FileManagerView> {
                         ),
                       ).marginOnly(left: 8),
                     )).marginOnly(left: 16),
+              if (const bool.fromEnvironment('NIKODESK'))
+                NikoFileSendButton(controller: controller)
+              else
               Obx(() => ElevatedButton.icon(
                     style: ButtonStyle(
                       padding: MaterialStateProperty.all<EdgeInsetsGeometry>(
@@ -1104,7 +1116,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                 (e) => e.build(
                   context,
                   MenuConfig(
-                      commonColor: CustomPopupMenuTheme.commonColor,
+                      commonColor: nikoMenuAccent(context) ??
+                          CustomPopupMenuTheme.commonColor,
                       height: CustomPopupMenuTheme.height,
                       dividerHeight: CustomPopupMenuTheme.dividerHeight),
                 ),
@@ -1128,6 +1141,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     final fd = controller.directory.value;
     final entries = fd.entries;
     Rx<Entry?> rightClickEntry = Rx(null);
+    final nikoList = NikoFileListColors.of(context);
 
     return ListSearchActionListener(
       node: _keyboardNode,
@@ -1240,14 +1254,14 @@ class _FileManagerViewState extends State<FileManagerView> {
             child: Obx(() => Container(
                 decoration: BoxDecoration(
                   color: selectedItems.items.contains(entry)
-                      ? MyTheme.button
+                      ? nikoList?.selected ?? MyTheme.button
                       : Theme.of(context).cardColor,
                   borderRadius: BorderRadius.all(
                     Radius.circular(5.0),
                   ),
                   border: rightClickEntry.value == entry
                       ? Border.all(
-                          color: MyTheme.button,
+                          color: nikoList?.ring ?? MyTheme.button,
                           width: 1.0,
                         )
                       : null,
@@ -1292,7 +1306,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                                                 style: TextStyle(
                                                     color: selectedItems.items
                                                             .contains(entry)
-                                                        ? Colors.white
+                                                        ? nikoList?.selectedText ??
+                                                            Colors.white
                                                         : null),
                                                 overflow:
                                                     TextOverflow.ellipsis))
@@ -1320,8 +1335,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                                           fontSize: 12,
                                           color: selectedItems.items
                                                   .contains(entry)
-                                              ? Colors.white70
-                                              : MyTheme.darkGray,
+                                              ? nikoList?.meta ?? Colors.white70
+                                              : nikoList?.meta ?? MyTheme.darkGray,
                                         ),
                                       )),
                                 ),
@@ -1347,8 +1362,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                                         fontSize: 10,
                                         color:
                                             selectedItems.items.contains(entry)
-                                                ? Colors.white70
-                                                : MyTheme.darkGray),
+                                                ? nikoList?.meta ?? Colors.white70
+                                                : nikoList?.meta ?? MyTheme.darkGray),
                                   ),
                                 ),
                                 onTap: onTap,
@@ -1676,7 +1691,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                             .map((e) => e.build(
                                 context,
                                 MenuConfig(
-                                    commonColor:
+                                    commonColor: nikoMenuAccent(context) ??
                                         CustomPopupMenuTheme.commonColor,
                                     height: CustomPopupMenuTheme.height,
                                     dividerHeight:

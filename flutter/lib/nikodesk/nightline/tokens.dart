@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 /// Nightline (夜航) colour tokens, frozen from the chosen UI 2.0 draft
-/// (artifacts/design/ui-2026/c/nightline.css, picked 2026-10-20).
+/// (artifacts/design/ui-2026/c/nightline.css, picked 2026-10-20). Two values
+/// differ from the draft so all text meets WCAG AA: fg3 (4.5:1 on every
+/// surface it is drawn on) and the destructive button fill [dangerFill].
 ///
 /// Only semantic names: surfaces, overlay, lines, text, accent and status.
 /// Pages read them through [NlColors.of]; nothing outside this file writes a
@@ -37,6 +39,10 @@ class NlColors extends ThemeExtension<NlColors> {
   final Color danger;
   final Color dangerText;
   final Color dangerSoft;
+
+  /// Fill of destructive buttons. Deeper than [danger] in dark mode so the
+  /// white label keeps 4.5:1; [danger] stays the bright status colour.
+  final Color dangerFill;
   final Color onDanger;
   final Color scrim;
 
@@ -73,6 +79,7 @@ class NlColors extends ThemeExtension<NlColors> {
     required this.danger,
     required this.dangerText,
     required this.dangerSoft,
+    required this.dangerFill,
     required this.onDanger,
     required this.scrim,
     required this.shadow2,
@@ -95,7 +102,7 @@ class NlColors extends ThemeExtension<NlColors> {
     ring: Color(0x0FFFFFFF),
     fg: Color(0xFFE6EDF2),
     fg2: Color(0xFF93A1AD),
-    fg3: Color(0xFF687682),
+    fg3: Color(0xFF7C8A96),
     accent: Color(0xFF2FD8EE),
     onAccent: Color(0xFF031317),
     accentText: Color(0xFF5CE6F7),
@@ -110,6 +117,7 @@ class NlColors extends ThemeExtension<NlColors> {
     danger: Color(0xFFFF5D6C),
     dangerText: Color(0xFFFF8592),
     dangerSoft: Color(0x24FF5D6C),
+    dangerFill: Color(0xFFD2283B),
     onDanger: Color(0xFFFFFFFF),
     scrim: Color(0x9E030507),
     shadow2: [
@@ -145,7 +153,7 @@ class NlColors extends ThemeExtension<NlColors> {
     ring: Color(0xFFDCE1E6),
     fg: Color(0xFF0E1418),
     fg2: Color(0xFF4A5660),
-    fg3: Color(0xFF74808A),
+    fg3: Color(0xFF616D78),
     accent: Color(0xFF0A7F95),
     onAccent: Color(0xFFFFFFFF),
     accentText: Color(0xFF07707F),
@@ -160,6 +168,7 @@ class NlColors extends ThemeExtension<NlColors> {
     danger: Color(0xFFD2283B),
     dangerText: Color(0xFFB71F31),
     dangerSoft: Color(0xFFFCE3E6),
+    dangerFill: Color(0xFFD2283B),
     onDanger: Color(0xFFFFFFFF),
     scrim: Color(0x660E1418),
     shadow2: [
@@ -240,6 +249,7 @@ class NlColors extends ThemeExtension<NlColors> {
     Color? danger,
     Color? dangerText,
     Color? dangerSoft,
+    Color? dangerFill,
     Color? onDanger,
     Color? scrim,
     List<BoxShadow>? shadow2,
@@ -274,6 +284,7 @@ class NlColors extends ThemeExtension<NlColors> {
         danger: danger ?? this.danger,
         dangerText: dangerText ?? this.dangerText,
         dangerSoft: dangerSoft ?? this.dangerSoft,
+        dangerFill: dangerFill ?? this.dangerFill,
         onDanger: onDanger ?? this.onDanger,
         scrim: scrim ?? this.scrim,
         shadow2: shadow2 ?? this.shadow2,
@@ -315,6 +326,7 @@ class NlColors extends ThemeExtension<NlColors> {
       danger: c(danger, other.danger),
       dangerText: c(dangerText, other.dangerText),
       dangerSoft: c(dangerSoft, other.dangerSoft),
+      dangerFill: c(dangerFill, other.dangerFill),
       onDanger: c(onDanger, other.onDanger),
       scrim: c(scrim, other.scrim),
       shadow2: s(shadow2, other.shadow2),

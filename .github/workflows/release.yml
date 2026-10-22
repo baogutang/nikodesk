@@ -123,6 +123,7 @@ jobs:
           cargo build --locked --lib --release \
             --features flutter,hwcodec,unix-file-copy-paste,screencapturekit,nikodesk
           cp target/release/liblibrustdesk.dylib target/release/librustdesk.dylib
+          cargo build --locked --release -p nikodesk-service
 
       - name: Build the Flutter app
         working-directory: flutter
@@ -144,6 +145,7 @@ jobs:
               "$filter" 2>&1 | tee "test-evidence/${filter//::/-}.log"
           done
           cargo test --locked -p base --lib
+          cargo test --locked --release -p nikodesk-service 2>&1 | tee test-evidence/nikodesk-service.log
           cargo test --locked --release --lib \
             --features flutter,hwcodec,unix-file-copy-paste,screencapturekit,nikodesk,nikodesk-dev-profile \
             nikodesk::credentials::tests
@@ -170,6 +172,7 @@ jobs:
         run: |
           python3 -m unittest discover -s .github/scripts/tests -p test_release_manifest.py -v
           python3 -m unittest discover -s .github/scripts/tests -p test_update_key.py -v
+          python3 -m unittest discover -s .github/scripts/tests -p "test_package_macos_*.py" -v
 
       - name: Import the NikoDesk signing identity
         env:
@@ -183,11 +186,12 @@ jobs:
           python3 .github/scripts/prepare-macos-camera.py "$APP"
           python3 .github/scripts/package-macos.py "$APP" --prepare-coreaudio-licenses
           python3 .github/scripts/build-macos-privacy-watchdog.py "$APP" --architecture arm64
+          install -m 0755 target/release/nikodesk-service "$APP/Contents/MacOS/nikodesk-service"
           cp LICENCE "$APP/Contents/Resources/NikoDesk-LICENCE.txt"
           printf 'NikoDesk source: https://github.com/%s/tree/%s\n' "$GITHUB_REPOSITORY" "$GITHUB_SHA" \
             > "$APP/Contents/Resources/NikoDesk-SOURCE.txt"
           bash .github/scripts/sign-macos-app.sh "$APP" "$NIKODESK_MACOS_CODESIGN_SHA1" flutter/macos/Runner/NikoLocalDevelopment.entitlements
-          python3 .github/scripts/package-macos.py "$APP" dist --require-privacy-watchdog --require-camera --require-voice
+          python3 .github/scripts/package-macos.py "$APP" dist --require-privacy-watchdog --require-camera --require-voice --require-service
           python3 .github/scripts/sync-brand-icons.py --check --macos-app "$APP"
 
       - name: Start the packaged app

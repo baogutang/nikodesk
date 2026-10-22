@@ -376,7 +376,7 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(tester.getSize(find.byKey(const Key('table-header'))).height, 58);
     expect(tester.getSize(find.byKey(const Key('table-row'))).height, 68);
-    expect(tester.getSize(find.byKey(const Key('table-row'))).width, 1080);
+    expect(tester.getSize(find.byKey(const Key('table-row'))).width, 840);
   });
 
   testWidgets(

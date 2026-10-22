@@ -29,6 +29,7 @@ import 'mobile/pages/home_page.dart';
 import 'mobile/pages/server_page.dart';
 import 'mobile/widgets/deploy_dialog.dart';
 import 'models/platform_model.dart';
+import 'nikodesk/mac_update_install.dart' show NikoUpdateSchedule;
 import 'nikodesk/mobile_home.dart';
 import 'nikodesk/startup_failure.dart';
 import 'nikodesk/startup_shell.dart';
@@ -221,6 +222,7 @@ Future<void> _runNikoMainApp(bool startService) async {
     if (startService) gFFI.serverModel.startService();
     await Future.wait([gFFI.abModel.loadCache(), gFFI.groupModel.loadCache()]);
     gFFI.userModel.refreshCurrentUser();
+    if (Platform.isMacOS) NikoUpdateSchedule.instance.start();
     ready.complete();
   });
 }

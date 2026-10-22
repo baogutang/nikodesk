@@ -1,10 +1,12 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common.dart' show readableFileSize;
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:get/get.dart';
 
 import 'file_transfer.dart';
+import 'nightline.dart';
 import 'ui.dart';
 
 String nikoFileRetryReason(NikoRetryBlock block) => switch (block) {
@@ -194,6 +196,17 @@ class NikoFileTaskCard extends StatelessWidget {
     final progress = job.totalSize > 0
         ? (job.finishedSize / job.totalSize).clamp(0.0, 1.0)
         : null;
+    final nl = NlColors.maybeOf(context);
+    if (nl != null) {
+      return _nightline(context, nl,
+          transfer: transfer,
+          dataActive: dataActive,
+          active: active,
+          failed: failed,
+          status: status,
+          direction: direction,
+          progress: progress);
+    }
     return NikoCard(
         padding: const EdgeInsets.all(14),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -269,6 +282,185 @@ class NikoFileTaskCard extends StatelessWidget {
           ]),
         ]));
   }
+
+  /// Nightline task: a glyph and colour for the state, the same status and
+  /// explanation texts, the draft's 4 px bar, and the paths in mono.
+  Widget _nightline(BuildContext context, NlColors nl,
+      {required bool transfer,
+      required bool dataActive,
+      required bool active,
+      required bool failed,
+      required String status,
+      required String direction,
+      required double? progress}) {
+    final cancelling = cancellation != NikoCancelState.none ||
+        (job.state == JobState.done && job.err == 'cancel');
+    final (IconData glyph, Color ink, Color wash) = failed
+        ? (Icons.error_outline_rounded, nl.dangerText, nl.dangerSoft)
+        : cancelling || job.state == JobState.paused
+            ? (Icons.pause_rounded, nl.warnText, nl.warnSoft)
+            : !transfer || job.err == 'skipped'
+                ? (
+                    transfer
+                        ? Icons.redo_rounded
+                        : Icons.delete_outline_rounded,
+                    nl.fg2,
+                    nl.surface2
+                  )
+                : job.state == JobState.done && !active
+                    ? (Icons.check_rounded, nl.okText, nl.okSoft)
+                    : (
+                        job.isRemoteToLocal
+                            ? Icons.south_rounded
+                            : Icons.north_rounded,
+                        nl.accentText,
+                        nl.accentSoft
+                      );
+    final showProgress = transfer &&
+        dataActive &&
+        cancellation != NikoCancelState.requested;
+    final removable = !active || cancellation == NikoCancelState.requested;
+    final reduced = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final small = NlType.text(NlType.s2, color: nl.fg2);
+    // A zero-width space after each separator lets a long path wrap at a
+    // folder boundary instead of inside a name or after "C:".
+    Widget path(String label, String value) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              NlMonoLabel(label),
+              Text(
+                  value.replaceAllMapped(
+                      RegExp(r'[\\/]'), (match) => '${match[0]}​'),
+                  style: NlType.monoText(NlType.s1, color: nl.fg2)),
+            ]);
+    return NlPanel(
+        padding: const EdgeInsets.all(NlSpace.s3),
+        child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                        color: wash,
+                        borderRadius: BorderRadius.circular(NlRadius.r2)),
+                    child: Icon(glyph, size: 16, color: ink)),
+                const SizedBox(width: NlSpace.s3),
+                Expanded(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                      Tooltip(
+                          message: job.jobName,
+                          child: Text(
+                              job.fileName.isEmpty ? job.jobName : job.fileName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: NlType.text(NlType.s3,
+                                  weight: FontWeight.w600, color: nl.fg))),
+                      Text(direction,
+                          style: NlType.text(NlType.s2, color: nl.fg3)),
+                    ])),
+                if (showProgress && job.totalSize > 0) ...[
+                  const SizedBox(width: NlSpace.s2),
+                  Text(job.percentText,
+                      style: NlType.monoText(NlType.s2,
+                          weight: FontWeight.w500, color: nl.fg2)),
+                ],
+                if (removable)
+                  NlIconButton(
+                      key: Key('niko-file-remove-${job.id}'),
+                      icon: Icons.close_rounded,
+                      tooltip: nikoText('移除记录', 'Remove record'),
+                      onPressed: onRemove),
+              ]),
+              const SizedBox(height: NlSpace.s2),
+              Semantics(
+                  liveRegion: true,
+                  child: Text(status,
+                      style: NlType.text(NlType.s2,
+                          weight: FontWeight.w500, color: ink))),
+              if (showProgress) ...[
+                const SizedBox(height: NlSpace.s2),
+                ClipRRect(
+                    borderRadius: BorderRadius.circular(2),
+                    child: LinearProgressIndicator(
+                        value: progress ?? (reduced ? 0 : null),
+                        minHeight: 4,
+                        color: nl.accent,
+                        backgroundColor: nl.surface2)),
+                const SizedBox(height: NlSpace.s1),
+                job.recvJobRes
+                    ? Tooltip(
+                        message:
+                            '${job.finishedSize}/${job.totalSize} B · ${job.speed.toStringAsFixed(0)} B/s',
+                        child: Text(
+                            '${readableFileSize(job.finishedSize.toDouble())} / '
+                            '${readableFileSize(job.totalSize.toDouble())} · '
+                            '${readableFileSize(job.speed)}/s',
+                            style: NlType.monoText(NlType.s1, color: nl.fg2)))
+                    : Text(
+                        nikoText('尚未收到传输进度', 'No transfer progress received yet'),
+                        style: small),
+              ],
+              if (request != null) ...[
+                const SizedBox(height: NlSpace.s3),
+                path(nikoText('源', 'Source'), request!.source),
+                const SizedBox(height: NlSpace.s2),
+                path(nikoText('目标', 'Destination'), request!.destination),
+              ],
+              if (folder != null) ...[
+                const SizedBox(height: NlSpace.s2),
+                Semantics(
+                    liveRegion: true,
+                    child: Text(nikoFolderDetail(folder!), style: small)),
+              ],
+              if (requestIssue != null && folder == null) ...[
+                const SizedBox(height: NlSpace.s2),
+                Semantics(
+                    liveRegion: true,
+                    child: Text(nikoFileRequestIssue(requestIssue!),
+                        style: NlType.text(NlType.s2, color: nl.warnText))),
+              ],
+              if (job.state == JobState.error && job.err.isNotEmpty) ...[
+                const SizedBox(height: NlSpace.s2),
+                Text('${nikoText('错误', 'Error')}: ${job.err}',
+                    key: Key('niko-file-error-${job.id}'),
+                    style: NlType.text(NlType.s2, color: nl.dangerText)),
+              ],
+              if (failed || job.state == JobState.paused) ...[
+                const SizedBox(height: NlSpace.s2),
+                Text(
+                    retryBlock == null
+                        ? nikoText('重新发送会从头开始；同名文件会再次询问是否覆盖。',
+                            'Resending starts from the beginning. A same-name destination prompts for overwrite again.')
+                        : nikoFileRetryReason(retryBlock!),
+                    style: small),
+              ],
+              if ((active && cancellation != NikoCancelState.requested) ||
+                  (transfer && failed && retryBlock == null)) ...[
+                const SizedBox(height: NlSpace.s3),
+                Wrap(spacing: NlSpace.s2, runSpacing: NlSpace.s2, children: [
+                  if (active && cancellation != NikoCancelState.requested)
+                    NlButton.ghost(
+                        key: Key('niko-file-cancel-${job.id}'),
+                        small: true,
+                        onPressed: cancellation == NikoCancelState.requesting
+                            ? null
+                            : onCancel,
+                        label: nikoText('请求取消', 'Request cancel')),
+                  if (transfer && failed && retryBlock == null)
+                    NlButton(
+                        key: Key('niko-file-resend-${job.id}'),
+                        small: true,
+                        icon: Icons.refresh_rounded,
+                        onPressed: onRetry,
+                        label: nikoText('重新发送', 'Resend')),
+                ]),
+              ],
+            ]));
+  }
 }
 
 class NikoFileTasks extends StatelessWidget {
@@ -278,6 +470,8 @@ class NikoFileTasks extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Obx(() {
         final jobs = controller.jobTable.toList();
+        final nl = NlColors.maybeOf(context);
+        if (nl != null) return _nightline(context, nl, jobs);
         if (jobs.isEmpty) {
           return Center(
               child: Padding(
@@ -288,28 +482,78 @@ class NikoFileTasks extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             itemCount: jobs.length,
             separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (context, index) {
-              final job = jobs[index];
-              return NikoFileTaskCard(
-                  job: job,
-                  request: controller.niko.request(job.id),
-                  cancellation: controller.niko.cancellation(job.id),
-                  folder: controller.niko.folder(job.id),
-                  requestIssue: controller.niko.failure(job.id),
-                  retryBlock: controller.nikoRetryBlock(job),
-                  onCancel: () => controller.nikoCancelJob(job.id),
-                  onRemove: () => controller.nikoRemoveRecord(job.id),
-                  onRetry: () async {
-                    final sent = await controller.nikoResendJob(job.id);
-                    if (!sent && context.mounted) {
-                      nikoNotice(
-                          context,
-                          nikoText('重新发送未全部完成，请查看任务状态或重新连接。',
-                              'Resending did not fully finish. Check the task status or reconnect.'));
-                    }
-                  });
-            });
+            itemBuilder: (context, index) => _card(context, jobs[index]));
       });
+
+  Widget _card(BuildContext context, JobProgress job) => NikoFileTaskCard(
+      job: job,
+      request: controller.niko.request(job.id),
+      cancellation: controller.niko.cancellation(job.id),
+      folder: controller.niko.folder(job.id),
+      requestIssue: controller.niko.failure(job.id),
+      retryBlock: controller.nikoRetryBlock(job),
+      onCancel: () => controller.nikoCancelJob(job.id),
+      onRemove: () => controller.nikoRemoveRecord(job.id),
+      onRetry: () async {
+        final sent = await controller.nikoResendJob(job.id);
+        if (!sent && context.mounted) {
+          nikoNotice(
+              context,
+              nikoText('重新发送未全部完成，请查看任务状态或重新连接。',
+                  'Resending did not fully finish. Check the task status or reconnect.'));
+        }
+      });
+
+  /// Nightline: a titled column with the running count, the cards, and an
+  /// empty state that says how a transfer starts.
+  Widget _nightline(BuildContext context, NlColors nl, List<JobProgress> jobs) {
+    final running = jobs
+        .where((job) =>
+            job.state == JobState.inProgress || job.state == JobState.none)
+        .length;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Padding(
+          padding: const EdgeInsets.fromLTRB(
+              NlSpace.s4, NlSpace.s4, NlSpace.s4, NlSpace.s3),
+          child: Row(children: [
+            Expanded(child: NlMonoLabel(nikoText('传输任务', 'Transfers'))),
+            if (jobs.isNotEmpty)
+              Text(
+                  running > 0
+                      ? nikoText('$running 进行中 · 共 ${jobs.length}',
+                          '$running active · ${jobs.length}')
+                      : '${jobs.length}',
+                  style: NlType.monoText(NlType.s1, color: nl.fg3)),
+          ])),
+      Expanded(
+          child: jobs.isEmpty
+              ? Center(
+                  child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(NlSpace.s6),
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.swap_vert_rounded, size: 28, color: nl.fg3),
+                        const SizedBox(height: NlSpace.s3),
+                        Text(nikoText('暂无传输任务', 'No transfers yet'),
+                            textAlign: TextAlign.center,
+                            style: NlType.text(NlType.s3,
+                                weight: FontWeight.w600, color: nl.fg)),
+                        const SizedBox(height: NlSpace.s1),
+                        Text(
+                            nikoText('在一侧选中文件后点“发送”或“接收”；也可以把文件拖到远端一侧发送。',
+                                'Select files on one side and choose Send or Receive, or drop files on the remote side to send them.'),
+                            textAlign: TextAlign.center,
+                            style: NlType.text(NlType.s2, color: nl.fg2)),
+                      ])))
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(
+                      NlSpace.s3, 0, NlSpace.s3, NlSpace.s3),
+                  itemCount: jobs.length,
+                  separatorBuilder: (_, __) =>
+                      const SizedBox(height: NlSpace.s2),
+                  itemBuilder: (context, index) =>
+                      _card(context, jobs[index]))),
+    ]);
+  }
 }
 
 class NikoFileWorkspace extends StatefulWidget {
@@ -320,6 +564,9 @@ class NikoFileWorkspace extends StatefulWidget {
   final int? selectedPane;
   final ValueChanged<int>? onPaneChanged;
   final String? localLabel;
+
+  /// The task list; its length is shown on the Tasks switch in Nightline.
+  final RxList<JobProgress>? jobs;
   const NikoFileWorkspace(
       {super.key,
       required this.local,
@@ -328,7 +575,8 @@ class NikoFileWorkspace extends StatefulWidget {
       this.alwaysCompact = false,
       this.selectedPane,
       this.onPaneChanged,
-      this.localLabel});
+      this.localLabel,
+      this.jobs});
   @override
   State<NikoFileWorkspace> createState() => _NikoFileWorkspaceState();
 }
@@ -341,6 +589,8 @@ class _NikoFileWorkspaceState extends State<NikoFileWorkspace> {
         final scale =
             math.max(1.0, MediaQuery.textScalerOf(context).scale(16) / 16);
         final selected = widget.selectedPane ?? _selected;
+        final nl = NlColors.maybeOf(context);
+        if (nl != null) return _nightline(nl, constraints.maxWidth / scale, selected);
         if (!widget.alwaysCompact && constraints.maxWidth / scale >= 1100) {
           return Row(children: [
             Flexible(flex: 3, child: widget.local),
@@ -377,6 +627,62 @@ class _NikoFileWorkspaceState extends State<NikoFileWorkspace> {
           ])),
         ]);
       });
+
+  /// Nightline: both directories side by side with the tasks in an inspector
+  /// column once each pane can hold its table (about 420 px plus the pane's
+  /// margins); below that, one pane at a time behind a segmented switch.
+  Widget _nightline(NlColors nl, double width, int selected) {
+    if (!widget.alwaysCompact && width >= 1240) {
+      return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Expanded(child: widget.local),
+        Expanded(child: widget.remote),
+        Container(
+            width: 300,
+            decoration: BoxDecoration(
+                color: nl.bg2,
+                border: Border(left: BorderSide(color: nl.line))),
+            child: widget.tasks),
+      ]);
+    }
+    Widget switcher(int? tasks) => NlSegmented<int>(
+        segments: [
+          NlSegment(
+              key: const Key('niko-file-pane-0'),
+              value: 0,
+              label: widget.localLabel ?? nikoText('本地', 'Local')),
+          NlSegment(
+              key: const Key('niko-file-pane-1'),
+              value: 1,
+              label: nikoText('远端', 'Remote')),
+          NlSegment(
+              key: const Key('niko-file-pane-2'),
+              value: 2,
+              label: nikoText('任务', 'Tasks'),
+              count: tasks == null || tasks == 0 ? null : '$tasks'),
+        ],
+        selected: selected,
+        onChanged: (pane) {
+          setState(() => _selected = pane);
+          widget.onPaneChanged?.call(pane);
+        });
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Padding(
+          padding: const EdgeInsets.fromLTRB(
+              NlSpace.s6, NlSpace.s3, NlSpace.s6, 0),
+          child: Align(
+              alignment: Alignment.centerLeft,
+              child: widget.jobs == null
+                  ? switcher(null)
+                  : Obx(() => switcher(widget.jobs!.length)))),
+      Expanded(
+          child: IndexedStack(index: selected, children: [
+        for (var i = 0; i < 3; i++)
+          ExcludeFocus(
+              excluding: selected != i,
+              child: [widget.local, widget.remote, widget.tasks][i]),
+      ])),
+    ]);
+  }
 }
 
 class NikoAppFileAreaNotice extends StatelessWidget {
@@ -434,10 +740,11 @@ class NikoFilePaneTools extends StatelessWidget {
       LayoutBuilder(builder: (context, constraints) {
         final scale =
             math.max(1.0, MediaQuery.textScalerOf(context).scale(16) / 16);
+        // Two rows of 38 px icon buttons plus the send button fit in 320.
         return SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: SizedBox(
-                width: math.max(constraints.maxWidth, 520 * scale),
+                width: math.max(constraints.maxWidth, 320 * scale),
                 child: child));
       });
 }
@@ -455,10 +762,11 @@ class NikoFileDirectoryTable extends StatelessWidget {
       LayoutBuilder(builder: (context, constraints) {
         final scale =
             math.max(1.0, MediaQuery.textScalerOf(context).scale(16) / 16);
+        // Name 190 + modified 160 + dividers leave about 64 for the size.
         return SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: SizedBox(
-                width: math.max(constraints.maxWidth, 540 * scale),
+                width: math.max(constraints.maxWidth, 420 * scale),
                 height: constraints.maxHeight,
                 child: child));
       });

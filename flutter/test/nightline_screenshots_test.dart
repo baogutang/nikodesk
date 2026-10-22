@@ -23,9 +23,12 @@ import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
 import 'package:flutter_hbb/models/native_model.dart';
 import 'package:flutter_hbb/nikodesk/cm_permissions.dart';
 import 'package:flutter_hbb/nikodesk/device_store.dart';
+import 'package:flutter_hbb/nikodesk/file_conflict_dialog.dart';
+import 'package:flutter_hbb/nikodesk/first_server_setup.dart';
 import 'package:flutter_hbb/nikodesk/home_shell.dart';
 import 'package:flutter_hbb/nikodesk/metrics.dart';
 import 'package:flutter_hbb/nikodesk/nightline.dart';
+import 'package:flutter_hbb/nikodesk/permission_guide.dart';
 import 'package:flutter_hbb/nikodesk/policy.dart';
 import 'package:flutter_hbb/nikodesk/privacy_connection.dart';
 import 'package:flutter_hbb/nikodesk/privacy_style.dart';
@@ -36,7 +39,9 @@ import 'package:flutter_hbb/nikodesk/session_log.dart';
 import 'package:flutter_hbb/nikodesk/session_toolbar.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
 
+import 'support/nikodesk_cm_panels.dart';
 import 'support/nikodesk_fake_bridge.dart';
+import 'support/nikodesk_file_window.dart';
 
 const _out = String.fromEnvironment('NIKO_SHOT_DIR');
 const _cjk = String.fromEnvironment('NIKO_CJK_DIR');
@@ -48,6 +53,14 @@ class _Gateway implements ServerGateway {
           base64Encode(List.filled(32, 7))),
       1,
       true);
+  @override
+  Future<void> save(PrivateServerConfig config) async {}
+}
+
+class _EmptyGateway implements ServerGateway {
+  @override
+  Future<ServerSnapshot> read() async =>
+      const ServerSnapshot(PrivateServerConfig('', '', ''), null, false);
   @override
   Future<void> save(PrivateServerConfig config) async {}
 }
@@ -85,27 +98,48 @@ Future<void> _capture(WidgetTester tester, Widget app, String name,
   tester.view.physicalSize = size * 2;
   tester.view.devicePixelRatio = 2;
   addTearDown(tester.view.reset);
-  final key = GlobalKey();
-  await tester.runAsync(() async {
-    await tester.pumpWidget(RepaintBoundary(key: key, child: app));
-    for (var i = 0; i < 80; i++) {
-      await tester.pump();
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-    }
-  });
-  await tester.pumpAndSettle();
-  if (before != null) {
-    await before();
+  // flutter_test draws Material shadows as solid black outlines; render
+  // them as the app does, and restore the test default before it ends.
+  final shadows = debugDisableShadows;
+  debugDisableShadows = false;
+  try {
+    final key = GlobalKey();
+    await tester.runAsync(() async {
+      await tester.pumpWidget(RepaintBoundary(key: key, child: app));
+      for (var i = 0; i < 80; i++) {
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    });
     await tester.pumpAndSettle();
+    // The shell's missing accessibility grant shows the permission guide
+    // first; shots of the home skip it as the user would.
+    final skip = find.text(nikoText('跳过，进入 NikoDesk', 'Skip for now'));
+    if (!name.startsWith('permissions') && skip.evaluate().isNotEmpty) {
+      await tester.tap(skip);
+      await tester.runAsync(() async {
+        for (var i = 0; i < 40; i++) {
+          await tester.pump();
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+      });
+      await tester.pumpAndSettle();
+    }
+    if (before != null) {
+      await before();
+      await tester.pumpAndSettle();
+    }
+    await tester.runAsync(() async {
+      final boundary =
+          key.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      final image = await boundary.toImage(pixelRatio: 2);
+      final png = await image.toByteData(format: ui.ImageByteFormat.png);
+      File('$_out/$name.png').writeAsBytesSync(png!.buffer.asUint8List());
+    });
+    await tester.pumpWidget(const SizedBox());
+  } finally {
+    debugDisableShadows = shadows;
   }
-  await tester.runAsync(() async {
-    final boundary =
-        key.currentContext!.findRenderObject() as RenderRepaintBoundary;
-    final image = await boundary.toImage(pixelRatio: 2);
-    final png = await image.toByteData(format: ui.ImageByteFormat.png);
-    File('$_out/$name.png').writeAsBytesSync(png!.buffer.asUint8List());
-  });
-  await tester.pumpWidget(const SizedBox());
 }
 
 void main() {
@@ -189,6 +223,46 @@ void main() {
             'home-${brightness.name}-$lang-1440x900');
       }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
     }
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final (screen, input) in [(false, false), (true, true)]) {
+      final state = screen ? 'ready' : 'missing';
+      testWidgets('permissions $state ${brightness.name}', (tester) async {
+        NikoLanguage.english = _cjk.isEmpty;
+        await _capture(
+            tester,
+            MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: nightlineTheme(brightness),
+                home: Scaffold(
+                    body: NikoPermissionGuide(
+                        screenRecording: () => screen,
+                        accessibility: () => input,
+                        requestScreenRecording: () {},
+                        requestAccessibility: () {},
+                        onContinue: () {},
+                        onSilence: () {}))),
+            'permissions-$state-${brightness.name}-${_cjk.isEmpty ? 'en' : 'zh'}-1100x760',
+            size: const Size(1100, 760));
+      }, skip: _out.isEmpty);
+    }
+    testWidgets('first-time setup ${brightness.name}', (tester) async {
+      NikoLanguage.english = _cjk.isEmpty;
+      await _capture(
+          tester,
+          MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: nightlineTheme(brightness),
+              home: Scaffold(
+                  body: NikoFirstServerSetup(
+                      gateway: _EmptyGateway(),
+                      onSaved: () {},
+                      onLanguageChanged: () async {},
+                      child: const SizedBox()))),
+          'setup-${brightness.name}-${_cjk.isEmpty ? 'en' : 'zh'}-1100x760',
+          size: const Size(1100, 760));
+    }, skip: _out.isEmpty);
   }
 
   testWidgets('home compact dark with navigation open', (tester) async {
@@ -356,6 +430,150 @@ void main() {
         }, skip: _out.isEmpty);
       }
     }
+  });
+
+  // The same tree FileManagerPage builds in the NikoDesk build, on real file
+  // controllers with fixed directories; no session or native call is made.
+  group('file transfer', () {
+    setUp(() async {
+      PlatformFFI.instance.ffiBindForTesting = NikoFakeBridge();
+      await initGlobalFFI();
+    });
+    for (final brightness in Brightness.values) {
+      // 1280 x 720 is the size a new file transfer window opens at.
+      for (final size in const [
+        Size(1440, 900),
+        Size(1280, 720),
+        Size(900, 640)
+      ]) {
+        final name = 'files-${brightness.name}-en-'
+            '${size.width.toInt()}x${size.height.toInt()}';
+        testWidgets(name, (tester) async {
+          NikoLanguage.english = true;
+          await _capture(
+              tester,
+              MaterialApp(
+                  debugShowCheckedModeBanner: false,
+                  theme: nightlineTheme(brightness),
+                  home: const NikoTestFileWindow()),
+              name,
+              size: size);
+        }, skip: _out.isEmpty);
+      }
+      testWidgets('files-tasks-${brightness.name}-en-900x640', (tester) async {
+        NikoLanguage.english = true;
+        await _capture(
+            tester,
+            MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: nightlineTheme(brightness),
+                home: const NikoTestFileWindow()),
+            'files-tasks-${brightness.name}-en-900x640',
+            size: const Size(900, 640), before: () async {
+          await tester.tap(find.byKey(const Key('niko-file-pane-2')));
+        });
+      }, skip: _out.isEmpty);
+      testWidgets('files-conflict-${brightness.name}', (tester) async {
+        NikoLanguage.english = _cjk.isEmpty;
+        await _capture(
+            tester,
+            MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: nightlineTheme(brightness),
+                home: Scaffold(
+                    body: Center(
+                        child: NikoFileConflictDialog(
+                            path: r'C:\Users\demo\Desktop\Quarterly report.pdf',
+                            identical: false,
+                            showRemember: true,
+                            remember: false,
+                            onRemember: (_) {},
+                            onDecision: (_) {})))),
+            'files-conflict-${brightness.name}-${_cjk.isEmpty ? 'en' : 'zh'}-640x560',
+            size: const Size(640, 560));
+      }, skip: _out.isEmpty);
+    }
+    testWidgets('files-empty-dark-en-1280x720', (tester) async {
+      NikoLanguage.english = true;
+      await _capture(
+          tester,
+          MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: nightlineTheme(Brightness.dark),
+              home: const NikoTestFileWindow(withJobs: false)),
+          'files-empty-dark-en-1280x720',
+          size: const Size(1280, 720));
+    }, skip: _out.isEmpty);
+    testWidgets('files-dark-zh-1440x900', (tester) async {
+      NikoLanguage.english = false;
+      await _capture(
+          tester,
+          MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: nightlineTheme(Brightness.dark),
+              home: const NikoTestFileWindow()),
+          'files-dark-zh-1440x900');
+    }, skip: _out.isEmpty || _cjk.isEmpty);
+  });
+
+  // Connection manager cards with a terminal, camera, voice or tunnel panel,
+  // or the offer to call the controller. 300 px is the width the window
+  // opens at; the tall captures show the whole card, which the window
+  // scrolls.
+  group('connection manager panels', () {
+    Widget card(Brightness brightness, NikoTestCmPanel panel,
+            {bool running = false}) =>
+        MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: nightlineTheme(brightness),
+            home: Scaffold(body: NikoTestCmCard(panel, running: running)));
+    for (final panel in NikoTestCmPanel.values) {
+      for (final brightness in Brightness.values) {
+        final name = 'cm-${panel.name}-${brightness.name}-en-300x1100';
+        testWidgets(name, (tester) async {
+          NikoLanguage.english = true;
+          await _capture(tester, card(brightness, panel), name,
+              size: const Size(300, 1100));
+        }, skip: _out.isEmpty);
+      }
+      if (panel == NikoTestCmPanel.voiceStart) continue;
+      final running = 'cm-${panel.name}-running-dark-en-300x1100';
+      testWidgets(running, (tester) async {
+        NikoLanguage.english = true;
+        await _capture(
+            tester, card(Brightness.dark, panel, running: true), running,
+            size: const Size(300, 1100));
+      }, skip: _out.isEmpty);
+    }
+    testWidgets('cm-terminal-dark-en-300x490', (tester) async {
+      NikoLanguage.english = true;
+      await _capture(tester, card(Brightness.dark, NikoTestCmPanel.terminal),
+          'cm-terminal-dark-en-300x490',
+          size: const Size(300, 490));
+    }, skip: _out.isEmpty);
+    testWidgets('cm-camera-chosen-light-en-300x1300', (tester) async {
+      NikoLanguage.english = true;
+      await _capture(tester, card(Brightness.light, NikoTestCmPanel.camera),
+          'cm-camera-chosen-light-en-300x1300',
+          size: const Size(300, 1300), before: () async {
+        await tester.tap(find.byKey(const ValueKey('niko-camera-device')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('FaceTime HD Camera').last);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('niko-camera-format')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.textContaining('1280 × 720').last);
+        await tester.pumpAndSettle();
+        await tester.enterText(
+            find.byKey(const ValueKey('niko-camera-fps')), '30');
+      });
+    }, skip: _out.isEmpty);
+    testWidgets('cm-camera-dark-zh-300x1100', (tester) async {
+      NikoLanguage.english = false;
+      await _capture(tester, card(Brightness.dark, NikoTestCmPanel.camera),
+          'cm-camera-dark-zh-300x1100',
+          size: const Size(300, 1100));
+    }, skip: _out.isEmpty || _cjk.isEmpty);
   });
 
   testWidgets('privacy arrival reminder in the session window', (tester) async {

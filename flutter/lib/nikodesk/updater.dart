@@ -29,8 +29,9 @@ class _UpdateHttpException extends HttpException {
 ///    re-validated);
 ///  - the downloaded bundle must match a version-bound SHA256 manifest signed
 ///    by the publisher key pinned in this binary; no key means no staging;
-///  - verified macOS bundles are shown for manual installation; the running
-///    installation is never overwritten by this updater.
+///  - verified macOS bundles are shown for manual installation; this updater
+///    never writes the installation. With the privileged service installed,
+///    the service installs them instead (mac_update_install.dart).
 class NikoUpdater {
   const NikoUpdater(
       {this.owner = 'baogutang',
@@ -389,6 +390,20 @@ class NikoUpdater {
       throw const FileSystemException(
           'Cannot show the verified update in Finder');
     }
+  }
+
+  /// The staged bundle's canonical path after the same checks as before
+  /// showing it, for the privileged service to install (it checks its own
+  /// copy again: fixed certificate, newer version).
+  Future<String> recheckStagedMacUpdate(Directory staging,
+      {NikoUpdateCancellation? cancellation}) async {
+    final task = NikoUpdateTask(limits, cancellation);
+    task.check();
+    final staged = Directory('${staging.path}/mac');
+    if (!await _validMacBundle(staged, task: task)) {
+      throw const FormatException('invalid staged bundle');
+    }
+    return Directory('${staged.path}/NikoDesk.app').resolveSymbolicLinks();
   }
 
   Future<bool> _validMacBundle(Directory staged,
