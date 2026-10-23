@@ -11,7 +11,7 @@ enum NikoToolbarTone { action, inactive, danger, engaged }
 bool nikoDockStyled(BuildContext context) => NlColors.maybeOf(context) != null;
 
 ButtonStyle _dockStyle(NikoToolbarTone tone, bool selected) {
-  const nl = NlColors.dark;
+  final nl = NlColors.dark;
   return ButtonStyle(
     minimumSize: const WidgetStatePropertyAll(Size(40, 40)),
     padding: const WidgetStatePropertyAll(EdgeInsets.all(NlSpace.s2)),
@@ -22,7 +22,7 @@ ButtonStyle _dockStyle(NikoToolbarTone tone, bool selected) {
       final lit = states.contains(WidgetState.hovered) ||
           states.contains(WidgetState.focused);
       return switch (tone) {
-        NikoToolbarTone.engaged => lit ? const Color(0xFF5CE6F7) : nl.accent,
+        NikoToolbarTone.engaged => lit ? nl.accentHover : nl.accentFill,
         NikoToolbarTone.danger =>
           lit ? nl.danger.withOpacity(.22) : Colors.transparent,
         _ when selected => nl.accent.withOpacity(lit ? .22 : .14),
@@ -42,12 +42,14 @@ ButtonStyle _dockStyle(NikoToolbarTone tone, bool selected) {
 
 /// Icon colour of a dock button; the dock is dark in both modes.
 Color nikoDockInk(NikoToolbarTone tone, bool selected, bool disabled) {
-  const nl = NlColors.dark;
+  final nl = NlColors.dark;
   if (disabled) return nl.fg3.withOpacity(.6);
   return switch (tone) {
     NikoToolbarTone.engaged => nl.onAccent,
     NikoToolbarTone.danger => nl.dangerText,
-    _ when selected => nl.accentText,
+    // The accent wash and ring mark the selection; a tinted icon on the
+    // wash would fall under 4.5:1 over a bright remote picture.
+    _ when selected => nl.fg,
     NikoToolbarTone.inactive => nl.fg2,
     _ => nl.fg,
   };

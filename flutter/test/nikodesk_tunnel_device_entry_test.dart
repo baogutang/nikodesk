@@ -8,6 +8,7 @@ import 'package:flutter_hbb/nikodesk/policy.dart';
 import 'package:flutter_hbb/nikodesk/server_gateway.dart';
 import 'package:flutter_hbb/nikodesk/session_log.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
+import 'package:flutter_hbb/nikodesk/nightline.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 // Explicit directory/history/gateway/dispatch doubles; no native or file I/O.
@@ -91,7 +92,12 @@ void main() {
     await tester.pump();
     await tester.tap(mode);
     await tester.pump();
-    expect(tester.widget<ChoiceChip>(mode).selected, true);
+    expect(
+        tester
+            .widget<NlPressable>(
+                find.descendant(of: mode, matching: find.byType(NlPressable)))
+            .selected,
+        true);
     await tester.enterText(
         find.byKey(const Key('nikodesk-hero-id')), '123456789');
     await tester.enterText(find.byKey(const Key('nikodesk-hero-password')), '');

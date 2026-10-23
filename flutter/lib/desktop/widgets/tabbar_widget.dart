@@ -20,6 +20,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import '../../utils/multi_window_manager.dart';
+import '../../nikodesk/title_bar.dart';
 import '../../nikodesk/window_scope.dart';
 
 const double _kTabBarHeight = kDesktopRemoteTabBarHeight;
@@ -525,7 +526,10 @@ class _DesktopTabState extends State<DesktopTab>
     return Column(children: [
       Obx(() {
         if (stateGlobal.showTabBar.isTrue &&
-            !(kUseCompatibleUiMode && isHideSingleItem())) {
+            !(kUseCompatibleUiMode && isHideSingleItem()) &&
+            !(tabType == DesktopTabType.main &&
+                isHideSingleItem() &&
+                nikoHomeDrawsTitleBar())) {
           final showBottomDivider = _showTabBarBottomDivider(tabType);
           return SizedBox(
             height: _kTabBarHeight,

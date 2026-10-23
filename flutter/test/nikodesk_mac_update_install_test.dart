@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/nikodesk/mac_service_settings.dart';
 import 'package:flutter_hbb/nikodesk/mac_update_install.dart';
 import 'package:flutter_hbb/nikodesk/mac_update_settings.dart';
+import 'package:flutter_hbb/nikodesk/nightline.dart';
 import 'package:flutter_hbb/nikodesk/product_build_info.dart';
 import 'package:flutter_hbb/nikodesk/update_publisher.dart';
 import 'package:flutter_hbb/nikodesk/updater.dart';
@@ -248,7 +249,9 @@ void main() {
     await tester.tap(find.byKey(const Key('nikodesk-update-install-now')));
     // Removing the staging directory is real file I/O.
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
-    await tester.pumpAndSettle();
+    // The button keeps its spinner while the app reopens, so do not settle.
+    await tester.pump();
+    await tester.pump();
     expect(messages.last, contains('2.0.0+23'));
     expect(reopened, isTrue);
   });
@@ -274,10 +277,15 @@ void main() {
     await tester.tap(find.text('空闲时自动安装').last);
     await tester.pumpAndSettle();
     expect(written, isEmpty, reason: 'a disabled entry cannot be chosen');
+    // The menu stays open on a disabled entry; dismiss it by its barrier.
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pumpAndSettle();
 
     await pump(_ready);
     await tester.tap(find.byKey(const Key('nikodesk-update-mode')));
     await tester.pumpAndSettle();
+    // The current mode carries the pop-up list's check, as in NlSelect.
+    expect(find.byIcon(NlIcons.check), findsOneWidget);
     await tester.tap(find.text('空闲时自动安装').last);
     await tester.pumpAndSettle();
     expect(written, [NikoUpdateMode.auto]);

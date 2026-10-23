@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter_hbb/nikodesk/nightline.dart';
 import 'package:flutter_hbb/nikodesk/privacy_style.dart';
 import 'package:flutter_hbb/nikodesk/privacy_style_events.dart';
 import 'package:flutter_hbb/nikodesk/privacy_style_image.dart';
@@ -172,7 +173,7 @@ void main() {
     await tester.pump();
     expect(requested!.preset, NikoPrivacyPreset.graphite);
     expect(find.text('Applied'), findsNothing);
-    expect(tester.widget<FilledButton>(button).onPressed, isNull);
+    expect(tester.widget<NlButton>(button).onPressed, isNull);
     confirmation.complete();
     await tester.pump();
     expect(find.text('Applied'), findsOneWidget);
@@ -182,7 +183,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(editor((_) async {}, allowed: false));
     final button = find.byKey(const Key('privacy-apply-style'));
-    expect(tester.widget<FilledButton>(button).onPressed, isNull);
+    expect(tester.widget<NlButton>(button).onPressed, isNull);
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(editor((_) async {}));
     await tester
@@ -190,7 +191,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('privacy-preset-custom')));
     await tester.pump();
     expect(find.byKey(const Key('privacy-custom-image')), findsOneWidget);
-    expect(tester.widget<FilledButton>(button).onPressed, isNull);
+    expect(tester.widget<NlButton>(button).onPressed, isNull);
     await tester.pumpWidget(const SizedBox());
   });
 

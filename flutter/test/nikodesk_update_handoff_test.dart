@@ -87,6 +87,7 @@ void main() {
         home: Scaffold(
             body: NikoSettingsView(
                 native: false,
+                initialSection: NikoSettingsSection.updates,
                 updater: updater,
                 openUpdateUrl: open,
                 buildInfoLoader: () async => const ProductBuildInfo(

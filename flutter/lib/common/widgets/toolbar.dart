@@ -11,6 +11,7 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/nikodesk/mobile_input.dart';
 import 'package:flutter_hbb/nikodesk/session_capability_connect.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
 import 'package:flutter_hbb/nikodesk/privacy_style_model.dart';
@@ -1179,9 +1180,10 @@ List<TToggleMenu> toolbarKeyboardToggles(FFI ffi) {
   List<TToggleMenu> v = [];
 
   // swap key
+  final macKeys = isMacOS || nikoMacLikeInput;
   if (ffiModel.keyboard &&
-      ((isMacOS && pi.platform != kPeerPlatformMacOS) ||
-          (!isMacOS && pi.platform == kPeerPlatformMacOS))) {
+      ((macKeys && pi.platform != kPeerPlatformMacOS) ||
+          (!macKeys && pi.platform == kPeerPlatformMacOS))) {
     final option = 'allow_swap_key';
     final value =
         bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);

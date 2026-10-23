@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'home_chrome.dart';
 import 'nightline.dart';
 import 'server_gateway.dart';
 import 'server_settings.dart';
@@ -12,12 +13,16 @@ class NikoFirstServerSetup extends StatefulWidget {
   final VoidCallback onSaved;
   final Future<void> Function() onLanguageChanged;
 
+  /// Keeps a macOS title strip above the setup page.
+  final bool macTitleBar;
+
   const NikoFirstServerSetup({
     super.key,
     required this.gateway,
     required this.child,
     required this.onSaved,
     required this.onLanguageChanged,
+    this.macTitleBar = false,
   });
 
   @override
@@ -38,6 +43,51 @@ class _NikoFirstServerSetupState extends State<NikoFirstServerSetup> {
     widget.onSaved();
   }
 
+  void _retry() {
+    final snapshot = _read();
+    setState(() {
+      _snapshot = snapshot;
+    });
+  }
+
+  /// Nightline: the unknown state said plainly, with the same two ways on.
+  Widget _readFailed(NlColors nl) => SingleChildScrollView(
+      padding: const EdgeInsets.all(NlSpace.s6),
+      child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              const NlLed(NlLedState.warn),
+              const SizedBox(width: NlSpace.s2),
+              Expanded(
+                  child: Text(
+                      nikoText('无法读取私服配置', 'Could not read server settings'),
+                      style: NlType.text(NlType.s5,
+                          weight: FontWeight.w600, color: nl.fg))),
+            ]),
+            const SizedBox(height: NlSpace.s2),
+            Text(
+                nikoText('当前配置状态未知。请重试，或进入首页查看连接状态。',
+                    'Configuration status is unknown. Retry or open Home to check connection status.'),
+                style: NlType.text(NlType.s3, color: nl.fg2)),
+            const SizedBox(height: NlSpace.s6),
+            Align(
+                alignment: Alignment.centerRight,
+                child: Wrap(
+                    spacing: NlSpace.s2,
+                    runSpacing: NlSpace.s2,
+                    children: [
+                      NlButton.ghost(
+                          onPressed: _defer,
+                          label: nikoText('进入首页', 'Open Home')),
+                      NlButton(
+                          onPressed: _retry,
+                          icon: NlIcons.refreshCw,
+                          label: nikoText('重试', 'Retry')),
+                    ])),
+          ]));
+
   @override
   Widget build(BuildContext context) {
     if (_finished) return widget.child;
@@ -48,8 +98,16 @@ class _NikoFirstServerSetupState extends State<NikoFirstServerSetup> {
             snapshot.data?.config.isValid == true) {
           return widget.child;
         }
+        final nl = NlColors.maybeOf(context);
         final Widget content;
-        if (snapshot.connectionState != ConnectionState.done) {
+        if (nl != null && snapshot.connectionState != ConnectionState.done) {
+          content = const Padding(
+            padding: EdgeInsets.all(NlSpace.s10),
+            child: Center(child: NlSpinner(size: 20)),
+          );
+        } else if (nl != null && snapshot.hasError) {
+          content = _readFailed(nl);
+        } else if (snapshot.connectionState != ConnectionState.done) {
           content = const Padding(
             padding: EdgeInsets.all(32),
             child: Center(child: CircularProgressIndicator()),
@@ -88,9 +146,8 @@ class _NikoFirstServerSetupState extends State<NikoFirstServerSetup> {
           );
         }
         // The desktop home hosts this in Nightline; mobile keeps its card.
-        final nl = NlColors.maybeOf(context);
         if (nl != null) {
-          return ColoredBox(
+          final page = ColoredBox(
               color: nl.page,
               child: SafeArea(
                   child: Center(
@@ -103,11 +160,23 @@ class _NikoFirstServerSetupState extends State<NikoFirstServerSetup> {
                                   crossAxisAlignment: CrossAxisAlignment.stretch,
                                   children: [
                                     Row(children: [
-                                      const NlMark(size: 28),
+                                      const NlMark(size: 32),
                                       const SizedBox(width: NlSpace.s3),
                                       Expanded(
-                                          child: NlMonoLabel(nikoText(
-                                              '首次设置', 'First-time setup'))),
+                                          child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                            Text('NikoDesk',
+                                                style: NlType.text(NlType.s4,
+                                                    weight: FontWeight.w600,
+                                                    color: nl.fg)),
+                                            Text(
+                                                nikoText(
+                                                    '首次设置', 'First-time setup'),
+                                                style: NlType.text(NlType.s2,
+                                                    color: nl.fg3)),
+                                          ])),
                                       NlButton.ghost(
                                           small: true,
                                           onPressed: widget.onLanguageChanged,
@@ -115,12 +184,13 @@ class _NikoFirstServerSetupState extends State<NikoFirstServerSetup> {
                                               ? '中文'
                                               : 'English'),
                                     ]),
-                                    const SizedBox(height: NlSpace.s4),
+                                    const SizedBox(height: NlSpace.s5),
                                     Flexible(
                                         child: NlPanel(
                                             padding: EdgeInsets.zero,
                                             child: content)),
                                   ]))))));
+          return NikoTitleStrip(enabled: widget.macTitleBar, child: page);
         }
         final light = nikoIsLight(context);
         return DecoratedBox(

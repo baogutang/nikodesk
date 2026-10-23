@@ -1,10 +1,22 @@
 import 'package:flutter/material.dart';
 
+import 'nightline/surfaces.dart';
+import 'nightline/tokens.dart';
+
 class NikoLanguage {
   static bool english = false;
 
   static void usePreference(String language) {
     english = language.isNotEmpty && !language.startsWith('zh');
+  }
+}
+
+/// The colour preset, kept in the local option [option].
+class NikoAppearance {
+  static const option = 'niko-ui-preset';
+
+  static void usePreference(String preset) {
+    NlColors.active = preset == 'clay' ? NlPreset.clay : NlPreset.orbit;
   }
 }
 
@@ -45,7 +57,18 @@ InputDecoration nikoInput(String label, {String? hint}) => InputDecoration(
       isDense: true,
     );
 
+/// The stock toast as the design-system capsule when the app runs on the
+/// Nightline theme; false leaves it to the stock one.
+bool nikoShowToast(OverlayState overlay, String message, Duration timeout) {
+  if (NlColors.maybeOf(overlay.context) == null) return false;
+  NlToast.showIn(overlay, message, duration: timeout);
+  return true;
+}
+
 void nikoNotice(BuildContext context, String message) {
+  if (NlColors.maybeOf(context) != null && NlToast.show(context, message)) {
+    return;
+  }
   ScaffoldMessenger.maybeOf(context)
       ?.showSnackBar(SnackBar(content: Text(message)));
 }

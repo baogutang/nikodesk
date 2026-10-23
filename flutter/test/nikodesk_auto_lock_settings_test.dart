@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/nikodesk/auto_lock_settings.dart';
+import 'package:flutter_hbb/nikodesk/nightline.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -20,12 +21,12 @@ void main() {
                   saves++;
                 }))));
     await tester.pumpAndSettle();
-    final toggle = find.byType(SwitchListTile);
-    expect(tester.widget<SwitchListTile>(toggle).value, false);
+    final toggle = find.byType(NlSwitch);
+    expect(tester.widget<NlSwitch>(toggle).value, false);
     await tester.tap(toggle);
     await tester.pumpAndSettle();
     expect(saves, 1);
-    expect(tester.widget<SwitchListTile>(toggle).value, true);
+    expect(tester.widget<NlSwitch>(toggle).value, true);
   });
 
   testWidgets('unconfirmed write preserves old value and requires reload',
@@ -35,11 +36,11 @@ void main() {
             body: NikoAutoLockSettings(
                 readOptions: () async => '{}', writeEnabled: (_) async {}))));
     await tester.pumpAndSettle();
-    final toggle = find.byType(SwitchListTile);
+    final toggle = find.byType(NlSwitch);
     await tester.tap(toggle);
     await tester.pumpAndSettle();
-    expect(tester.widget<SwitchListTile>(toggle).value, false);
-    expect(tester.widget<SwitchListTile>(toggle).onChanged, isNull);
+    expect(tester.widget<NlSwitch>(toggle).value, false);
+    expect(tester.widget<NlSwitch>(toggle).onChanged, isNull);
     expect(tester.takeException(), isNull);
   });
 }

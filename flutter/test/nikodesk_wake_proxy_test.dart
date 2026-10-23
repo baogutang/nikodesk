@@ -8,6 +8,7 @@ import 'package:flutter_hbb/nikodesk/wake_on_lan.dart';
 import 'package:flutter_hbb/nikodesk/wake_on_lan_view.dart';
 import 'package:flutter_hbb/nikodesk/wake_proxy.dart';
 import 'package:flutter_hbb/nikodesk/wake_proxy_settings.dart';
+import 'package:flutter_hbb/nikodesk/nightline.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const scope =
@@ -187,8 +188,9 @@ void main() {
       expect(gateway.saves, 0);
       expect(
           tester
-              .widget<SwitchListTile>(
-                  find.byKey(const Key('wake-proxy-enabled')))
+              .widget<NlSwitch>(find.ancestor(
+                  of: find.byKey(const Key('wake-proxy-enabled')),
+                  matching: find.byType(NlSwitch)))
               .value,
           false);
       await addTarget(tester);
@@ -227,7 +229,7 @@ void main() {
     expect(gateway.saves, 0);
     expect(
         tester
-            .widget<ElevatedButton>(find.byKey(const Key('wake-proxy-save')))
+            .widget<NlButton>(find.byKey(const Key('wake-proxy-save')))
             .onPressed,
         isNull);
     gateway.current = scope;
@@ -240,7 +242,7 @@ void main() {
     expect(gateway.saves, 1);
     expect(
         tester
-            .widget<ElevatedButton>(find.byKey(const Key('wake-proxy-save')))
+            .widget<NlButton>(find.byKey(const Key('wake-proxy-save')))
             .onPressed,
         isNull);
     expect(tester.takeException(), isNull);
@@ -282,4 +284,54 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets(
+      'Nightline: the route is a select and an unavailable saved proxy '
+      'still never falls back', (tester) async {
+    NikoLanguage.english = true;
+    var localSends = 0;
+    var raw = directory([endpoint(21129)]);
+    await tester.pumpWidget(MaterialApp(
+        theme: nightlineTheme(Brightness.dark),
+        home: Builder(
+            builder: (context) => Scaffold(
+                body: TextButton(
+                    onPressed: () => showWakeOnLan(context,
+                            title: 'Wake target',
+                            initial: const WakeProfile(nic, '192.168.1.255',
+                                proxyId: '987654321'),
+                            proxies: NikoWakeTunnelDirectory(scope,
+                                readStatus: () async => raw),
+                            proxyLabels: const {'123456789': 'Office NAS'},
+                            send: (_) async {
+                          localSends++;
+                          return 3;
+                        }),
+                    child: const Text('Open'))))));
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    final route = find.byKey(const Key('wol-route'));
+    expect(tester.widget<NlSelect<String>>(route).value, '987654321');
+    expect(find.text('Saved proxy 987654321 is unavailable'), findsOneWidget);
+    // The fields keep their limits without a counter.
+    await tester.enterText(find.byKey(const Key('wol-port')), '1234567');
+    expect(tester.widget<TextField>(find.byKey(const Key('wol-port')))
+        .controller!.text, '12345');
+    expect(find.textContaining('/17'), findsNothing);
+    await tester.enterText(find.byKey(const Key('wol-port')), '9');
+    await tester.tap(find.byKey(const Key('wol-send')));
+    await tester.pumpAndSettle();
+    expect(localSends, 0);
+    expect(find.textContaining('Wake request unconfirmed.'), findsOneWidget);
+    // An online proxy can be chosen; the disabled saved one cannot.
+    await tester.tap(route);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Office NAS').last);
+    await tester.pumpAndSettle();
+    expect(tester.widget<NlSelect<String>>(route).value, '123456789');
+    raw = directory([]);
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
 }

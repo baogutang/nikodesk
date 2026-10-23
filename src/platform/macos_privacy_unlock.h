@@ -1,6 +1,18 @@
 #pragma once
 #import <OpenDirectory/OpenDirectory.h>
 
+// Apple's recipe for a panel that stays above other apps' full-screen Spaces:
+// an accessory app, a nonactivating panel at screen-saver level and these
+// behaviours. Without them the cover joined a full-screen Space only on the
+// next tick, after the switch had already shown the real screen.
+static NSWindowCollectionBehavior NPSCoverBehavior() {
+    NSWindowCollectionBehavior behavior=NSWindowCollectionBehaviorCanJoinAllSpaces|
+        NSWindowCollectionBehaviorFullScreenAuxiliary|NSWindowCollectionBehaviorStationary|
+        NSWindowCollectionBehaviorIgnoresCycle;
+    if(@available(macOS 13.0,*))behavior|=NSWindowCollectionBehaviorCanJoinAllApplications;
+    return behavior;
+}
+
 static NSString *NPSLocalText(NSString *zh,NSString *en) {
     return [NSLocale.preferredLanguages.firstObject hasPrefix:@"zh"]?zh:en;
 }
@@ -88,7 +100,7 @@ static bool NPSUnlockShow() {
         panel.backgroundColor=[NSColor colorWithWhite:.13 alpha:1];
         panel.appearance=[NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
         panel.level=CGWindowLevelForKey(kCGScreenSaverWindowLevelKey)+2;
-        panel.collectionBehavior=NSWindowCollectionBehaviorCanJoinAllSpaces|NSWindowCollectionBehaviorFullScreenAuxiliary;
+        panel.collectionBehavior=NPSCoverBehavior();
         npsUnlock.panel=panel;
         NSTextField *title=[NSTextField labelWithString:NPSLocalText(@"退出隐私屏",@"Exit privacy screen")];
         title.frame=NSMakeRect(24,194,412,28);title.font=[NSFont systemFontOfSize:20 weight:NSFontWeightSemibold];

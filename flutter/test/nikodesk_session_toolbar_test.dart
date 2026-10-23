@@ -192,6 +192,6 @@ void main() {
           reason: '$tone selected=$selected');
     }
     expect(buttons[NikoToolbarTone.engaged.index].style!.backgroundColor!.resolve({}),
-        NlColors.dark.accent);
+        NlColors.dark.accentFill);
   });
 }

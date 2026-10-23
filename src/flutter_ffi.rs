@@ -2693,6 +2693,8 @@ pub fn main_set_home_dir(_home: String) {
 
 // This is a temporary method to get data dir for ios
 pub fn main_get_data_dir_ios(app_dir: String) -> SyncReturn<String> {
+    #[cfg(all(feature = "nikodesk", target_os = "ios"))]
+    return SyncReturn(crate::nikodesk::configure_ios_or_exit(&app_dir));
     *config::APP_DIR.write().unwrap() = app_dir;
     let data_dir = config::Config::path("data");
     if !data_dir.exists() {

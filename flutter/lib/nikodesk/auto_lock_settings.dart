@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 
+import 'nightline.dart';
+import 'settings_kit.dart';
 import 'ui.dart';
 
 const nikoAutoLockOption = 'nikodesk-lock-on-last-control';
@@ -91,33 +93,34 @@ class _NikoAutoLockSettingsState extends State<NikoAutoLockSettings> {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SwitchListTile.adaptive(
-            key: const Key('auto-lock-last-control'),
-            contentPadding: EdgeInsets.zero,
-            title: Text(nikoText('控制结束后自动锁屏', 'Lock after remote control')),
-            subtitle: Text(nikoText(
-                '默认关闭。最后一个控制会话结束后，等待 5 秒锁定本机；本机操作或重连会取消。文件传输不会触发。',
-                'Off by default. Lock this computer 5 seconds after the last control session ends. Local input or reconnection cancels it. File transfers do not trigger it.')),
+  Widget build(BuildContext context) {
+    final title = nikoText('控制结束后自动锁屏', 'Lock after remote control');
+    return NikoSettingRow(
+        title: title,
+        description: nikoText(
+            '默认关闭。最后一个控制会话结束后，等待 5 秒锁定本机；本机操作或重连会取消。文件传输不会触发。',
+            'Off by default. Lock this computer 5 seconds after the last control session ends. Local input or reconnection cancels it. File transfers do not trigger it.'),
+        busy: _loading || _saving,
+        trailing: NlSwitch(
+            switchKey: const Key('auto-lock-last-control'),
+            semanticLabel: title,
             value: _enabled,
             onChanged: _loading || _saving || _error != null ? null : _save),
-        Text(
-            nikoText('主控端主动选择的“断开后锁屏”也遵循同样的会话与取消规则。',
-                'The controller’s “Lock after disconnect” also follows these session and cancellation rules.'),
-            style: Theme.of(context).textTheme.bodySmall),
-        if (_loading || _saving) const LinearProgressIndicator(),
-        if (_error != null) ...[
-          Text(_error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error)),
-          TextButton(
-              onPressed: _saving
-                  ? null
-                  : () {
-                      setState(() => _loading = true);
-                      _load();
-                    },
-              child: Text(nikoText('重新读取', 'Reload')))
-        ]
-      ]);
+        below: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          NikoSettingNote(nikoText('主控端主动选择的“断开后锁屏”也遵循同样的会话与取消规则。',
+              'The controller’s “Lock after disconnect” also follows these session and cancellation rules.')),
+          if (_error != null) ...[
+            const SizedBox(height: NlSpace.s2),
+            NikoSettingNote(_error!,
+                tone: NlTone.danger,
+                actionLabel: nikoText('重新读取', 'Reload'),
+                onAction: _saving
+                    ? null
+                    : () {
+                        setState(() => _loading = true);
+                        _load();
+                      }),
+          ],
+        ]));
+  }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'nightline.dart';
+import 'settings_kit.dart';
 import 'theme.dart';
 import 'ui.dart';
 
@@ -129,17 +130,15 @@ class NikoProductInfoRows extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final nightline = NlColors.maybeOf(context);
-    final muted = nightline?.fg2 ??
-        (nikoIsLight(context) ? NikoPalette.lightMuted : NikoPalette.darkMuted);
+    if (nightline != null) return _rows(context, nightline);
+    final muted =
+        nikoIsLight(context) ? NikoPalette.lightMuted : NikoPalette.darkMuted;
     Widget row(String label, String value) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(label, style: TextStyle(color: muted, fontSize: 12)),
           SelectableText(value,
-              style: nightline == null
-                  ? const TextStyle(fontWeight: FontWeight.w600)
-                  : NlType.monoText(NlType.s3,
-                      weight: FontWeight.w500, color: nightline.fg)),
+              style: const TextStyle(fontWeight: FontWeight.w600)),
         ]));
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       row(nikoText('产品版本 / 构建号', 'Product version / build'),
@@ -155,6 +154,38 @@ class NikoProductInfoRows extends StatelessWidget {
           nikoText('本机包版本不代表已公开发布或完成真实会话验收。',
               'Installed package metadata does not establish publication or real-session acceptance.'),
           style: TextStyle(color: muted, fontSize: 12)),
+    ]);
+  }
+
+  /// Settings rows with the values on the right, split by hairlines.
+  Widget _rows(BuildContext context, NlColors nl) {
+    final rows = [
+      NikoSettingRow(
+          title: nikoText('产品版本 / 构建号', 'Product version / build'),
+          trailing: NikoSettingValue('NikoDesk ${info.fullVersion}', mono: true)),
+      NikoSettingRow(
+          title: nikoText('上游内核 / 协议版本', 'Upstream core / protocol version'),
+          trailing: NikoSettingValue(
+              'RustDesk ${info.nativeVersion ?? nikoText('未知', 'Unknown')}',
+              mono: true)),
+      if (buildDate?.isNotEmpty == true)
+        NikoSettingRow(
+            title: nikoText('原生构建日期', 'Native build date'),
+            trailing: NikoSettingValue(buildDate!, mono: true)),
+      NikoSettingRow(
+          title: nikoText('许可', 'License'),
+          description: 'RustDesk · Copyright Purslane Tech Pte. Ltd.',
+          trailing: const NikoSettingValue('AGPL-3.0', mono: true)),
+    ];
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      for (var i = 0; i < rows.length; i++) ...[
+        if (i > 0) Container(height: 1, color: nl.line),
+        rows[i],
+      ],
+      Padding(
+          padding: const EdgeInsets.only(bottom: NlSpace.s3),
+          child: NikoSettingNote(nikoText('本机包版本不代表已公开发布或完成真实会话验收。',
+              'Installed package metadata does not establish publication or real-session acceptance.'))),
     ]);
   }
 }
@@ -192,11 +223,45 @@ class _NikoProductAboutState extends State<NikoProductAbout> {
   }
 
   @override
-  Widget build(BuildContext context) => NikoGlassCard(
+  Widget build(BuildContext context) {
+    if (NlColors.maybeOf(context) != null) return _group(context);
+    return _card(context);
+  }
+
+  /// Nightline: a settings group, as on the desktop About page.
+  Widget _group(BuildContext context) => FutureBuilder<ProductBuildInfo>(
+      future: _info,
+      builder: (context, snapshot) {
+        final done = snapshot.connectionState == ConnectionState.done;
+        final info = snapshot.data ?? ProductBuildInfo.unknown;
+        return NikoSettingsGroup(
+            title: nikoText('关于 NikoDesk', 'About NikoDesk'),
+            trailing: done && info.hasUnknown
+                ? NlButton.ghost(
+                    small: true,
+                    icon: NlIcons.rotateCcw,
+                    onPressed: _retry,
+                    label: nikoText('重试读取版本', 'Retry version read'))
+                : null,
+            children: [
+              if (!done)
+                Semantics(
+                    liveRegion: true,
+                    child: NikoSettingRow(
+                        title: nikoText(
+                            '正在读取版本信息…', 'Reading version information…'),
+                        busy: true))
+              else
+                NikoProductInfoRows(info: info),
+            ]);
+      });
+
+  Widget _card(BuildContext context) => NikoGlassCard(
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         NlColors.maybeOf(context) != null
-            ? NlMonoLabel(nikoText('关于 NikoDesk', 'About NikoDesk'))
+            ? NlSectionLabel(nikoText('关于 NikoDesk', 'About NikoDesk'),
+                padding: EdgeInsets.zero)
             : Text(nikoText('关于 NikoDesk', 'About NikoDesk'),
                 style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 12),

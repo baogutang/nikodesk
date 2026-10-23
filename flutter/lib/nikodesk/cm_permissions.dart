@@ -12,6 +12,19 @@ class NikoCmPermission {
   const NikoCmPermission(this.name, this.label, this.icon, this.enabled);
 }
 
+/// The design system's icon for a permission the connection manager names.
+IconData? _permissionIcon(String name) => switch (name) {
+      'keyboard' => NlIcons.keyboard,
+      'clipboard' => NlIcons.clipboard,
+      'audio' => NlIcons.volume2,
+      'file' => NlIcons.files,
+      'restart' => NlIcons.rotateCcw,
+      'recording' => NlIcons.circleDot,
+      'block_input' => NlIcons.lock,
+      'privacy_mode' => NlIcons.eyeOff,
+      _ => null,
+    };
+
 class NikoCmPermissions extends StatelessWidget {
   final List<NikoCmPermission> permissions;
   final bool canModify;
@@ -45,21 +58,21 @@ class NikoCmPermissions extends StatelessWidget {
         ]));
   }
 
-  /// Nightline: one chip per permission, as in the draft's visitor card. An
-  /// unchecked chip is struck through so a revoked right reads as revoked.
+  /// Design system: one chip per permission. An unchecked chip is struck
+  /// through so a revoked right reads as revoked.
   Widget _chips(BuildContext context) => NlPanel(
       child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            NlMonoLabel(nikoText('此会话的权限', 'Session permissions')),
-            const SizedBox(height: NlSpace.s3),
+            NlSectionLabel(nikoText('此会话的权限', 'Session permissions'),
+                padding: const EdgeInsets.only(bottom: NlSpace.s3)),
             Wrap(spacing: NlSpace.s2, runSpacing: NlSpace.s2, children: [
               for (final permission in permissions)
                 NlChip(
                     key: ValueKey('cm-permission-${permission.name}'),
                     label: permission.label,
-                    icon: permission.icon,
+                    icon: _permissionIcon(permission.name) ?? permission.icon,
                     selected: permission.enabled,
                     strikeWhenOff: true,
                     onChanged: canModify
@@ -76,9 +89,13 @@ class NikoCmRequestHeader extends StatelessWidget {
   final String status;
   final Widget? duration;
   final Widget? trailing;
+
+  /// The state's light in the design system: green while connected by
+  /// default, off otherwise.
+  final NlTone? tone;
   const NikoCmRequestHeader({super.key, required this.requester,
     required this.peerId, required this.action, required this.status,
-    this.duration, this.trailing});
+    this.duration, this.trailing, this.tone});
 
   @override
   Widget build(BuildContext context) {
@@ -106,56 +123,76 @@ class NikoCmRequestHeader extends StatelessWidget {
         ]));
   }
 
-  /// Nightline visitor card: what is asked, who asks, and the state.
-  Widget _visitorCard(BuildContext context, NlColors nl) => NlPanel(
-      padding: const EdgeInsets.all(NlSpace.s4),
-      child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-              Expanded(child: NlMonoLabel(action, tone: NlTone.accent)),
-              if (trailing != null) trailing!,
-            ]),
-            const SizedBox(height: NlSpace.s3),
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Container(
-                  width: 40,
-                  height: 40,
+  /// Design-system visitor card: who connects, what they reach, and the
+  /// state with its time.
+  Widget _visitorCard(BuildContext context, NlColors nl) {
+    final light = switch (tone ?? (duration != null ? NlTone.ok : NlTone.neutral)) {
+      NlTone.ok => NlLedState.ok,
+      NlTone.warn || NlTone.accent => NlLedState.warn,
+      NlTone.danger => NlLedState.danger,
+      NlTone.neutral => NlLedState.off,
+    };
+    return NlPanel(
+        padding: const EdgeInsets.all(NlSpace.s4),
+        child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                NlIconTile(icon: NlIcons.monitor, color: nl.accent, size: 40),
+                const SizedBox(width: NlSpace.s3),
+                Expanded(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                      Text(
+                          requester.isEmpty
+                              ? nikoText('远程设备', 'Remote device')
+                              : requester,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: NlType.text(NlType.s5,
+                              weight: FontWeight.w600, color: nl.fg)),
+                      SelectableText(peerId,
+                          style: NlType.monoText(NlType.s2, color: nl.fg3)),
+                    ])),
+                if (trailing != null) trailing!,
+              ]),
+              const SizedBox(height: NlSpace.s4),
+              // A tinted label rather than a badge: a tunnel's target can be
+              // long, and large text wraps it.
+              DecoratedBox(
                   decoration: BoxDecoration(
-                      color: nl.surface2,
-                      borderRadius: BorderRadius.circular(NlRadius.r2)),
-                  child: Icon(Icons.laptop_mac_rounded,
-                      size: 20, color: nl.accentText)),
-              const SizedBox(width: NlSpace.s3),
-              Expanded(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    Text(
-                        requester.isEmpty
-                            ? nikoText('远程设备', 'Remote device')
-                            : requester,
-                        style: NlType.text(NlType.s4,
-                            weight: FontWeight.w600, color: nl.fg)),
-                    SelectableText(peerId,
-                        style: NlType.monoText(NlType.s2, color: nl.fg2)),
-                  ])),
-            ]),
-            const SizedBox(height: NlSpace.s3),
-            Wrap(
-                spacing: NlSpace.s3,
-                runSpacing: NlSpace.s1,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(status, style: NlType.text(NlType.s3, color: nl.fg2)),
-                  if (duration != null)
-                    DefaultTextStyle.merge(
-                        style: NlType.monoText(NlType.s5,
-                            weight: FontWeight.w500, color: nl.fg),
-                        child: duration!),
-                ]),
-          ]));
+                      color: nl.accentSoft,
+                      borderRadius: BorderRadius.circular(NlRadius.r1)),
+                  child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: NlSpace.s2, vertical: 3),
+                      child: Text(action,
+                          style: NlType.text(NlType.s2,
+                              weight: FontWeight.w500, color: nl.accentText)))),
+              const SizedBox(height: NlSpace.s3),
+              Wrap(
+                  spacing: NlSpace.s3,
+                  runSpacing: NlSpace.s1,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      NlLed(light),
+                      const SizedBox(width: NlSpace.s2),
+                      Flexible(
+                          child: Text(status,
+                              style: NlType.text(NlType.s3, color: nl.fg2))),
+                    ]),
+                    if (duration != null)
+                      DefaultTextStyle.merge(
+                          style: NlType.monoText(NlType.s3,
+                              weight: FontWeight.w500, color: nl.fg),
+                          child: duration!),
+                  ]),
+            ]));
+  }
 }
 
 class NikoCmSessionLayout extends StatelessWidget {
@@ -199,6 +236,14 @@ class NikoCmActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (NlColors.maybeOf(context) != null) {
+      // Text only, as the stock dialogs' buttons are.
+      return outlined
+          ? NlButton.ghost(label: label, onPressed: onPressed, large: true, expand: true)
+          : danger
+              ? NlButton.danger(label: label, onPressed: onPressed, large: true, expand: true)
+              : NlButton(label: label, onPressed: onPressed, large: true, expand: true);
+    }
     final colors = Theme.of(context).colorScheme;
     final foreground = outlined ? colors.onSurface
         : danger ? colors.onError : colors.onPrimary;

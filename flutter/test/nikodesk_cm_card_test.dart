@@ -75,7 +75,7 @@ void main() {
       // The tab bar's own jump runs 100 ms later.
       await tester.pump(const Duration(milliseconds: 200));
       expect(find.byType(NikoCmCapabilityFrame), findsOneWidget);
-      expect(find.text('LOCAL TUNNEL APPROVAL'), findsOneWidget);
+      expect(find.text('Local tunnel approval'), findsOneWidget);
       final leave = tester.widget<NikoCmActionButton>(
           find.widgetWithText(NikoCmActionButton, 'Leave connection'));
       expect(leave.danger, isTrue);

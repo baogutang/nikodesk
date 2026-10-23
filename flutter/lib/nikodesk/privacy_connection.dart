@@ -4,9 +4,10 @@ import 'package:get/get.dart';
 import '../models/model.dart' show FFI, ConnType;
 import '../models/platform_model.dart';
 import 'connection_progress.dart';
-import 'nightline/tokens.dart';
+import 'nightline.dart';
 import 'privacy_screen.dart';
 import 'privacy_style.dart';
+import 'settings_kit.dart';
 import 'ui.dart';
 
 const nikoPrivacyAutoOption = 'nikodesk-privacy-auto-on';
@@ -173,81 +174,157 @@ class NikoPrivacyArrivalView extends StatelessWidget {
       required this.onAuto,
       required this.onEnable,
       required this.onSkip});
+  String get _title =>
+      nikoText('开启被控电脑的隐私屏？', 'Turn on the remote privacy screen?');
+
+  String get _body => allowed
+      ? nikoText('电脑屏幕仍在显示你的远程操作。',
+          'Your remote activity is still visible on that computer.')
+      : nikoText('被控端尚未允许隐私屏，请在控制中心查看设置。',
+          'Privacy screen is unavailable. Check permissions in Control center.');
+
+  String get _autoLabel =>
+      nikoText('以后连接这台电脑自动开启', 'Turn on automatically for this computer');
+
+  String get _skipLabel => nikoText('暂不开启', 'Not now');
+
+  String get _enableLabel => busy
+      ? nikoText('开启中…', 'Turning on…')
+      : allowed
+          ? nikoText('开启', 'Turn on')
+          : nikoText('查看设置', 'Check settings');
+
   @override
   Widget build(BuildContext context) {
-    // Nightline colours when the session window runs on that theme; the
-    // fixed dark card otherwise.
     final nl = NlColors.maybeOf(context);
-    final auto = CheckboxListTile(
-        key: const Key('privacy-arrival-auto'),
-        dense: true,
-        contentPadding: EdgeInsets.zero,
-        controlAffinity: ListTileControlAffinity.leading,
-        visualDensity: nl == null ? null : VisualDensity.compact,
-        value: this.auto,
-        onChanged: busy ? null : (value) => onAuto(value ?? false),
-        title: Text(
-            nikoText('以后连接这台电脑自动开启',
-                'Turn on automatically for this computer'),
-            style: TextStyle(color: nl?.fg2 ?? Colors.white70, fontSize: 13)));
-    return Material(
-        color: nl?.overlay ?? const Color(0xff24282e),
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: nl == null ? BorderSide.none : BorderSide(color: nl.line2)),
-        elevation: 6,
-        child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                      nikoText(
-                          '开启被控电脑的隐私屏？', 'Turn on the remote privacy screen?'),
-                      style: TextStyle(
-                          color: nl?.fg ?? Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 5),
-                  Text(
-                      allowed
-                          ? nikoText('电脑屏幕仍在显示你的远程操作。',
-                              'Your remote activity is still visible on that computer.')
-                          : nikoText('被控端尚未允许隐私屏，请在控制中心查看设置。',
-                              'Privacy screen is unavailable. Check permissions in Control center.'),
-                      style: TextStyle(
-                          color: nl?.fg2 ?? Colors.white70, fontSize: 13)),
-                  nl == null
-                      ? auto
-                      : ListTileTheme(
-                          horizontalTitleGap: NlSpace.s1,
-                          minLeadingWidth: 0,
-                          child: auto),
-                  if (error != null)
-                    Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(error!,
-                            style: TextStyle(
-                                color: nl?.warnText ?? const Color(0xffffc8a4),
-                                fontSize: 13))),
-                  Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-                    TextButton(
-                        key: const Key('privacy-arrival-skip'),
-                        onPressed: busy ? null : onSkip,
-                        child: Text(nikoText('暂不开启', 'Not now'))),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                        key: const Key('privacy-arrival-enable'),
-                        onPressed: busy ? null : onEnable,
-                        child: Text(busy
-                            ? nikoText('开启中…', 'Turning on…')
-                            : allowed
-                                ? nikoText('开启', 'Turn on')
-                                : nikoText('查看设置', 'Check settings'))),
-                  ]),
-                ])));
+    return nl == null ? _material() : _nightline(nl);
   }
+
+  Widget _material() => Material(
+      color: const Color(0xff24282e),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 6,
+      child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_title,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(height: 5),
+                Text(_body,
+                    style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                CheckboxListTile(
+                    key: const Key('privacy-arrival-auto'),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    value: auto,
+                    onChanged: busy ? null : (value) => onAuto(value ?? false),
+                    title: Text(_autoLabel,
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 13))),
+                if (error != null)
+                  Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(error!,
+                          style: const TextStyle(
+                              color: Color(0xffffc8a4), fontSize: 13))),
+                Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                  TextButton(
+                      key: const Key('privacy-arrival-skip'),
+                      onPressed: busy ? null : onSkip,
+                      child: Text(_skipLabel)),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                      key: const Key('privacy-arrival-enable'),
+                      onPressed: busy ? null : onEnable,
+                      child: Text(_enableLabel)),
+                ]),
+              ])));
+
+  /// Nightline: a floating card like the dialogs, the icon beside the
+  /// question, the opt-in under the text and the actions at the end.
+  Widget _nightline(NlColors nl) => Material(
+      type: MaterialType.transparency,
+      child: Container(
+          padding: const EdgeInsets.all(NlSpace.s5),
+          decoration: BoxDecoration(
+              color: nl.overlay,
+              borderRadius: BorderRadius.circular(NlRadius.r4),
+              border: Border.all(color: nl.isDark ? nl.line2 : nl.line),
+              boxShadow: nl.shadow3),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            NlIconTile(
+                icon: allowed ? NlIcons.eyeOff : NlIcons.shieldAlert,
+                color: allowed ? nl.accent : nl.warn,
+                size: 36),
+            const SizedBox(width: NlSpace.s3),
+            Expanded(
+                child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Semantics(
+                      header: true,
+                      child: Text(_title,
+                          style: NlType.text(NlType.s4,
+                              weight: FontWeight.w600, color: nl.fg))),
+                  const SizedBox(height: NlSpace.s1),
+                  Text(_body,
+                      style: NlType.text(NlType.s3, color: nl.fg2)
+                          .copyWith(height: 20 / 13)),
+                  const SizedBox(height: NlSpace.s2),
+                  NlCheckbox(
+                      boxKey: const Key('privacy-arrival-auto'),
+                      value: auto,
+                      onChanged: busy ? null : onAuto,
+                      label: _autoLabel),
+                  if (error != null)
+                    Semantics(
+                        liveRegion: true,
+                        child: Padding(
+                            padding: const EdgeInsets.only(top: NlSpace.s1),
+                            child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Padding(
+                                      padding: const EdgeInsets.only(top: 2),
+                                      child: Icon(NlIcons.triangleAlert,
+                                          size: 14, color: nl.warnText)),
+                                  const SizedBox(width: NlSpace.s2),
+                                  Expanded(
+                                      child: Text(error!,
+                                          style: NlType.text(NlType.s3,
+                                              color: nl.warnText))),
+                                ]))),
+                  const SizedBox(height: NlSpace.s4),
+                  Align(
+                      alignment: Alignment.centerRight,
+                      child: Wrap(
+                          spacing: NlSpace.s2,
+                          runSpacing: NlSpace.s2,
+                          alignment: WrapAlignment.end,
+                          children: [
+                            NlButton.ghost(
+                                key: const Key('privacy-arrival-skip'),
+                                onPressed: busy ? null : onSkip,
+                                label: _skipLabel),
+                            NlButton(
+                                key: const Key('privacy-arrival-enable'),
+                                onPressed: busy ? null : onEnable,
+                                loading: busy,
+                                icon: allowed
+                                    ? NlIcons.eyeOff
+                                    : NlIcons.settings,
+                                label: _enableLabel),
+                          ])),
+                ])),
+          ])));
 }
 
 class NikoPrivacyAutoPreference extends StatefulWidget {
@@ -293,15 +370,15 @@ class _PreferenceState extends State<NikoPrivacyAutoPreference> {
   }
 
   @override
-  Widget build(BuildContext context) => SwitchListTile.adaptive(
-      key: const Key('privacy-auto-preference'),
-      contentPadding: EdgeInsets.zero,
-      title: Text(
-          nikoText('连接后自动开启隐私屏', 'Turn on privacy screen after connecting')),
-      subtitle: Text(_value == null
+  Widget build(BuildContext context) => NikoSettingRow(
+      title:
+          nikoText('连接后自动开启隐私屏', 'Turn on privacy screen after connecting'),
+      description: _value == null
           ? nikoText('设置暂不可用', 'Preference unavailable')
           : nikoText('仅对这台电脑生效；关闭后改为可跳过的提醒。',
-              'Applies to this computer. Turn off to use an optional reminder.')),
-      value: _value ?? false,
-      onChanged: _value == null || _busy ? null : _save);
+              'Applies to this computer. Turn off to use an optional reminder.'),
+      trailing: NlSwitch(
+          key: const Key('privacy-auto-preference'),
+          value: _value ?? false,
+          onChanged: _value == null || _busy ? null : _save));
 }

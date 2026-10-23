@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/nikodesk/mac_background_agent.dart';
 import 'package:flutter_hbb/nikodesk/mac_background_settings.dart';
 import 'package:flutter_hbb/nikodesk/mac_service_settings.dart';
+import 'package:flutter_hbb/nikodesk/nightline.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _Gateway extends NikoMacServiceGateway {
@@ -48,7 +49,7 @@ void main() {
       (tester) async {
     final gateway = _Gateway(const NikoMacServiceState());
     await _pump(tester, NikoMacServiceSettings(gateway: gateway));
-    final install = tester.widget<FilledButton>(
+    final install = tester.widget<NlButton>(
         find.byKey(const Key('niko-mac-service-install')));
     expect(install.onPressed, isNull);
     expect(find.textContaining('证书签名'), findsOneWidget);

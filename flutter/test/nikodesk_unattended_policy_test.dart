@@ -289,9 +289,10 @@ void main() {
                   policyGateway: gateway,
                   permissionsGranted: () => true))));
       await tester.pumpAndSettle();
-      // Under Nightline the settings page's section label is the only title.
+      // The settings page names the section; the group carries its own title.
       expect(find.text('macOS unattended access and background recovery'),
-          nightline ? findsNothing : findsOneWidget);
+          findsNothing);
+      expect(find.text('Background recovery'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }

@@ -142,8 +142,12 @@ String _phaseText(NikoVoiceStatus status, bool controller) =>
 class NikoCmVoicePanel extends StatefulWidget {
   final NikoVoiceSessionModel model;
   final bool controller;
+
+  /// Replaces the heading where the surrounding sheet already names the
+  /// call.
+  final String? label;
   const NikoCmVoicePanel(
-      {super.key, required this.model, this.controller = false});
+      {super.key, required this.model, this.controller = false, this.label});
   @override
   State<NikoCmVoicePanel> createState() => _VoicePanelState();
 }
@@ -243,8 +247,9 @@ class _VoicePanelState extends State<NikoCmVoicePanel> {
   Widget _button(String key, String text, String op, {bool enabled = true}) =>
       OutlinedButton(
           key: ValueKey(key),
-          style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48))
-              .merge(op == 'revoke' ? nikoCmStopStyle(context) : null),
+          style:
+              OutlinedButton.styleFrom(minimumSize: nikoCmButtonSize(context))
+                  .merge(op == 'revoke' ? nikoCmStopStyle(context) : null),
           onPressed: enabled && !_model.busy ? () => _model.send(op) : null,
           child: Text(text));
 
@@ -260,6 +265,57 @@ class _VoicePanelState extends State<NikoCmVoicePanel> {
     final label = input
         ? nikoText('本机麦克风', 'Local microphone')
         : nikoText('本机扬声器', 'Local speaker');
+    final formatName = input
+        ? nikoText('麦克风格式', 'Microphone format')
+        : nikoText('扬声器格式', 'Speaker format');
+    String deviceName(NikoVoiceDevice d) =>
+        d.label.isEmpty ? nikoText('未命名音频设备', 'Unnamed audio device') : d.label;
+    String formatText(NikoVoiceFormat f) =>
+        '48 kHz · f32 · ${f.channels == 1 ? nikoText('单声道', 'mono') : nikoText('双声道', 'stereo')}';
+    final chooseDevice = enabled
+        ? (String? value) => setState(() {
+              if (input) {
+                _capture = value;
+                _captureFormat = null;
+              } else {
+                _playback = value;
+                _playbackFormat = null;
+              }
+            })
+        : null;
+    final chooseFormat = enabled && device != null
+        ? (String? value) => setState(() {
+              if (input) {
+                _captureFormat = value;
+              } else {
+                _playbackFormat = value;
+              }
+            })
+        : null;
+    if (NlColors.maybeOf(context) != null) {
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        NlSelect<String>(
+            key: ValueKey('niko-voice-$direction-device'),
+            label: label,
+            placeholder: nikoText('请选择设备', 'Choose a device'),
+            value: token,
+            options: [
+              for (final d in devices) NlSelectOption(d.token, deviceName(d))
+            ],
+            onChanged: chooseDevice),
+        const SizedBox(height: NlSpace.s3),
+        NlSelect<String>(
+            key: ValueKey('niko-voice-$direction-format'),
+            label: formatName,
+            placeholder: nikoText('请选择格式', 'Choose a format'),
+            value: formatToken,
+            options: [
+              for (final f in device?.formats ?? <NikoVoiceFormat>[])
+                NlSelectOption(f.token, formatText(f))
+            ],
+            onChanged: chooseFormat),
+      ]);
+    }
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       DropdownButtonFormField<String>(
           key: ValueKey('niko-voice-$direction-device'),
@@ -275,33 +331,17 @@ class _VoicePanelState extends State<NikoCmVoicePanel> {
                       constraints: const BoxConstraints(minHeight: 48),
                       child: Align(
                           alignment: Alignment.centerLeft,
-                          child: Text(
-                              d.label.isEmpty
-                                  ? nikoText('未命名音频设备', 'Unnamed audio device')
-                                  : d.label,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis)))))
+                          child: Text(deviceName(d),
+                              maxLines: 2, overflow: TextOverflow.ellipsis)))))
               .toList(),
-          onChanged: enabled
-              ? (value) => setState(() {
-                    if (input) {
-                      _capture = value;
-                      _captureFormat = null;
-                    } else {
-                      _playback = value;
-                      _playbackFormat = null;
-                    }
-                  })
-              : null),
+          onChanged: chooseDevice),
       const SizedBox(height: 12),
       DropdownButtonFormField<String>(
           key: ValueKey('niko-voice-$direction-format'),
           value: formatToken,
           isExpanded: true,
           itemHeight: null,
-          decoration: nikoInput(input
-              ? nikoText('麦克风格式', 'Microphone format')
-              : nikoText('扬声器格式', 'Speaker format')),
+          decoration: nikoInput(formatName),
           hint: Text(nikoText('请选择格式', 'Choose a format')),
           items: (device?.formats ?? <NikoVoiceFormat>[])
               .map((f) => DropdownMenuItem(
@@ -310,20 +350,10 @@ class _VoicePanelState extends State<NikoCmVoicePanel> {
                       constraints: const BoxConstraints(minHeight: 48),
                       child: Align(
                           alignment: Alignment.centerLeft,
-                          child: Text(
-                              '48 kHz · f32 · ${f.channels == 1 ? nikoText('单声道', 'mono') : nikoText('双声道', 'stereo')}',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis)))))
+                          child: Text(formatText(f),
+                              maxLines: 2, overflow: TextOverflow.ellipsis)))))
               .toList(),
-          onChanged: enabled && device != null
-              ? (value) => setState(() {
-                    if (input) {
-                      _captureFormat = value;
-                    } else {
-                      _playbackFormat = value;
-                    }
-                  })
-              : null)
+          onChanged: chooseFormat)
     ]);
   }
 
@@ -336,9 +366,10 @@ class _VoicePanelState extends State<NikoCmVoicePanel> {
         status.phase == 'RecoveryRequired' ||
         status.phase == 'Revoking';
     final nightline = NlColors.maybeOf(context) != null;
-    final heading = widget.controller
-        ? nikoText('语音通话', 'Voice call')
-        : nikoText('本机语音授权', 'Local voice approval');
+    final heading = widget.label ??
+        (widget.controller
+            ? nikoText('语音通话', 'Voice call')
+            : nikoText('本机语音授权', 'Local voice approval'));
     final title = Semantics(
         liveRegion: true,
         child: Text(_phaseText(status, widget.controller),
@@ -374,7 +405,7 @@ class _VoicePanelState extends State<NikoCmVoicePanel> {
         const SizedBox(height: 12),
         Text(_permissionText(status.microphonePermission,
             android: _model.androidController)),
-        Wrap(spacing: 8, runSpacing: 8, children: [
+        NikoCmActions(children: [
           _button('niko-voice-enumerate',
               nikoText('读取本机音频设备', 'Read local audio devices'), 'enumerate',
               enabled: _model.mayPrepare),
@@ -420,16 +451,19 @@ class _VoicePanelState extends State<NikoCmVoicePanel> {
         const SizedBox(height: 12),
         FilledButton(
             key: const ValueKey('niko-voice-approve'),
-            style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+            style:
+                FilledButton.styleFrom(minimumSize: nikoCmButtonSize(context)),
             onPressed:
                 !_model.busy && _model.mayApprove(_selection) ? _approve : null,
             child: Text(
                 nikoText('允许此会话使用本机音频', 'Allow local audio for this session')))
       ],
       const SizedBox(height: 8),
-      Wrap(spacing: 8, runSpacing: 8, children: [
-        _button('niko-voice-query', nikoText('读取当前状态', 'Read current status'),
-            'query'),
+      NikoCmActions(children: [
+        // The design system reads the state from the card's heading.
+        if (!nightline)
+          _button('niko-voice-query', nikoText('读取当前状态', 'Read current status'),
+              'query'),
         if (!cleanup && !_model.cleanupOnly && status.phase == 'Pending')
           _button(
               'niko-voice-deny', nikoText('拒绝本次通话', 'Deny this call'), 'deny'),
@@ -455,7 +489,12 @@ class _VoicePanelState extends State<NikoCmVoicePanel> {
     if (nightline) {
       return NikoCmCapabilityFrame(
           label: heading,
-          icon: Icons.mic_none_rounded,
+          icon: NlIcons.mic,
+          action: NlIconButton(
+              key: const ValueKey('niko-voice-query'),
+              icon: NlIcons.refreshCw,
+              tooltip: nikoText('读取当前状态', 'Read current status'),
+              onPressed: _model.busy ? null : () => _model.send('query')),
           // Local audio is ready but the peer has not answered yet.
           tone: status.phase == 'Running' && !status.callRunning
               ? NlTone.warn

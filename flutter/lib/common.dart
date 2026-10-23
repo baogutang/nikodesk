@@ -40,12 +40,14 @@ import 'desktop/pages/view_camera_page.dart' as desktop_view_camera;
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'models/model.dart';
 import 'models/platform_model.dart';
+import 'nikodesk/alert_dialog.dart';
 import 'nikodesk/link_handler.dart';
 import 'nikodesk/server_gateway.dart';
 import 'nikodesk/server_scope.dart';
 import 'nikodesk/mobile_file_owner.dart';
 import 'nikodesk/window_scope.dart';
 import 'nikodesk/nightline/tokens.dart';
+import 'nikodesk/ui.dart' show nikoShowToast;
 
 import 'package:flutter_hbb/native/win32.dart'
     if (dart.library.html) 'package:flutter_hbb/web/win32.dart';
@@ -1031,6 +1033,10 @@ void showToast(String text,
     Alignment alignment = const Alignment(0.0, 0.8)}) {
   final overlayState = globalKey.currentState?.overlay;
   if (overlayState == null) return;
+  if (const bool.fromEnvironment('NIKODESK') &&
+      nikoShowToast(overlayState, text, timeout)) {
+    return;
+  }
   final entry = OverlayEntry(builder: (context) {
     return IgnorePointer(
         child: Align(
@@ -1120,7 +1126,14 @@ class CustomAlertDialog extends StatelessWidget {
         }
         return KeyEventResult.ignored;
       },
-      child: AlertDialog(
+      child: const bool.fromEnvironment('NIKODESK')
+          ? NikoAlertDialog(
+              title: title,
+              titlePadding: titlePadding,
+              content: content,
+              constraints: contentBoxConstraints,
+              actions: actions)
+          : AlertDialog(
           scrollable: true,
           title: title,
           content: ConstrainedBox(
@@ -1381,6 +1394,10 @@ Widget msgboxContent(String type, String title, String text) {
     return text;
   }
 
+  if (const bool.fromEnvironment('NIKODESK')) {
+    return NikoMsgboxContent(
+        type: type, title: translate(title), text: translateText(text));
+  }
   return Row(
     children: [
       msgboxIcon(type),
@@ -1403,6 +1420,16 @@ Widget msgboxContent(String type, String title, String text) {
 void msgBoxCommon(OverlayDialogManager dialogManager, String title,
     Widget content, List<Widget> buttons,
     {bool hasCancel = true}) {
+  if (const bool.fromEnvironment('NIKODESK')) {
+    // The dialog theme sizes the title.
+    dialogManager.show((setState, close, context) => CustomAlertDialog(
+          title: Text(translate(title)),
+          content: content,
+          actions: buttons,
+          onCancel: hasCancel ? close : null,
+        ));
+    return;
+  }
   dialogManager.show((setState, close, context) => CustomAlertDialog(
         title: Text(
           translate(title),
@@ -3100,6 +3127,13 @@ Widget dialogButton(String text,
     Widget? icon,
     TextStyle? style,
     ButtonStyle? buttonStyle}) {
+  // Text-only Nightline buttons; a caller's own colours keep the stock one.
+  if (const bool.fromEnvironment('NIKODESK') && buttonStyle == null) {
+    return NikoDialogButton(
+        label: translate(text),
+        onPressed: onPressed,
+        primary: nikoDialogPrimary(text, isOutline: isOutline));
+  }
   if (isDesktop || isWebDesktop) {
     if (isOutline) {
       return icon == null

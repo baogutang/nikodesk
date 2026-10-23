@@ -117,7 +117,7 @@ extern "C" void NPSWindowsClose() {
 extern "C" bool NPSWindowsCreate(const uint8_t *pixels,uint32_t width,uint32_t height,bool hint,bool clock,
         const char *scene,bool motion,uint32_t brightness,uint32_t intensity) {
     if(!NSThread.isMainThread || npsWindows)return false;
-    [NSApplication sharedApplication];[NSApp setActivationPolicy:NSApplicationActivationPolicyProhibited];
+    [NSApplication sharedApplication];[NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
     npsScreens=NPSScreens();if(!npsScreens || npsScreens.count>32)return false;
     NSMutableArray<NSWindow*> *windows=[NSMutableArray new];
     for(NSScreen *screen in NSScreen.screens){
@@ -127,7 +127,7 @@ extern "C" bool NPSWindowsCreate(const uint8_t *pixels,uint32_t width,uint32_t h
         if(!window){for(NSWindow *existing in windows)[existing close];return false;}
         window.releasedWhenClosed=NO;window.opaque=YES;window.backgroundColor=NSColor.blackColor;
         window.ignoresMouseEvents=YES;window.hidesOnDeactivate=NO;window.animationBehavior=NSWindowAnimationBehaviorNone;
-        window.collectionBehavior=NSWindowCollectionBehaviorCanJoinAllSpaces|NSWindowCollectionBehaviorFullScreenAuxiliary;
+        window.collectionBehavior=NPSCoverBehavior();
         window.contentView=[[NPSWallpaperView alloc] initWithFrame:NSMakeRect(0,0,screen.frame.size.width,screen.frame.size.height)];
         window.contentView.wantsLayer=YES;
         // Register an on-screen window behind the desktop before content

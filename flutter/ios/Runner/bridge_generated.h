@@ -7,6 +7,22 @@ typedef struct _Dart_Handle* Dart_Handle;
 
 #define AUDIO_BUFFER_MS 3000
 
+#define MAX_PAYLOAD_BYTES ((512 * 1024) * 1024)
+
+#define MAX_TOTAL_BYTES (((2 * 1024) * 1024) * 1024)
+
+#define MAX_DISPLAYS 16
+
+#define MAX_STAGE_SAMPLES 8
+
+#define SAMPLE_RATE 48000
+
+#define FRAME_SAMPLES 480
+
+#define QUEUE_FRAMES 10
+
+#define MAX_OPUS_BYTES 1275
+
 #define CLIPBOARD_INTERVAL 333
 
 /**
@@ -90,6 +106,101 @@ typedef struct XRectangle {
 
 #define INJECTED_PROCESS_EXE WIN_TOPMOST_INJECTED_PROCESS_EXE
 
+extern bool NPSWindowSupported(void);
+
+extern bool NPSWindowPipes(void);
+
+extern bool NPSWindowsCreate(const uint8_t *pixels,
+                             uint32_t width,
+                             uint32_t height,
+                             bool hint,
+                             bool clock,
+                             const char *scene,
+                             bool motion,
+                             uint32_t brightness,
+                             uint32_t intensity);
+
+extern bool NPSWindowsStyle(const uint8_t *pixels,
+                            uint32_t width,
+                            uint32_t height,
+                            bool hint,
+                            bool clock,
+                            const char *scene,
+                            bool motion,
+                            uint32_t brightness,
+                            uint32_t intensity);
+
+extern bool NPSWindowsShow(void);
+
+extern bool NPSWindowsTick(const uint8_t *pixels, uint32_t width, uint32_t height);
+
+extern bool NPSWindowsMotionAllowed(void);
+
+extern void NPSWindowsClose(void);
+
+extern bool NPSWindowsRequestUnlock(void);
+
+extern bool NPSWindowsUnlocked(void);
+
+extern bool NikoMacStyledPrivacyInput(bool on, uint32_t helper_pid);
+
+extern bool NikoMacStyledPrivacyInputRenew(void);
+
+extern bool NikoMacStyledPrivacyUnlockPending(bool consume);
+
+extern bool NikoMacVirtualDisplaySupported(void);
+
+extern void *NikoMacVirtualDisplayCreate(uint32_t slot,
+                                         uint32_t *display_id,
+                                         uint32_t *serial,
+                                         bool *applied);
+
+extern bool NikoMacVirtualDisplayOnline(uint32_t display_id, uint32_t serial);
+
+extern void NikoMacVirtualDisplayRelease(void *display);
+
+extern void *NikoMacVirtualDisplayCreateMatched(uint32_t slot,
+                                                uint32_t width,
+                                                uint32_t height,
+                                                bool hidpi,
+                                                uint32_t refresh_hz,
+                                                uint32_t *display_id,
+                                                uint32_t *serial,
+                                                bool *applied,
+                                                int32_t *matched);
+
+extern bool NikoMacOtherDisplayOnline(const uint32_t *excluded, uint32_t count);
+
+extern bool NikoMacBackgroundEnvironment(void);
+
+extern void NikoMacBackgroundRunLoop(void);
+
+extern void NikoDisplayEventsStart(void);
+
+extern bool NikoDisplayEventsRegistered(void);
+
+extern uint64_t NikoDisplayEventsGeneration(void);
+
+extern uint64_t NikoLockEventsGeneration(void);
+
+extern int32_t NikoScreenLockedState(void);
+
+extern bool NikoLoginWindowProbe(char *out, uintptr_t length);
+
+extern int32_t NKVoiceMicrophoneAuthorization(void);
+
+extern int32_t NKVoiceRequestMicrophoneAuthorization(void (*completion)(void*, int32_t),
+                                                     void *context);
+
+extern int32_t NKVoiceReadDeviceUID(uint32_t device, char *output, uint32_t capacity);
+
+extern int32_t NKVoiceReadDeviceMetadata(uint32_t device,
+                                         uint32_t *capture,
+                                         uint32_t *playback,
+                                         double *rate);
+
+extern int32_t NKVoiceDeviceMatches(uint32_t device, const char *expected_uid);
+
 void store_dart_post_cobject(DartPostCObjectFnType ptr);
 
 Dart_Handle get_dart_object(uintptr_t ptr);
@@ -125,6 +236,32 @@ WireSyncReturn wire_session_add_sync(struct wire_uint_8_list *session_id,
                                      struct wire_uint_8_list *password,
                                      bool is_shared_password,
                                      struct wire_uint_8_list *conn_token);
+
+WireSyncReturn wire_session_add_nikodesk_sync(struct wire_uint_8_list *session_id,
+                                              struct wire_uint_8_list *id,
+                                              struct wire_uint_8_list *expected_server_namespace,
+                                              bool is_file_transfer,
+                                              bool is_view_camera,
+                                              bool is_port_forward,
+                                              bool is_rdp,
+                                              bool is_terminal,
+                                              struct wire_uint_8_list *switch_uuid,
+                                              bool force_relay,
+                                              struct wire_uint_8_list *password,
+                                              bool is_shared_password,
+                                              struct wire_uint_8_list *conn_token);
+
+WireSyncReturn wire_session_add_nikodesk_existed_sync(struct wire_uint_8_list *id,
+                                                      struct wire_uint_8_list *session_id,
+                                                      struct wire_int_32_list *displays,
+                                                      bool is_view_camera,
+                                                      struct wire_uint_8_list *expected_server_namespace);
+
+WireSyncReturn wire_peer_get_nikodesk_sessions_count(struct wire_uint_8_list *id,
+                                                     int32_t conn_type,
+                                                     struct wire_uint_8_list *expected_server_namespace);
+
+WireSyncReturn wire_session_get_server_namespace(struct wire_uint_8_list *session_id);
 
 void wire_session_start(int64_t port_,
                         struct wire_uint_8_list *session_id,
@@ -196,6 +333,10 @@ void wire_session_toggle_privacy_mode(int64_t port_,
                                       struct wire_uint_8_list *session_id,
                                       struct wire_uint_8_list *impl_key,
                                       bool on);
+
+void wire_session_privacy_style(int64_t port_,
+                                struct wire_uint_8_list *session_id,
+                                struct wire_uint_8_list *json);
 
 void wire_session_get_flutter_option(int64_t port_,
                                      struct wire_uint_8_list *session_id,
@@ -358,6 +499,9 @@ void wire_session_get_peer_option(int64_t port_,
                                   struct wire_uint_8_list *session_id,
                                   struct wire_uint_8_list *name);
 
+WireSyncReturn wire_session_get_peer_option_sync(struct wire_uint_8_list *session_id,
+                                                 struct wire_uint_8_list *name);
+
 void wire_session_input_os_password(int64_t port_,
                                     struct wire_uint_8_list *session_id,
                                     struct wire_uint_8_list *value);
@@ -490,6 +634,7 @@ void wire_main_get_http_status(int64_t port_, struct wire_uint_8_list *url);
 
 void wire_main_get_option(int64_t port_, struct wire_uint_8_list *key);
 
+void wire_main_niko_save_private_server(int64_t port_, struct wire_uint_8_list *config);
 
 WireSyncReturn wire_main_get_option_sync(struct wire_uint_8_list *key);
 
@@ -530,7 +675,45 @@ void wire_main_get_version(int64_t port_);
 
 void wire_main_get_fav(int64_t port_);
 
+WireSyncReturn wire_main_take_nikodesk_crash_marker(void);
+
+void wire_main_get_nikodesk_diagnostics(int64_t port_);
+
+void wire_main_get_nikodesk_mac_service(int64_t port_);
+
+void wire_main_nikodesk_mac_service_call(int64_t port_,
+                                         struct wire_uint_8_list *op,
+                                         struct wire_uint_8_list *bundle);
+
+void wire_main_set_nikodesk_mac_service(int64_t port_, bool install);
+
+void wire_main_get_nikodesk_capability_policy(int64_t port_,
+                                              struct wire_uint_8_list *expected_server_namespace);
+
+void wire_main_set_nikodesk_capability_policy(int64_t port_,
+                                              struct wire_uint_8_list *expected_server_namespace,
+                                              struct wire_uint_8_list *expected_revision,
+                                              struct wire_uint_8_list *capability,
+                                              bool allow_requests);
+
 void wire_main_store_fav(int64_t port_, struct wire_StringList *favs);
+
+void wire_main_get_nikodesk_favorites(int64_t port_,
+                                      struct wire_uint_8_list *expected_server_namespace);
+
+void wire_main_patch_nikodesk_favorites(int64_t port_,
+                                        struct wire_uint_8_list *expected_server_namespace,
+                                        struct wire_uint_8_list *expected_revision,
+                                        struct wire_StringList *add,
+                                        struct wire_StringList *remove);
+
+void wire_main_preview_nikodesk_legacy_peer_preferences(int64_t port_,
+                                                        struct wire_uint_8_list *expected_server_namespace);
+
+void wire_main_import_nikodesk_legacy_peer_preferences(int64_t port_,
+                                                       struct wire_uint_8_list *expected_server_namespace,
+                                                       struct wire_uint_8_list *preview_revision,
+                                                       struct wire_StringList *peer_ids);
 
 WireSyncReturn wire_main_get_peer_sync(struct wire_uint_8_list *id);
 
@@ -615,6 +798,24 @@ WireSyncReturn wire_main_set_peer_option_sync(struct wire_uint_8_list *id,
                                               struct wire_uint_8_list *key,
                                               struct wire_uint_8_list *value);
 
+WireSyncReturn wire_main_get_nikodesk_peer_option_sync(struct wire_uint_8_list *id,
+                                                       struct wire_uint_8_list *expected_server_namespace,
+                                                       struct wire_uint_8_list *key);
+
+WireSyncReturn wire_main_set_nikodesk_peer_option_sync(struct wire_uint_8_list *id,
+                                                       struct wire_uint_8_list *expected_server_namespace,
+                                                       struct wire_uint_8_list *key,
+                                                       struct wire_uint_8_list *value);
+
+WireSyncReturn wire_main_get_nikodesk_peer_flutter_option_sync(struct wire_uint_8_list *id,
+                                                               struct wire_uint_8_list *expected_server_namespace,
+                                                               struct wire_uint_8_list *k);
+
+WireSyncReturn wire_main_set_nikodesk_peer_flutter_option_sync(struct wire_uint_8_list *id,
+                                                               struct wire_uint_8_list *expected_server_namespace,
+                                                               struct wire_uint_8_list *k,
+                                                               struct wire_uint_8_list *v);
+
 void wire_main_set_peer_alias(int64_t port_,
                               struct wire_uint_8_list *id,
                               struct wire_uint_8_list *alias);
@@ -662,6 +863,20 @@ void wire_session_add_port_forward(int64_t port_,
                                    int32_t local_port,
                                    struct wire_uint_8_list *remote_host,
                                    int32_t remote_port);
+
+void wire_session_niko_tunnel_command(int64_t port_,
+                                      struct wire_uint_8_list *session_id,
+                                      struct wire_uint_8_list *json);
+
+void wire_session_niko_tunnel_close(int64_t port_,
+                                    struct wire_uint_8_list *session_id,
+                                    struct wire_uint_8_list *json);
+
+void wire_session_niko_tunnel_query(int64_t port_,
+                                    struct wire_uint_8_list *session_id,
+                                    struct wire_uint_8_list *json);
+
+void wire_session_niko_tunnel_retired(int64_t port_);
 
 void wire_session_remove_port_forward(int64_t port_,
                                       struct wire_uint_8_list *session_id,
@@ -775,6 +990,15 @@ void wire_session_toggle_virtual_display(int64_t port_,
                                          struct wire_uint_8_list *session_id,
                                          int32_t index,
                                          bool on);
+
+void wire_session_toggle_nikodesk_virtual_display(int64_t port_,
+                                                  struct wire_uint_8_list *session_id,
+                                                  int32_t index,
+                                                  bool on,
+                                                  uint32_t width,
+                                                  uint32_t height,
+                                                  uint32_t scale_milli,
+                                                  uint32_t refresh_milli_hz);
 
 void wire_session_printer_response(int64_t port_,
                                    struct wire_uint_8_list *session_id,
@@ -1005,6 +1229,44 @@ void wire_session_get_common(int64_t port_,
                              struct wire_uint_8_list *key,
                              struct wire_uint_8_list *param);
 
+void wire_cm_nikodesk_capability_decision(int64_t port_, struct wire_uint_8_list *json);
+
+void wire_cm_nikodesk_capability_revoke(int64_t port_, struct wire_uint_8_list *json);
+
+WireSyncReturn wire_cm_nikodesk_camera_command(struct wire_uint_8_list *json);
+
+void wire_session_voice_prepare(int64_t port_, struct wire_uint_8_list *session_id);
+
+void wire_session_voice_command(int64_t port_,
+                                struct wire_uint_8_list *session_id,
+                                struct wire_uint_8_list *json);
+
+void wire_session_voice_availability(int64_t port_, struct wire_uint_8_list *session_id);
+
+void wire_cm_voice_command(int64_t port_, struct wire_uint_8_list *json);
+
+void wire_cm_tunnel_command(int64_t port_, struct wire_uint_8_list *json);
+
+void wire_cm_voice_availability(int64_t port_, struct wire_uint_8_list *json_identity);
+
+void wire_voice_pending_cleanup(int64_t port_);
+
+void wire_main_niko_unattended_install_begin(int64_t port_, struct wire_uint_8_list *json);
+
+void wire_main_niko_unattended_install_status(int64_t port_, struct wire_uint_8_list *job_id);
+
+void wire_main_niko_unattended_install_current(int64_t port_);
+
+void wire_main_niko_unattended_install_cancel(int64_t port_, struct wire_uint_8_list *job_id);
+
+void wire_main_niko_session_audit(int64_t port_, struct wire_uint_8_list *namespace_);
+
+void wire_main_niko_session_audit_clear(int64_t port_,
+                                        struct wire_uint_8_list *namespace_,
+                                        struct wire_uint_8_list *revision);
+
+void wire_main_niko_virtual_driver(int64_t port_, struct wire_uint_8_list *json);
+
 struct wire_StringList *new_StringList_0(int32_t len);
 
 struct wire_int_32_list *new_int_32_list_0(int32_t len);
@@ -1046,6 +1308,8 @@ extern void XFixesSetWindowShapeRegion(Display *dpy,
 
 extern bool MacSetPrivacyMode(bool on);
 
+extern bool NikoMacPrivacyModeActive(void);
+
 static int64_t dummy_method_to_enforce_bundling(void) {
     int64_t dummy_var = 0;
     dummy_var ^= ((int64_t) (void*) wire_start_global_event_stream);
@@ -1054,6 +1318,10 @@ static int64_t dummy_method_to_enforce_bundling(void) {
     dummy_var ^= ((int64_t) (void*) wire_peer_get_sessions_count);
     dummy_var ^= ((int64_t) (void*) wire_session_add_existed_sync);
     dummy_var ^= ((int64_t) (void*) wire_session_add_sync);
+    dummy_var ^= ((int64_t) (void*) wire_session_add_nikodesk_sync);
+    dummy_var ^= ((int64_t) (void*) wire_session_add_nikodesk_existed_sync);
+    dummy_var ^= ((int64_t) (void*) wire_peer_get_nikodesk_sessions_count);
+    dummy_var ^= ((int64_t) (void*) wire_session_get_server_namespace);
     dummy_var ^= ((int64_t) (void*) wire_session_start);
     dummy_var ^= ((int64_t) (void*) wire_session_start_with_displays);
     dummy_var ^= ((int64_t) (void*) wire_session_get_cursor_shape);
@@ -1075,6 +1343,7 @@ static int64_t dummy_method_to_enforce_bundling(void) {
     dummy_var ^= ((int64_t) (void*) wire_session_reconnect);
     dummy_var ^= ((int64_t) (void*) wire_session_toggle_option);
     dummy_var ^= ((int64_t) (void*) wire_session_toggle_privacy_mode);
+    dummy_var ^= ((int64_t) (void*) wire_session_privacy_style);
     dummy_var ^= ((int64_t) (void*) wire_session_get_flutter_option);
     dummy_var ^= ((int64_t) (void*) wire_session_set_flutter_option);
     dummy_var ^= ((int64_t) (void*) wire_get_next_texture_key);
@@ -1119,6 +1388,7 @@ static int64_t dummy_method_to_enforce_bundling(void) {
     dummy_var ^= ((int64_t) (void*) wire_session_close_terminal);
     dummy_var ^= ((int64_t) (void*) wire_session_peer_option);
     dummy_var ^= ((int64_t) (void*) wire_session_get_peer_option);
+    dummy_var ^= ((int64_t) (void*) wire_session_get_peer_option_sync);
     dummy_var ^= ((int64_t) (void*) wire_session_input_os_password);
     dummy_var ^= ((int64_t) (void*) wire_session_read_remote_dir);
     dummy_var ^= ((int64_t) (void*) wire_session_send_files);
@@ -1148,6 +1418,7 @@ static int64_t dummy_method_to_enforce_bundling(void) {
     dummy_var ^= ((int64_t) (void*) wire_main_get_async_status);
     dummy_var ^= ((int64_t) (void*) wire_main_get_http_status);
     dummy_var ^= ((int64_t) (void*) wire_main_get_option);
+    dummy_var ^= ((int64_t) (void*) wire_main_niko_save_private_server);
     dummy_var ^= ((int64_t) (void*) wire_main_get_option_sync);
     dummy_var ^= ((int64_t) (void*) wire_main_get_error);
     dummy_var ^= ((int64_t) (void*) wire_main_set_option);
@@ -1164,7 +1435,18 @@ static int64_t dummy_method_to_enforce_bundling(void) {
     dummy_var ^= ((int64_t) (void*) wire_main_get_license);
     dummy_var ^= ((int64_t) (void*) wire_main_get_version);
     dummy_var ^= ((int64_t) (void*) wire_main_get_fav);
+    dummy_var ^= ((int64_t) (void*) wire_main_take_nikodesk_crash_marker);
+    dummy_var ^= ((int64_t) (void*) wire_main_get_nikodesk_diagnostics);
+    dummy_var ^= ((int64_t) (void*) wire_main_get_nikodesk_mac_service);
+    dummy_var ^= ((int64_t) (void*) wire_main_nikodesk_mac_service_call);
+    dummy_var ^= ((int64_t) (void*) wire_main_set_nikodesk_mac_service);
+    dummy_var ^= ((int64_t) (void*) wire_main_get_nikodesk_capability_policy);
+    dummy_var ^= ((int64_t) (void*) wire_main_set_nikodesk_capability_policy);
     dummy_var ^= ((int64_t) (void*) wire_main_store_fav);
+    dummy_var ^= ((int64_t) (void*) wire_main_get_nikodesk_favorites);
+    dummy_var ^= ((int64_t) (void*) wire_main_patch_nikodesk_favorites);
+    dummy_var ^= ((int64_t) (void*) wire_main_preview_nikodesk_legacy_peer_preferences);
+    dummy_var ^= ((int64_t) (void*) wire_main_import_nikodesk_legacy_peer_preferences);
     dummy_var ^= ((int64_t) (void*) wire_main_get_peer_sync);
     dummy_var ^= ((int64_t) (void*) wire_main_get_lan_peers);
     dummy_var ^= ((int64_t) (void*) wire_main_get_connect_status);
@@ -1193,6 +1475,10 @@ static int64_t dummy_method_to_enforce_bundling(void) {
     dummy_var ^= ((int64_t) (void*) wire_main_set_peer_flutter_option_sync);
     dummy_var ^= ((int64_t) (void*) wire_main_set_peer_option);
     dummy_var ^= ((int64_t) (void*) wire_main_set_peer_option_sync);
+    dummy_var ^= ((int64_t) (void*) wire_main_get_nikodesk_peer_option_sync);
+    dummy_var ^= ((int64_t) (void*) wire_main_set_nikodesk_peer_option_sync);
+    dummy_var ^= ((int64_t) (void*) wire_main_get_nikodesk_peer_flutter_option_sync);
+    dummy_var ^= ((int64_t) (void*) wire_main_set_nikodesk_peer_flutter_option_sync);
     dummy_var ^= ((int64_t) (void*) wire_main_set_peer_alias);
     dummy_var ^= ((int64_t) (void*) wire_main_get_new_stored_peers);
     dummy_var ^= ((int64_t) (void*) wire_main_forget_password);
@@ -1213,6 +1499,10 @@ static int64_t dummy_method_to_enforce_bundling(void) {
     dummy_var ^= ((int64_t) (void*) wire_main_get_main_display);
     dummy_var ^= ((int64_t) (void*) wire_main_get_displays);
     dummy_var ^= ((int64_t) (void*) wire_session_add_port_forward);
+    dummy_var ^= ((int64_t) (void*) wire_session_niko_tunnel_command);
+    dummy_var ^= ((int64_t) (void*) wire_session_niko_tunnel_close);
+    dummy_var ^= ((int64_t) (void*) wire_session_niko_tunnel_query);
+    dummy_var ^= ((int64_t) (void*) wire_session_niko_tunnel_retired);
     dummy_var ^= ((int64_t) (void*) wire_session_remove_port_forward);
     dummy_var ^= ((int64_t) (void*) wire_session_new_rdp);
     dummy_var ^= ((int64_t) (void*) wire_session_request_voice_call);
@@ -1261,6 +1551,7 @@ static int64_t dummy_method_to_enforce_bundling(void) {
     dummy_var ^= ((int64_t) (void*) wire_session_change_prefer_codec);
     dummy_var ^= ((int64_t) (void*) wire_session_on_waiting_for_image_dialog_show);
     dummy_var ^= ((int64_t) (void*) wire_session_toggle_virtual_display);
+    dummy_var ^= ((int64_t) (void*) wire_session_toggle_nikodesk_virtual_display);
     dummy_var ^= ((int64_t) (void*) wire_session_printer_response);
     dummy_var ^= ((int64_t) (void*) wire_main_set_home_dir);
     dummy_var ^= ((int64_t) (void*) wire_main_get_data_dir_ios);
@@ -1363,6 +1654,23 @@ static int64_t dummy_method_to_enforce_bundling(void) {
     dummy_var ^= ((int64_t) (void*) wire_session_set_common);
     dummy_var ^= ((int64_t) (void*) wire_session_get_common_sync);
     dummy_var ^= ((int64_t) (void*) wire_session_get_common);
+    dummy_var ^= ((int64_t) (void*) wire_cm_nikodesk_capability_decision);
+    dummy_var ^= ((int64_t) (void*) wire_cm_nikodesk_capability_revoke);
+    dummy_var ^= ((int64_t) (void*) wire_cm_nikodesk_camera_command);
+    dummy_var ^= ((int64_t) (void*) wire_session_voice_prepare);
+    dummy_var ^= ((int64_t) (void*) wire_session_voice_command);
+    dummy_var ^= ((int64_t) (void*) wire_session_voice_availability);
+    dummy_var ^= ((int64_t) (void*) wire_cm_voice_command);
+    dummy_var ^= ((int64_t) (void*) wire_cm_tunnel_command);
+    dummy_var ^= ((int64_t) (void*) wire_cm_voice_availability);
+    dummy_var ^= ((int64_t) (void*) wire_voice_pending_cleanup);
+    dummy_var ^= ((int64_t) (void*) wire_main_niko_unattended_install_begin);
+    dummy_var ^= ((int64_t) (void*) wire_main_niko_unattended_install_status);
+    dummy_var ^= ((int64_t) (void*) wire_main_niko_unattended_install_current);
+    dummy_var ^= ((int64_t) (void*) wire_main_niko_unattended_install_cancel);
+    dummy_var ^= ((int64_t) (void*) wire_main_niko_session_audit);
+    dummy_var ^= ((int64_t) (void*) wire_main_niko_session_audit_clear);
+    dummy_var ^= ((int64_t) (void*) wire_main_niko_virtual_driver);
     dummy_var ^= ((int64_t) (void*) new_StringList_0);
     dummy_var ^= ((int64_t) (void*) new_int_32_list_0);
     dummy_var ^= ((int64_t) (void*) new_uint_8_list_0);

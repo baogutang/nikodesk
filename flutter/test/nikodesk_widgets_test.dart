@@ -323,10 +323,8 @@ void main() {
       (tester) async {
     final gateway = _ServerDouble(
         const ServerSnapshot(PrivateServerConfig('', '', ''), null, false));
+    NikoLanguage.english = true;
     await loadPage(tester, NikoDevicePage(store: store, gateway: gateway));
-    await tester.ensureVisible(find.text('English'));
-    await tester.tap(find.text('English'));
-    await tester.pumpAndSettle();
     expect(find.text('My devices'), findsOneWidget);
     expect(find.text('Set up your private server'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());

@@ -258,7 +258,7 @@ class _NikoQualityOverlayState extends State<NikoQualityOverlay> {
   /// Nightline telemetry HUD: three headline figures over the same rows as
   /// the plain panel. It stays dark in both modes, like the session dock.
   Widget _telemetry(BuildContext context) {
-    const nl = NlColors.dark;
+    final nl = NlColors.dark;
     final setup = widget.metrics.setup;
     final host = _host();
     final fps = _number('decodedCallbackFps');

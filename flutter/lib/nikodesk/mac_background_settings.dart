@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'mac_background_agent.dart';
 import 'mac_service_settings.dart';
-import 'nightline/tokens.dart';
+import 'nightline.dart';
+import 'settings_kit.dart';
 import 'unattended_policy.dart';
 import 'ui.dart';
 
@@ -130,50 +132,70 @@ class _SettingsState extends State<NikoMacBackgroundSettings> {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        // The NikoDesk settings page already labels this section.
-        if (NlColors.maybeOf(context) == null)
-          Text(
-              nikoText('macOS 无人值守与后台恢复',
-                  'macOS unattended access and background recovery'),
-              style: Theme.of(context).textTheme.titleMedium),
-        Text(nikoText(
-            '登录后保持真实远控核心运行，异常退出后恢复。需明确设置服务密码并授予系统权限；注销后、FileVault 解锁前不提供被控。',
-            'Keep the real remote-control core running after login and recover after a crash. An explicit service password and system permissions are required. Control is unavailable after logout or before FileVault unlock.')),
-        if (_system)
-          Text(
-              key: const Key('niko-mac-background-by-service'),
-              nikoText('后台恢复已由下方的系统后台服务接管。',
-                  'Background recovery is provided by the system background service below.')),
-        if (!_system && !_configured) ...[
-          TextField(
-              controller: _password,
-              enabled: !_busy,
-              maxLength: 128,
-              autofillHints: const [],
-              obscureText: true,
-              enableSuggestions: false,
-              autocorrect: false,
-              decoration: nikoInput(nikoText(
-                  '本机无人值守密码', 'Unattended password for this computer'))),
-          FilledButton(
-              onPressed: _busy ? null : _enable,
-              child: Text(nikoText('确认无人值守并注册后台恢复',
-                  'Confirm unattended access and register recovery')))
-        ],
-        if (!_system && _owned)
-          OutlinedButton(
-              onPressed: _busy ? null : _disable,
-              child: Text(nikoText('停用后台恢复', 'Disable background recovery'))),
-        if (!_system && _owned && !_configured)
-          Text(nikoText('已有后台配置与当前应用路径不一致。可以重新确认更新配置，或停用原任务。',
-              'An existing background configuration uses a different application path. Confirm again to update it, or disable the previous job.')),
-        TextButton(
-            onPressed: _busy ? null : _refresh,
-            child: Text(nikoText('更新状态', 'Refresh status'))),
-        if (_busy) const LinearProgressIndicator(),
-        if (_notice != null)
-          Text(_notice!, style: Theme.of(context).textTheme.bodySmall)
-      ]);
+  Widget build(BuildContext context) => NikoSettingsGroup(
+          title: nikoText('后台恢复', 'Background recovery'),
+          description: nikoText(
+              '登录后保持真实远控核心运行，异常退出后恢复。需明确设置服务密码并授予系统权限；注销后、FileVault 解锁前不提供被控。',
+              'Keep the real remote-control core running after login and recover after a crash. An explicit service password and system permissions are required. Control is unavailable after logout or before FileVault unlock.'),
+          trailing: NlButton.quiet(
+              small: true,
+              icon: NlIcons.refreshCw,
+              onPressed: _busy ? null : _refresh,
+              label: nikoText('更新状态', 'Refresh status')),
+          children: [
+            if (_system)
+              Padding(
+                  padding: const EdgeInsets.symmetric(vertical: NlSpace.s3),
+                  child: NikoSettingNote(
+                      nikoText('后台恢复已由下方的系统后台服务接管。',
+                          'Background recovery is provided by the system background service below.'),
+                      tone: NlTone.ok,
+                      textKey: const Key('niko-mac-background-by-service'))),
+            if (!_system && !_configured)
+              NikoSettingRow(
+                  title: nikoText('本机无人值守密码', 'Unattended password for this computer'),
+                  description: nikoText('远程连接本机时输入的密码',
+                      'The password a remote session enters to connect to this computer'),
+                  busy: _busy,
+                  below: Wrap(
+                      spacing: NlSpace.s2,
+                      runSpacing: NlSpace.s2,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        SizedBox(
+                            width: 260,
+                            child: NlTextField(
+                                controller: _password,
+                                enabled: !_busy,
+                                obscure: true,
+                                autofillHints: const [],
+                                hint: nikoText('设置服务密码', 'Set the service password'),
+                                inputFormatters: [
+                                  LengthLimitingTextInputFormatter(128)
+                                ])),
+                        NlButton(
+                            onPressed: _busy ? null : _enable,
+                            label: nikoText('确认无人值守并注册后台恢复',
+                                'Confirm unattended access and register recovery')),
+                      ])),
+            if (!_system && _owned)
+              NikoSettingRow(
+                  title: nikoText('停用后台恢复', 'Disable background recovery'),
+                  description: _configured
+                      ? null
+                      : nikoText('已有后台配置与当前应用路径不一致。可以重新确认更新配置，或停用原任务。',
+                          'An existing background configuration uses a different application path. Confirm again to update it, or disable the previous job.'),
+                  trailing: NlButton.ghost(
+                      small: true,
+                      onPressed: _busy ? null : _disable,
+                      label: nikoText('停用', 'Disable'))),
+            if (_notice != null || (_busy && (_system || _configured)))
+              Padding(
+                  padding: const EdgeInsets.symmetric(vertical: NlSpace.s3),
+                  child: _notice == null
+                      ? const Align(
+                          alignment: Alignment.centerLeft,
+                          child: NlSpinner(size: 14))
+                      : NikoSettingNote(_notice!)),
+          ]);
 }

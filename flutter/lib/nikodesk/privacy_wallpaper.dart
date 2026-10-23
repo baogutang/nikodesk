@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'nightline/tokens.dart';
 import 'privacy_style_model.dart';
 import 'ui.dart';
 
@@ -251,10 +252,13 @@ class _NikoPrivacyPill extends StatelessWidget {
                       fontWeight: FontWeight.w600)),
               const SizedBox(width: 8),
             ],
+            // The bundled mono face carries the modifier glyphs on every
+            // platform; a generic 'monospace' may not.
             Text(keys,
                 style: const TextStyle(
                     fontSize: 9,
-                    fontFamily: 'monospace',
+                    fontFamily: NlType.mono,
+                    fontFamilyFallback: NlType.monoFallback,
                     color: Color(0xFF93A1AD))),
             const SizedBox(width: 6),
             Text(nikoText('退出 · 需本机登录密码', 'to exit · local login password'),

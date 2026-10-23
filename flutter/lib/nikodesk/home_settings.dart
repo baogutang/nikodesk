@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'autostart.dart';
 import 'diagnostics_bundle.dart';
+import 'home_chrome.dart';
 import 'auto_lock_settings.dart';
 import 'privacy_settings.dart';
 import 'virtual_display_settings.dart';
@@ -22,7 +23,7 @@ import 'policy.dart';
 import 'updater.dart';
 import 'server_gateway.dart';
 import 'server_settings.dart';
-import 'theme.dart';
+import 'settings_kit.dart';
 import 'ui.dart';
 import 'peer_preferences_native.dart';
 import 'peer_preferences_view.dart';
@@ -32,15 +33,36 @@ import 'capability_policy_view.dart';
 import 'product_build_info.dart';
 import 'update_transfer.dart' show NikoUpdateTask;
 
-/// Settings page of the NikoDesk home: private server, appearance, language,
-/// autostart, and a hosted entry into the full upstream settings.
+/// The pages of NikoDesk settings, in the order the navigation lists them.
+enum NikoSettingsSection {
+  general,
+  appearance,
+  server,
+  unattended,
+  security,
+  wake,
+  updates,
+  advanced,
+  about,
+}
+
+/// Settings page of the NikoDesk home: one section at a time beside a
+/// section list on a wide page, every section in one scroll on a narrow
+/// one.
 class NikoSettingsView extends StatefulWidget {
   final ServerGateway? gateway;
   final bool native;
   final bool active;
   final VoidCallback? onServerSaved;
   final VoidCallback? onLanguageChanged;
+  final VoidCallback? onAppearanceChanged;
   final VoidCallback? onOpenAdvanced;
+
+  /// The section shown first.
+  final NikoSettingsSection? initialSection;
+
+  /// Changing it opens [initialSection] again on a page already shown.
+  final int sectionRequest;
   final NikoAutostart? autostart;
   final Future<ProductBuildInfo> Function()? buildInfoLoader;
   // Explicit UI-test injection; production uses the real NikoUpdater.
@@ -54,7 +76,10 @@ class NikoSettingsView extends StatefulWidget {
       this.active = true,
       this.onServerSaved,
       this.onLanguageChanged,
+      this.onAppearanceChanged,
       this.onOpenAdvanced,
+      this.initialSection,
+      this.sectionRequest = 0,
       this.autostart,
       this.buildInfoLoader,
       this.updateChecker,
@@ -94,6 +119,10 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
   String? _buildDate;
   String? _loadError;
 
+  late NikoSettingsSection _section =
+      widget.initialSection ?? NikoSettingsSection.general;
+  final _content = ScrollController();
+
   bool get _native => widget.native;
 
   @override
@@ -106,11 +135,16 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
   void didUpdateWidget(covariant NikoSettingsView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.active && !oldWidget.active) _refresh();
+    final section = widget.initialSection;
+    if (section != null && widget.sectionRequest != oldWidget.sectionRequest) {
+      _open(section);
+    }
   }
 
   @override
   void dispose() {
     _updateCancellation?.cancel();
+    _content.dispose();
     super.dispose();
   }
 
@@ -210,6 +244,19 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
     if (_native) await MyTheme.changeDarkMode(mode);
   }
 
+  Future<void> _changePreset(NlPreset preset) async {
+    if (preset == NlColors.active) return;
+    setState(() => NlColors.active = preset);
+    widget.onAppearanceChanged?.call();
+    if (!_native) return;
+    await bind.mainSetLocalOption(
+        key: NikoAppearance.option,
+        value: preset == NlPreset.clay ? 'clay' : 'orbit');
+    // Other windows read the preset again when the language is announced.
+    await bind.mainChangeLanguage(lang: bind.mainGetLocalOption(key: 'lang'));
+    await reloadAllWindows();
+  }
+
   Future<void> _changeLanguage(bool english) async {
     setState(() => NikoLanguage.english = english);
     widget.onLanguageChanged?.call();
@@ -269,82 +316,88 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
         _updateStatus = nikoText('可下载 ${release.displayName}，尚未安装。',
             '${release.displayName} is available to download, not installed.');
       });
-      final confirmed = await showDialog<bool>(
+      final confirmed = await showNlDialog<bool>(
           context: context,
-          builder: (dialog) => AlertDialog(
-                title: Text(release.isNightly
+          builder: (dialog) {
+            final nl = NlColors.of(dialog);
+            Widget para(String text, {Color? color}) => Padding(
+                padding: const EdgeInsets.only(top: NlSpace.s3),
+                child: Text(text,
+                    style: NlType.text(NlType.s2, color: color ?? nl.fg2)));
+            return NlDialog(
+                width: 460,
+                icon: NlIconTile(
+                    icon: NlIcons.cloudDownload, color: nl.accent, size: 40),
+                title: release.isNightly
                     ? nikoText('预览版本', 'Nightly preview')
                     : legacyTransition
                         ? nikoText('切换到正式版', 'Switch to stable')
-                        : nikoText('发现新版本', 'Update available')),
-                content: SizedBox(
-                    width: 420,
-                    child: SingleChildScrollView(
-                        child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                          Text(release.displayName,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w700)),
-                          const SizedBox(height: 6),
-                          Text(nikoText(
+                        : nikoText('发现新版本', 'Update available'),
+                content: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(release.displayName,
+                          style: NlType.text(NlType.s4,
+                              weight: FontWeight.w600, color: nl.fg)),
+                      const SizedBox(height: NlSpace.s1),
+                      Text(
+                          nikoText(
                               '当前本机 ${info.fullVersion} → 公开版本 ${release.tag}',
-                              'Installed ${info.fullVersion} → published ${release.tag}')),
-                          if (release.publishedAt != null) ...[
-                            const SizedBox(height: 6),
-                            Text(nikoText(
-                                '发布时间：${release.publishedAt!.toLocal()}',
-                                'Published: ${release.publishedAt!.toLocal()}')),
-                          ],
-                          if (release.isNightly) ...[
-                            const SizedBox(height: 10),
-                            Text(nikoText(
+                              'Installed ${info.fullVersion} → published ${release.tag}'),
+                          style: NlType.monoText(NlType.s2, color: nl.fg2)),
+                      if (release.publishedAt != null)
+                        para(nikoText(
+                            '发布时间：${release.publishedAt!.toLocal()}',
+                            'Published: ${release.publishedAt!.toLocal()}')),
+                      if (release.isNightly)
+                        para(
+                            nikoText(
                                 '预览版随 main 更新，可能尚未完成真机验收。相同版本号不能判断是否比本机构建更新；请核对发布名称和时间后手动下载。',
-                                'Nightly follows main and may still be awaiting device acceptance. Matching version numbers cannot establish whether it is newer than your installed build; review the release name and time before downloading manually.')),
-                          ],
-                          if (legacyTransition) ...[
-                            const SizedBox(height: 10),
-                            Text(nikoText(
-                                '本机 1.1.0+9 使用旧预览版编号；1.0.7 是新的正式版编号。本次仅打开发布页供你核对并手动切换，请保留备用远控入口。',
-                                'Installed 1.1.0+9 uses the old preview numbering. Stable 1.0.7 uses the new scheme. Open the release page to review and switch manually, keeping a backup remote-access path.')),
-                          ],
-                          const SizedBox(height: 10),
-                          if (release.notes.isNotEmpty)
-                            Text(release.notes,
+                                'Nightly follows main and may still be awaiting device acceptance. Matching version numbers cannot establish whether it is newer than your installed build; review the release name and time before downloading manually.'),
+                            color: nl.warnText),
+                      if (legacyTransition)
+                        para(nikoText(
+                            '本机 1.1.0+9 使用旧预览版编号；1.0.7 是新的正式版编号。本次仅打开发布页供你核对并手动切换，请保留备用远控入口。',
+                            'Installed 1.1.0+9 uses the old preview numbering. Stable 1.0.7 uses the new scheme. Open the release page to review and switch manually, keeping a backup remote-access path.')),
+                      if (release.notes.isNotEmpty)
+                        Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(top: NlSpace.s4),
+                            padding: const EdgeInsets.all(NlSpace.s3),
+                            decoration: BoxDecoration(
+                                color: nl.bg2,
+                                borderRadius:
+                                    BorderRadius.circular(NlRadius.r2)),
+                            child: Text(release.notes,
                                 maxLines: 12,
                                 overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    color: Theme.of(dialog)
-                                        .colorScheme
-                                        .onSurfaceVariant)),
-                          const SizedBox(height: 10),
-                          Text(
-                              macAsset == null
-                                  ? nikoText('请前往 GitHub Releases 手动下载。此构建未提供本平台的发行者签名验证下载流程。',
-                                      'Download manually from GitHub Releases. This build does not provide publisher-verified downloads for this platform.')
-                                  : nikoText(
-                                      '验证发行者签名和更新包完整性后，在 Finder 中显示供你手动安装；当前应用会继续运行。',
-                                      'Verify the publisher signature and update integrity, then show it in Finder for manual installation. The current app keeps running.'),
-                              style: TextStyle(
-                                  fontSize: 11.5,
-                                  color: Theme.of(dialog)
-                                      .colorScheme
-                                      .onSurfaceVariant)),
-                        ]))),
+                                style:
+                                    NlType.text(NlType.s2, color: nl.fg2))),
+                      para(
+                          macAsset == null
+                              ? nikoText('请前往 GitHub Releases 手动下载。此构建未提供本平台的发行者签名验证下载流程。',
+                                  'Download manually from GitHub Releases. This build does not provide publisher-verified downloads for this platform.')
+                              : nikoText(
+                                  '验证发行者签名和更新包完整性后，在 Finder 中显示供你手动安装；当前应用会继续运行。',
+                                  'Verify the publisher signature and update integrity, then show it in Finder for manual installation. The current app keeps running.'),
+                          color: nl.fg3),
+                    ]),
                 actions: [
-                  TextButton(
+                  NlButton.ghost(
                       onPressed: () => Navigator.pop(dialog, false),
-                      child: Text(nikoText('稍后', 'Later'))),
-                  NikoPrimaryButton(
-                      compact: true,
+                      label: nikoText('稍后', 'Later')),
+                  NlButton(
+                      autofocus: true,
+                      icon: macAsset == null
+                          ? NlIcons.externalLink
+                          : NlIcons.shieldCheck,
                       onPressed: () => Navigator.pop(dialog, true),
-                      child: Text(macAsset == null
+                      label: macAsset == null
                           ? nikoText('去下载', 'Download')
-                          : nikoText('下载并校验', 'Download and verify'))),
-                ],
-              ));
+                          : nikoText('下载并校验', 'Download and verify')),
+                ]);
+          });
       if (confirmed != true || !_ownsUpdate(cancellation)) return;
       if (macAsset == null) {
         await _openUpdatePage();
@@ -515,300 +568,539 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
     }
   }
 
+  List<NikoSettingsSection> get _sections => [
+        NikoSettingsSection.general,
+        NikoSettingsSection.appearance,
+        NikoSettingsSection.server,
+        if (_native && Platform.isMacOS) NikoSettingsSection.unattended,
+        if (_native && (Platform.isMacOS || Platform.isWindows)) ...[
+          NikoSettingsSection.security,
+          NikoSettingsSection.wake,
+        ],
+        NikoSettingsSection.updates,
+        NikoSettingsSection.advanced,
+        NikoSettingsSection.about,
+      ];
+
+  (IconData, String, String) _meta(NikoSettingsSection section) =>
+      switch (section) {
+        NikoSettingsSection.general => (
+            NlIcons.settings,
+            nikoText('通用', 'General'),
+            nikoText('语言与启动', 'Language and startup')
+          ),
+        NikoSettingsSection.appearance => (
+            NlIcons.palette,
+            nikoText('外观', 'Appearance'),
+            nikoText('主题与主题色，所有窗口同步', 'Theme and accent, shared by every window')
+          ),
+        NikoSettingsSection.server => (
+            NlIcons.server,
+            nikoText('私有服务器', 'Private server'),
+            nikoText('NikoDesk 只连接你自己的服务器', 'NikoDesk connects only to your own server')
+          ),
+        NikoSettingsSection.unattended => (
+            NlIcons.monitorCheck,
+            nikoText('无人值守', 'Unattended access'),
+            nikoText('电脑前没人时也能被远控', 'Accept remote control when nobody is at this computer')
+          ),
+        NikoSettingsSection.security => (
+            NlIcons.shield,
+            nikoText('会话安全', 'Session security'),
+            nikoText('锁屏、隐私屏与虚拟屏', 'Locking, privacy screen and virtual displays')
+          ),
+        NikoSettingsSection.wake => (
+            NlIcons.power,
+            nikoText('远程开机', 'Remote wake'),
+            nikoText('让本机替同一网络里的电脑开机', 'Wake computers on this computer’s network')
+          ),
+        NikoSettingsSection.updates => (
+            NlIcons.cloudDownload,
+            nikoText('软件更新', 'Software update'),
+            nikoText('版本、更新渠道与安装方式', 'Version, channel and how updates install')
+          ),
+        NikoSettingsSection.advanced => (
+            NlIcons.slidersHorizontal,
+            nikoText('高级', 'Advanced'),
+            nikoText('高级功能请求与完整的上游选项', 'Capability requests and the full upstream options')
+          ),
+        NikoSettingsSection.about => (
+            NlIcons.info,
+            nikoText('关于', 'About'),
+            nikoText('版本、许可与诊断', 'Version, license and diagnostics')
+          ),
+      };
+
+  void _open(NikoSettingsSection section) {
+    if (section == _section) return;
+    setState(() => _section = section);
+    if (_content.hasClients) _content.jumpTo(0);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final muted = NlColors.maybeOf(context)?.fg2 ??
-        (nikoIsLight(context) ? NikoPalette.lightMuted : NikoPalette.darkMuted);
+    final sections = _sections;
+    final current = sections.contains(_section) ? _section : sections.first;
     return FocusTraversalGroup(
-        child: ListView(
-            padding: const EdgeInsets.all(NikoTokens.pagePadding),
-            children: [
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(nikoText('设置', 'Settings'),
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineMedium
-                    ?.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 6),
-            Text(
-                nikoText(
-                    '外观、服务器与高级选项。', 'Appearance, server and advanced options.'),
-                style: TextStyle(color: muted)),
-          ]),
-          const SizedBox(height: 22),
-          _section(context, nikoText('私有服务器', 'Private server'), [
-            _row(context, nikoText('ID 服务器', 'ID server'),
-                _config?.idServer ?? '—'),
-            _row(context, nikoText('中继服务器', 'Relay server'),
-                _config?.relayServer ?? '—'),
-            _row(context, nikoText('公钥', 'Public key'), _maskedKey()),
-            _row(context, nikoText('注册状态', 'Registration'),
-                _registrationLabel()),
-            const SizedBox(height: 12),
-            Row(children: [
-              OutlinedButton(
-                  onPressed: _gateway == null ? null : _configure,
-                  child: Text(nikoText('配置服务器', 'Configure server'))),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: Text(
-                      nikoText('未配置或配置错误时不回退公共协调服务。',
-                          'Never falls back to public rendezvous services.'),
-                      style: TextStyle(fontSize: 11.5, color: muted))),
-            ]),
-          ]),
-          const SizedBox(height: 16),
-          if (_native && (Platform.isMacOS || Platform.isWindows)) ...[
-            if (Platform.isMacOS) ...[
-              _section(context, nikoText('无人值守', 'Unattended access'), [const NikoMacBackgroundSettings(), const NikoMacServiceSettings(relaunch: nikoRelaunch)]),
-              const SizedBox(height: 16),
-            ],
-            _section(context, nikoText('会话安全', 'Session security'), [
-              const NikoAutoLockSettings(),
-              const SizedBox(height: 12),
-              const NikoPrivacySettings(),
-              const SizedBox(height: 16),
-              const NikoVirtualDisplaySettings(),
-            ]),
-            const SizedBox(height: 16),
-            _section(context, nikoText('远程开机', 'Remote wake'), [const NikoWakeProxySettings()]),
-            const SizedBox(height: 16),
-          ],
-          _section(context, nikoText('外观', 'Appearance'), [
-            Text(nikoText('主题', 'Theme'),
-                style: Theme.of(context)
-                    .textTheme
-                    .titleSmall
-                    ?.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 8),
-            SegmentedButton<ThemeMode>(
-                segments: [
-                  ButtonSegment(
-                      value: ThemeMode.system,
-                      label: Text(nikoText('跟随系统', 'System'))),
-                  ButtonSegment(
-                      value: ThemeMode.light,
-                      label: Text(nikoText('明亮', 'Light'))),
-                  ButtonSegment(
-                      value: ThemeMode.dark,
-                      label: Text(nikoText('暗黑', 'Dark'))),
-                ],
-                selected: {
-                  _mode
-                },
-                onSelectionChanged: (selection) => _changeMode(selection.first),
-                showSelectedIcon: false),
-            const SizedBox(height: 14),
-            Text(nikoText('语言', 'Language'),
-                style: Theme.of(context)
-                    .textTheme
-                    .titleSmall
-                    ?.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 8),
-            SegmentedButton<int>(
-                segments: [
-                  ButtonSegment(value: 0, label: const Text('中文')),
-                  ButtonSegment(value: 1, label: const Text('English')),
-                ],
-                selected: {
-                  NikoLanguage.english ? 1 : 0
-                },
-                onSelectionChanged: (selection) =>
-                    _changeLanguage(selection.first == 1),
-                showSelectedIcon: false),
-          ]),
-          const SizedBox(height: 16),
-          if (_autostart != null)
-            _section(context, nikoText('通用', 'General'), [
-              SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: _autostartOn,
-                  onChanged: _changeAutostart,
-                  title: Text(
-                      nikoText('登录自动启动配置', 'Launch-at-login configuration')),
-                  subtitle: Text(nikoText(
-                      '开关表示本应用的登录启动配置已验证；实际重新登录运行需另行确认。不会安装特权服务，也不提供登录前被控。',
-                      'The switch verifies this app’s login configuration. Startup after a real login needs separate verification. It installs no privileged service and provides no pre-login control.'))),
-            ]),
-          const SizedBox(height: 16),
-          _section(context, nikoText('软件更新', 'Software update'), [
-            DropdownButtonFormField<NikoUpdateChannel>(
-                key: const Key('nikodesk-update-channel'),
-                value: _updateChannel,
-                decoration: InputDecoration(
-                    labelText: nikoText('更新渠道', 'Update channel')),
-                items: [
-                  DropdownMenuItem(
-                      value: NikoUpdateChannel.stable,
-                      child: Text(nikoText('正式版', 'Stable'))),
-                  DropdownMenuItem(
-                      value: NikoUpdateChannel.nightly,
-                      child: Text(nikoText('预览版（nightly）', 'Nightly preview'))),
-                ],
-                onChanged: _checkingUpdate || _openingUpdate
-                    ? null
-                    : (channel) {
-                        if (channel != null) {
-                          setState(() => _updateChannel = channel);
-                        }
-                      }),
-            if (_native && Platform.isMacOS) const NikoUpdateModeSettings(),
-            const SizedBox(height: 10),
-            Row(children: [
-              Icon(Icons.system_update_rounded, color: muted),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: Text(
-                      _buildInfoLoading
-                          ? nikoText('正在读取本机版本…',
-                              'Reading installed version…')
-                          : 'NikoDesk ${_buildInfo.fullVersion}',
-                      style: const TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w600))),
-              _downloadingUpdate
-                  ? SizedBox(
-                      width: 120,
-                      child: LinearProgressIndicator(
-                          value: _updateProgress,
-                          minHeight: 6,
-                          borderRadius: BorderRadius.circular(3)))
-                  : OutlinedButton(
-                      onPressed: _checkingUpdate || _openingUpdate ? null : _checkForUpdate,
-                      child: _checkingUpdate
-                          ? SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: const CircularProgressIndicator(
-                                  strokeWidth: 2))
-                          : Text(nikoText('检查更新', 'Check for updates'))),
-              if (_checkingUpdate) ...[
-                const SizedBox(width: 8),
-                TextButton(
-                    onPressed: () => _updateCancellation?.cancel(),
-                    child: Text(nikoText('取消', 'Cancel'))),
-              ],
-            ]),
-            const SizedBox(height: 6),
-            if (_native && (Platform.isMacOS || Platform.isWindows))
-              const Align(
-                  alignment: Alignment.centerLeft,
-                  child: NikoDiagnosticsExportButton()),
-            if (_updateStatus != null) ...[
-              Text(_updateStatus!, key: const Key('nikodesk-update-status')),
-              const SizedBox(height: 8),
-            ],
-            if (_stagedMacUpdate != null) ...[
-              Text(_stagedMacReady
-                  ? nikoText('$_stagedMacVersion 安装包已校验，仍需手动安装',
-                      '$_stagedMacVersion installer checked; manual installation required')
-                  : nikoText('保留了 $_stagedMacVersion 的文件，安装前需重新校验',
-                      '$_stagedMacVersion files retained; recheck before installation'),
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
-              if (_stagedMacReady && _native && Platform.isMacOS)
-                NikoMacUpdateInstallButton(
-                    staging: _stagedMacUpdate!, onStatus: _showUpdateStatus),
-              if (_stagedMacReady)
-                Text(nikoText('1. 保存工作并结束远控会话，然后手动退出 NikoDesk。\n2. 在 Finder 将准备好的 NikoDesk.app 复制到原安装位置，按系统提示确认替换。\n3. 从原安装位置重新打开 NikoDesk，在本页核对版本。手动安装时应用不会自行替换或重启。\n升级可能需要重新授予 macOS 权限；请保留备用远控入口。',
-                    '1. Save your work and end remote sessions, then quit NikoDesk manually.\n2. In Finder, copy the prepared NikoDesk.app to its original installation location and confirm replacement when prompted.\n3. Reopen NikoDesk from that location and check the version here. When installing by hand, the app does not replace itself or restart.\nmacOS permissions may need to be granted again; keep a backup remote-access path.'))
-              else
-                Text(nikoText('请先重新校验并在 Finder 显示，成功前不要安装这些文件。也可从发布页重新下载。',
-                    'Recheck and show the files in Finder before installation. Do not install them until this succeeds, or download again from the release page.')),
-              SelectableText('${_stagedMacUpdate!.path}/mac/NikoDesk.app',
-                  key: const Key('nikodesk-update-staged-path')),
-              Align(alignment: Alignment.centerLeft, child: OutlinedButton(
-                  onPressed: _checkingUpdate || _openingUpdate ? null : () => _revealUpdate(),
-                  child: Text(nikoText('在 Finder 显示安装包', 'Show installer in Finder')))),
-              Text(nikoText('安装前请记下文件位置；关闭此页后，可在 Finder 中按该位置找到文件。',
-                  'Keep the file location before closing this page so you can find the files in Finder later.'),
-                  style: TextStyle(fontSize: 11.5, color: muted)),
-              const SizedBox(height: 8),
-            ],
-            if (_updatePage != null) ...[
-              SelectableText(_updatePage.toString(), key: const Key('nikodesk-update-release-url')),
-              Align(alignment: Alignment.centerLeft, child: TextButton(
-                  onPressed: _checkingUpdate || _openingUpdate ? null : _openUpdatePage,
-                  child: Text(nikoText('打开发布页', 'Open release page')))),
-            ],
-            Text(
-                _updater.publisher.configured
-                    ? nikoText('macOS 更新使用内置发行公钥验证签名与 SHA256，再手动安装。系统签名与公证状态请参阅发布说明。',
-                        'macOS updates verify a signed SHA256 manifest with the built-in publisher key before manual installation. See release notes for OS signing and notarization status.')
-                    : nikoText('此构建未配置发行验证公钥，更新仅提供手动下载入口。SHA256 本身不能确认发行者。',
-                        'No publisher verification key is configured in this build. Updates offer manual download only. SHA256 alone does not authenticate a publisher.'),
-                style: TextStyle(fontSize: 11.5, color: muted)),
-          ]),
-          const SizedBox(height: 16),
-          _section(context, nikoText('高级', 'Advanced'), [
-            if (_native && (Platform.isMacOS || Platform.isWindows))
-              ListTile(
-                leading: Icon(Icons.verified_user_outlined, color: muted),
-                title: Text(nikoText('高级功能请求', 'Advanced capability requests')),
-                subtitle: Text(nikoText('默认关闭；允许请求后仍需每次单独批准。',
-                    'Off by default. Every request still needs separate approval.')),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () {
-                  final namespace = NikoServerScope.current;
-                  if (namespace == null) {
-                    nikoNotice(context, nikoText('请先配置有效的私有服务器。',
-                        'Configure a valid private server first.'));
-                    return;
-                  }
-                  showNikoCapabilityPolicy(context, nativeNikoCapabilityPolicy, namespace);
-                },
-              ),
-            if (_native)
-              ListTile(
-                leading: Icon(Icons.import_export_rounded, color: muted),
-                title: Text(nikoText('查看旧连接偏好', 'Review legacy connection preferences')),
-                subtitle: Text(nikoText('选择设备归属当前私服；保留原文件，不导入密码。',
-                    'Attribute selected devices to this server. Preserve originals without importing passwords.')),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () {
-                  final namespace = NikoServerScope.current;
-                  if (namespace == null) {
-                    nikoNotice(context, nikoText('请先配置有效的私有服务器。',
-                        'Configure a valid private server first.'));
-                    return;
-                  }
-                  showNikoPeerPreferences(context, nativeNikoPeerPreferences, namespace);
-                },
-              ),
-            ListTile(
-              leading: Icon(Icons.tune_rounded, color: muted),
-              title: Text(nikoText('打开高级设置', 'Open advanced settings')),
-              subtitle: Text(nikoText('安全、网络、显示、编解码等完整上游选项。',
-                  'Full upstream options for security, network, display and codecs.')),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: widget.onOpenAdvanced,
-            ),
-          ]),
-          const SizedBox(height: 16),
-          _section(context, nikoText('关于', 'About'), [
-            if (_buildInfoLoading)
-              Semantics(liveRegion: true,
-                  child: Text(nikoText('正在读取版本信息…',
-                      'Reading version information…')))
-            else ...[
-              NikoProductInfoRows(info: _buildInfo, buildDate: _buildDate),
-              if (_buildInfo.hasUnknown)
-                TextButton(key: const Key('nikodesk-version-retry'),
-                    onPressed: _refreshBuildInfo,
-                    child: Text(nikoText('重试读取版本', 'Retry version read'))),
-            ],
-            _row(
-                context,
-                nikoText('边界', 'Boundaries'),
-                nikoText('仅私服 · 无自动更新 · 本地签名',
-                    'Private-server only · no auto update · locally signed')),
-          ]),
-          if (_loadError != null)
+        child: LayoutBuilder(builder: (context, box) {
+      final wide = box.maxWidth >= 760;
+      final side = box.maxWidth < NlLayout.compactMax ? NlSpace.s4 : NlSpace.s6;
+      return NlScrollWatcher(
+          header: (context, scrolled) => NikoPageBar(
+              title: nikoText('设置', 'Settings'),
+              subtitle: wide
+                  ? null
+                  : nikoText('外观、服务器与高级选项',
+                      'Appearance, server and advanced options'),
+              divider: scrolled),
+          child: wide
+              ? _wide(context, sections, current, side)
+              : ListView(
+                  key: const Key('nikodesk-settings-scroll'),
+                  padding: EdgeInsets.fromLTRB(
+                      side, NlSpace.s2, side, NlSpace.s12),
+                  children: [
+                      for (final section in sections)
+                        _page(context, section, wide: false),
+                    ]));
+    }));
+  }
+
+  Widget _wide(BuildContext context, List<NikoSettingsSection> sections,
+      NikoSettingsSection current, double side) {
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      SizedBox(
+          width: 216,
+          // The list scrolling on a short window says nothing about the page.
+          child: NotificationListener<ScrollNotification>(
+              onNotification: (_) => true,
+              child: ListView(
+                  padding: EdgeInsets.fromLTRB(
+                      side - NlSpace.s2, NlSpace.s2, 0, NlSpace.s6),
+                  children: [
+                    for (final section in sections)
+                      NlSidebarItem(
+                          key: Key('nikodesk-settings-nav-${section.name}'),
+                          icon: _meta(section).$1,
+                          label: _meta(section).$2,
+                          selected: section == current,
+                          onTap: () => _open(section)),
+                  ]))),
+      Expanded(
+          child: SingleChildScrollView(
+              key: const Key('nikodesk-settings-scroll'),
+              controller: _content,
+              padding: EdgeInsets.fromLTRB(
+                  NlSpace.s8, NlSpace.s2, side, NlSpace.s12),
+              child: Align(
+                  alignment: Alignment.topLeft,
+                  child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 680),
+                      child: AnimatedSwitcher(
+                          duration: NlMotion.of(context, NlMotion.base),
+                          switchInCurve: NlMotion.ease,
+                          switchOutCurve: NlMotion.exit,
+                          layoutBuilder: (shown, previous) => Stack(
+                              alignment: Alignment.topLeft,
+                              children: [...previous, if (shown != null) shown]),
+                          transitionBuilder: (child, animation) =>
+                              FadeTransition(
+                                  opacity: animation,
+                                  child: SlideTransition(
+                                      position: Tween(
+                                              begin: const Offset(0, .015),
+                                              end: Offset.zero)
+                                          .animate(animation),
+                                      child: child)),
+                          child: KeyedSubtree(
+                              key: ValueKey(current),
+                              child: _page(context, current, wide: true))))))),
+    ]);
+  }
+
+  Widget _page(BuildContext context, NikoSettingsSection section,
+      {required bool wide}) {
+    final nl = NlColors.of(context);
+    final (_, title, subtitle) = _meta(section);
+    return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+              padding: EdgeInsets.only(
+                  top: wide ? NlSpace.s1 : NlSpace.s6, bottom: NlSpace.s5),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Semantics(
+                        header: true,
+                        child: Text(title,
+                            style: NlType.text(wide ? NlType.s6 : NlType.s5,
+                                weight: FontWeight.w600, color: nl.fg))),
+                    const SizedBox(height: 2),
+                    Text(subtitle,
+                        style: NlType.text(NlType.s3, color: nl.fg2)),
+                  ])),
+          if (_loadError != null &&
+              (section == NikoSettingsSection.general ||
+                  section == NikoSettingsSection.server))
             Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text(_loadError!,
-                    style:
-                        TextStyle(color: Theme.of(context).colorScheme.error))),
-          const SizedBox(height: 16),
-        ]));
+                padding: const EdgeInsets.only(bottom: NlSpace.s5),
+                child: NikoSettingNote(_loadError!,
+                    tone: NlTone.danger,
+                    actionLabel: nikoText('重试', 'Retry'),
+                    onAction: _refresh)),
+          ...switch (section) {
+            NikoSettingsSection.general => _general(context),
+            NikoSettingsSection.appearance => _appearance(context),
+            NikoSettingsSection.server => _server(context),
+            NikoSettingsSection.unattended => const [
+                NikoMacBackgroundSettings(),
+                NikoMacServiceSettings(relaunch: nikoRelaunch),
+              ],
+            NikoSettingsSection.security => const [
+                NikoSettingsGroup(children: [
+                  NikoAutoLockSettings(),
+                  NikoPrivacySettings(),
+                  NikoVirtualDisplaySettings(),
+                ]),
+              ],
+            NikoSettingsSection.wake => const [NikoWakeProxySettings()],
+            NikoSettingsSection.updates => _updates(context),
+            NikoSettingsSection.advanced => _advanced(context),
+            NikoSettingsSection.about => _about(context),
+          },
+        ]);
+  }
+
+  List<Widget> _general(BuildContext context) => [
+        NikoSettingsGroup(children: [
+          NikoSettingRow(
+              title: nikoText('语言', 'Language'),
+              description: nikoText('所有窗口一起切换', 'Applies to every window'),
+              trailing: NlSegmented<bool>(
+                  small: true,
+                  segments: const [
+                    NlSegment(value: false, label: '中文'),
+                    NlSegment(value: true, label: 'English'),
+                  ],
+                  selected: NikoLanguage.english,
+                  onChanged: _changeLanguage)),
+          if (_autostart != null)
+            NikoSettingRow(
+                title: nikoText('登录时启动', 'Open at login'),
+                description: nikoText(
+                    '开关表示本应用的登录启动配置已验证；实际重新登录后运行需另行确认。不会安装特权服务，也不提供登录前被控。',
+                    'The switch shows that this app’s login configuration is verified; running after a real login needs separate confirmation. It installs no privileged service and provides no pre-login control.'),
+                trailing: NlSwitch(
+                    value: _autostartOn,
+                    onChanged: _changeAutostart,
+                    semanticLabel: nikoText('登录时启动', 'Open at login'))),
+        ]),
+      ];
+
+  List<Widget> _appearance(BuildContext context) => [
+        NikoSettingsGroup(children: [
+          NikoSettingRow(
+              title: nikoText('主题', 'Theme'),
+              description: nikoText('跟随系统时随电脑的浅色和深色设置切换',
+                  'System follows the light or dark setting of this computer'),
+              trailing: NlSegmented<ThemeMode>(
+                  small: true,
+                  segments: [
+                    NlSegment(
+                        value: ThemeMode.system,
+                        icon: NlIcons.sunMoon,
+                        label: nikoText('跟随系统', 'System')),
+                    NlSegment(
+                        value: ThemeMode.light,
+                        icon: NlIcons.sun,
+                        label: nikoText('浅色', 'Light')),
+                    NlSegment(
+                        value: ThemeMode.dark,
+                        icon: NlIcons.moon,
+                        label: nikoText('深色', 'Dark')),
+                  ],
+                  selected: _mode,
+                  onChanged: _changeMode)),
+          NikoSettingRow(
+              title: nikoText('主题色', 'Accent'),
+              description: nikoText('Orbit 是默认的蓝色；Clay 是更温暖的陶土色',
+                  'Orbit is the default blue; Clay is a warmer terracotta'),
+              trailing: Wrap(spacing: NlSpace.s2, children: [
+                for (final preset in NlPreset.values)
+                  _PresetSwatch(
+                      preset: preset,
+                      selected: NlColors.active == preset,
+                      onTap: () => _changePreset(preset)),
+              ])),
+        ]),
+      ];
+
+  List<Widget> _server(BuildContext context) {
+    final config = _config;
+    String shown(String? value) =>
+        value == null || value.isEmpty ? '—' : value;
+    return [
+      NikoSettingsGroup(
+          trailing: NlButton.ghost(
+              small: true,
+              icon: NlIcons.squarePen,
+              onPressed: _gateway == null ? null : _configure,
+              label: nikoText('配置服务器', 'Configure server')),
+          title: nikoText('连接', 'Connection'),
+          children: [
+            NikoSettingRow(
+                title: nikoText('ID 服务器', 'ID server'),
+                trailing: NikoSettingValue(shown(config?.idServer), mono: true)),
+            NikoSettingRow(
+                title: nikoText('中继服务器', 'Relay server'),
+                trailing:
+                    NikoSettingValue(shown(config?.relayServer), mono: true)),
+            NikoSettingRow(
+                title: nikoText('公钥', 'Public key'),
+                trailing: NikoSettingValue(_maskedKey(), mono: true)),
+            NikoSettingRow(
+                title: nikoText('注册状态', 'Registration'),
+                trailing: NikoSettingValue(_registrationLabel(),
+                    leading: NlLed(_registrationLed))),
+          ]),
+      NikoSettingNote(
+          nikoText('未配置或配置错误时不回退公共协调服务。',
+              'Never falls back to public rendezvous services.'),
+          tone: NlTone.ok),
+    ];
+  }
+
+  List<Widget> _updates(BuildContext context) {
+    final busy = _checkingUpdate || _openingUpdate;
+    final staged = _stagedMacUpdate;
+    return [
+      NikoSettingsGroup(children: [
+        NikoSettingRow(
+            leading: const NlMark(size: 36),
+            title: _buildInfoLoading
+                ? nikoText('正在读取本机版本…', 'Reading installed version…')
+                : 'NikoDesk ${_buildInfo.fullVersion}',
+            description: _updateChannel == NikoUpdateChannel.stable
+                ? nikoText('正式版渠道', 'Stable channel')
+                : nikoText('预览版渠道', 'Nightly channel'),
+            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+              if (_checkingUpdate) ...[
+                NlButton.quiet(
+                    small: true,
+                    onPressed: () => _updateCancellation?.cancel(),
+                    label: nikoText('取消', 'Cancel')),
+                const SizedBox(width: NlSpace.s2),
+              ],
+              if (_downloadingUpdate)
+                SizedBox(
+                    width: 120,
+                    child: ClipRRect(
+                        borderRadius: BorderRadius.circular(NlRadius.pill),
+                        child: LinearProgressIndicator(
+                            value: _updateProgress, minHeight: 4)))
+              else
+                NlButton(
+                    small: true,
+                    loading: _checkingUpdate,
+                    onPressed: busy ? null : _checkForUpdate,
+                    label: nikoText('检查更新', 'Check for updates')),
+            ]),
+            below: _updateStatus == null
+                ? null
+                : NikoSettingNote(_updateStatus!,
+                    textKey: const Key('nikodesk-update-status'))),
+        NikoSettingRow(
+            title: nikoText('更新渠道', 'Update channel'),
+            description: _updateChannel == NikoUpdateChannel.stable
+                ? nikoText('只接收正式发布的版本', 'Published releases only')
+                : nikoText('随 main 更新，可能尚未完成真机验收',
+                    'Follows main and may still be awaiting device acceptance'),
+            trailing: NlSegmented<NikoUpdateChannel>(
+                key: const Key('nikodesk-update-channel'),
+                small: true,
+                segments: [
+                  NlSegment(
+                      value: NikoUpdateChannel.stable,
+                      label: nikoText('正式版', 'Stable')),
+                  NlSegment(
+                      value: NikoUpdateChannel.nightly,
+                      label: nikoText('预览版', 'Nightly')),
+                ],
+                selected: _updateChannel,
+                onChanged: busy
+                    ? null
+                    : (channel) => setState(() => _updateChannel = channel))),
+        if (_native && Platform.isMacOS) const NikoUpdateModeSettings(),
+      ]),
+      if (staged != null)
+        NikoSettingsGroup(
+            title: _stagedMacReady
+                ? nikoText('$_stagedMacVersion 安装包已校验，仍需手动安装',
+                    '$_stagedMacVersion installer checked; manual installation required')
+                : nikoText('保留了 $_stagedMacVersion 的文件，安装前需重新校验',
+                    '$_stagedMacVersion files retained; recheck before installation'),
+            children: [
+              NikoSettingRow(
+                  title: nikoText('安装包位置', 'Installer location'),
+                  description: _stagedMacReady
+                      ? nikoText(
+                          '1. 保存工作并结束远控会话，然后手动退出 NikoDesk。\n2. 在 Finder 将准备好的 NikoDesk.app 复制到原安装位置，按系统提示确认替换。\n3. 从原安装位置重新打开 NikoDesk，在本页核对版本。手动安装时应用不会自行替换或重启。\n升级可能需要重新授予 macOS 权限；请保留备用远控入口。',
+                          '1. Save your work and end remote sessions, then quit NikoDesk manually.\n2. In Finder, copy the prepared NikoDesk.app to its original installation location and confirm replacement when prompted.\n3. Reopen NikoDesk from that location and check the version here. When installing by hand, the app does not replace itself or restart.\nmacOS permissions may need to be granted again; keep a backup remote-access path.')
+                      : nikoText('请先重新校验并在 Finder 显示，成功前不要安装这些文件。也可从发布页重新下载。',
+                          'Recheck and show the files in Finder before installation. Do not install them until this succeeds, or download again from the release page.'),
+                  below: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SelectableText('${staged.path}/mac/NikoDesk.app',
+                            key: const Key('nikodesk-update-staged-path'),
+                            style: NlType.monoText(NlType.s2,
+                                color: NlColors.of(context).fg)),
+                        const SizedBox(height: NlSpace.s3),
+                        Wrap(
+                            spacing: NlSpace.s2,
+                            runSpacing: NlSpace.s2,
+                            children: [
+                              if (_stagedMacReady && _native && Platform.isMacOS)
+                                NikoMacUpdateInstallButton(
+                                    staging: staged,
+                                    onStatus: _showUpdateStatus),
+                              NlButton.ghost(
+                                  small: true,
+                                  icon: NlIcons.folderOpen,
+                                  onPressed: busy ? null : () => _revealUpdate(),
+                                  label: nikoText(
+                                      '在 Finder 显示安装包', 'Show installer in Finder')),
+                            ]),
+                        const SizedBox(height: NlSpace.s2),
+                        NikoSettingNote(nikoText(
+                            '安装前请记下文件位置；关闭此页后，可在 Finder 中按该位置找到文件。',
+                            'Keep the file location before closing this page so you can find the files in Finder later.')),
+                      ])),
+            ]),
+      if (_updatePage != null)
+        NikoSettingsGroup(children: [
+          NikoSettingRow(
+              title: nikoText('发布页', 'Release page'),
+              trailing: NlButton.ghost(
+                  small: true,
+                  icon: NlIcons.externalLink,
+                  onPressed: busy ? null : _openUpdatePage,
+                  label: nikoText('打开发布页', 'Open release page')),
+              below: SelectableText(_updatePage.toString(),
+                  key: const Key('nikodesk-update-release-url'),
+                  style: NlType.monoText(NlType.s2,
+                      color: NlColors.of(context).fg2))),
+        ]),
+      NikoSettingNote(_updater.publisher.configured
+          ? nikoText('macOS 更新使用内置发行公钥验证签名与 SHA256，再手动安装。系统签名与公证状态请参阅发布说明。',
+              'macOS updates verify a signed SHA256 manifest with the built-in publisher key before manual installation. See release notes for OS signing and notarization status.')
+          : nikoText('此构建未配置发行验证公钥，更新仅提供手动下载入口。SHA256 本身不能确认发行者。',
+              'No publisher verification key is configured in this build. Updates offer manual download only. SHA256 alone does not authenticate a publisher.')),
+    ];
+  }
+
+  List<Widget> _advanced(BuildContext context) {
+    void scoped(void Function(String namespace) open) {
+      final namespace = NikoServerScope.current;
+      if (namespace == null) {
+        nikoNotice(context,
+            nikoText('请先配置有效的私有服务器。', 'Configure a valid private server first.'));
+        return;
+      }
+      open(namespace);
+    }
+
+    return [
+      NikoSettingsGroup(children: [
+        if (_native && (Platform.isMacOS || Platform.isWindows))
+          NikoSettingRow(
+              title: nikoText('高级功能请求', 'Advanced capability requests'),
+              description: nikoText('默认关闭；允许请求后仍需每次单独批准。',
+                  'Off by default. Every request still needs separate approval.'),
+              onTap: () => scoped((namespace) => showNikoCapabilityPolicy(
+                  context, nativeNikoCapabilityPolicy, namespace))),
+        if (_native)
+          NikoSettingRow(
+              title: nikoText('查看旧连接偏好', 'Review legacy connection preferences'),
+              description: nikoText('选择设备归属当前私服；保留原文件，不导入密码。',
+                  'Attribute selected devices to this server. Preserve originals without importing passwords.'),
+              onTap: () => scoped((namespace) => showNikoPeerPreferences(
+                  context, nativeNikoPeerPreferences, namespace))),
+        NikoSettingRow(
+            title: nikoText('打开高级设置', 'Open advanced settings'),
+            description: nikoText('安全、网络、显示、编解码等完整上游选项。',
+                'Full upstream options for security, network, display and codecs.'),
+            onTap: widget.onOpenAdvanced),
+      ]),
+    ];
+  }
+
+  List<Widget> _about(BuildContext context) {
+    final nl = NlColors.of(context);
+    return [
+      Padding(
+          padding: const EdgeInsets.only(bottom: NlSpace.s6),
+          child: Row(children: [
+            const NlMark(size: 52),
+            const SizedBox(width: NlSpace.s4),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text('NikoDesk',
+                      style: NlType.text(NlType.s6,
+                          weight: FontWeight.w600, color: nl.fg)),
+                  Text(
+                      nikoText('私有服务器上的远程桌面', 'Remote desktop on your own server'),
+                      style: NlType.text(NlType.s3, color: nl.fg2)),
+                ])),
+          ])),
+      NikoSettingsGroup(children: [
+        if (_buildInfoLoading)
+          Semantics(
+              liveRegion: true,
+              child: NikoSettingRow(
+                  busy: true,
+                  title: nikoText('正在读取版本信息…', 'Reading version information…')))
+        else ...[
+          NikoProductInfoRows(info: _buildInfo, buildDate: _buildDate),
+          if (_buildInfo.hasUnknown)
+            Padding(
+                padding: const EdgeInsets.symmetric(vertical: NlSpace.s2),
+                child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: NlButton.ghost(
+                        key: const Key('nikodesk-version-retry'),
+                        small: true,
+                        icon: NlIcons.refreshCw,
+                        onPressed: _refreshBuildInfo,
+                        label: nikoText('重试读取版本', 'Retry version read')))),
+        ],
+        NikoSettingRow(
+            title: nikoText('边界', 'Boundaries'),
+            trailing: NikoSettingValue(nikoText(
+                '仅私服 · 本地签名', 'Private-server only · locally signed'))),
+      ]),
+      if (_native && (Platform.isMacOS || Platform.isWindows))
+        NikoSettingsGroup(children: [
+          NikoSettingRow(
+              title: nikoText('诊断包', 'Diagnostics'),
+              description: nikoText('导出日志与配置摘要，便于排查问题；不含密码与私钥。',
+                  'Export logs and a configuration summary for troubleshooting; passwords and private keys are left out.'),
+              trailing: const NikoDiagnosticsExportButton()),
+        ]),
+    ];
+  }
+
+  NlLedState get _registrationLed {
+    if (_loadError != null || !_enabled) return NlLedState.off;
+    return switch (_registration) {
+      1 => NlLedState.ok,
+      0 => NlLedState.warn,
+      -1 => NlLedState.danger,
+      _ => NlLedState.off,
+    };
   }
 
   String _maskedKey() {
@@ -831,48 +1123,61 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
         return nikoText('未知', 'Unknown');
     }
   }
+}
 
-  Widget _section(BuildContext context, String title, List<Widget> children) =>
-      NlColors.maybeOf(context) != null
-          ? NlPanel(
-              padding: const EdgeInsets.all(NlSpace.s5),
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    NlMonoLabel(title),
-                    const SizedBox(height: NlSpace.s3),
-                    ...children,
-                  ]))
-          : NikoGlassCard(
-          padding: const EdgeInsets.all(20),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 12),
-            ...children,
-          ]));
+/// One colour preset, shown as its accent dot and name.
+class _PresetSwatch extends StatelessWidget {
+  final NlPreset preset;
+  final bool selected;
+  final VoidCallback onTap;
+  const _PresetSwatch(
+      {required this.preset, required this.selected, required this.onTap});
 
-  Widget _row(BuildContext context, String label, String value) {
-    final muted = NlColors.maybeOf(context)?.fg2 ??
-        (nikoIsLight(context) ? NikoPalette.lightMuted : NikoPalette.darkMuted);
-    return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          SizedBox(
-              width: 92,
-              child:
-                  Text(label, style: TextStyle(fontSize: 12.5, color: muted))),
-          Expanded(
-              child: Text(value,
-                  style: NlColors.maybeOf(context) != null
-                      ? NlType.monoText(NlType.s2,
-                          color: NlColors.of(context).fg)
-                      : const TextStyle(
-                          fontSize: 12.5, fontWeight: FontWeight.w600))),
-        ]));
+  @override
+  Widget build(BuildContext context) {
+    final nl = NlColors.of(context);
+    final swatch = NlColors.palette(preset, nl.brightness);
+    final name = switch (preset) {
+      NlPreset.orbit => 'Orbit',
+      NlPreset.clay => 'Clay',
+    };
+    return Semantics(
+        button: true,
+        selected: selected,
+        label: name,
+        excludeSemantics: true,
+        child: NlPressable(
+            key: Key('nikodesk-preset-${preset.name}'),
+            onTap: onTap,
+            builder: (context, states) => AnimatedContainer(
+                duration: NlMotion.of(context, NlMotion.fast),
+                height: NlLayout.touch(context) ? 40 : 30,
+                padding: const EdgeInsets.symmetric(horizontal: NlSpace.s3),
+                decoration: BoxDecoration(
+                    color: selected
+                        ? nl.accentSoft
+                        : states.contains(WidgetState.hovered)
+                            ? nl.hover
+                            : Colors.transparent,
+                    borderRadius: BorderRadius.circular(NlRadius.r2),
+                    border: Border.all(
+                        color: selected ? nl.accent : nl.line2,
+                        width: selected ? 1.5 : 1),
+                    boxShadow: states.contains(WidgetState.focused)
+                        ? nl.focusRing
+                        : null),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: swatch.accent,
+                          border: Border.all(color: swatch.accentFill))),
+                  const SizedBox(width: NlSpace.s2),
+                  Text(name,
+                      style: NlType.text(NlType.s3,
+                          weight: FontWeight.w500, color: nl.fg)),
+                ]))));
   }
 }

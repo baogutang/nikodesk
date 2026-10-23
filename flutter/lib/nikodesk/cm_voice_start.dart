@@ -160,7 +160,7 @@ class _NikoCmVoiceStartState extends State<NikoCmVoiceStart> {
     if (NlColors.maybeOf(context) != null) {
       return NikoCmCapabilityFrame(
           label: nikoText('语音通话', 'Voice call'),
-          icon: Icons.mic_none_rounded,
+          icon: NlIcons.mic,
           tone: NlTone.neutral,
           title: title,
           children: children);

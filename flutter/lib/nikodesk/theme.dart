@@ -145,7 +145,7 @@ class NikoPrimaryButton extends StatelessWidget {
                 child: Ink(
                     decoration: BoxDecoration(
                       borderRadius: radius,
-                      color: nightline?.accent ??
+                      color: nightline?.accentFill ??
                           (light ? NikoPalette.lightAction : NikoPalette.darkSeed),
                       boxShadow: disabled || nightline != null
                           ? null
@@ -355,11 +355,16 @@ ThemeData nikoTheme(Brightness brightness) {
 /// before its app starts.
 bool nikoSessionWindow = false;
 
-/// App-wide theme for NikoDesk windows. Desktop windows are on Nightline;
-/// mobile keeps [nikoTheme] until its own redesign.
-ThemeData nikoAppTheme(Brightness brightness) => isDesktop
-    ? nightlineTheme(nikoSessionWindow ? Brightness.dark : brightness)
-    : nikoTheme(brightness);
+/// App-wide theme for NikoDesk windows on every platform.
+ThemeData nikoAppTheme(Brightness brightness) =>
+    nightlineTheme(nikoSessionWindow ? Brightness.dark : brightness);
+
+/// Session chrome on a phone or iPad, where the session shares the app's
+/// window: dark in both modes like the desktop session windows, at the
+/// density of [context]'s platform.
+ThemeData nikoSessionTheme(BuildContext context) =>
+    nightlineTheme(Brightness.dark)
+        .copyWith(platform: Theme.of(context).platform);
 
 /// Tabular digits keep long device ids from jittering while editing.
 TextStyle nikoIdStyle(BuildContext context,

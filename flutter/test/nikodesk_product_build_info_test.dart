@@ -153,9 +153,11 @@ void main() {
         theme: nikoTheme(Brightness.light),
         home: Scaffold(
             body: NikoSettingsView(
-                native: false, buildInfoLoader: () async => _fixture))));
+                native: false,
+                initialSection: NikoSettingsSection.about,
+                buildInfoLoader: () async => _fixture))));
     await tester.pumpAndSettle();
-    expect(find.text('NikoDesk 9.8.7+42'), findsNWidgets(2));
+    expect(find.text('NikoDesk 9.8.7+42'), findsOneWidget);
     expect(find.text('RustDesk 0.9.0'), findsOneWidget);
     expect(find.text('RustDesk 1.5.0 · AGPL v3'), findsNothing);
     expect(tester.takeException(), isNull);

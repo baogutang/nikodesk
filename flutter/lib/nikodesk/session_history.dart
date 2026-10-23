@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'connect_dialog.dart';
+import 'home_chrome.dart';
 import 'server_gateway.dart';
 import 'server_scope.dart';
 
 import 'session_log.dart';
 import 'session_audit_view.dart';
+import 'history_kit.dart';
 import 'nightline.dart';
+import 'settings_kit.dart';
 import 'theme.dart';
 import 'ui.dart';
 
@@ -73,21 +76,21 @@ class _NikoSessionHistoryPageState extends State<NikoSessionHistoryPage> {
   }
 
   Future<void> _clear() async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showNlDialog<bool>(
         context: context,
-        builder: (_) => AlertDialog(
-              title: Text(nikoText('清空会话记录', 'Clear session history')),
-              content: Text(nikoText('仅删除本机的发起记录，不影响设备目录和远端设备。',
-                  'Only local initiation records are removed. Devices and remotes are unchanged.')),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: Text(nikoText('取消', 'Cancel'))),
-                TextButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    child: Text(nikoText('清空', 'Clear'))),
-              ],
-            ));
+        builder: (dialog) => NlDialog(
+                title: nikoText('清空会话记录', 'Clear session history'),
+                message: nikoText('仅删除本机的发起记录，不影响设备目录和远端设备。',
+                    'Only local initiation records are removed. Devices and remotes are unchanged.'),
+                actions: [
+                  NlButton.ghost(
+                      onPressed: () => Navigator.pop(dialog, false),
+                      label: nikoText('取消', 'Cancel')),
+                  NlButton.danger(
+                      autofocus: true,
+                      onPressed: () => Navigator.pop(dialog, true),
+                      label: nikoText('清空', 'Clear')),
+                ]));
     if (confirmed != true) return;
     try {
       await _store.clear();
@@ -143,30 +146,33 @@ class _NikoSessionHistoryPageState extends State<NikoSessionHistoryPage> {
   Widget build(BuildContext context) {
     if (_nativeHistory && _showNativeHistory) {
       return FocusTraversalGroup(
-          child: Column(children: [
-        Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              key: const ValueKey('niko-history-show-attempts'),
-              onPressed: () {
-                setState(() => _showNativeHistory = false);
-                _refresh();
-              },
-              icon: const Icon(Icons.history_rounded),
-              label: Text(nikoText('查看发起记录', 'View initiation history')),
-            )),
-      Expanded(
-          child: NikoNativeSessionHistory(
-              namespace: NikoServerScope.current ?? _store.serverNamespace ?? '',
-              active: widget.active,
-              onReconnect: _reconnectResult)),
-      ]));
+          child: NlScrollWatcher(
+              header: (context, scrolled) => NikoPageBar(
+                      title: nikoText('会话记录', 'Session history'),
+                      subtitle: nikoText('每次会话的认证与结果', 'How each session went'),
+                      divider: scrolled,
+                      actions: [
+                        NlButton.ghost(
+                            key: const ValueKey('niko-history-show-attempts'),
+                            small: true,
+                            icon: NlIcons.history,
+                            onPressed: () {
+                              setState(() => _showNativeHistory = false);
+                              _refresh();
+                            },
+                            label: nikoText('查看发起记录', 'View initiation history')),
+                      ]),
+              child: NikoNativeSessionHistory(
+                  namespace:
+                      NikoServerScope.current ?? _store.serverNamespace ?? '',
+                  active: widget.active,
+                  onReconnect: _reconnectResult)));
     }
     final nightline = NlColors.maybeOf(context);
-    final muted = nightline?.fg2 ??
-        (nikoIsLight(context) ? NikoPalette.lightMuted : NikoPalette.darkMuted);
-    return FocusTraversalGroup(
-        child: ListView(
+    if (nightline != null) return _nightlinePage(context, nightline);
+    final muted =
+        nikoIsLight(context) ? NikoPalette.lightMuted : NikoPalette.darkMuted;
+    final list = ListView(
             padding: const EdgeInsets.all(NikoTokens.pagePadding),
             children: [
           if (_nativeHistory)
@@ -240,11 +246,63 @@ class _NikoSessionHistoryPageState extends State<NikoSessionHistoryPage> {
                       textAlign: TextAlign.center,
                       style: TextStyle(color: muted, fontSize: 12.5)),
                 ]))
-          else if (nightline != null)
-            ..._nightlineGroups(context, nightline)
           else
             ..._grouped(context, muted),
-        ]));
+        ]);
+    return FocusTraversalGroup(child: list);
+  }
+
+  Widget _nightlinePage(BuildContext context, NlColors nl) {
+    final narrow = MediaQuery.sizeOf(context).width < 600;
+    final side = narrow ? NlSpace.s4 : NlSpace.s6;
+    final list = ListView(
+        padding: EdgeInsets.fromLTRB(side, NlSpace.s2, side, NlSpace.s10),
+        children: [
+          if (_loading)
+            const Padding(
+                padding: EdgeInsets.all(NlSpace.s8),
+                child: Center(child: NlSpinner(size: 20)))
+          else if (_error != null)
+            NikoSettingNote(_error!,
+                tone: NlTone.danger,
+                actionLabel: nikoText('重试', 'Retry'),
+                onAction: _refresh)
+          else if (_entries.isEmpty)
+            NlEmptyState(
+                icon: NlIcons.history,
+                title: nikoText('还没有连接记录', 'No sessions yet'),
+                message: nikoText('从设备页发起一次连接后，这里会记录发起历史。',
+                    'Start a session from the devices page and it will be recorded here.'))
+          else
+            ..._nightlineGroups(context, nl),
+        ]);
+    return FocusTraversalGroup(
+        child: NlScrollWatcher(
+            header: (context, scrolled) => NikoPageBar(
+                    title: nikoText('会话记录', 'Session history'),
+                    subtitle: nikoText('本机发起过的连接；远端是否接受以每次会话为准',
+                        'Sessions this client started. Remote acceptance is checked per session'),
+                    divider: scrolled,
+                    actions: [
+                      if (_nativeHistory)
+                        NlButton.ghost(
+                            key: const ValueKey('niko-history-show-results'),
+                            small: true,
+                            icon: NlIcons.clipboardCheck,
+                            onPressed: () =>
+                                setState(() => _showNativeHistory = true),
+                            label: nikoText('查看会话结果', 'View session results')),
+                      NlIconButton(
+                          icon: NlIcons.refreshCw,
+                          tooltip: nikoText('刷新', 'Refresh'),
+                          onPressed: _refresh),
+                      if (_entries.isNotEmpty)
+                        NlButton.ghost(
+                            small: true,
+                            onPressed: _clear,
+                            label: nikoText('清空记录', 'Clear history')),
+                    ]),
+            child: list));
   }
 
   Future<void> _delete(SessionLogEntry entry) async {
@@ -254,96 +312,54 @@ class _NikoSessionHistoryPageState extends State<NikoSessionHistoryPage> {
     } catch (_) {}
   }
 
-  /// Nightline: one panel per day with compact rows, as in the draft's
-  /// recent-sessions table. The route is shown only when it was forced to
-  /// the relay; anything else is not known here and is not claimed.
+  /// Nightline: flat rows under a heading per day. The route is shown only
+  /// when it was forced to the relay; anything else is not known here and
+  /// is not claimed.
   List<Widget> _nightlineGroups(BuildContext context, NlColors nl) {
-    final groups = <String, List<SessionLogEntry>>{};
-    for (final entry in _entries) {
-      final local = entry.startedAt.toLocal();
-      final key =
-          '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}';
-      groups.putIfAbsent(key, () => []).add(entry);
-    }
+    final days = nikoByDay(_entries, (entry) => entry.startedAt);
     Widget row(SessionLogEntry entry, bool first) {
-      final details = Row(children: [
-        Text(_time(entry.startedAt),
-            style: NlType.monoText(NlType.s2, color: nl.fg3)),
-        const SizedBox(width: NlSpace.s4),
-        Icon(entry.fileTransfer
-                ? Icons.folder_outlined
-                : Icons.desktop_windows_outlined,
-            size: 16, color: nl.fg3),
-        const SizedBox(width: NlSpace.s2),
-        Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(entry.title,
+      final details = [
+        if (entry.title != entry.id)
+          Text(entry.id, style: NlType.monoText(NlType.s1, color: nl.fg3)),
+        if (entry.forceRelay) NlBadge(nikoText('中继', 'Relay')),
+      ];
+      return NikoHistoryRow(
+          first: first,
+          icon: entry.fileTransfer ? NlIcons.folder : NlIcons.monitor,
+          time: nikoClock(entry.startedAt),
+          title: Text(entry.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: NlType.text(NlType.s3, weight: FontWeight.w500, color: nl.fg)),
-          Text(entry.id, style: NlType.monoText(NlType.s1, color: nl.fg3)),
-        ])),
-        if (entry.forceRelay) ...[
-          const SizedBox(width: NlSpace.s2),
-          Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: NlSpace.s2, vertical: 1),
-              decoration: BoxDecoration(
-                  color: nl.surface2,
-                  borderRadius: BorderRadius.circular(NlRadius.r1)),
-              child: Text(nikoText('中继', 'RELAY'),
-                  style: NlType.monoText(NlType.s1, color: nl.fg2))),
-        ],
-      ]);
-      final actions = Row(mainAxisSize: MainAxisSize.min, children: [
-        NlButton.ghost(
-            small: true,
-            icon: entry.fileTransfer
-                ? Icons.folder_open_rounded
-                : Icons.arrow_forward_rounded,
-            onPressed: () => _reconnect(entry),
-            label: nikoText(entry.fileTransfer ? '传文件' : '连接',
-                entry.fileTransfer ? 'Files' : 'Connect')),
-        const SizedBox(width: NlSpace.s1),
-        NlIconButton(
-            icon: Icons.close_rounded,
-            tooltip: nikoText('删除该记录', 'Delete record'),
-            onPressed: () => _delete(entry)),
-      ]);
-      return Container(
-          constraints: const BoxConstraints(minHeight: 52),
-          padding: const EdgeInsets.symmetric(vertical: NlSpace.s2),
-          decoration: BoxDecoration(
-              border: first ? null : Border(top: BorderSide(color: nl.line))),
-          child: LayoutBuilder(builder: (context, constraints) {
-            if (constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1) <
-                500) {
-              return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                details,
-                const SizedBox(height: NlSpace.s2),
-                Align(alignment: Alignment.centerRight, child: actions),
-              ]);
-            }
-            return Row(children: [
-              Expanded(child: details),
-              const SizedBox(width: NlSpace.s3),
-              actions,
-            ]);
-          }));
+              style: NlType.text(NlType.s3,
+                  weight: FontWeight.w500, color: nl.fg)),
+          subtitle: details.isEmpty
+              ? null
+              : Wrap(
+                  spacing: NlSpace.s2,
+                  runSpacing: 2,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: details),
+          actions: [
+            NlButton.ghost(
+                small: true,
+                icon: entry.fileTransfer
+                    ? NlIcons.folderOpen
+                    : NlIcons.arrowRight,
+                onPressed: () => _reconnect(entry),
+                label: nikoText(entry.fileTransfer ? '传文件' : '连接',
+                    entry.fileTransfer ? 'Files' : 'Connect')),
+            NlIconButton(
+                icon: NlIcons.close,
+                tooltip: nikoText('删除该记录', 'Delete record'),
+                onPressed: () => _delete(entry)),
+          ]);
     }
 
     return [
-      for (final day in groups.keys) ...[
-        Padding(
-            padding: const EdgeInsets.only(top: NlSpace.s3, bottom: NlSpace.s2),
-            child: NlMonoLabel(day)),
-        NlPanel(
-            padding: const EdgeInsets.symmetric(
-                horizontal: NlSpace.s4, vertical: NlSpace.s1),
-            child: Column(children: [
-              for (var i = 0; i < groups[day]!.length; i++)
-                row(groups[day]![i], i == 0),
-            ])),
+      for (var d = 0; d < days.length; d++) ...[
+        NikoHistoryDay(nikoDayLabel(days[d].$1), first: d == 0),
+        for (var i = 0; i < days[d].$2.length; i++)
+          row(days[d].$2[i], i == 0),
       ]
     ];
   }

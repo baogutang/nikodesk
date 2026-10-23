@@ -175,7 +175,10 @@ class PlatformFFI {
       }
       const nikoBuild = bool.fromEnvironment('NIKODESK');
       final deferAndroidEvents = isAndroid && nikoBuild;
-      if (!deferAndroidEvents) _startListenEvent(_ffiBind);
+      // NikoDesk starts on the first call that needs it, and on iOS its
+      // configuration directory is set by mainGetDataDirIos below.
+      final deferIosEvents = isIOS && nikoBuild;
+      if (!deferAndroidEvents && !deferIosEvents) _startListenEvent(_ffiBind);
       try {
         if (isAndroid) {
           // Android file transfer uses app-specific storage. User-selected
@@ -226,7 +229,7 @@ class PlatformFFI {
         name = macOsInfo.computerName;
         id = macOsInfo.systemGUID ?? '';
       }
-      if ((isAndroid && !nikoBuild) || isIOS) {
+      if ((isAndroid || isIOS) && !nikoBuild) {
         debugPrint(
             '_appType:$_appType,info1-id:$id,info2-name:$name,dir:$_dir,homeDir:$_homeDir');
       } else {
@@ -244,6 +247,13 @@ class PlatformFFI {
       );
       if (deferAndroidEvents) {
         DeviceStore.configureAndroidDirectory(Directory('$_dir/NikoDesk'));
+        _startListenEvent(_ffiBind);
+      }
+      if (deferIosEvents) {
+        // The private directory nikodesk::configure_ios keeps beside Documents.
+        final documents = Directory(_dir).resolveSymbolicLinksSync();
+        DeviceStore.configureIosDirectory(Directory(
+            '${Directory(documents).parent.path}/Library/Application Support/NikoDesk'));
         _startListenEvent(_ffiBind);
       }
     } catch (e) {

@@ -9,6 +9,7 @@ import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/nikodesk/file_transfer.dart';
 import 'package:flutter_hbb/nikodesk/file_tasks.dart';
 import 'package:flutter_hbb/nikodesk/mobile_file_owner.dart';
+import 'package:flutter_hbb/nikodesk/mobile_file_pane.dart';
 import '../../models/model.dart' show FFI;
 import 'package:flutter_hbb/nikodesk/ui.dart';
 import 'package:flutter/services.dart';
@@ -461,11 +462,11 @@ class _FileManagerPageState extends State<FileManagerPage> {
         // backgroundColor: MyTheme.grayBg,
         appBar: AppBar(
           leading: Row(children: [
-            IconButton(
+            nikoMobileIconButton(context, IconButton(
                 icon: Icon(Icons.close),
                 tooltip: const bool.fromEnvironment('NIKODESK')
                     ? nikoText('关闭文件会话', 'Close file session') : null,
-                onPressed: () => clientClose(_ffi.sessionId, _ffi)),
+                onPressed: () => clientClose(_ffi.sessionId, _ffi))),
           ]),
           centerTitle: true,
           title: const bool.fromEnvironment('NIKODESK')
@@ -493,7 +494,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
             },
           ),
           actions: [
-            PopupMenuButton<String>(
+            nikoMobileActionsMenu(context, PopupMenuButton<String>(
                 enabled: !(const bool.fromEnvironment('NIKODESK')) || _nikoPane != 2,
                 tooltip: const bool.fromEnvironment('NIKODESK') ? nikoText('文件操作', 'File actions') : "",
                 icon: Icon(Icons.more_vert),
@@ -657,21 +658,26 @@ class _FileManagerPageState extends State<FileManagerPage> {
                   } else if (v == "hidden") {
                     currentFileController.toggleShowHidden();
                   }
-                }),
+                }), header: nikoMobileMenuSide(context, showLocal)),
           ],
         ),
         body: const bool.fromEnvironment('NIKODESK')
             ? Column(children: [
                 NikoAppFileAreaNotice(status: _nikoDocumentStatus,
-                    showGuide: showLocal && _nikoPane != 2,
+                    showGuide: (showLocal || nikoMobileFileSplit(context)) && _nikoPane != 2,
                     onDismiss: () => setState(() => _nikoDocumentStatus = null)),
-                Expanded(child: NikoFileWorkspace(alwaysCompact: true,
-                    selectedPane: _nikoPane,
-                    localLabel: nikoText('应用文件', 'App files'),
+                Expanded(child: NikoMobileFileArea(
+                    pane: _nikoPane,
+                    localActive: showLocal,
                     onPaneChanged: (pane) => setState(() {
                       _nikoPane = pane;
                       if (pane < 2) showLocal = pane == 0;
                     }),
+                    selecting: () => selectMode.value == SelectMode.none
+                        ? null : selectMode.value == SelectMode.local,
+                    localController: model.localController,
+                    remoteController: model.remoteController,
+                    jobs: model.jobController.jobTable,
                     local: FileManagerView(controller: model.localController, selectMode: selectMode),
                     remote: FileManagerView(controller: model.remoteController, selectMode: selectMode),
                     tasks: NikoFileTasks(controller: model.jobController))),
@@ -698,6 +704,27 @@ class _FileManagerPageState extends State<FileManagerPage> {
           ? ""
           : " [${selectedItems!.isLocal ? translate("Local") : translate("Remote")}]";
       if (!(selectMode.value == SelectMode.none)) {
+        if (const bool.fromEnvironment('NIKODESK') && nikoMobileFileSplit(context)) {
+          final local = selectMode.value == SelectMode.local;
+          final selection = (local ? model.localController : model.remoteController).selectedItems;
+          final bar = nikoSplitSelectionBar(context,
+              source: local ? model.localController : model.remoteController,
+              destination: local ? model.remoteController : model.localController,
+              onDone: () => setState(() => selectMode.value = SelectMode.none),
+              extra: [
+                if (isAndroid && local && selection.items.isNotEmpty)
+                  selection.items.length == 1 && selection.items.single.isFile
+                      ? IconButton(
+                          tooltip: nikoText('另存到系统文件', 'Save to system files'),
+                          icon: Icon(Icons.save_alt),
+                          onPressed: () => _exportFile(selection.items.single))
+                      : IconButton(
+                          tooltip: nikoText('导出到系统文件', 'Export to system files'),
+                          icon: Icon(Icons.drive_folder_upload),
+                          onPressed: () => _exportItems(selection)),
+              ]);
+          if (bar != null) return bar;
+        }
         final selectedItemsLen =
             "${selectedItems?.items.length ?? 0} ${translate("items")}";
         if (selectedItems == null ||
@@ -900,7 +927,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   @override
   Widget build(BuildContext context) {
     return Column(children: [
-      headTools(),
+      nikoMobilePathBar(context, controller) ?? headTools(),
       Expanded(child: Obx(() {
         final entries = controller.directory.value.entries;
         return ListView.builder(
@@ -908,7 +935,9 @@ class _FileManagerViewState extends State<FileManagerView> {
           itemCount: entries.length + 1,
           itemBuilder: (context, index) {
             if (index >= entries.length) {
-              return listTail();
+              return nikoMobileListTail(context, controller,
+                      clearance: widget.selectMode.value != SelectMode.none) ??
+                  listTail();
             }
             var selected = false;
             if (widget.selectMode.value != SelectMode.none) {
@@ -923,6 +952,35 @@ class _FileManagerViewState extends State<FileManagerView> {
               return widget.selectMode.value != SelectMode.none &&
                   widget.selectMode.value.eq(controller.selectedItems.isLocal);
             }();
+            if (const bool.fromEnvironment('NIKODESK')) {
+              final entry = entries[index];
+              final row = nikoMobileFileRow(context,
+                  controller: controller,
+                  entry: entry,
+                  selected: selected,
+                  checking: showCheckBox,
+                  onCheck: (on) => setState(() => on
+                      ? _selectedItems.add(entry)
+                      : _selectedItems.remove(entry)),
+                  onMultiSelect: () => setState(() {
+                        // Choosing here while the other side chooses
+                        // starts over on this side.
+                        if (widget.selectMode.value != SelectMode.none &&
+                            !widget.selectMode.value.eq(isLocal)) {
+                          final files = controller.rootState.target?.fileModel;
+                          (isLocal ? files?.remoteController : files?.localController)
+                              ?.selectedItems
+                              .clear();
+                          widget.selectMode.value = SelectMode.none;
+                        }
+                        _selectedItems.clear();
+                        widget.selectMode.toggle(isLocal);
+                        if (widget.selectMode.value != SelectMode.none) {
+                          _selectedItems.add(entry);
+                        }
+                      }));
+              if (row != null) return row;
+            }
             return Card(
               child: ListTile(
                 leading: entries[index].isDrive
@@ -1176,6 +1234,13 @@ class BottomSheetBody extends StatelessWidget {
   @override
   BottomSheet build(BuildContext context) {
     if (const bool.fromEnvironment('NIKODESK')) {
+      final niko = nikoSelectionSheet(context,
+          title: title,
+          text: text,
+          leading: leading,
+          onCanceled: onCanceled,
+          actions: actions);
+      if (niko != null) return niko;
       return BottomSheet(
       enableDrag: false, onClosing: () {}, builder: (_) => Padding(
         padding: const EdgeInsets.all(12), child: Column(mainAxisSize: MainAxisSize.min,

@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'nightline.dart';
+import 'settings_kit.dart';
 import 'ui.dart';
 import 'virtual_driver_settings.dart';
 
@@ -70,37 +72,40 @@ class _SettingsState extends State<NikoVirtualDisplaySettings> {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SwitchListTile.adaptive(
-            contentPadding: EdgeInsets.zero,
-            title: Text(nikoText(
-                '允许连接创建虚拟屏', 'Allow connections to create virtual displays')),
-            subtitle: Text(nikoText('默认关闭。需要已认证的远控和键鼠授权；每个屏幕属于创建它的连接，断开或撤权后移除。',
-                'Off by default. Remote authentication and keyboard control are required. Each display belongs to its connection and is removed on disconnect or permission revocation.')),
+  Widget build(BuildContext context) {
+    final title = nikoText(
+        '允许连接创建虚拟屏', 'Allow connections to create virtual displays');
+    return NikoSettingRow(
+        title: title,
+        description: nikoText(
+            '默认关闭。需要已认证的远控和键鼠授权；每个屏幕属于创建它的连接，断开或撤权后移除。',
+            'Off by default. Remote authentication and keyboard control are required. Each display belongs to its connection and is removed on disconnect or permission revocation.'),
+        busy: _busy,
+        trailing: NlSwitch(
+            semanticLabel: title,
             value: _enabled,
             onChanged: _busy || _error != null ? null : _save),
-        Text(
-            Platform.isWindows
-                ? nikoText(
-                    'Windows 使用随附的已签名驱动，首次创建虚拟屏时自动安装。需要通过无人值守服务的机器 ID 连接，或在本机以管理员身份运行客户端。',
-                    'Windows uses the bundled signed driver, installed automatically the first time a virtual display is created. Connect through the unattended service’s machine ID, or run the client as Administrator locally.')
-                : nikoText(
-                    'macOS 会检查系统是否支持虚拟屏。可用时支持 1080p、1440p 和 4K；创建失败会显示原因。',
-                    'macOS checks virtual display support. Available displays offer 1080p, 1440p and 4K; creation failures are shown.'),
-            style: Theme.of(context).textTheme.bodySmall),
-        if (Platform.isWindows) const NikoVirtualDriverSettings(),
-        if (_busy) const LinearProgressIndicator(),
-        if (_error != null) ...[
-          Text(_error!),
-          TextButton(
-              onPressed: _busy
-                  ? null
-                  : () {
-                      setState(() => _busy = true);
-                      _load();
-                    },
-              child: Text(nikoText('重新读取', 'Reload')))
-        ]
-      ]);
+        below: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          NikoSettingNote(Platform.isWindows
+              ? nikoText(
+                  'Windows 使用随附的已签名驱动，首次创建虚拟屏时自动安装。需要通过无人值守服务的机器 ID 连接，或在本机以管理员身份运行客户端。',
+                  'Windows uses the bundled signed driver, installed automatically the first time a virtual display is created. Connect through the unattended service’s machine ID, or run the client as Administrator locally.')
+              : nikoText(
+                  'macOS 会检查系统是否支持虚拟屏。可用时支持 1080p、1440p 和 4K；创建失败会显示原因。',
+                  'macOS checks virtual display support. Available displays offer 1080p, 1440p and 4K; creation failures are shown.')),
+          if (Platform.isWindows) const NikoVirtualDriverSettings(),
+          if (_error != null) ...[
+            const SizedBox(height: NlSpace.s2),
+            NikoSettingNote(_error!,
+                tone: NlTone.danger,
+                actionLabel: nikoText('重新读取', 'Reload'),
+                onAction: _busy
+                    ? null
+                    : () {
+                        setState(() => _busy = true);
+                        _load();
+                      }),
+          ],
+        ]));
+  }
 }

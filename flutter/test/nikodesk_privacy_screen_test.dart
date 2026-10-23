@@ -119,11 +119,12 @@ void main() {
         onViewStyle: (_) async {},
         privacyScreen: status,
         onPrivacyScreen: change,
+        initialSection: NikoQuickSection.privacy,
         onClose: () {},
       )));
 
-  SwitchListTile tile(WidgetTester tester) => tester.widget<SwitchListTile>(
-      find.byKey(const Key('nikodesk-privacy-screen')));
+  NlSwitch tile(WidgetTester tester) =>
+      tester.widget<NlSwitch>(find.byKey(const Key('nikodesk-privacy-screen')));
 
   testWidgets('the control center has no privacy section without a state',
       (tester) async {

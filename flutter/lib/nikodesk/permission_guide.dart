@@ -197,7 +197,7 @@ class _NikoPermissionGuideState extends State<NikoPermissionGuide> {
           row,
           Padding(
               padding: const EdgeInsets.only(
-                  left: NlLed.size + NlSpace.s3, bottom: NlSpace.s2),
+                  left: NlLed.dotSize + NlSpace.s3, bottom: NlSpace.s2),
               child: Align(alignment: Alignment.centerLeft, child: action)),
         ]);
       });

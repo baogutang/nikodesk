@@ -11,6 +11,7 @@ import 'privacy_style_events.dart';
 import 'privacy_style_image.dart';
 import 'privacy_style_model.dart';
 import 'privacy_wallpaper.dart';
+import 'settings_kit.dart';
 import 'ui.dart';
 
 Future<NikoPrivacyStyle> nikoReadPrivacyStyle(FFI ffi) async =>
@@ -114,13 +115,7 @@ class _PanelState extends State<NikoPrivacyStylePanel> {
 
   @override
   Widget build(BuildContext context) => _initial == null
-      ? const SizedBox(
-          height: 40,
-          child: Center(
-              child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2))))
+      ? const SizedBox(height: 40, child: Center(child: NlSpinner(size: 18)))
       : NikoPrivacyStyleEditor(
           initial: _initial!,
           allowed: nikoPrivacyStyleAllowed(widget.ffi),
@@ -152,6 +147,7 @@ class _EditorState extends State<NikoPrivacyStyleEditor> {
   late NikoPrivacyStyle _style;
   bool _busy = false;
   String? _feedback;
+  bool _failed = false;
   @override
   void initState() {
     super.initState();
@@ -203,7 +199,12 @@ class _EditorState extends State<NikoPrivacyStyleEditor> {
             image: normalized));
       }
     } catch (error) {
-      if (mounted) setState(() => _feedback = nikoPrivacyStyleError(error));
+      if (mounted) {
+        setState(() {
+          _feedback = nikoPrivacyStyleError(error);
+          _failed = true;
+        });
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -216,24 +217,70 @@ class _EditorState extends State<NikoPrivacyStyleEditor> {
     });
     try {
       await widget.onApply(_style);
-      if (mounted) setState(() => _feedback = nikoText('已应用', 'Applied'));
+      if (mounted) {
+        setState(() {
+          _feedback = nikoText('已应用', 'Applied');
+          _failed = false;
+        });
+      }
     } catch (error) {
-      if (mounted) setState(() => _feedback = nikoPrivacyStyleError(error));
+      if (mounted) {
+        setState(() {
+          _feedback = nikoPrivacyStyleError(error);
+          _failed = true;
+        });
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  Widget _toggle(String label, bool value, void Function(bool) change) =>
-      SwitchListTile.adaptive(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          title: Text(label),
-          value: value,
-          onChanged: _busy ? null : (value) => setState(() => change(value)));
-  /// Nightline only: accent corner brackets that frame the live preview.
+  /// A setting of the style, switched by a tap anywhere on its line.
+  Widget _toggle(String label, bool value, void Function(bool) change,
+      {Key? key}) {
+    final nl = NlColors.of(context);
+    void flip() => setState(() => change(!value));
+    return NlPressable(
+        key: key,
+        onTap: _busy ? null : flip,
+        pressScale: 1,
+        builder: (context, states) => ConstrainedBox(
+            constraints: BoxConstraints(minHeight: _rowHeight),
+            child: Row(children: [
+              Expanded(
+                  child: Text(label,
+                      style: NlType.text(NlType.s3, color: nl.fg))),
+              const SizedBox(width: NlSpace.s3),
+              NlSwitch(value: value, onChanged: _busy ? null : (_) => flip()),
+            ])));
+  }
+
+  /// Switch and slider lines share one height, so the list keeps an even
+  /// rhythm; a slider would otherwise take its taller hover halo's.
+  double get _rowHeight => NlLayout.touch(context) ? 48 : 40;
+
+  Widget _slider(String label, int value, double min, double max,
+      void Function(int) change) {
+    final nl = NlColors.of(context);
+    return Row(children: [
+      SizedBox(
+          width: MediaQuery.textScalerOf(context).scale(72),
+          child: Text(label, style: NlType.text(NlType.s3, color: nl.fg))),
+      Expanded(
+          child: SizedBox(
+              height: _rowHeight,
+              child: Slider(
+              value: value.toDouble(),
+              min: min,
+              max: max,
+              onChanged: _busy
+                  ? null
+                  : (next) => setState(() => change(next.round()))))),
+    ]);
+  }
+
+  /// Accent corner brackets that frame the live preview.
   Widget _framed(Widget preview) {
-    if (NlColors.maybeOf(context) == null) return preview;
     Widget corner(Alignment at) => Align(
         alignment: at,
         child: Padding(
@@ -254,154 +301,137 @@ class _EditorState extends State<NikoPrivacyStyleEditor> {
     ]);
   }
 
+  Widget _preset(NikoPrivacyPreset preset, double width) {
+    final nl = NlColors.of(context);
+    final selected = _style.preset == preset;
+    return SizedBox(
+        width: width,
+        child: NlPressable(
+            key: ValueKey('privacy-preset-${preset.name}'),
+            selected: selected,
+            pressScale: .98,
+            onTap: _busy
+                ? null
+                : () => setState(() {
+                      _feedback = null;
+                      _style = _style.copyWith(
+                          preset: preset,
+                          effect: NikoPrivacyStyle.effectFor(preset));
+                    }),
+            builder: (context, states) => AnimatedContainer(
+                duration: NlMotion.of(context, NlMotion.fast),
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                    // The glow is a filled shadow; an opaque tile keeps it
+                    // outside the frame.
+                    color: nl.surface,
+                    borderRadius: BorderRadius.circular(NlRadius.r3),
+                    border: Border.all(
+                        color: selected
+                            ? nl.accent
+                            : states.contains(WidgetState.hovered)
+                                ? nl.line2
+                                : nl.line,
+                        width: selected ? 2 : 1),
+                    boxShadow: selected
+                        ? nl.glow
+                        : states.contains(WidgetState.focused)
+                            ? nl.focusRing
+                            : null),
+                child: Column(children: [
+                  ClipRRect(
+                      borderRadius: BorderRadius.circular(NlRadius.r2),
+                      child: AspectRatio(
+                          aspectRatio: 1.6,
+                          child: NikoPrivacyWallpaper(
+                              animate: false,
+                              passwordExit: false,
+                              style: _style.copyWith(
+                                  preset: preset,
+                                  effect: NikoPrivacyStyle.effectFor(preset),
+                                  hint: false,
+                                  clock: false)))),
+                  Padding(
+                      padding: const EdgeInsets.all(NlSpace.s2 - 2),
+                      child: Text(_name(preset),
+                          style: NlType.text(NlType.s2,
+                              weight:
+                                  selected ? FontWeight.w600 : FontWeight.w500,
+                              color: selected ? nl.accentText : nl.fg2))),
+                ]))));
+  }
+
   @override
   Widget build(BuildContext context) {
-    final nightline = NlColors.maybeOf(context);
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const SizedBox(height: 12),
-        nightline != null
-            ? NlMonoLabel(nikoText('样式', 'Style'))
-            : Text(nikoText('样式', 'Style'),
-                style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 10),
-        LayoutBuilder(
-            builder: (context, bounds) =>
-                Wrap(spacing: 10, runSpacing: 10, children: [
-                  for (final preset in NikoPrivacyPreset.values)
-                    SizedBox(
-                        width: (bounds.maxWidth - 10) / 2,
-                        child: InkWell(
-                            key: ValueKey('privacy-preset-${preset.name}'),
-                            borderRadius: BorderRadius.circular(10),
-                            onTap: _busy
-                                ? null
-                                : () => setState(() {
-                                      _feedback = null;
-                                      _style = _style.copyWith(
-                                          preset: preset,
-                                          effect: NikoPrivacyStyle.effectFor(
-                                              preset));
-                                    }),
-                            child: Container(
-                                decoration: BoxDecoration(
-                                    // The glow is a filled shadow; an opaque
-                                    // tile keeps it outside the frame.
-                                    color: nightline?.surface,
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                        color: _style.preset == preset
-                                            ? Theme.of(context)
-                                                .colorScheme
-                                                .primary
-                                            : Theme.of(context).dividerColor,
-                                        width:
-                                            _style.preset == preset ? 2 : 1),
-                                    boxShadow: nightline != null &&
-                                            _style.preset == preset
-                                        ? nightline.glow
-                                        : null),
-                                padding: const EdgeInsets.all(3),
-                                child: Column(children: [
-                                  ClipRRect(
-                                      borderRadius: BorderRadius.circular(7),
-                                      child: AspectRatio(
-                                          aspectRatio: 1.6,
-                                          child: NikoPrivacyWallpaper(
-                                              animate: false,
-                                              passwordExit: false,
-                                              style: _style.copyWith(
-                                                  preset: preset,
-                                                  effect: NikoPrivacyStyle
-                                                      .effectFor(preset),
-                                                  hint: false,
-                                                  clock: false)))),
-                                  Padding(
-                                      padding: const EdgeInsets.all(6),
-                                      child: Text(_name(preset),
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .labelMedium
-                                              ?.copyWith(
-                                                  color: nightline != null &&
-                                                          _style.preset ==
-                                                              preset
-                                                      ? nightline.accentText
-                                                      : null,
-                                                  fontWeight: nightline !=
-                                                              null &&
-                                                          _style.preset ==
-                                                              preset
-                                                      ? FontWeight.w600
-                                                      : null)))
-                                ])))),
-                ])),
-        const SizedBox(height: 12),
-        ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: AspectRatio(
-                aspectRatio: 1.6,
-                child: _framed(NikoPrivacyWallpaper(
-                    key: const Key('privacy-motion-preview'),
-                    style: _style,
-                    passwordExit: widget.passwordExit,
-                    mac: widget.mac)))),
-        if (_style.preset == NikoPrivacyPreset.custom) ...[
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-              key: const Key('privacy-custom-image'),
-              onPressed: _busy ? null : _pick,
-              icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
-              label: Text(nikoText('选择图片', 'Choose image'))),
-        ],
-        _toggle(nikoText('动效', 'Animate'), _style.motion,
-            (value) => _style = _style.copyWith(motion: value)),
-        if (_style.preset != NikoPrivacyPreset.custom)
-          Row(children: [
-            Text(nikoText('光感', 'Glow')),
-            Expanded(
-                child: Slider(
-                    value: _style.intensity.toDouble(),
-                    min: 50,
-                    max: 200,
-                    onChanged: _busy
-                        ? null
-                        : (value) => setState(() => _style =
-                            _style.copyWith(intensity: value.round()))))
-          ]),
-        Row(children: [
-          Text(nikoText('亮度', 'Brightness')),
-          Expanded(
-              child: Slider(
-                  value: _style.brightness.toDouble(),
-                  min: 40,
-                  max: 100,
-                  onChanged: _busy
-                      ? null
-                      : (value) => setState(() =>
-                          _style = _style.copyWith(brightness: value.round()))))
-        ]),
-        if (!widget.passwordExit)
-          _toggle(nikoText('恢复提示', 'Restore hint'), _style.hint,
-              (value) => _style = _style.copyWith(hint: value)),
-        _toggle(nikoText('时钟', 'Clock'), _style.clock,
-            (value) => _style = _style.copyWith(clock: value)),
-        const SizedBox(height: 4),
-        FilledButton(
-            key: const Key('privacy-apply-style'),
-            onPressed:
-                _busy || !widget.allowed || !_style.valid ? null : _apply,
-            child: Text(_busy
-                ? nikoText('应用中…', 'Applying…')
-                : widget.active
-                    ? nikoText('应用', 'Apply')
-                    : nikoText('应用并开启', 'Apply and turn on'))),
-        if (_feedback != null)
-          Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(_feedback!,
-                  style: Theme.of(context).textTheme.bodySmall)),
-        const SizedBox(height: 12),
-      ]);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      const SizedBox(height: NlSpace.s2),
+      // Small swatches in one row where they fit; the preview below shows
+      // the chosen one large.
+      LayoutBuilder(builder: (context, bounds) {
+        const gap = NlSpace.s2;
+        final room =
+            bounds.maxWidth / MediaQuery.textScalerOf(context).scale(1);
+        final columns = room >= 460 ? 5 : (room >= 300 ? 3 : 2);
+        final width =
+            ((bounds.maxWidth - gap * (columns - 1)) / columns).floorToDouble();
+        return Wrap(spacing: gap, runSpacing: gap, children: [
+          for (final preset in NikoPrivacyPreset.values) _preset(preset, width),
+        ]);
+      }),
+      const SizedBox(height: NlSpace.s3),
+      ClipRRect(
+          borderRadius: BorderRadius.circular(NlRadius.r3),
+          child: AspectRatio(
+              aspectRatio: 1.6,
+              child: _framed(NikoPrivacyWallpaper(
+                  key: const Key('privacy-motion-preview'),
+                  style: _style,
+                  passwordExit: widget.passwordExit,
+                  mac: widget.mac)))),
+      if (_style.preset == NikoPrivacyPreset.custom) ...[
+        const SizedBox(height: NlSpace.s2),
+        Align(
+            alignment: Alignment.centerLeft,
+            child: NlButton.ghost(
+                key: const Key('privacy-custom-image'),
+                small: true,
+                icon: NlIcons.image,
+                label: nikoText('选择图片', 'Choose image'),
+                onPressed: _busy ? null : _pick)),
+      ],
+      const SizedBox(height: NlSpace.s2),
+      _toggle(nikoText('动效', 'Animate'), _style.motion,
+          (value) => _style = _style.copyWith(motion: value)),
+      if (_style.preset != NikoPrivacyPreset.custom)
+        _slider(nikoText('光感', 'Glow'), _style.intensity, 50, 200,
+            (value) => _style = _style.copyWith(intensity: value)),
+      _slider(nikoText('亮度', 'Brightness'), _style.brightness, 40, 100,
+          (value) => _style = _style.copyWith(brightness: value)),
+      if (!widget.passwordExit)
+        _toggle(nikoText('恢复提示', 'Restore hint'), _style.hint,
+            (value) => _style = _style.copyWith(hint: value)),
+      _toggle(nikoText('时钟', 'Clock'), _style.clock,
+          (value) => _style = _style.copyWith(clock: value)),
+      const SizedBox(height: NlSpace.s3),
+      Align(
+          alignment: Alignment.centerRight,
+          child: NlButton(
+              key: const Key('privacy-apply-style'),
+              loading: _busy,
+              label: _busy
+                  ? nikoText('应用中…', 'Applying…')
+                  : widget.active
+                      ? nikoText('应用', 'Apply')
+                      : nikoText('应用并开启', 'Apply and turn on'),
+              onPressed:
+                  _busy || !widget.allowed || !_style.valid ? null : _apply)),
+      if (_feedback != null)
+        Padding(
+            padding: const EdgeInsets.only(top: NlSpace.s3),
+            child: NikoSettingNote(_feedback!,
+                tone: _failed ? NlTone.danger : NlTone.ok)),
+      const SizedBox(height: NlSpace.s2),
+    ]);
   }
 }
 

@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/nikodesk/home_settings.dart';
+import 'package:flutter_hbb/nikodesk/nightline.dart';
 import 'package:flutter_hbb/nikodesk/policy.dart';
 import 'package:flutter_hbb/nikodesk/product_build_info.dart';
 import 'package:flutter_hbb/nikodesk/server_gateway.dart';
@@ -137,6 +138,7 @@ void main() {
         tester,
         NikoSettingsView(
             native: false,
+            initialSection: NikoSettingsSection.updates,
             gateway: _Gateway(),
             buildInfoLoader: () async => const ProductBuildInfo(
                 version: '1.0.2', buildNumber: '11', nativeVersion: '1.5.0'),
@@ -160,6 +162,7 @@ void main() {
         tester,
         NikoSettingsView(
             native: false,
+            initialSection: NikoSettingsSection.updates,
             gateway: _Gateway(),
             buildInfoLoader: () async => _fixture,
             updateChecker: (_) async => throw const FormatException(
@@ -189,6 +192,7 @@ void main() {
         tester,
         NikoSettingsView(
             native: false,
+            initialSection: NikoSettingsSection.updates,
             gateway: _Gateway(),
             buildInfoLoader: () async => _fixture,
             updateChecker: (_) async => nightly));
@@ -196,12 +200,10 @@ void main() {
     final channel = find.byKey(const Key('nikodesk-update-channel'));
     expect(
         tester
-            .widget<DropdownButtonFormField<NikoUpdateChannel>>(channel)
-            .initialValue,
+            .widget<NlSegmented<NikoUpdateChannel>>(channel)
+            .selected,
         NikoUpdateChannel.stable);
-    await tester.tap(channel);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Nightly preview').last);
+    await tester.tap(find.text('Nightly'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Check for updates'));
     await tester.pump();
@@ -224,6 +226,7 @@ void main() {
         tester,
         NikoSettingsView(
             native: false,
+            initialSection: NikoSettingsSection.updates,
             gateway: _Gateway(),
             buildInfoLoader: () async => _fixture,
             updateChecker: (_) => pending.future));
@@ -233,14 +236,14 @@ void main() {
     final channel = find.byKey(const Key('nikodesk-update-channel'));
     expect(
         tester
-            .widget<DropdownButtonFormField<NikoUpdateChannel>>(channel)
+            .widget<NlSegmented<NikoUpdateChannel>>(channel)
             .onChanged,
         isNull);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(
         tester
-            .widget<DropdownButtonFormField<NikoUpdateChannel>>(channel)
+            .widget<NlSegmented<NikoUpdateChannel>>(channel)
             .onChanged,
         isNotNull);
     pending.complete(null);
@@ -277,20 +280,25 @@ void main() {
         tester,
         NikoSettingsView(
             native: false,
+            initialSection: NikoSettingsSection.server,
             gateway: _Gateway(),
             buildInfoLoader: () =>
                 ++reads == 1 ? pending.future : Future.value(_fixture)));
     expect(find.text('Registered'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('nikodesk-settings-nav-about')));
+    await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Reading version information…'), findsOneWidget);
     await tester.pump(ProductBuildInfo.loadTimeout);
     await tester.pump();
-    expect(find.text('NikoDesk Unknown (build unknown)'), findsNWidgets(2));
+    expect(find.text('NikoDesk Unknown (build unknown)'), findsOneWidget);
     await tester.tap(find.byKey(const Key('nikodesk-version-retry')));
     await tester.pumpAndSettle();
-    expect(find.text('NikoDesk 9.8.7+42'), findsNWidgets(2));
+    expect(find.text('NikoDesk 9.8.7+42'), findsOneWidget);
     pending.complete(_obsolete);
     await tester.pumpAndSettle();
     expect(find.text('NikoDesk 100.0.0+1'), findsNothing);
+    await tester.tap(find.byKey(const Key('nikodesk-settings-nav-server')));
+    await tester.pumpAndSettle();
     expect(find.text('Registered'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
@@ -306,6 +314,7 @@ void main() {
         tester,
         NikoSettingsView(
             native: false,
+            initialSection: NikoSettingsSection.updates,
             active: false,
             gateway: gateway,
             buildInfoLoader: loader));
@@ -313,13 +322,14 @@ void main() {
         tester,
         NikoSettingsView(
             native: false,
+            initialSection: NikoSettingsSection.updates,
             active: true,
             gateway: gateway,
             buildInfoLoader: loader));
     await tester.pumpAndSettle();
     old.complete(_obsolete);
     await tester.pumpAndSettle();
-    expect(find.text('NikoDesk 9.8.7+42'), findsNWidgets(2));
+    expect(find.text('NikoDesk 9.8.7+42'), findsOneWidget);
     expect(find.text('NikoDesk 100.0.0+1'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
@@ -340,6 +350,7 @@ void main() {
         tester,
         NikoSettingsView(
             native: false,
+            initialSection: NikoSettingsSection.updates,
             gateway: _Gateway(),
             buildInfoLoader: loader,
             updateChecker: (_) async => _release));
@@ -351,8 +362,8 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pump();
     await tester.pump();
-    final button = find.widgetWithText(OutlinedButton, 'Check for updates');
-    expect(tester.widget<OutlinedButton>(button).onPressed, isNotNull);
+    final button = find.widgetWithText(NlButton, 'Check for updates');
+    expect(tester.widget<NlButton>(button).onPressed, isNotNull);
     await tester.tap(button);
     await tester.pump();
     await tester.pump();
@@ -360,9 +371,9 @@ void main() {
     old.complete(_obsolete);
     await tester.pump();
     await tester.pump();
-    expect(find.text('NikoDesk 9.8.9+43'), findsNWidgets(2));
+    expect(find.text('NikoDesk 9.8.9+43'), findsOneWidget);
     expect(find.text('NikoDesk 100.0.0+1'), findsNothing);
-    expect(tester.widget<OutlinedButton>(button).onPressed, isNotNull);
+    expect(tester.widget<NlButton>(button).onPressed, isNotNull);
     await tester.pumpWidget(const SizedBox());
     await tester.pump(ProductBuildInfo.loadTimeout);
   });
@@ -378,6 +389,7 @@ void main() {
         tester,
         NikoSettingsView(
             native: false,
+            initialSection: NikoSettingsSection.updates,
             gateway: _Gateway(),
             buildInfoLoader: () {
               reads++;
@@ -399,9 +411,9 @@ void main() {
     initialMetadata.complete(_fixture);
     await tester.pumpAndSettle();
     expect(find.text('Update available'), findsNothing);
-    expect(find.text('NikoDesk 9.8.7+42'), findsNWidgets(2));
-    final button = find.widgetWithText(OutlinedButton, 'Check for updates');
-    expect(tester.widget<OutlinedButton>(button).onPressed, isNotNull);
+    expect(find.text('NikoDesk 9.8.7+42'), findsOneWidget);
+    final button = find.widgetWithText(NlButton, 'Check for updates');
+    expect(tester.widget<NlButton>(button).onPressed, isNotNull);
     await tester.pumpWidget(const SizedBox());
     await tester.pump(ProductBuildInfo.loadTimeout);
   });

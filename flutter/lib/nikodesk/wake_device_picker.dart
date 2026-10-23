@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'alert_dialog.dart';
 import 'device_store.dart';
+import 'nightline.dart';
 import 'tunnel_controller.dart';
 import 'ui.dart';
 import 'wake_on_lan.dart';
@@ -22,7 +24,9 @@ Future<void> showNikoWakeDevicePicker(
     if (!context.mounted || !WakeSender.proxyReady(controller, port)) return;
     final index = await showDialog<int>(
         context: context,
-        builder: (dialog) => AlertDialog(
+        builder: (dialog) =>
+            NikoWakePicker.of(dialog, devices) ??
+            AlertDialog(
                 title: Text(nikoText('选择待唤醒设备', 'Choose a device to wake')),
                 content: SizedBox(
                     width: 440,
@@ -74,5 +78,53 @@ Future<void> showNikoWakeDevicePicker(
           nikoText('无法读取待唤醒设备或代理会话已结束，请重试。',
               'Could not read wake targets, or the proxy session ended. Retry.'));
     }
+  }
+}
+
+/// Nightline: the saved devices as rows, then manual entry. Pops the chosen
+/// index, -1 for manual entry, as the stock dialog does.
+class NikoWakePicker extends StatelessWidget {
+  final List<DeviceEntry> devices;
+  const NikoWakePicker({super.key, required this.devices});
+
+  static Widget? of(BuildContext context, List<DeviceEntry> devices) =>
+      NlColors.maybeOf(context) == null
+          ? null
+          : NikoWakePicker(devices: devices);
+
+  @override
+  Widget build(BuildContext context) {
+    final nl = NlColors.of(context);
+    return NikoAlertDialog(
+        title: Text(nikoText('选择待唤醒设备', 'Choose a device to wake')),
+        constraints: const BoxConstraints(maxWidth: 440),
+        content: NlPanel(
+            padding: EdgeInsets.zero,
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final (index, device) in devices.indexed)
+                    NlListRow(
+                        leading: NlDeviceGlyph(id: device.id, size: 32),
+                        title: device.title,
+                        // A device without an alias is already titled by its ID.
+                        subtitle: device.title == device.id ? null : device.id,
+                        chevron: true,
+                        onTap: () => Navigator.pop(context, index)),
+                  NlListRow(
+                      leading: SizedBox(
+                          width: 32,
+                          child: Icon(NlIcons.pencil, size: 16, color: nl.fg2)),
+                      title: nikoText('手动填写网卡', 'Enter NIC manually'),
+                      chevron: true,
+                      divider: false,
+                      onTap: () => Navigator.pop(context, -1)),
+                ])),
+        actions: [
+          NikoDialogButton(
+              label: nikoText('取消', 'Cancel'),
+              primary: false,
+              onPressed: () => Navigator.pop(context)),
+        ]);
   }
 }

@@ -7,6 +7,8 @@ import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/terminal_model.dart';
 import 'package:flutter_hbb/models/terminal_mouse_handler.dart';
+import 'package:flutter_hbb/nikodesk/terminal_look.dart';
+import 'package:xterm/xterm.dart' show TerminalStyle, TerminalThemes;
 import 'terminal_connection_manager.dart';
 
 class TerminalPage extends StatefulWidget {
@@ -207,6 +209,7 @@ class _TerminalPageState extends State<TerminalPage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final nikoLook = nikoTerminalLook(context);
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: LayoutBuilder(
@@ -218,7 +221,9 @@ class _TerminalPageState extends State<TerminalPage>
             focusNode: _terminalFocusNode,
             // Note: autofocus is not used here because focus is managed manually
             // via _onTabStateChanged() to handle tab switching properly.
-            backgroundOpacity: 0.7,
+            backgroundOpacity: nikoLook == null ? 0.7 : 1,
+            textStyle: nikoLook?.style ?? const TerminalStyle(),
+            theme: nikoLook?.theme ?? TerminalThemes.defaultTheme,
             padding: _calculatePadding(heightPx),
             onSecondaryTapDown: (details, offset) async {
               final selection = _terminalModel.terminalController.selection;

@@ -153,7 +153,7 @@ class _TunnelPanelState extends State<NikoCmTunnelPanel> {
 
   Widget _action(String op, String chinese, String english) => OutlinedButton(
       key: ValueKey('niko-tunnel-$op'),
-      style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48))
+      style: OutlinedButton.styleFrom(minimumSize: nikoCmButtonSize(context))
           .merge(op == 'revoke' ? nikoCmStopStyle(context) : null),
       onPressed: _model.maySend(op) ? () => _model.send(op) : null,
       child: Text(nikoText(chinese, english)));
@@ -166,6 +166,13 @@ class _TunnelPanelState extends State<NikoCmTunnelPanel> {
     final nonLoopback = selected.isNotEmpty && !selected.first.loopback;
     final heading = nikoText('本机隧道授权', 'Local tunnel approval');
     final title = Semantics(liveRegion: true, child: Text(_phase(_model)));
+    final nightline = NlColors.maybeOf(context) != null;
+    final chooseAddress = _model.mayResolve
+        ? (String? value) => setState(() {
+              _selected = value;
+              _allowNonLoopback = false;
+            })
+        : null;
     final children = <Widget>[
       Text(nikoText('请求目标：${status.target.label}',
           'Requested target: ${status.target.label}')),
@@ -185,34 +192,42 @@ class _TunnelPanelState extends State<NikoCmTunnelPanel> {
         if (status.reason == 'select_exact_address' &&
             status.addresses.isNotEmpty) ...[
           const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-              key: const ValueKey('niko-tunnel-address'),
-              value: _selected,
-              isExpanded: true,
-              itemHeight: null,
-              decoration:
-                  nikoInput(nikoText('选择实际地址', 'Choose an actual address')),
-              // A dense field has one line; a wrapped hint was clipped.
-              hint: Text(
-                  nikoText(
-                      '请选择，不会自动批准', 'Choose an address; approval is manual'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
-              items: status.addresses
-                  .map((a) => DropdownMenuItem(
-                      value: a.value,
-                      child: ConstrainedBox(
-                          constraints: const BoxConstraints(minHeight: 48),
-                          child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(a.value)))))
-                  .toList(),
-              onChanged: _model.mayResolve
-                  ? (value) => setState(() {
-                        _selected = value;
-                        _allowNonLoopback = false;
-                      })
-                  : null),
+          if (nightline)
+            NlSelect<String>(
+                key: const ValueKey('niko-tunnel-address'),
+                label: nikoText('实际地址', 'Actual address'),
+                placeholder: nikoText(
+                    '请选择，不会自动批准', 'Choose an address; approval is manual'),
+                value: _selected,
+                options: [
+                  for (final a in status.addresses)
+                    NlSelectOption(a.value, a.value)
+                ],
+                onChanged: chooseAddress)
+          else
+            DropdownButtonFormField<String>(
+                key: const ValueKey('niko-tunnel-address'),
+                value: _selected,
+                isExpanded: true,
+                itemHeight: null,
+                decoration:
+                    nikoInput(nikoText('选择实际地址', 'Choose an actual address')),
+                // A dense field has one line; a wrapped hint was clipped.
+                hint: Text(
+                    nikoText(
+                        '请选择，不会自动批准', 'Choose an address; approval is manual'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+                items: status.addresses
+                    .map((a) => DropdownMenuItem(
+                        value: a.value,
+                        child: ConstrainedBox(
+                            constraints: const BoxConstraints(minHeight: 48),
+                            child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(a.value)))))
+                    .toList(),
+                onChanged: chooseAddress),
           if (nonLoopback) ...[
             const SizedBox(height: 12),
             CheckboxListTile(
@@ -232,7 +247,8 @@ class _TunnelPanelState extends State<NikoCmTunnelPanel> {
           const SizedBox(height: 12),
           FilledButton(
               key: const ValueKey('niko-tunnel-approve'),
-              style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+              style: FilledButton.styleFrom(
+                  minimumSize: nikoCmButtonSize(context)),
               onPressed: _model.mayApprove(_selected,
                       allowNonLoopback: _allowNonLoopback)
                   ? _approve
@@ -242,8 +258,9 @@ class _TunnelPanelState extends State<NikoCmTunnelPanel> {
         ],
       ],
       const SizedBox(height: 16),
-      Wrap(spacing: 8, runSpacing: 8, children: [
-        _action('query', '读取当前状态', 'Read current state'),
+      NikoCmActions(children: [
+        // The design system reads the state from the card's heading.
+        if (!nightline) _action('query', '读取当前状态', 'Read current state'),
         if (pending) _action('deny', '拒绝本次请求', 'Deny this request'),
         if (!_model.cleanupOnly &&
             {'Starting', 'Running', 'Revoking'}.contains(status.phase))
@@ -267,10 +284,16 @@ class _TunnelPanelState extends State<NikoCmTunnelPanel> {
             child: Text(nikoTunnelReasonText(_model.operationMessage!))),
       ],
     ];
-    if (NlColors.maybeOf(context) != null) {
+    if (nightline) {
       return NikoCmCapabilityFrame(
           label: heading,
-          icon: Icons.swap_horiz_rounded,
+          icon: NlIcons.cable,
+          action: NlIconButton(
+              key: const ValueKey('niko-tunnel-query'),
+              icon: NlIcons.refreshCw,
+              tooltip: nikoText('读取当前状态', 'Read current state'),
+              onPressed:
+                  _model.maySend('query') ? () => _model.send('query') : null),
           // A previous session's tunnel that still runs is waiting for
           // cleanup, as its title says, not live.
           tone: _model.cleanupOnly && status.phase == 'Running'

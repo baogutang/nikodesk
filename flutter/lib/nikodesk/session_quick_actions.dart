@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart'
-    show CustomAlertDialog, SessionID, isMobile, isDesktop, isWindows, isLinux;
+    show SessionID, isMobile, isDesktop, isWindows, isLinux;
 import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
@@ -15,26 +15,27 @@ import 'privacy_connection.dart';
 import 'privacy_style.dart';
 import 'remote_resolution.dart';
 import 'session_quick_actions_view.dart';
+import 'session_sheet.dart';
 import 'session_shortcuts.dart';
 import 'ui.dart';
 
-void showNikoSessionQuickActions(FFI ffi) {
+export 'session_quick_actions_view.dart' show NikoQuickSection;
+
+/// Opens the control center over the session, on [section] when given (the
+/// privacy screen's "why" links open on its section).
+void showNikoSessionQuickActions(FFI ffi, {NikoQuickSection? section}) {
   if (ffi.closed || !ffi.ffiModel.pi.isSet.value) return;
   final session = ffi.sessionId;
   NikoLanguage.usePreference(bind.mainGetLocalOption(key: 'lang'));
   ffi.inputModel.enterOrLeave(false);
-  ffi.dialogManager.show((_, close, context) {
-    final width = (MediaQuery.sizeOf(context).width - 64).clamp(0.0, 560.0);
-    return CustomAlertDialog(
-      onCancel: close,
-      contentBoxConstraints: BoxConstraints(maxWidth: width),
-      content: SizedBox(
-        width: width,
-        child: _NikoSessionQuickActions(
-            ffi: ffi, session: session, onClose: close),
-      ),
-    );
-  }, backDismiss: true, tag: 'nikodesk-quick-actions');
+  ffi.dialogManager.show(
+      (_, close, context) => NikoSessionSheet(
+          onCancel: close,
+          child: _NikoSessionQuickActions(
+              ffi: ffi, session: session, section: section, onClose: close)),
+      backDismiss: true,
+      clickMaskDismiss: true,
+      tag: 'nikodesk-quick-actions');
 }
 
 class _NativeShortcutInput implements NikoShortcutInput {
@@ -62,9 +63,13 @@ class _NativeShortcutInput implements NikoShortcutInput {
 class _NikoSessionQuickActions extends StatefulWidget {
   final FFI ffi;
   final SessionID session;
+  final NikoQuickSection? section;
   final VoidCallback onClose;
   const _NikoSessionQuickActions(
-      {required this.ffi, required this.session, required this.onClose});
+      {required this.ffi,
+      required this.session,
+      this.section,
+      required this.onClose});
 
   @override
   State<_NikoSessionQuickActions> createState() =>
@@ -241,6 +246,7 @@ class _NikoSessionQuickActionsState extends State<_NikoSessionQuickActions> {
               _resolutionAvailable ? _setAutoFitResolution : null,
           captureMode: _captureMode,
           onCaptureMode: _resolutionAvailable ? _setCaptureMode : null,
+          initialSection: widget.section,
           onClose: widget.onClose,
         )),
       );

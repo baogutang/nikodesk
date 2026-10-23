@@ -4,9 +4,11 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_hbb/nikodesk/device_store.dart';
 import 'package:flutter_hbb/nikodesk/home_shell.dart';
+import 'package:flutter_hbb/nikodesk/history_kit.dart';
 import 'package:flutter_hbb/nikodesk/nightline.dart';
 import 'package:flutter_hbb/nikodesk/policy.dart';
 import 'package:flutter_hbb/nikodesk/server_gateway.dart';
@@ -91,6 +93,9 @@ void main() {
     expect(find.text('1000000001'), findsOneWidget);
     expect(find.text('设置永久密码'), findsOneWidget);
     expect(find.text('已就绪'), findsOneWidget);
+    // Granted permissions read like the server's state, not as a code.
+    expect(find.text('已授权'), findsNWidgets(Platform.isMacOS ? 2 : 0));
+    expect(find.text('OK'), findsNothing);
     expect(find.byType(BackdropFilter, skipOffstage: false), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
@@ -159,10 +164,12 @@ void main() {
     await loadShell(tester, shell(gateway), deferSetup: false);
     expect(find.text('连接自己的服务器'), findsOneWidget);
     expect(find.text('我的设备'), findsNothing);
-    await tester.enterText(find.byType(TextFormField).at(0), 'test.invalid:21116');
-    await tester.enterText(find.byType(TextFormField).at(1), 'test.invalid:21117');
     await tester.enterText(
-        find.byType(TextFormField).at(2), base64Encode(List.filled(32, 1)));
+        find.byKey(const ValueKey('niko-server-id')), 'test.invalid:21116');
+    await tester.enterText(
+        find.byKey(const ValueKey('niko-server-relay')), 'test.invalid:21117');
+    await tester.enterText(find.byKey(const ValueKey('niko-server-key')),
+        base64Encode(List.filled(32, 1)));
     await tester.ensureVisible(find.text('保存并启用私服'));
     await tester.runAsync(() async {
       await tester.tap(find.text('保存并启用私服'));
@@ -223,7 +230,7 @@ void main() {
 
     await tester.tap(find.text('设置'));
     await tester.pumpAndSettle();
-    expect(find.text('配置服务器'), findsOneWidget);
+    expect(find.text('语言'), findsOneWidget);
 
     await tester.tap(find.text('高级设置'));
     await tester.pumpAndSettle();
@@ -237,12 +244,16 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('device settings icon routes into the shell settings page',
+  testWidgets('command palette routes into the shell settings page',
       (tester) async {
     final gateway = _ServerDouble(
         const ServerSnapshot(PrivateServerConfig('', '', ''), null, false));
     await loadShell(tester, shell(gateway));
-    await tester.tap(find.byTooltip('设置'));
+    await tester.tap(find.text('搜索与命令'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(EditableText).last, '设置');
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
     expect(find.text('配置服务器'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
@@ -399,12 +410,12 @@ void main() {
       final page = tester.element(find.text('我的设备'));
       expect(NlColors.maybeOf(page), same(NlColors.forBrightness(brightness)));
       expect(find.byType(NlMark), findsOneWidget);
-      expect(find.text('DEVICES'), findsOneWidget);
+      expect(find.text('我的设备'), findsOneWidget);
       expect(find.text('READY'), findsOneWidget);
       expect(find.text('private.example'), findsOneWidget);
       await tester.tap(find.text('会话'));
       await tester.pumpAndSettle();
-      expect(find.text('SESSIONS'), findsOneWidget);
+      expect(find.text('会话记录'), findsOneWidget);
       expect(find.text('还没有连接记录'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
@@ -436,7 +447,7 @@ void main() {
       }
       await tester.pumpAndSettle();
       expect(opacity(), 1);
-      expect(find.text('配置服务器'), findsOneWidget);
+      expect(find.text('语言'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     });
   }
@@ -456,10 +467,10 @@ void main() {
     await loadThemedShell(tester, shell(gateway), brightness: Brightness.dark);
     await tester.tap(find.text('设置'));
     await tester.pumpAndSettle();
-    expect(find.ancestor(of: find.text('外观'), matching: find.byType(NlMonoLabel)),
-        findsOneWidget);
-    expect(find.ancestor(of: find.text('外观'), matching: find.byType(NlPanel)),
-        findsOneWidget);
+    expect(find.widgetWithText(NlSidebarItem, '外观'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('nikodesk-settings-nav-appearance')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('nikodesk-preset-orbit')), findsOneWidget);
     await tester.runAsync(() async {
       await tester.tap(find.text('会话'));
       for (var i = 0; i < 20; i++) {
@@ -468,7 +479,9 @@ void main() {
       }
     });
     await tester.pumpAndSettle();
-    expect(find.ancestor(of: find.text('Office'), matching: find.byType(NlPanel)),
+    expect(
+        find.ancestor(
+            of: find.text('Office'), matching: find.byType(NikoHistoryRow)),
         findsOneWidget);
     expect(find.text('中继'), findsOneWidget);
     expect(find.widgetWithText(NlButton, '连接'), findsOneWidget);
@@ -516,4 +529,29 @@ void main() {
     expect(find.text('让这台 Mac 可以被远程控制'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   }, skip: !Platform.isMacOS);
+
+  // Last in the file: the loaded font stays registered for any test after it.
+  group('with the bundled mono font', () {
+    setUpAll(() async {
+      final font = FontLoader(NlType.mono)
+        ..addFont(rootBundle.load('assets/fonts/JetBrainsMono-Medium.ttf'));
+      await font.load();
+    });
+
+    testWidgets('a grouped ten-digit local ID stays on one line',
+        (tester) async {
+      const id = '1 362 993 690';
+      final gateway = _ServerDouble(
+          const ServerSnapshot(PrivateServerConfig('', '', ''), null, false));
+      await loadShell(tester, shell(gateway, deviceId: id));
+      final paragraph = tester.renderObject<RenderParagraph>(find.text(id));
+      final first = paragraph.getBoxesForSelection(
+          const TextSelection(baseOffset: 0, extentOffset: 1));
+      final last = paragraph.getBoxesForSelection(
+          TextSelection(baseOffset: id.length - 1, extentOffset: id.length));
+      expect(last.single.top, first.single.top);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+  });
 }

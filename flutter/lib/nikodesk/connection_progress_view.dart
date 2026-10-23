@@ -3,6 +3,7 @@ import 'package:flutter_hbb/common.dart'
     show CustomAlertDialog, OverlayDialogManager;
 
 import 'connection_progress.dart';
+import 'nightline.dart';
 import 'ui.dart';
 
 String nikoConnectionPhaseLabel(NikoConnectionPhase phase) => switch (phase) {
@@ -35,6 +36,24 @@ String _detail(NikoConnectionPhase phase) => switch (phase) {
       _ => '',
     };
 
+/// The step a phase belongs to: reaching the peer, verifying, then the
+/// first picture. 3 means all are done; -1 that the attempt ended.
+int _step(NikoConnectionPhase phase) => switch (phase) {
+      NikoConnectionPhase.preparing ||
+      NikoConnectionPhase.connecting ||
+      NikoConnectionPhase.reconnecting =>
+        0,
+      NikoConnectionPhase.authenticating ||
+      NikoConnectionPhase.waitingForCredentials ||
+      NikoConnectionPhase.waitingForApproval =>
+        1,
+      NikoConnectionPhase.authenticated ||
+      NikoConnectionPhase.waitingForFrame =>
+        2,
+      NikoConnectionPhase.connected => 3,
+      NikoConnectionPhase.failed || NikoConnectionPhase.closed => -1,
+    };
+
 class NikoConnectionProgressView extends StatelessWidget {
   final NikoConnectionProgress progress;
   const NikoConnectionProgressView({super.key, required this.progress});
@@ -42,22 +61,93 @@ class NikoConnectionProgressView extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<NikoConnectionState>(
       valueListenable: progress,
-      builder: (context, state, _) => SizedBox(
-          width: 420,
-          child: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              if (state.pending) const CircularProgressIndicator(),
-              const SizedBox(height: 20),
-              Semantics(liveRegion: true, child: Text(
-                nikoConnectionPhaseLabel(state.phase),
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleLarge,
-              )),
-              const SizedBox(height: 12),
-              Text(_detail(state.phase), textAlign: TextAlign.center),
-            ]),
-          ),
-      ));
+      builder: (context, state, _) {
+        final nl = NlColors.of(context);
+        final detail = _detail(state.phase);
+        return SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+              child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _Steps(current: _step(state.phase), moving: state.pending),
+                    const SizedBox(height: NlSpace.s6),
+                    Semantics(
+                        liveRegion: true,
+                        child: AnimatedSwitcher(
+                            duration: NlMotion.of(context, NlMotion.base),
+                            child: Text(nikoConnectionPhaseLabel(state.phase),
+                                key: ValueKey(state.phase),
+                                textAlign: TextAlign.center,
+                                style: NlType.text(NlType.s5,
+                                    weight: FontWeight.w600, color: nl.fg)))),
+                    if (detail.isNotEmpty) ...[
+                      const SizedBox(height: NlSpace.s2),
+                      Text(detail,
+                          textAlign: TextAlign.center,
+                          style: NlType.text(NlType.s3, color: nl.fg2)
+                              .copyWith(height: 20 / 13)),
+                    ],
+                  ]),
+            ));
+      });
+}
+
+/// Three short bars for the three steps: done ones filled, the current one
+/// sweeping while the attempt is pending.
+class _Steps extends StatelessWidget {
+  final int current;
+  final bool moving;
+  const _Steps({required this.current, required this.moving});
+
+  @override
+  Widget build(BuildContext context) {
+    final nl = NlColors.of(context);
+    final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final labels = [
+      nikoText('连接', 'Connect'),
+      nikoText('验证', 'Verify'),
+      nikoText('画面', 'Video'),
+    ];
+    Widget bar(int i) {
+      final Widget fill;
+      if (i < current) {
+        fill = ColoredBox(color: nl.accent);
+      } else if (i == current && moving) {
+        fill = LinearProgressIndicator(
+            minHeight: 4,
+            value: still ? .5 : null,
+            color: nl.accent,
+            backgroundColor: nl.accentSoft);
+      } else {
+        fill = ColoredBox(color: nl.line2);
+      }
+      return ClipRRect(
+          borderRadius: BorderRadius.circular(NlRadius.pill),
+          child: SizedBox(height: 4, width: double.infinity, child: fill));
+    }
+
+    return ExcludeSemantics(
+        child: Row(children: [
+      for (var i = 0; i < labels.length; i++) ...[
+        if (i > 0) const SizedBox(width: NlSpace.s2),
+        Expanded(
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+              bar(i),
+              const SizedBox(height: NlSpace.s2),
+              Text(labels[i],
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: NlType.text(NlType.s2,
+                      weight: i == current ? FontWeight.w600 : FontWeight.w400,
+                      color: i <= current ? nl.fg2 : nl.fg3)),
+            ])),
+      ],
+    ]));
+  }
 }
 
 CustomAlertDialog nikoConnectionProgressDialog(NikoConnectionProgress progress,

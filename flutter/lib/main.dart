@@ -44,7 +44,6 @@ late List<String> kBootArgs;
 Future<void> main(List<String> args) async {
   earlyAssert();
   WidgetsFlutterBinding.ensureInitialized();
-
   debugPrint("launch argument count: ${args.length}");
   kBootArgs = List.from(args);
 
@@ -132,6 +131,8 @@ Future<void> initEnv(String appType) async {
   await initGlobalFFI();
   if (bind.mainGetAppNameSync() == 'NikoDesk') {
     NikoLanguage.usePreference(bind.mainGetLocalOption(key: 'lang'));
+    NikoAppearance.usePreference(
+        bind.mainGetLocalOption(key: NikoAppearance.option));
   }
   // await Firebase.initializeApp();
   _registerEventHandler();
@@ -567,7 +568,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
               ? const DesktopTabPage()
               : isWeb
                   ? WebHomePage()
-                  : isAndroid && bind.mainGetAppNameSync() == 'NikoDesk'
+                  : (isAndroid || isIOS) &&
+                          bind.mainGetAppNameSync() == 'NikoDesk'
                       ? const NikoMobileHome()
                       : HomePage(),
           localizationsDelegates: const [
@@ -628,6 +630,8 @@ _registerEventHandler() {
     platformFFI.registerEventHandler('language', 'language', (_) async {
       if (bind.mainGetAppNameSync() == 'NikoDesk') {
         NikoLanguage.usePreference(bind.mainGetLocalOption(key: 'lang'));
+        NikoAppearance.usePreference(
+            bind.mainGetLocalOption(key: NikoAppearance.option));
       }
       reloadAllWindows();
     });

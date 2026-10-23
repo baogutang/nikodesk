@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/model.dart';
+import 'package:flutter_hbb/nikodesk/nightline.dart';
 import 'package:flutter_hbb/nikodesk/theme.dart';
 import 'package:flutter_hbb/nikodesk/tunnel_cleanup.dart';
 import 'package:flutter_hbb/nikodesk/tunnel_cleanup_view.dart';
@@ -169,8 +170,12 @@ class _NikoMobilePortForwardPageState extends State<NikoMobilePortForwardPage> {
   Widget build(BuildContext context) {
     final ffi = _owner?.ffi;
     final controller = ffi?.nikoTunnelController;
+    // The app's own theme when it runs on the design system.
+    final nightline = NlColors.maybeOf(context) != null;
     return Theme(
-        data: nikoTheme(Theme.of(context).brightness),
+        data: nightline
+            ? Theme.of(context)
+            : nikoTheme(Theme.of(context).brightness),
         child: PopScope(
           canPop: _allowPop || _owner == null,
           onPopInvokedWithResult: (didPop, _) {
@@ -179,14 +184,44 @@ class _NikoMobilePortForwardPageState extends State<NikoMobilePortForwardPage> {
           child: Scaffold(
             appBar: AppBar(
                 title: Text(nikoText('TCP 隧道', 'TCP tunnel')),
-                leading: IconButton(
-                    tooltip: nikoText('退出隧道会话', 'Exit tunnel session'),
-                    constraints:
-                        const BoxConstraints(minWidth: 48, minHeight: 48),
-                    onPressed: _closing ? null : _exit,
-                    icon: const Icon(Icons.arrow_back))),
+                centerTitle: nightline ? true : null,
+                leading: nightline
+                    ? NlIconButton(
+                        icon: NlIcons.arrowLeft,
+                        tooltip: nikoText('退出隧道会话', 'Exit tunnel session'),
+                        onPressed: _closing ? null : _exit)
+                    : IconButton(
+                        tooltip: nikoText('退出隧道会话', 'Exit tunnel session'),
+                        constraints:
+                            const BoxConstraints(minWidth: 48, minHeight: 48),
+                        onPressed: _closing ? null : _exit,
+                        icon: const Icon(Icons.arrow_back))),
             body: Column(children: [
-              if (_closing || _closeUnconfirmed)
+              if (nightline && (_closing || _closeUnconfirmed))
+                Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                        NlSpace.s4, NlSpace.s3, NlSpace.s4, 0),
+                    child: NikoTunnelNote(
+                        _closing
+                            ? nikoText('正在退出，等待本机资源确认。',
+                                'Exiting; waiting for local resource confirmation.')
+                            : nikoText('退出尚未确认，仍保留本次会话。请查询清理，或重试退出。',
+                                'Exit is unconfirmed. This session is retained. Check cleanup or retry exit.'),
+                        warn: !_closing,
+                        actions: [
+                          if (!_closing) ...[
+                            NlButton.ghost(
+                                small: true,
+                                label: nikoText(
+                                    '查询并重试清理', 'Check and retry cleanup'),
+                                onPressed: () => _exit(query: true)),
+                            NlButton.ghost(
+                                small: true,
+                                label: nikoText('重试退出', 'Retry exit'),
+                                onPressed: _exit),
+                          ],
+                        ]))
+              else if (_closing || _closeUnconfirmed)
                 Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -215,15 +250,23 @@ class _NikoMobilePortForwardPageState extends State<NikoMobilePortForwardPage> {
                             ]),
                         ])),
               Expanded(
-                  child: controller == null
-                      ? Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Text(nikoText('此隧道会话未能创建。请关闭页面，检查私服与密码后重试。',
-                              'The tunnel session could not be created. Close this page, check the private server and password, and retry.')))
-                      : NikoTunnelControllerView(
-                          controller: controller,
-                          sendCommand: ffi!.sendNikoTunnelCommand,
-                          mobile: true)),
+                  child: controller == null && nightline
+                      ? NlEmptyState(
+                          icon: NlIcons.circleAlert,
+                          title: nikoText(
+                              '隧道会话未能创建', 'Tunnel session not created'),
+                          message: nikoText('请关闭页面，检查私服与密码后重试。',
+                              'Close this page, check the private server and password, and retry.'))
+                      : controller == null
+                          ? Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Text(nikoText(
+                                  '此隧道会话未能创建。请关闭页面，检查私服与密码后重试。',
+                                  'The tunnel session could not be created. Close this page, check the private server and password, and retry.')))
+                          : NikoTunnelControllerView(
+                              controller: controller,
+                              sendCommand: ffi!.sendNikoTunnelCommand,
+                              mobile: true)),
             ]),
           ),
         ));

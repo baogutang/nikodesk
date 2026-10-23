@@ -190,8 +190,8 @@ void main() {
             controls: NikoCmActionButton(label: 'Allow this session',
               onPressed: () => accepted++)))))));
       expect(tester.takeException(), isNull);
-      expect(find.text('SCREEN AND INPUT CONTROL'), findsOneWidget);
-      final action = find.byType(FilledButton);
+      expect(find.text('Screen and input control'), findsOneWidget);
+      final action = find.byType(NikoCmActionButton);
       await tester.ensureVisible(action);
       await tester.pumpAndSettle();
       expect(tester.getSize(action).height, greaterThanOrEqualTo(48));

@@ -833,7 +833,8 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     NikoSessionButton(ffi: widget.ffi),
     if (widget.ffi.connType == ConnType.defaultConn) ...[
       NikoPrivacyScreenButton(ffi: widget.ffi,
-          onExplain: () => showNikoSessionQuickActions(widget.ffi)),
+          onExplain: () => showNikoSessionQuickActions(widget.ffi,
+              section: NikoQuickSection.privacy)),
       NikoToolbarButton(
         icon: const Icon(Icons.dashboard_customize_outlined),
         label: nikoText('控制中心', 'Control center'),

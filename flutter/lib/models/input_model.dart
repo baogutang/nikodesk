@@ -20,6 +20,7 @@ import 'input_modifier_utils.dart';
 import 'relative_mouse_model.dart';
 import '../common.dart';
 import '../consts.dart';
+import '../nikodesk/mobile_input.dart';
 import '../nikodesk/session_shortcuts.dart';
 import '../generated_bridge.dart' show Rustdesk;
 
@@ -1389,6 +1390,7 @@ class InputModel {
   void onPointerPanZoomStart(PointerPanZoomStartEvent e) {
     _lastScale = 1.0;
     _stopFling = true;
+    nikoTrackpadGestureStart(this);
     if (isViewOnly) return;
     if (isViewCamera) return;
     if (peerPlatform == kPeerPlatformAndroid) {
@@ -1400,6 +1402,10 @@ class InputModel {
   void onPointerPanZoomUpdate(PointerPanZoomUpdateEvent e) {
     if (isViewOnly) return;
     if (isViewCamera) return;
+    if (nikoTrackpadPinch(this, e)) {
+      _trackpadLastDelta = Offset.zero;
+      return;
+    }
     if (peerPlatform != kPeerPlatformAndroid) {
       final scale = ((e.scale - _lastScale) * 1000).toInt();
       _lastScale = e.scale;
@@ -1415,7 +1421,7 @@ class InputModel {
     }
 
     var delta = e.panDelta * _trackpadSpeedInner;
-    if (isMacOS && peerPlatform == kPeerPlatformWindows) {
+    if ((isMacOS || nikoMacLikeInput) && peerPlatform == kPeerPlatformWindows) {
       delta *= _trackpadAdjustMacToWin;
     }
     delta = _filterTrackpadDeltaAxis(delta);
@@ -1538,7 +1544,7 @@ class InputModel {
 
     // 2.0 is an experience value
     double minFlingValue = 2.0 * _trackpadSpeedInner;
-    if (isMacOS && peerPlatform == kPeerPlatformWindows) {
+    if ((isMacOS || nikoMacLikeInput) && peerPlatform == kPeerPlatformWindows) {
       minFlingValue *= _trackpadAdjustMacToWin;
     }
     if (_trackpadLastDelta.dx.abs() > minFlingValue ||

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/nikodesk/file_pane.dart';
 
 class MenuButton extends StatefulWidget {
   final GestureTapCallback? onPressed;
@@ -31,6 +32,14 @@ class _MenuButtonState extends State<MenuButton> {
 
   @override
   Widget build(BuildContext context) {
+    if (const bool.fromEnvironment('NIKODESK')) {
+      final niko = nikoMenuButton(context,
+          child: widget.child,
+          onPressed: widget.onPressed,
+          tooltip: widget.tooltip,
+          padding: widget.padding);
+      if (niko != null) return niko;
+    }
     return Padding(
       padding: widget.padding,
       child: Tooltip(

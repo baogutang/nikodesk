@@ -1249,6 +1249,21 @@ class _FileManagerViewState extends State<FileManagerView> {
                 details.globalPosition.dy);
           }
 
+          if (const bool.fromEnvironment('NIKODESK') && nikoList != null) {
+            return Obx(() => NikoFileRow(
+                key: ValueKey(entry.name),
+                entry: entry,
+                selected: selectedItems.items.contains(entry),
+                menuOpen: rightClickEntry.value == entry,
+                height: _fileRowHeight - 2,
+                nameWidth: _nameColWidth.value,
+                modifiedWidth: _modifiedColWidth.value,
+                modified: lastModifiedStr,
+                size: sizeStr,
+                onTap: onTap,
+                onSecondaryTap: onSecondaryTap,
+                onSecondaryTapDown: onSecondaryTapDown));
+          }
           return Padding(
             padding: EdgeInsets.symmetric(vertical: 1),
             child: Obx(() => Container(
@@ -1760,6 +1775,11 @@ class _FileManagerViewState extends State<FileManagerView> {
       ..selection = TextSelection.collapsed(offset: text.length);
     return Row(
       children: [
+        if (nikoPathFieldIcon(context,
+                search: _locationStatus.value != LocationStatus.pathLocation)
+            case final icon?)
+          icon
+        else
         SvgPicture.asset(
           _locationStatus.value == LocationStatus.pathLocation
               ? "assets/folder.svg"

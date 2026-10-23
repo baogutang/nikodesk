@@ -9,7 +9,12 @@ import 'voice_session_model.dart';
 class NikoVoiceCallPanel extends StatelessWidget {
   final NikoVoiceSessionModel? model;
   final NikoVoicePreparation? preparation;
-  const NikoVoiceCallPanel({super.key, this.model, this.preparation});
+
+  /// Replaces the card's heading where the surrounding sheet already names
+  /// the call.
+  final String? label;
+  const NikoVoiceCallPanel(
+      {super.key, this.model, this.preparation, this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -18,7 +23,8 @@ class NikoVoiceCallPanel extends StatelessWidget {
       return AnimatedBuilder(
           animation: session,
           builder: (context, _) {
-            final panel = NikoCmVoicePanel(model: session, controller: true);
+            final panel = NikoCmVoicePanel(
+                model: session, controller: true, label: label);
             if (session.status.phase != 'Stopped' ||
                 session.cleanupUnconfirmed ||
                 session.cleanupOnly ||
@@ -69,7 +75,8 @@ class NikoVoiceCallPanel extends StatelessWidget {
           const SizedBox(height: 12),
           FilledButton(
               key: const ValueKey('niko-voice-prepare'),
-              style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+              style: FilledButton.styleFrom(
+                  minimumSize: nikoCmButtonSize(context)),
               onPressed: preparing.mayPrepare ? preparing.start : null,
               child: Text(nikoText('准备通话', 'Prepare call')))
         ];
@@ -80,8 +87,8 @@ class NikoVoiceCallPanel extends StatelessWidget {
             return NikoCmCapabilityFrame.bare([title, ...children]);
           }
           return NikoCmCapabilityFrame(
-              label: nikoText('语音通话', 'Voice call'),
-              icon: Icons.mic_none_rounded,
+              label: label ?? nikoText('语音通话', 'Voice call'),
+              icon: NlIcons.mic,
               tone: NlTone.neutral,
               title: title,
               children: children);

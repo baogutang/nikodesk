@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'nightline.dart';
 import 'nightline_settings.dart';
@@ -41,6 +42,10 @@ class _PrivateServerFormState extends State<PrivateServerForm> {
   bool _saving = false;
   String? _error;
 
+  /// Nightline shows each field's check under it; the Material form keeps
+  /// them in its FormState.
+  final _errors = <TextEditingController, String>{};
+
   @override
   void dispose() {
     _id.dispose();
@@ -51,7 +56,7 @@ class _PrivateServerFormState extends State<PrivateServerForm> {
 
   Future<void> _save() async {
     if (_saving) return;
-    if (!_form.currentState!.validate()) return;
+    if (!_validate()) return;
     setState(() {
       _saving = true;
       _error = null;
@@ -80,6 +85,48 @@ class _PrivateServerFormState extends State<PrivateServerForm> {
     }
   }
 
+  bool _validate() {
+    final form = _form.currentState;
+    if (form != null) return form.validate();
+    setState(() {
+      _errors.clear();
+      for (final (controller, check) in [
+        (_id, _idError),
+        (_relay, _relayError),
+        (_key, _keyError),
+      ]) {
+        final error = check(controller.text);
+        if (error != null) _errors[controller] = error;
+      }
+    });
+    return _errors.isEmpty;
+  }
+
+  String? _idError(String? value) => validServerEndpoint(value!.trim())
+      ? null
+      : nikoText('使用主机名或 IP，可带端口；不支持 URL 或公共服务。',
+          'Enter a host/IP with an optional port, without a URL or public service.');
+
+  String? _relayError(String? value) => validServerEndpoint(value!.trim())
+      ? null
+      : nikoText('填写有效主机名 / IP 和 1–65535 范围的端口。',
+          'Use a valid host/IP and a port between 1 and 65535.');
+
+  String? _keyError(String? value) => validServerKey(value!.trim())
+      ? null
+      : nikoText('需要标准 Base64 编码的 32 字节公钥（44 个字符）。',
+          'Use the 32-byte public key in standard Base64 (44 characters).');
+
+  String get _title => nikoText('连接自己的服务器', 'Connect to your server');
+
+  String get _intro => nikoText(
+      '填写你已有 NAS / OSS 服务端的配置，远端电脑需要使用相同私服。保存后启用本应用的私服配置，不会安装系统服务或授予系统权限。',
+      'Use your existing NAS / OSS server settings. The remote computer needs the same server. Saving enables this app’s private-server configuration; it does not install a system service or grant permissions.');
+
+  String get _keyNote => nikoText(
+      '公钥用于核验服务器身份，不是远端设备的控制密码。配置完整不代表服务器已注册或远端在线。',
+      'The public key checks server identity; it is not a remote-control password. Valid settings do not prove registration or device availability.');
+
   Widget _field(TextEditingController controller, String label,
           String? Function(String?) validator,
           {String? hint, bool autofocus = false}) =>
@@ -105,7 +152,12 @@ class _PrivateServerFormState extends State<PrivateServerForm> {
           ));
 
   @override
-  Widget build(BuildContext context) => SingleChildScrollView(
+  Widget build(BuildContext context) {
+    final nl = NlColors.maybeOf(context);
+    return nl == null ? _material(context) : _nightline(context, nl);
+  }
+
+  Widget _material(BuildContext context) => SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Form(
             key: _form,
@@ -113,40 +165,15 @@ class _PrivateServerFormState extends State<PrivateServerForm> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(nikoText('连接自己的服务器', 'Connect to your server'),
-                    style: Theme.of(context).textTheme.headlineSmall),
+                Text(_title, style: Theme.of(context).textTheme.headlineSmall),
                 const SizedBox(height: 10),
-                Text(nikoText(
-                    '填写你已有 NAS / OSS 服务端的配置，远端电脑需要使用相同私服。保存后启用本应用的私服配置，不会安装系统服务或授予系统权限。',
-                    'Use your existing NAS / OSS server settings. The remote computer needs the same server. Saving enables this app’s private-server configuration; it does not install a system service or grant permissions.')),
-                _field(
-                    _id,
-                    nikoText('ID 服务器', 'ID server'),
-                    (v) => validServerEndpoint(v!.trim())
-                        ? null
-                        : nikoText('使用主机名或 IP，可带端口；不支持 URL 或公共服务。',
-                            'Enter a host/IP with an optional port, without a URL or public service.'),
-                    hint: 'nas.example.net:21116',
-                    autofocus: true),
-                _field(
-                    _relay,
-                    nikoText('中继服务器', 'Relay server'),
-                    (v) => validServerEndpoint(v!.trim())
-                        ? null
-                        : nikoText('填写有效主机名 / IP 和 1–65535 范围的端口。',
-                            'Use a valid host/IP and a port between 1 and 65535.'),
+                Text(_intro),
+                _field(_id, nikoText('ID 服务器', 'ID server'), _idError,
+                    hint: 'nas.example.net:21116', autofocus: true),
+                _field(_relay, nikoText('中继服务器', 'Relay server'), _relayError,
                     hint: 'nas.example.net:21117'),
-                _field(
-                    _key,
-                    nikoText('服务端公钥', 'Server public key'),
-                    (v) => validServerKey(v!.trim())
-                        ? null
-                        : nikoText('需要标准 Base64 编码的 32 字节公钥（44 个字符）。',
-                            'Use the 32-byte public key in standard Base64 (44 characters).')),
-                Text(
-                    nikoText('公钥用于核验服务器身份，不是远端设备的控制密码。配置完整不代表服务器已注册或远端在线。',
-                        'The public key checks server identity; it is not a remote-control password. Valid settings do not prove registration or device availability.'),
-                    style: Theme.of(context).textTheme.bodySmall),
+                _field(_key, nikoText('服务端公钥', 'Server public key'), _keyError),
+                Text(_keyNote, style: Theme.of(context).textTheme.bodySmall),
                 if (_error != null)
                   Padding(
                       padding: const EdgeInsets.only(top: 16),
@@ -182,6 +209,105 @@ class _PrivateServerFormState extends State<PrivateServerForm> {
               ],
             )),
       );
+
+  /// Nightline: the title and what saving does, the three fields with their
+  /// checks under them, and the actions at the end, the main one last.
+  Widget _nightline(BuildContext context, NlColors nl) {
+    Widget field(TextEditingController controller, String label,
+            {String? hint, String? helper, bool autofocus = false}) =>
+        Padding(
+            padding: const EdgeInsets.only(top: NlSpace.s4),
+            child: NlTextField(
+                fieldKey: ValueKey('niko-server-${_fieldName(controller)}'),
+                controller: controller,
+                label: label,
+                hint: hint,
+                helper: helper,
+                error: _errors[controller],
+                enabled: !_saving,
+                autofocus: autofocus,
+                mono: true,
+                keyboardType: TextInputType.visiblePassword,
+                inputFormatters: [
+                  LengthLimitingTextInputFormatter(controller == _key ? 44 : 260)
+                ],
+                textInputAction: controller == _key
+                    ? TextInputAction.done
+                    : TextInputAction.next,
+                onSubmitted: controller == _key ? (_) => _save() : null,
+                onChanged: (_) {
+                  if (_errors.containsKey(controller)) {
+                    setState(() => _errors.remove(controller));
+                  }
+                }));
+    return SingleChildScrollView(
+        padding: const EdgeInsets.all(NlSpace.s6),
+        child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Semantics(
+                  header: true,
+                  child: Text(_title,
+                      style: NlType.text(NlType.s6,
+                          weight: FontWeight.w600, color: nl.fg))),
+              const SizedBox(height: NlSpace.s2),
+              Text(_intro,
+                  style: NlType.text(NlType.s3, color: nl.fg2)
+                      .copyWith(height: 20 / 13)),
+              const SizedBox(height: NlSpace.s2),
+              field(_id, nikoText('ID 服务器', 'ID server'),
+                  hint: 'nas.example.net:21116', autofocus: true),
+              field(_relay, nikoText('中继服务器', 'Relay server'),
+                  hint: 'nas.example.net:21117'),
+              field(_key, nikoText('服务端公钥', 'Server public key'),
+                  helper: _keyNote),
+              if (_error != null) ...[
+                const SizedBox(height: NlSpace.s4),
+                Semantics(
+                    liveRegion: true,
+                    child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Icon(NlIcons.circleAlert,
+                                  size: 16, color: nl.dangerText)),
+                          const SizedBox(width: NlSpace.s2),
+                          Expanded(
+                              child: Text(_error!,
+                                  style: NlType.text(NlType.s3,
+                                      color: nl.dangerText))),
+                        ])),
+              ],
+              const SizedBox(height: NlSpace.s6),
+              Wrap(
+                  spacing: NlSpace.s2,
+                  runSpacing: NlSpace.s2,
+                  alignment: WrapAlignment.end,
+                  children: [
+                    NlButton.ghost(
+                        onPressed: _saving
+                            ? null
+                            : widget.onCancelled ??
+                                () => Navigator.of(context).pop(false),
+                        label: widget.onCancelled == null
+                            ? nikoText('取消', 'Cancel')
+                            : nikoText('稍后配置', 'Set up later')),
+                    NlButton(
+                        onPressed: _saving ? null : _save,
+                        loading: _saving,
+                        icon: NlIcons.check,
+                        label: nikoText('保存并启用私服', 'Save and enable private server')),
+                  ]),
+            ]));
+  }
+
+  String _fieldName(TextEditingController controller) => controller == _id
+      ? 'id'
+      : controller == _relay
+          ? 'relay'
+          : 'key';
 }
 
 class NikoNetworkSettings extends StatefulWidget {

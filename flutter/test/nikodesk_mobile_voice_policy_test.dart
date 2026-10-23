@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/nikodesk/nightline.dart';
 import 'package:flutter_hbb/nikodesk/capability_policy.dart';
 import 'package:flutter_hbb/nikodesk/capability_policy_view.dart';
 import 'package:flutter_hbb/nikodesk/theme.dart';
@@ -136,7 +137,7 @@ void main() {
         NikoMobileVoicePolicyCard(
             policy: NikoCapabilityPolicy(transport), scopeChanges: changes));
     final open = find.byKey(const Key('nikodesk-mobile-voice-policy-open'));
-    expect(tester.widget<OutlinedButton>(open).onPressed, isNull);
+    expect(tester.widget<NlButton>(open).onPressed, isNull);
     expect(find.textContaining('请先配置有效的私有服务器'), findsOneWidget);
     expect(transport.calls, isEmpty);
   });

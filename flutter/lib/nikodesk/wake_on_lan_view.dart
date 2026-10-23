@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'alert_dialog.dart';
+import 'nightline.dart';
 import 'ui.dart';
 import 'wake_on_lan.dart';
 import 'wake_proxy.dart';
@@ -250,7 +253,154 @@ class _WakeState extends State<_WakeDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
+  Widget build(BuildContext context) {
+    final nl = NlColors.maybeOf(context);
+    return nl == null ? _material(context) : _nightline(context, nl);
+  }
+
+  /// Nightline: what Wake-on-LAN needs, the route as a select, the MAC in
+  /// full width and the broadcast address beside the port when they fit,
+  /// and the latest result under them. Same checks and states as below.
+  Widget _nightline(BuildContext context, NlColors nl) {
+    final unavailable =
+        _proxyId != null && !_proxies.any((proxy) => proxy.peerId == _proxyId);
+    Widget field(
+            Key key, TextEditingController controller, String label, int length,
+            {String? hint, TextInputType? keyboardType}) =>
+        NlTextField(
+            fieldKey: key,
+            controller: controller,
+            label: label,
+            hint: hint,
+            enabled: !_busy,
+            mono: true,
+            keyboardType: keyboardType,
+            inputFormatters: [LengthLimitingTextInputFormatter(length)]);
+    final broadcast = field(const Key('wol-broadcast'), _broadcast,
+        nikoText('局域网广播地址', 'LAN broadcast address'), 15);
+    final port = field(
+        const Key('wol-port'), _port, nikoText('UDP 端口', 'UDP port'), 5,
+        keyboardType: TextInputType.number);
+    return NikoAlertDialog(
+        title: Text(widget.title),
+        constraints: const BoxConstraints(maxWidth: 440),
+        content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              NikoDialogText(nikoText(
+                  '设备需要支持并启用 Wake-on-LAN。当前网络与设备同网段时可直接发送；跨网段请连接同网段在线代理的加密隧道。',
+                  'Wake-on-LAN must be supported and enabled. Send directly on the same LAN; across networks use an encrypted tunnel to an online LAN proxy.')),
+              const SizedBox(height: NlSpace.s4),
+              if (widget.proxies != null) ...[
+                NlSelect<String>(
+                    key: const Key('wol-route'),
+                    label: nikoText('唤醒方式', 'Wake route'),
+                    placeholder: nikoText('选择唤醒方式', 'Choose a wake route'),
+                    value: _proxyId ?? 'local',
+                    options: [
+                      NlSelectOption(
+                          'local', nikoText('本机所在局域网', 'This device’s LAN')),
+                      for (final id
+                          in _proxies.map((proxy) => proxy.peerId).toSet())
+                        NlSelectOption(id, widget.proxyLabels[id] ?? id),
+                      if (unavailable)
+                        NlSelectOption(
+                            _proxyId!,
+                            nikoText('已保存的代理 $_proxyId 暂不可用',
+                                'Saved proxy $_proxyId is unavailable'),
+                            enabled: false),
+                    ],
+                    onChanged: _busy
+                        ? null
+                        : (value) => setState(
+                            () => _proxyId = value == 'local' ? null : value)),
+                if (_proxyUnconfirmed) ...[
+                  const SizedBox(height: NlSpace.s2),
+                  Row(children: [
+                    const NlLed(NlLedState.warn),
+                    const SizedBox(width: NlSpace.s2),
+                    Expanded(
+                        child: Text(
+                            nikoText('代理列表未确认，不能通过已保存的代理发送。',
+                                'Proxy list is unconfirmed; saved proxy routes cannot send.'),
+                            style: NlType.text(NlType.s2, color: nl.warnText))),
+                  ]),
+                ],
+                if (widget.connectProxy != null) ...[
+                  const SizedBox(height: NlSpace.s2),
+                  Align(
+                      alignment: Alignment.centerLeft,
+                      child: NlButton.quiet(
+                          key: const Key('wol-connect-proxy'),
+                          small: true,
+                          icon: NlIcons.cable,
+                          onPressed: _busy
+                              ? null
+                              : () async {
+                                  final connect = widget.connectProxy!;
+                                  Navigator.of(context).pop();
+                                  await connect();
+                                },
+                          label: nikoText(
+                              '连接常开设备作为代理', 'Connect an always-on proxy'))),
+                ],
+                const SizedBox(height: NlSpace.s4),
+              ],
+              field(
+                  const Key('wol-mac'), _mac, nikoText('网卡 MAC', 'NIC MAC'), 17,
+                  hint: '02:11:22:33:44:55'),
+              const SizedBox(height: NlSpace.s3),
+              // The dialog sizes itself to its content, so the choice
+              // follows the screen and text size, as its actions do.
+              if (MediaQuery.sizeOf(context).width < 440 ||
+                  MediaQuery.textScalerOf(context).scale(16) > 20) ...[
+                broadcast,
+                const SizedBox(height: NlSpace.s3),
+                port,
+              ] else
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(flex: 3, child: broadcast),
+                  const SizedBox(width: NlSpace.s3),
+                  Expanded(child: port),
+                ]),
+              if (_feedback != null) ...[
+                const SizedBox(height: NlSpace.s4),
+                Semantics(
+                    liveRegion: true,
+                    child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                              padding: const EdgeInsets.only(top: 1),
+                              child: _busy
+                                  ? const NlSpinner(size: 14)
+                                  : Icon(NlIcons.info,
+                                      size: 15, color: nl.fg3)),
+                          const SizedBox(width: NlSpace.s2),
+                          Expanded(
+                              child: Text(_feedback!,
+                                  key: const Key('wol-feedback'),
+                                  style:
+                                      NlType.text(NlType.s3, color: nl.fg2))),
+                        ])),
+              ],
+            ]),
+        actions: [
+          NikoDialogButton(
+              label: nikoText('关闭', 'Close'),
+              primary: false,
+              onPressed: () => Navigator.of(context).pop()),
+          NikoDialogButton(
+              key: const Key('wol-send'),
+              label: nikoText(_busy ? '等待上线…' : '发送唤醒',
+                  _busy ? 'Waiting…' : 'Send wake request'),
+              primary: true,
+              onPressed: _busy ? null : _wake),
+        ]);
+  }
+
+  Widget _material(BuildContext context) => AlertDialog(
           title: Text(widget.title),
           content: SizedBox(
               width: 440,

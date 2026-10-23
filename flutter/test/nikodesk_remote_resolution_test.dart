@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_hbb/nikodesk/nightline.dart';
 import 'package:flutter_hbb/nikodesk/remote_resolution_policy.dart';
 import 'package:flutter_hbb/nikodesk/session_quick_actions_view.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
@@ -190,6 +191,7 @@ void main() {
         autoFitResolution: auto,
         onRemoteResolution: change,
         onAutoFitResolution: setAuto,
+        initialSection: NikoQuickSection.display,
         onClose: () {},
       )));
 
@@ -197,7 +199,7 @@ void main() {
   const fit = NikoDisplayMode(1920, 1080);
 
   bool enabled(WidgetTester tester, String key) =>
-      tester.widget<ButtonStyleButton>(find.byKey(Key(key))).onPressed != null;
+      tester.widget<NlButton>(find.byKey(Key(key))).onPressed != null;
 
   testWidgets('the section is absent when the session cannot offer it',
       (tester) async {
@@ -256,7 +258,7 @@ void main() {
     expect(find.textContaining('需要键鼠权限'), findsOneWidget);
     expect(
         tester
-            .widget<SwitchListTile>(
+            .widget<NlSwitch>(
                 find.byKey(const Key('nikodesk-resolution-auto')))
             .onChanged,
         isNull);
@@ -312,13 +314,12 @@ void main() {
       onViewStyle: (_) async {},
       captureMode: NikoCaptureMode.fit,
       onCaptureMode: (mode) async => chosen.add(mode),
+      initialSection: NikoQuickSection.display,
       onClose: () {},
     ))));
-    final dropdown = find.byKey(const Key('nikodesk-capture-mode'));
-    await tester.ensureVisible(dropdown);
-    await tester.tap(dropdown);
-    await tester.pumpAndSettle();
-    await tester.tap(find.textContaining('更小').last);
+    final smaller = find.byKey(const ValueKey('nikodesk-capture-small'));
+    await tester.ensureVisible(smaller);
+    await tester.tap(smaller);
     await tester.pumpAndSettle();
     expect(chosen, [NikoCaptureMode.small]);
     expect(find.textContaining('已请求并按设备保存'), findsOneWidget);

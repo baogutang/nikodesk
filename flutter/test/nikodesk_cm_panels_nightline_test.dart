@@ -50,16 +50,16 @@ void main() {
   for (final (panel, label, stop) in [
     (
       NikoTestCmPanel.terminal,
-      'LOCAL TERMINAL APPROVAL',
+      'Local terminal approval',
       'Revoke terminal access'
     ),
     (
       NikoTestCmPanel.camera,
-      'LOCAL CAMERA APPROVAL',
+      'Local camera approval',
       'Stop and revoke camera access'
     ),
-    (NikoTestCmPanel.voice, 'LOCAL VOICE APPROVAL', 'End voice call'),
-    (NikoTestCmPanel.tunnel, 'LOCAL TUNNEL APPROVAL', 'Stop this tunnel'),
+    (NikoTestCmPanel.voice, 'Local voice approval', 'End voice call'),
+    (NikoTestCmPanel.tunnel, 'Local tunnel approval', 'Stop this tunnel'),
   ]) {
     testWidgets('${panel.name}: one card, amber while waiting, green running',
         (tester) async {
@@ -105,11 +105,27 @@ void main() {
     });
   }
 
-  testWidgets('other actions keep the neutral outline', (tester) async {
-    await load(tester, NikoTestCmPanel.voice, running: true);
-    final read = tester.widget<OutlinedButton>(
-        find.widgetWithText(OutlinedButton, 'Read current status'));
-    expect(read.style!.foregroundColor, isNull);
+  testWidgets('reading the state is a quiet action in the heading',
+      (tester) async {
+    for (final (panel, key) in [
+      (NikoTestCmPanel.voice, 'niko-voice-query'),
+      (NikoTestCmPanel.tunnel, 'niko-tunnel-query'),
+      (NikoTestCmPanel.camera, 'niko-camera-refresh'),
+    ]) {
+      await load(tester, panel, running: true);
+      final read = find.byKey(ValueKey(key));
+      expect(
+          find.descendant(
+              of: find.byType(NikoCmCapabilityFrame), matching: read),
+          findsOneWidget,
+          reason: panel.name);
+      expect(tester.widget<NlIconButton>(read).onPressed, isNotNull,
+          reason: panel.name);
+      expect(find.widgetWithText(OutlinedButton, 'Read current status'),
+          findsNothing);
+      expect(find.widgetWithText(OutlinedButton, 'Read current state'),
+          findsNothing);
+    }
   });
 
   testWidgets('terminal: Allow and Deny are 48 px and Deny is outlined',
@@ -130,7 +146,7 @@ void main() {
       (tester) async {
     final semantics = tester.ensureSemantics();
     await load(tester, NikoTestCmPanel.camera);
-    expect(tester.getSemantics(find.text('LOCAL CAMERA APPROVAL')),
+    expect(tester.getSemantics(find.text('Local camera approval')),
         containsSemantics(isHeader: true));
     expect(tester.getSemantics(find.text('Camera waiting for local approval')),
         containsSemantics(isLiveRegion: true));
@@ -156,7 +172,7 @@ void main() {
         theme: nightlineTheme(Brightness.light),
         home: Scaffold(body: NikoVoiceCallPanel(preparation: preparation))));
     expect(find.byType(NikoCmCapabilityFrame), findsOneWidget);
-    expect(find.text('VOICE CALL'), findsOneWidget);
+    expect(find.text('Voice call'), findsOneWidget);
     expect(find.byKey(const ValueKey('niko-voice-prepare')), findsOneWidget);
   });
 }

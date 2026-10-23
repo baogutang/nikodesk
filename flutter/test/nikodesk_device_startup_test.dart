@@ -7,8 +7,8 @@ import 'package:flutter_hbb/generated_bridge.dart';
 import 'package:flutter_hbb/nikodesk/device_page.dart';
 import 'package:flutter_hbb/nikodesk/device_store.dart';
 import 'package:flutter_hbb/nikodesk/server_gateway.dart';
-import 'package:flutter_hbb/nikodesk/theme.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
+import 'package:flutter_hbb/nikodesk/nightline.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 // The production gateway waits on this controlled IPC response. The widget and
@@ -87,7 +87,7 @@ void main() {
     await tester.pump();
   }
 
-  NikoPrimaryButton connectButton(WidgetTester tester) =>
+  NlButton connectButton(WidgetTester tester) =>
       tester.widget(find.byKey(const Key('nikodesk-device-connect-123456')));
 
   Future<void> completeStatus(WidgetTester tester) async {
@@ -156,7 +156,7 @@ void main() {
     expect(find.textContaining('设备目录由更高版本创建'), findsOneWidget);
     expect(
         tester
-            .widget<NikoPrimaryButton>(
+            .widget<NlButton>(
                 find.byKey(const Key('nikodesk-hero-connect')))
             .onPressed,
         isNull);

@@ -143,6 +143,7 @@ void main() {
                 onClose: () {},
                 privacyScreen: NikoPrivacyScreenStatus.on,
                 onPrivacyScreen: (_) async {},
+                initialSection: NikoQuickSection.privacy,
                 privacyAuto: const Text('Auto preference')))));
     expect(find.textContaining('remote screen is black'), findsOneWidget);
     expect(find.text('Auto preference'), findsOneWidget);
@@ -180,7 +181,7 @@ void main() {
 
   testWidgets('under Nightline the reminder uses the session tokens',
       (tester) async {
-    var auto = false;
+    var auto = false, skipped = 0, enabled = 0;
     await tester.pumpWidget(MaterialApp(
         theme: nightlineTheme(Brightness.dark),
         home: Scaffold(
@@ -190,28 +191,76 @@ void main() {
                     auto: auto,
                     busy: false,
                     onAuto: (value) => setState(() => auto = value),
-                    onEnable: () {},
-                    onSkip: () {})))));
-    const nl = NlColors.dark;
-    final card = tester.widget<Material>(find
+                    onEnable: () => enabled++,
+                    onSkip: () => skipped++)))));
+    final nl = NlColors.dark;
+    final card = tester.widget<Container>(find
         .ancestor(
             of: find.text('Turn on the remote privacy screen?'),
-            matching: find.byType(Material))
-        .first);
-    expect(card.color, nl.overlay);
+            matching: find.byType(Container))
+        .last);
+    expect((card.decoration! as BoxDecoration).color, nl.overlay);
     expect(
         tester
             .widget<Text>(find.text('Turn on the remote privacy screen?'))
             .style!
             .color,
         nl.fg);
-    final theme = tester.widget<ListTileTheme>(find.ancestor(
-        of: find.byKey(const Key('privacy-arrival-auto')),
-        matching: find.byType(ListTileTheme)).first);
-    expect(theme.data.horizontalTitleGap, NlSpace.s1);
-    await tester.tap(find.byKey(const Key('privacy-arrival-auto')));
+    // Without permission the card warns and the main action opens settings.
+    expect(tester.widget<NlIconTile>(find.byType(NlIconTile)).color, nl.warn);
+    expect(find.text('Check settings'), findsOneWidget);
+    expect(find.byType(CheckboxListTile), findsNothing);
+    // The label toggles the box, which carries the key.
+    await tester.tap(find.text('Turn on automatically for this computer'));
     await tester.pump();
     expect(auto, isTrue);
+    expect(
+        tester.getSemantics(find.byKey(const Key('privacy-arrival-auto'))),
+        matchesSemantics(
+            isChecked: true,
+            hasCheckedState: true,
+            hasEnabledState: true,
+            isEnabled: true,
+            isFocusable: true,
+            hasTapAction: true,
+            label: 'Turn on automatically for this computer'));
+    await tester.tap(find.byKey(const Key('privacy-arrival-auto')));
+    await tester.pump();
+    expect(auto, isFalse);
+    final skip = tester.widget<NlButton>(
+        find.byKey(const Key('privacy-arrival-skip')));
+    expect(skip.tone, NlButtonTone.ghost);
+    await tester.tap(find.byKey(const Key('privacy-arrival-skip')));
+    await tester.tap(find.byKey(const Key('privacy-arrival-enable')));
+    expect((skipped, enabled), (1, 1));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('under Nightline a pending request disables the card',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+        theme: nightlineTheme(Brightness.light),
+        home: Scaffold(
+            body: NikoPrivacyArrivalView(
+                allowed: true,
+                auto: false,
+                busy: true,
+                error: 'Screen capture is not ready',
+                onAuto: (_) => fail('toggled while busy'),
+                onEnable: () => fail('enabled while busy'),
+                onSkip: () => fail('skipped while busy')))));
+    expect(
+        tester
+            .widget<NlButton>(find.byKey(const Key('privacy-arrival-enable')))
+            .loading,
+        isTrue);
+    expect(find.text('Turning on…'), findsOneWidget);
+    expect(tester.widget<NlIconTile>(find.byType(NlIconTile)).color,
+        NlColors.light.accent);
+    expect(find.text('Screen capture is not ready'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('privacy-arrival-auto')));
+    await tester.tap(find.byKey(const Key('privacy-arrival-skip')));
+    await tester.tap(find.byKey(const Key('privacy-arrival-enable')));
+    await tester.pump();
   });
 }

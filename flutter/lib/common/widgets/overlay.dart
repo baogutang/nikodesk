@@ -10,6 +10,7 @@ import '../../consts.dart';
 import '../../desktop/widgets/tabbar_widget.dart';
 import '../../models/chat_model.dart';
 import '../../models/model.dart';
+import '../../nikodesk/chat_view.dart';
 import '../../nikodesk/quality_overlay.dart';
 import 'chat_page.dart';
 
@@ -31,6 +32,21 @@ class DraggableChatWindow extends StatelessWidget {
   Widget build(BuildContext context) {
     if (draggablePositions.chatWindow.isInvalid()) {
       draggablePositions.chatWindow.update(position);
+    }
+    if (const bool.fromEnvironment('NIKODESK')) {
+      // No Scaffold inside, so iOS drags it by the header like the others.
+      final size = nikoChatWindowSize(MediaQuery.sizeOf(context));
+      return Draggable(
+          checkKeyboard: true,
+          checkScreenSize: true,
+          position: draggablePositions.chatWindow,
+          width: size.width,
+          height: size.height,
+          chatModel: chatModel,
+          builder: (context, onPanUpdate) => NikoSessionChatWindow(
+              chatModel: chatModel,
+              onPanUpdate: onPanUpdate,
+              touch: !(isDesktop || isWebDesktop)));
     }
     return isIOS
         ? IOSDraggable(

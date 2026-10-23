@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import 'mac_service_settings.dart';
 import 'mac_update_install.dart';
+import 'nightline.dart';
+import 'settings_kit.dart';
 import 'ui.dart';
 
 /// "Install now" for a verified, staged update; shown only when the
@@ -56,12 +58,13 @@ class _InstallButtonState extends State<NikoMacUpdateInstallButton> {
   @override
   Widget build(BuildContext context) {
     if (!_ready) return const SizedBox.shrink();
-    return Align(
-        alignment: Alignment.centerLeft,
-        child: FilledButton(
-            key: const Key('nikodesk-update-install-now'),
-            onPressed: _busy ? null : _install,
-            child: Text(nikoText('立即安装并重新打开', 'Install now and reopen'))));
+    return NlButton(
+        key: const Key('nikodesk-update-install-now'),
+        small: true,
+        icon: NlIcons.download,
+        loading: _busy,
+        onPressed: _busy ? null : _install,
+        label: nikoText('立即安装并重新打开', 'Install now and reopen'));
   }
 }
 
@@ -105,42 +108,48 @@ class _ModeState extends State<NikoUpdateModeSettings> {
 
   @override
   Widget build(BuildContext context) {
-    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [
-        Expanded(child: Text(nikoText('有新版本时', 'When a new version is out'))),
-        DropdownButton<NikoUpdateMode>(
-            key: const Key('nikodesk-update-mode'),
-            value: _mode,
-            items: [
-              DropdownMenuItem(
-                  value: NikoUpdateMode.remind,
-                  child: Text(nikoText('提醒我', 'Remind me'))),
-              DropdownMenuItem(
-                  value: NikoUpdateMode.auto,
-                  enabled: _serviceReady,
-                  child: Text(nikoText('空闲时自动安装', 'Install when idle'))),
-            ],
-            onChanged: _change),
-      ]),
-      Text(
-          _mode == NikoUpdateMode.auto && _serviceReady
-              ? nikoText('每 6 小时检查一次正式版。下载并校验通过后，在没有远控会话时安装并重新打开 NikoDesk。',
-                  'Checks for stable releases every 6 hours. A verified release is installed and NikoDesk reopened when no remote session is active.')
-              : _serviceReady
-                  ? nikoText('每 6 小时检查一次正式版，有新版本时提醒你。',
-                      'Checks for stable releases every 6 hours and reminds you of a new one.')
-                  : nikoText('每 6 小时检查一次正式版，有新版本时提醒你。自动安装需要先在“无人值守”中安装系统后台服务。',
-                      'Checks for stable releases every 6 hours and reminds you of a new one. Installing by itself needs the system background service under Unattended access.'),
-          style: TextStyle(fontSize: 11.5, color: muted)),
-      ValueListenableBuilder(
-          valueListenable: _schedule.available,
-          builder: (context, release, _) => release == null
-              ? const SizedBox.shrink()
-              : Text(
-                  nikoText('自动检查发现 ${release.displayName}，点“检查更新”即可下载。',
-                      'The automatic check found ${release.displayName}; use “Check for updates” to download it.'),
-                  key: const Key('nikodesk-update-available'))),
-    ]);
+    final current = switch (_mode) {
+      NikoUpdateMode.remind => nikoText('提醒我', 'Remind me'),
+      NikoUpdateMode.auto => nikoText('空闲时自动安装', 'Install when idle'),
+    };
+    return NikoSettingRow(
+        title: nikoText('有新版本时', 'When a new version is out'),
+        description: _mode == NikoUpdateMode.auto && _serviceReady
+            ? nikoText('每 6 小时检查一次正式版。下载并校验通过后，在没有远控会话时安装并重新打开 NikoDesk。',
+                'Checks for stable releases every 6 hours. A verified release is installed and NikoDesk reopened when no remote session is active.')
+            : _serviceReady
+                ? nikoText('每 6 小时检查一次正式版，有新版本时提醒你。',
+                    'Checks for stable releases every 6 hours and reminds you of a new one.')
+                : nikoText('每 6 小时检查一次正式版，有新版本时提醒你。自动安装需要先在“无人值守”中安装系统后台服务。',
+                    'Checks for stable releases every 6 hours and reminds you of a new one. Installing by itself needs the system background service under Unattended access.'),
+        trailing: Builder(
+            builder: (anchor) => NlButton.ghost(
+                key: const Key('nikodesk-update-mode'),
+                small: true,
+                icon: NlIcons.chevronsUpDown,
+                onPressed: () => showNlMenu(anchor,
+                        anchor: nlAnchorOf(anchor),
+                        width: 200,
+                        entries: [
+                          NlMenuItem(
+                              label: nikoText('提醒我', 'Remind me'),
+                              checked: _mode == NikoUpdateMode.remind,
+                              onSelected: () => _change(NikoUpdateMode.remind)),
+                          NlMenuItem(
+                              label: nikoText('空闲时自动安装', 'Install when idle'),
+                              checked: _mode == NikoUpdateMode.auto,
+                              enabled: _serviceReady,
+                              onSelected: () => _change(NikoUpdateMode.auto)),
+                        ]),
+                label: current)),
+        below: ValueListenableBuilder(
+            valueListenable: _schedule.available,
+            builder: (context, release, _) => release == null
+                ? const SizedBox.shrink()
+                : NikoSettingNote(
+                    nikoText('自动检查发现 ${release.displayName}，点“检查更新”即可下载。',
+                        'The automatic check found ${release.displayName}; use “Check for updates” to download it.'),
+                    tone: NlTone.accent,
+                    textKey: const Key('nikodesk-update-available'))));
   }
 }

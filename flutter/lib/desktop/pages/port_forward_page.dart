@@ -6,6 +6,7 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/nikodesk/nightline.dart';
 import 'package:flutter_hbb/nikodesk/tunnel_controller_view.dart';
 import 'package:flutter_hbb/nikodesk/tunnel_cleanup.dart';
 import 'package:flutter_hbb/nikodesk/tunnel_cleanup_view.dart';
@@ -138,8 +139,23 @@ class _PortForwardPageState extends State<PortForwardPage>
     super.build(context);
     if (const bool.fromEnvironment('NIKODESK')) {
       final controller = _ffi.nikoTunnelController;
+      final nightline = NlColors.maybeOf(context) != null;
       return Scaffold(body: Column(children: [
-        if (_nikoClosing || _nikoCloseUnconfirmed) Padding(padding: const EdgeInsets.all(16),
+        if (nightline && (_nikoClosing || _nikoCloseUnconfirmed)) Padding(
+          padding: const EdgeInsets.fromLTRB(NlSpace.s6, NlSpace.s4, NlSpace.s6, 0),
+          child: NikoTunnelNote(_nikoClosing
+                ? nikoText('正在退出，等待本机资源确认。', 'Exiting; waiting for local resource confirmation.')
+                : nikoText('此会话尚未能退出，窗口已保留。请重试退出或查询清理。',
+                    'This session could not exit. The window is retained. Retry exit or check cleanup.'),
+            warn: !_nikoClosing,
+            actions: [
+              if (!_nikoClosing) ...[
+                NlButton.ghost(small: true, label: nikoText('重试退出', 'Retry exit'), onPressed: _retryNikoClose),
+                NlButton.ghost(small: true, label: nikoText('查询清理', 'Check cleanup'),
+                    onPressed: () => _retryNikoClose(query: true)),
+              ],
+            ]))
+        else if (_nikoClosing || _nikoCloseUnconfirmed) Padding(padding: const EdgeInsets.all(16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Semantics(liveRegion: true, child: Text(_nikoClosing
                 ? nikoText('正在退出，等待本机资源确认。', 'Exiting; waiting for local resource confirmation.')
@@ -152,7 +168,12 @@ class _PortForwardPageState extends State<PortForwardPage>
                   onPressed: () => _retryNikoClose(query: true), child: Text(nikoText('查询清理', 'Check cleanup'))),
             ]),
           ])),
-        Expanded(child: controller == null || widget.isRDP
+        Expanded(child: (controller == null || widget.isRDP) && nightline
+          ? NlEmptyState(icon: NlIcons.circleAlert,
+              title: nikoText('隧道会话未能创建', 'Tunnel session not created'),
+              message: nikoText('请关闭窗口，检查私服与密码后重试。RDP 暂不支持。',
+                  'Close this window, check the private server and password, and retry. RDP is not supported.'))
+          : controller == null || widget.isRDP
           ? Padding(padding: const EdgeInsets.all(16), child: Text(nikoText(
               '此隧道会话未能创建。请关闭窗口，检查私服与密码后重试。RDP 暂不支持。',
               'The tunnel session could not be created. Close this window, check the private server and password, and retry. RDP is not supported.')))

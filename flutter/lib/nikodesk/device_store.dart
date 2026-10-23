@@ -129,6 +129,7 @@ class DeviceStore {
   }
 
   static Directory? _androidDirectory;
+  static Directory? _iosDirectory;
   final Directory directory;
   final String? serverNamespace;
   Future<void> _pending = Future.value();
@@ -143,7 +144,16 @@ class DeviceStore {
     _androidDirectory = directory;
   }
 
+  static void configureIosDirectory(Directory directory) {
+    if (!directory.isAbsolute) {
+      throw ArgumentError('The iOS device directory must be absolute');
+    }
+    _iosDirectory = directory;
+  }
+
   static Directory _privateDirectory() {
+    final profile = _devProfileDirectory();
+    if (profile != null) return profile;
     final env = Platform.environment;
     if (Platform.isMacOS) {
       return Directory(
@@ -159,8 +169,40 @@ class DeviceStore {
       }
       return directory;
     }
+    if (Platform.isIOS) {
+      // iOS gives the app no HOME, so startup passes the directory in.
+      final directory = _iosDirectory;
+      if (directory == null) {
+        throw StateError('iOS private storage is not initialized');
+      }
+      return directory;
+    }
     return Directory(
         '${env['XDG_CONFIG_HOME'] ?? '${env['HOME']!}/.config'}/NikoDesk');
+  }
+
+  /// Development builds run extra identities side by side: with
+  /// NIKODESK_DEV_PROFILE the core keys its configuration directory as
+  /// NikoDesk-<profile> (same rule: 1 to 16 lowercase letters or digits), and
+  /// saved devices and session history must follow it instead of landing in
+  /// the product's own list. A packaged core ignores the variable; there the
+  /// list would only look empty.
+  static Directory? _devProfileDirectory() {
+    final env = Platform.environment;
+    final profile = env['NIKODESK_DEV_PROFILE'];
+    if (profile == null || !RegExp(r'^[a-z0-9]{1,16}$').hasMatch(profile)) {
+      return null;
+    }
+    final name = 'NikoDesk-$profile';
+    if (Platform.isMacOS) {
+      return Directory('${env['HOME']!}/Library/Preferences/io.nikodesk.$name');
+    }
+    if (Platform.isWindows) return Directory('${env['APPDATA']!}/$name/config');
+    if (Platform.isLinux) {
+      return Directory(
+          '${env['XDG_CONFIG_HOME'] ?? '${env['HOME']!}/.config'}/$name');
+    }
+    return null;
   }
 
   File get file => File('${directory.path}/devices.json');

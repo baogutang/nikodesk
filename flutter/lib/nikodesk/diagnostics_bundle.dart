@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../models/platform_model.dart';
 import 'product_build_info.dart';
+import 'nightline.dart';
 import 'ui.dart';
 
 /// The redacted local diagnostics bundle: product version plus what the
@@ -117,9 +118,11 @@ class _ExportState extends State<NikoDiagnosticsExportButton> {
   }
 
   @override
-  Widget build(BuildContext context) => TextButton.icon(
+  Widget build(BuildContext context) => NlButton.ghost(
       key: const Key('nikodesk-export-diagnostics'),
+      small: true,
+      icon: NlIcons.fileText,
+      loading: _busy,
       onPressed: _busy ? null : _run,
-      icon: const Icon(Icons.description_outlined, size: 18),
-      label: Text(nikoText('导出诊断包', 'Export diagnostics')));
+      label: nikoText('导出诊断包', 'Export diagnostics'));
 }

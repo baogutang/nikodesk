@@ -9,6 +9,8 @@ import 'package:flutter_hbb/models/platform_model.dart';
 
 import 'device_page.dart';
 import 'device_store.dart';
+import 'home_board.dart';
+import 'home_chrome.dart';
 import 'server_scope.dart';
 import 'home_settings.dart';
 import 'nightline.dart';
@@ -42,6 +44,10 @@ class NikoHomeShell extends StatefulWidget {
   final void Function(bool prompt)? screenRecordingRequest;
   final void Function(bool prompt)? accessibilityRequest;
 
+  /// Draws the page headers as the macOS title bar. Defaults to the native
+  /// macOS app; screenshots set it explicitly.
+  final bool? macTitleBar;
+
   const NikoHomeShell(
       {super.key,
       this.store,
@@ -53,7 +59,8 @@ class NikoHomeShell extends StatefulWidget {
       this.screenRecordingProbe,
       this.accessibilityProbe,
       this.screenRecordingRequest,
-      this.accessibilityRequest});
+      this.accessibilityRequest,
+      this.macTitleBar});
 
   @override
   State<NikoHomeShell> createState() => _NikoHomeShellState();
@@ -66,7 +73,7 @@ class _NikoHomeShellState extends State<NikoHomeShell>
   DeviceStore get _store => widget.store ?? DeviceStore.instance;
   late final _gateway = widget.gateway ?? NativeServerGateway();
   _HomeDestination _destination = _HomeDestination.devices;
-  final _scaffoldKey = GlobalKey<ScaffoldState>();
+  final _board = NikoDeviceBoard();
   ServerSnapshot? _server;
   String? _temporaryPassword;
   bool _showPassword = false;
@@ -82,6 +89,10 @@ class _NikoHomeShellState extends State<NikoHomeShell>
 
   bool get _native =>
       widget.gateway == null || widget.gateway is NativeServerGateway;
+
+  // The tab bar above steps aside on macOS (nikoHomeDrawsTitleBar), so every
+  // page here keeps the traffic lights clear and the window draggable.
+  bool get _macTitleBar => widget.macTitleBar ?? (Platform.isMacOS && _native);
 
   @override
   void initState() {
@@ -106,6 +117,7 @@ class _NikoHomeShellState extends State<NikoHomeShell>
     NikoServerScope.changes.removeListener(_scopeChanged);
     _timer?.cancel();
     _enter.dispose();
+    _board.dispose();
     NikoLinkInbox.detach(this);
     super.dispose();
   }
@@ -314,104 +326,133 @@ class _NikoHomeShellState extends State<NikoHomeShell>
     final shell = nightlineTheme(brightness);
     return Theme(
         data: shell,
-        child: NikoFirstServerSetup(
+        child: Material(
+            type: MaterialType.transparency,
+            child: NikoFirstServerSetup(
+                gateway: _gateway,
+                macTitleBar: _macTitleBar,
+                onLanguageChanged: _setLanguage,
+                onSaved: () {
+                  _go(_HomeDestination.devices);
+                  _refreshStatus();
+                },
+                child: _guide == true
+                    ? NikoTitleStrip(
+                        enabled: _macTitleBar, child: _permissionGuide())
+                    : Builder(builder: (context) => _home(context, shell)))));
+  }
+
+  Widget _home(BuildContext context, ThemeData shell) {
+    final nl = NlColors.of(context);
+    final local = _localPanel(nl, heading: false);
+    final pages = <_HomeDestination, Widget>{
+      _HomeDestination.devices: NikoDevicePage(
+          key: ValueKey('devices-${_store.directory.path}'),
+          store: _store,
           gateway: _gateway,
-          onLanguageChanged: _setLanguage,
-          onSaved: () {
-            _go(_HomeDestination.devices);
-            _refreshStatus();
-          },
-          child: _guide == true ? _permissionGuide() : LayoutBuilder(builder: (context, constraints) {
-          final nl = NlColors.of(context);
-          final compact = constraints.maxWidth < 840 ||
-              constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1) < 640;
-          final pages = <_HomeDestination, Widget>{
-            _HomeDestination.devices: NikoDevicePage(
-                key: ValueKey('devices-${_store.directory.path}'),
-                store: _store,
-                gateway: _gateway,
-                native: _native,
-                active: _destination == _HomeDestination.devices,
-                sessionLog: widget.sessionLog,
-                onLanguageChanged: () => setState(() {}),
-                onConnect: widget.onConnect,
-                onOpenSettings: () => _go(_HomeDestination.settings)),
-            _HomeDestination.sessions: NikoSessionHistoryPage(
-                key: ValueKey(
-                    'history-${widget.sessionLog?.directory.path ?? SessionLogStore.instance.directory.path}'),
-                store: widget.sessionLog,
-                gateway: _gateway,
-                active: _destination == _HomeDestination.sessions,
-                onConnect: widget.onConnect),
-            _HomeDestination.settings: NikoSettingsView(
-                gateway: _gateway,
-                native: _native,
-                active: _destination == _HomeDestination.settings,
-                onServerSaved: _refreshStatus,
-                onLanguageChanged: () => setState(() {}),
-                onOpenAdvanced: () => _go(_HomeDestination.advanced)),
-            _HomeDestination.advanced: _advancedPage(shell),
-          };
-          final content = AnimatedBuilder(
-              animation: _enter,
-              child: IndexedStack(
-                  index: pages.keys.toList().indexOf(_destination),
-                  children: pages.entries.map((entry) => ExcludeFocus(
-                      excluding: _destination != entry.key,
-                      child: entry.value)).toList()),
-              builder: (context, child) {
-                final t = NlMotion.ease.transform(_enter.value);
-                return Opacity(
-                    key: const ValueKey('nikodesk-shell-page'),
-                    opacity: t,
-                    child: Transform.translate(
-                        offset: Offset(12 * (1 - t), 0), child: child));
-              });
-          return ColoredBox(
-            color: nl.bg,
-            child: Scaffold(
-                key: _scaffoldKey,
-                backgroundColor: Colors.transparent,
-                appBar: compact ? AppBar(
-                    backgroundColor: nl.bg,
-                    shape: Border(bottom: BorderSide(color: nl.line)),
-                    title: const Text('NikoDesk'),
-                    leading: IconButton(
-                        tooltip: nikoText('打开导航', 'Open navigation'),
-                        onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-                        icon: const Icon(Icons.menu_rounded))) : null,
-                drawer: compact ? Drawer(width: 320, child: _drawer(nl)) : null,
-                body: compact
-                    ? content
-                    : Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _rail(nl),
-                          Expanded(
-                              child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                                  children: [
-                                _topBar(nl),
-                                Expanded(
-                                    child: Row(
-                                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                                        children: [
-                                      Expanded(child: content),
-                                      Container(
-                                          width: constraints.maxWidth >= 1360 ? 332 : 288,
-                                          decoration: BoxDecoration(
-                                              color: nl.bg2,
-                                              border: Border(
-                                                  left: BorderSide(color: nl.line))),
-                                          child: _inspector(nl)),
-                                    ])),
-                              ])),
-                        ])));
-        })));
+          native: _native,
+          active: _destination == _HomeDestination.devices,
+          sessionLog: widget.sessionLog,
+          board: _board,
+          localPanel: local,
+          onLanguageChanged: () => setState(() {}),
+          onConnect: widget.onConnect,
+          onOpenSettings: () => _openSettings(NikoSettingsSection.server)),
+      _HomeDestination.sessions: NikoSessionHistoryPage(
+          key: ValueKey(
+              'history-${widget.sessionLog?.directory.path ?? SessionLogStore.instance.directory.path}'),
+          store: widget.sessionLog,
+          gateway: _gateway,
+          active: _destination == _HomeDestination.sessions,
+          onConnect: widget.onConnect),
+      _HomeDestination.settings: NikoSettingsView(
+          gateway: _gateway,
+          initialSection: _settingsSection,
+          sectionRequest: _settingsRequest,
+          native: _native,
+          active: _destination == _HomeDestination.settings,
+          onServerSaved: _refreshStatus,
+          onLanguageChanged: () => setState(() {}),
+          onAppearanceChanged: () => setState(() {}),
+          onOpenAdvanced: () => _go(_HomeDestination.advanced)),
+      _HomeDestination.advanced: _advancedPage(shell),
+    };
+    final content = AnimatedBuilder(
+        animation: _enter,
+        child: IndexedStack(
+            index: pages.keys.toList().indexOf(_destination),
+            children: pages.entries
+                .map((entry) => ExcludeFocus(
+                    excluding: _destination != entry.key, child: entry.value))
+                .toList()),
+        builder: (context, child) {
+          final t = NlMotion.ease.transform(_enter.value);
+          return Opacity(
+              key: const ValueKey('nikodesk-shell-page'),
+              opacity: t,
+              child: Transform.translate(
+                  offset: Offset(12 * (1 - t), 0), child: child));
+        });
+    return CallbackShortcuts(
+        bindings: _shortcuts,
+        child: Focus(
+            autofocus: true,
+            child: ListenableBuilder(
+                listenable: _board,
+                builder: (context, _) {
+                  final grouped = _destination == _HomeDestination.devices &&
+                      _board.filter.startsWith('group:');
+                  return NikoHomeChrome(
+                      destinations: [
+                        for (final destination in _HomeDestination.values)
+                          NikoHomeDestination(
+                              icon: _icon(destination),
+                              label: _label(destination),
+                              count: destination == _HomeDestination.devices &&
+                                      _board.devices.isNotEmpty
+                                  ? '${_board.devices.length}'
+                                  : null),
+                      ],
+                      selected: grouped
+                          ? -1
+                          : _HomeDestination.values.indexOf(_destination),
+                      onSelect: (index) {
+                        final destination = _HomeDestination.values[index];
+                        if (destination == _HomeDestination.devices &&
+                            _board.filter.startsWith('group:')) {
+                          _board.filter = 'all';
+                        }
+                        _go(destination);
+                      },
+                      body: content,
+                      sections: nikoBoardSections(context, _board,
+                          devicesShown:
+                              _destination == _HomeDestination.devices,
+                          onDevices: _onDevices),
+                      footer: _footer(nl),
+                      drawerExtra: _localPanel(nl),
+                      onQuickConnect: _quickConnect,
+                      onSearch: _openPalette,
+                      quickConnectShortcut: nikoShortcut('N'),
+                      searchShortcut: nikoShortcut('K'),
+                      macTitleBar: _macTitleBar);
+                })));
   }
 
   /// Every destination change goes through here so pages enter with the same
   /// short slide; reduced motion switches instantly.
+  NikoSettingsSection? _settingsSection;
+  int _settingsRequest = 0;
+
+  /// Opens settings on [section], wherever the settings page was left.
+  void _openSettings(NikoSettingsSection section) {
+    setState(() {
+      _settingsSection = section;
+      _settingsRequest++;
+    });
+    _go(_HomeDestination.settings);
+  }
+
   void _go(_HomeDestination destination) {
     if (destination == _destination) return;
     setState(() => _destination = destination);
@@ -422,31 +463,163 @@ class _NikoHomeShellState extends State<NikoHomeShell>
     }
   }
 
+  /// Shows the device page, then hands it the request once its fields can
+  /// take focus again.
+  void _onDevices(bool Function() request) {
+    _go(_HomeDestination.devices);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) request();
+    });
+  }
+
+  void _quickConnect() => _onDevices(_board.requestQuickConnect);
+
+  Map<ShortcutActivator, VoidCallback> get _shortcuts {
+    final apple = Platform.isMacOS || Platform.isIOS;
+    SingleActivator key(LogicalKeyboardKey key) =>
+        SingleActivator(key, meta: apple, control: !apple);
+    return {
+      key(LogicalKeyboardKey.keyK): _openPalette,
+      key(LogicalKeyboardKey.keyN): _quickConnect,
+      key(LogicalKeyboardKey.keyF): () =>
+          _onDevices(_board.requestFocusSearch),
+      key(LogicalKeyboardKey.comma): () => _go(_HomeDestination.settings),
+      key(LogicalKeyboardKey.digit1): () => _go(_HomeDestination.devices),
+      key(LogicalKeyboardKey.digit2): () => _go(_HomeDestination.sessions),
+      key(LogicalKeyboardKey.digit3): () => _go(_HomeDestination.settings),
+    };
+  }
+
+  Future<void> _openPalette() async {
+    final id = _deviceId;
+    final commands = nikoDeviceCommands(_board, onDevices: _onDevices);
+    final actions = nikoText('操作', 'Actions');
+    await showNlCommandPalette(context,
+        hint: nikoText('搜索设备、页面或命令', 'Search devices, pages or commands'),
+        empty: nikoText('没有匹配的结果', 'No matches'),
+        commands: [
+          ...commands.take(2),
+          if (id.isNotEmpty)
+            NlCommand(
+                title: nikoText('复制本机设备 ID', 'Copy local device ID'),
+                subtitle: id,
+                icon: NlIcons.copy,
+                group: actions,
+                run: () => _copy(id, nikoText('设备 ID', 'device ID'))),
+          NlCommand(
+              title: nikoText('设置永久密码', 'Set permanent password'),
+              icon: NlIcons.keyRound,
+              group: actions,
+              run: _setPermanentPassword),
+          for (final destination in _HomeDestination.values)
+            NlCommand(
+                title: _label(destination),
+                icon: _icon(destination),
+                group: nikoText('前往', 'Go to'),
+                shortcut: switch (destination) {
+                  _HomeDestination.devices => nikoShortcut('1'),
+                  _HomeDestination.sessions => nikoShortcut('2'),
+                  _HomeDestination.settings => nikoShortcut(','),
+                  _HomeDestination.advanced => null,
+                },
+                run: () => _go(destination)),
+          ...commands.skip(2),
+        ]);
+  }
+
+  IconData _icon(_HomeDestination destination) => switch (destination) {
+        _HomeDestination.devices => NlIcons.monitorSmartphone,
+        _HomeDestination.sessions => NlIcons.history,
+        _HomeDestination.settings => NlIcons.settings,
+        _HomeDestination.advanced => NlIcons.slidersHorizontal,
+      };
+
+  String _label(_HomeDestination destination) => switch (destination) {
+        _HomeDestination.devices => nikoText('设备', 'Devices'),
+        _HomeDestination.sessions => nikoText('会话', 'Sessions'),
+        _HomeDestination.settings => nikoText('设置', 'Settings'),
+        _HomeDestination.advanced => nikoText('高级设置', 'Advanced'),
+      };
+
+  /// The private server at the foot of the sidebar; it opens settings.
+  Widget _footer(NlColors nl) {
+    final state = _serverState;
+    final code = switch (state) {
+      _ServerState.unknown => '—',
+      _ServerState.unconfigured => 'SETUP',
+      _ServerState.paused => 'PAUSED',
+      _ServerState.ready => 'READY',
+      _ServerState.registering => 'REG',
+      _ServerState.notReady => 'WAIT',
+    };
+    return Padding(
+        padding: const EdgeInsets.fromLTRB(
+            NlSpace.s2, NlSpace.s1, NlSpace.s2, NlSpace.s3),
+        child: Semantics(
+            button: true,
+            label:
+                '${nikoText('私有服务器', 'Private server')} · ${_serverStatusText(state)}',
+            excludeSemantics: true,
+            child: NlPressable(
+                onTap: () => _openSettings(NikoSettingsSection.server),
+                pressScale: .99,
+                builder: (context, states) => AnimatedContainer(
+                    duration: NlMotion.of(context, NlMotion.instant),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: NlSpace.s3, vertical: NlSpace.s2),
+                    decoration: BoxDecoration(
+                        color: states.contains(WidgetState.hovered)
+                            ? nl.hover
+                            : nl.surface.withOpacity(nl.isDark ? .5 : .7),
+                        borderRadius: BorderRadius.circular(NlRadius.r2),
+                        border: Border.all(color: nl.line),
+                        boxShadow: states.contains(WidgetState.focused)
+                            ? nl.focusRing
+                            : null),
+                    child: Row(children: [
+                      NlLed(_serverLed(state)),
+                      const SizedBox(width: NlSpace.s2),
+                      Expanded(
+                          child: Text(_serverHostText,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: NlType.monoText(NlType.s1,
+                                  color: state == _ServerState.ready
+                                      ? nl.fg2
+                                      : nl.warnText))),
+                      const SizedBox(width: NlSpace.s2),
+                      NlMonoLabel(code,
+                          tone: switch (state) {
+                            _ServerState.ready => NlTone.ok,
+                            _ServerState.unknown => NlTone.neutral,
+                            _ => NlTone.warn,
+                          }),
+                    ])))));
+  }
+
   /// The full upstream settings page, hosted inside the shell instead of a
   /// legacy tab. Widget tests inject a gateway and never build it because
   /// the upstream page reads native options while constructing.
   Widget _advancedPage(ThemeData shell) {
-    if (!_native) {
-      return Center(
-          child: Text(
-              nikoText('高级设置仅在应用内提供。', 'Advanced settings are app-only.'),
-              style: TextStyle(color: shell.colorScheme.onSurfaceVariant)));
-    }
-    return Padding(
-        padding: const EdgeInsets.all(12),
-        child: DesktopSettingPage(initialTabkey: SettingsTabKey.general));
+    final bar = NikoPageBar(
+        title: nikoText('高级设置', 'Advanced settings'),
+        subtitle: nikoText('RustDesk 的全部原生选项', 'Every native RustDesk option'));
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      bar,
+      Expanded(
+          child: !_native
+              ? Center(
+                  child: Text(
+                      nikoText('高级设置仅在应用内提供。', 'Advanced settings are app-only.'),
+                      style:
+                          TextStyle(color: shell.colorScheme.onSurfaceVariant)))
+              : Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                      NlSpace.s3, 0, NlSpace.s3, NlSpace.s3),
+                  child:
+                      DesktopSettingPage(initialTabkey: SettingsTabKey.general))),
+    ]);
   }
-
-  List<_NavItem> get _navItems => [
-        _NavItem(_HomeDestination.devices, Icons.devices_rounded,
-            nikoText('设备', 'Devices'), 'Devices'),
-        _NavItem(_HomeDestination.sessions, Icons.history_rounded,
-            nikoText('会话', 'Sessions'), 'Sessions'),
-        _NavItem(_HomeDestination.settings, Icons.tune_rounded,
-            nikoText('设置', 'Settings'), 'Settings'),
-        _NavItem(_HomeDestination.advanced, Icons.settings_suggest_rounded,
-            nikoText('高级设置', 'Advanced'), 'Advanced'),
-      ];
 
   _ServerState get _serverState {
     final server = _server;
@@ -484,249 +657,142 @@ class _NikoHomeShellState extends State<NikoHomeShell>
             : host;
   }
 
-  Widget _rail(NlColors nl) {
-    final state = _serverState;
-    return Container(
-        width: 76,
-        decoration: BoxDecoration(
-            color: nl.bg2, border: Border(right: BorderSide(color: nl.line))),
-        child: SafeArea(
-            right: false,
-            child: Column(children: [
-              const SizedBox(height: NlSpace.s4),
-              const NlMark(),
+  /// This computer: the ID and one-time password a controller needs, and
+  /// the checks that decide whether it can be controlled at all. Shown in
+  /// the device page's inspector, or in the drawer on narrow windows.
+  Widget _localPanel(NlColors nl, {bool heading = true}) =>
+      Builder(builder: (context) {
+        void closeDrawer() => Scaffold.maybeOf(context)?.closeDrawer();
+        final id = _deviceId;
+        final raw = _temporaryPassword ?? '';
+        final password = raw.isEmpty
+            ? null
+            : (_showPassword ? raw : '•' * raw.length.clamp(4, 10));
+        final state = _serverState;
+        return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (heading) NlSectionLabel(nikoText('本机', 'This computer')),
+              NlPanel(
+                  padding: const EdgeInsets.fromLTRB(
+                      NlSpace.s4, NlSpace.s3, NlSpace.s2, NlSpace.s3),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(nikoText('设备 ID', 'Device ID'),
+                            style: NlType.text(NlType.s2, color: nl.fg3)),
+                        const SizedBox(height: 2),
+                        Row(children: [
+                          Expanded(
+                              // Ten-digit and custom IDs step down a size
+                              // before they wrap.
+                              child: LayoutBuilder(
+                                  builder: (context, box) => Text(
+                                      id.isEmpty ? '—' : id,
+                                      style: NlType.monoText(
+                                          _idSize(context, id, box.maxWidth),
+                                          weight: FontWeight.w500,
+                                          color: nl.fg)))),
+                          const SizedBox(width: NlSpace.s1),
+                          NlIconButton(
+                              icon: NlIcons.copy,
+                              tooltip:
+                                  nikoText('复制本机设备 ID', 'Copy local device ID'),
+                              onPressed: id.isEmpty
+                                  ? null
+                                  : () =>
+                                      _copy(id, nikoText('设备 ID', 'device ID'))),
+                        ]),
+                        Padding(
+                            padding: const EdgeInsets.only(
+                                top: NlSpace.s2,
+                                bottom: NlSpace.s2,
+                                right: NlSpace.s2),
+                            child: Divider(height: 1, color: nl.line)),
+                        Text(nikoText('临时密码', 'One-time password'),
+                            style: NlType.text(NlType.s2, color: nl.fg3)),
+                        const SizedBox(height: 2),
+                        Row(children: [
+                          Expanded(
+                              child: Text(
+                                  password ??
+                                      nikoText(
+                                          '未设置临时密码', 'No temporary password'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: password == null
+                                      ? NlType.text(NlType.s3, color: nl.fg3)
+                                      : NlType.monoText(NlType.s5,
+                                              weight: FontWeight.w500,
+                                              color: nl.fg)
+                                          .copyWith(
+                                              letterSpacing: NlType.s5 * .12))),
+                          if (password != null) ...[
+                            NlIconButton(
+                                icon: _showPassword ? NlIcons.eyeOff : NlIcons.eye,
+                                tooltip: _showPassword
+                                    ? nikoText('隐藏临时密码', 'Hide temporary password')
+                                    : nikoText('显示临时密码', 'Show temporary password'),
+                                onPressed: () => setState(
+                                    () => _showPassword = !_showPassword)),
+                            NlIconButton(
+                                icon: NlIcons.copy,
+                                tooltip:
+                                    nikoText('复制临时密码', 'Copy temporary password'),
+                                onPressed: () =>
+                                    _copy(raw, nikoText('密码', 'password'))),
+                          ],
+                        ]),
+                      ])),
+              const SizedBox(height: NlSpace.s2),
+              Align(
+                  alignment: Alignment.centerLeft,
+                  child: NlButton.quiet(
+                      small: true,
+                      icon: NlIcons.keyRound,
+                      onPressed: _setPermanentPassword,
+                      label: nikoText('设置永久密码', 'Set permanent password'))),
               const SizedBox(height: NlSpace.s5),
-              for (final item in _navItems)
-                Padding(
-                    padding: const EdgeInsets.only(bottom: NlSpace.s1),
-                    child: _NavButton(
-                        item: item,
-                        selected: _destination == item.destination,
-                        onTap: () => _go(item.destination))),
-              const Spacer(),
-              Tooltip(
-                  message:
-                      '${nikoText('私有服务器', 'Private server')} · ${_serverStatusText(state)}',
-                  child: Semantics(
-                      button: true,
-                      child: InkWell(
-                          borderRadius: BorderRadius.circular(NlRadius.r2),
-                          onTap: () => _go(_HomeDestination.settings),
-                          child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: NlSpace.s2, vertical: NlSpace.s2),
-                              child: Column(children: [
-                                NlLed(_serverLed(state)),
-                                const SizedBox(height: NlSpace.s1),
-                                ExcludeSemantics(
-                                    child: Text(
-                                        switch (state) {
-                                          _ServerState.unknown => '—',
-                                          _ServerState.unconfigured => 'SETUP',
-                                          _ServerState.paused => 'PAUSED',
-                                          _ServerState.ready => 'READY',
-                                          _ServerState.registering => 'REG',
-                                          _ServerState.notReady => 'WAIT',
-                                        },
-                                        style: NlType.monoText(NlType.s1,
-                                            color: nl.fg2))),
-                              ]))))),
-              const SizedBox(height: NlSpace.s3),
-            ])));
-  }
-
-  Widget _topBar(NlColors nl) {
-    final item =
-        _navItems.firstWhere((item) => item.destination == _destination);
-    final state = _serverState;
-    return Container(
-        height: 56,
-        padding: const EdgeInsets.fromLTRB(NlSpace.s6, 0, NlSpace.s4, 0),
-        decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: nl.line))),
-        child: Row(children: [
-          Text('NikoDesk',
-              style: NlType.text(NlType.s5, weight: FontWeight.w600, color: nl.fg)),
-          Padding(
-              padding: const EdgeInsets.symmetric(horizontal: NlSpace.s3),
-              child: Text('/', style: NlType.monoText(NlType.s3, color: nl.line2))),
-          NlMonoLabel(item.code),
-          const Spacer(),
-          Semantics(
-              button: true,
-              label: nikoText('私有服务器', 'Private server'),
-              child: Material(
-                  type: MaterialType.transparency,
-                  child: InkWell(
-                      borderRadius: BorderRadius.circular(NlRadius.pill),
-                      onTap: () => _go(_HomeDestination.settings),
-                      child: Container(
-                          height: 30,
-                          constraints: const BoxConstraints(maxWidth: 320),
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: NlSpace.s3),
-                          decoration: BoxDecoration(
-                              color: nl.surface,
-                              borderRadius: BorderRadius.circular(NlRadius.pill),
-                              border: Border.all(color: nl.ring)),
-                          child: Row(mainAxisSize: MainAxisSize.min, children: [
-                            NlLed(_serverLed(state)),
-                            const SizedBox(width: NlSpace.s2),
-                            const NlMonoLabel('Private'),
-                            const SizedBox(width: NlSpace.s2),
-                            Flexible(
-                                child: Text(_serverHostText,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: NlType.monoText(NlType.s1,
-                                        color: state == _ServerState.ready
-                                            ? nl.fg2
-                                            : nl.warnText))),
-                          ]))))),
-        ]));
-  }
-
-  Widget _drawer(NlColors nl) => SafeArea(
-      child: ListView(
-          padding: const EdgeInsets.all(NlSpace.s3),
-          children: [
-            const Padding(
-                padding: EdgeInsets.fromLTRB(
-                    NlSpace.s2, NlSpace.s2, NlSpace.s2, NlSpace.s4),
-                child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: NlMark(size: 28))),
-            for (final item in _navItems)
-              Padding(
-                  padding: const EdgeInsets.only(bottom: NlSpace.s1),
-                  child: _NavButton(
-                      item: item,
-                      horizontal: true,
-                      selected: _destination == item.destination,
-                      onTap: () {
-                        _go(item.destination);
-                        _scaffoldKey.currentState?.closeDrawer();
-                      })),
-            Padding(
-                padding: const EdgeInsets.symmetric(vertical: NlSpace.s3),
-                child: Divider(color: nl.line)),
-            _inspectorBody(nl, showHost: true),
-          ]));
-
-  Widget _inspector(NlColors nl) => SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(
-          NlSpace.s5, NlSpace.s5, NlSpace.s5, NlSpace.s4),
-      child: _inspectorBody(nl, showHost: false));
-
-  /// Local identity, health and server state. The drawer shows the server
-  /// host here because the compact layout has no top bar.
-  Widget _inspectorBody(NlColors nl, {required bool showHost}) {
-    final id = _deviceId;
-    final raw = _temporaryPassword ?? '';
-    final password = raw.isEmpty
-        ? null
-        : (_showPassword ? raw : '•' * raw.length.clamp(4, 10));
-    final state = _serverState;
-    final health = <Widget>[
-      NlListRow(
-          dense: true,
-          divider: false,
-          leading: NlLed(_serverLed(state)),
-          title: nikoText('私有服务器', 'Private server'),
-          subtitle: showHost ? _serverHostText : null,
-          trailing: Text(_serverStatusText(state),
-              style: NlType.text(NlType.s2,
-                  color: state == _ServerState.ready ? nl.okText : nl.warnText)),
-          onTap: () {
-            _go(_HomeDestination.settings);
-            _scaffoldKey.currentState?.closeDrawer();
-          }),
-      if (Platform.isMacOS) ...[
-        _permissionRow(nl, nikoText('屏幕录制', 'Screen recording'),
-            nikoText('被控画面必需', 'Required to be controlled'), _canScreen,
-            _openGuide),
-        _permissionRow(nl, nikoText('辅助功能', 'Accessibility'),
-            nikoText('远端键鼠必需', 'Required for remote input'),
-            _canAccessibility, _openGuide),
-      ],
-    ];
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      NlMonoLabel(nikoText('本机', 'This computer')),
-      const SizedBox(height: NlSpace.s3),
-      NlPanel(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const NlMonoLabel('ID'),
-        const SizedBox(height: NlSpace.s1),
-        Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-          Expanded(
-              child: Text(id.isEmpty ? '—' : id,
-                  style: NlType.monoText(NlType.s7,
-                      weight: FontWeight.w500,
-                      color: nl.fg).copyWith(
-                    shadows: nl.isDark
-                        ? const [Shadow(color: Color(0x402FD8EE), blurRadius: 15)]
-                        : null))),
-          const SizedBox(width: NlSpace.s2),
-          NlIconButton(
-              icon: Icons.copy_rounded,
-              tooltip: nikoText('复制本机设备 ID', 'Copy local device ID'),
-              onPressed: id.isEmpty
-                  ? null
-                  : () => _copy(id, nikoText('设备 ID', 'device ID'))),
-        ]),
-      ])),
-      const SizedBox(height: NlSpace.s4),
-      NlMonoLabel(nikoText('临时密码', 'One-time password')),
-      const SizedBox(height: NlSpace.s1),
-      Row(children: [
-        Expanded(
-            child: Text(
-                password ?? nikoText('未设置临时密码', 'No temporary password'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: password == null
-                    ? NlType.text(NlType.s3, color: nl.fg3)
-                    : NlType.monoText(NlType.s6,
-                            weight: FontWeight.w500, color: nl.fg)
-                        .copyWith(letterSpacing: NlType.s6 * .14))),
-        if (password != null) ...[
-          NlIconButton(
-              icon: _showPassword
-                  ? Icons.visibility_off_rounded
-                  : Icons.visibility_rounded,
-              tooltip: _showPassword
-                  ? nikoText('隐藏临时密码', 'Hide temporary password')
-                  : nikoText('显示临时密码', 'Show temporary password'),
-              onPressed: () => setState(() => _showPassword = !_showPassword)),
-          NlIconButton(
-              icon: Icons.copy_rounded,
-              tooltip: nikoText('复制临时密码', 'Copy temporary password'),
-              onPressed: () => _copy(raw, nikoText('密码', 'password'))),
-        ],
-      ]),
-      const SizedBox(height: NlSpace.s2),
-      Align(
-          alignment: Alignment.centerLeft,
-          child: NlButton.ghost(
-              small: true,
-              icon: Icons.key_rounded,
-              onPressed: _setPermanentPassword,
-              label: nikoText('设置永久密码', 'Set permanent password'))),
-      const SizedBox(height: NlSpace.s6),
-      NlMonoLabel(nikoText('自检', 'Health')),
-      const SizedBox(height: NlSpace.s1),
-      ...health,
-      if (_native) const NikoVoiceCleanupEntryPoint(),
-      if (_native) const NikoTunnelCleanupEntryPoint(),
-      const SizedBox(height: NlSpace.s6),
-      Text(nikoText('私有服务器 · 端到端加密', 'Private server · End-to-end encrypted'),
-          textAlign: TextAlign.center,
-          style: NlType.text(NlType.s1, color: nl.fg3)),
-    ]);
-  }
+              NlSectionLabel(nikoText('自检', 'Health')),
+              NlListRow(
+                  dense: true,
+                  divider: false,
+                  leading: NlLed(_serverLed(state)),
+                  title: nikoText('私有服务器', 'Private server'),
+                  trailing: Text(_serverStatusText(state),
+                      style: NlType.text(NlType.s2,
+                          color: state == _ServerState.ready
+                              ? nl.okText
+                              : nl.warnText)),
+                  onTap: () {
+                    _openSettings(NikoSettingsSection.server);
+                    closeDrawer();
+                  }),
+              if (Platform.isMacOS) ...[
+                _permissionRow(nl, nikoText('屏幕录制', 'Screen recording'),
+                    nikoText('被控画面必需', 'Required to be controlled'),
+                    _canScreen, _openGuide),
+                _permissionRow(nl, nikoText('辅助功能', 'Accessibility'),
+                    nikoText('远端键鼠必需', 'Required for remote input'),
+                    _canAccessibility, _openGuide),
+              ],
+              if (_native) const NikoVoiceCleanupEntryPoint(),
+              if (_native) const NikoTunnelCleanupEntryPoint(),
+              const SizedBox(height: NlSpace.s5),
+              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(NlIcons.shieldCheck, size: 12, color: nl.fg3),
+                const SizedBox(width: NlSpace.s1),
+                Flexible(
+                    child: Text(
+                        nikoText('私有服务器 · 端到端加密',
+                            'Private server · End-to-end encrypted'),
+                        textAlign: TextAlign.center,
+                        style: NlType.text(NlType.s1, color: nl.fg3))),
+              ]),
+            ]);
+      });
 
   Future<void> _openGuide() async {
-    _scaffoldKey.currentState?.closeDrawer();
     setState(() => _guide = true);
   }
 
@@ -738,121 +804,31 @@ class _NikoHomeShellState extends State<NikoHomeShell>
           title: title,
           subtitle: granted ? null : reason,
           trailing: granted
-              ? Text('OK', style: NlType.monoText(NlType.s1, color: nl.fg2))
+              ? Text(nikoText('已授权', 'Allowed'),
+                  style: NlType.text(NlType.s2, color: nl.okText))
               : NlButton.ghost(
                   small: true,
                   onPressed: request,
                   label: nikoText('授权', 'Grant')));
 }
 
-enum _ServerState { unknown, unconfigured, paused, ready, registering, notReady }
-
-class _NavItem {
-  final _HomeDestination destination;
-  final IconData icon;
-  final String label;
-
-  /// English section code for the mono breadcrumb in the top bar.
-  final String code;
-  const _NavItem(this.destination, this.icon, this.label, this.code);
-}
-
-/// Rail button (icon over label) or, in the compact drawer, a row.
-class _NavButton extends StatefulWidget {
-  final _NavItem item;
-  final bool selected;
-  final bool horizontal;
-  final VoidCallback onTap;
-  const _NavButton(
-      {required this.item,
-      required this.selected,
-      required this.onTap,
-      this.horizontal = false});
-
-  @override
-  State<_NavButton> createState() => _NavButtonState();
-}
-
-class _NavButtonState extends State<_NavButton> {
-  bool _hovered = false;
-  bool _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final nl = NlColors.of(context);
-    final selected = widget.selected;
-    final ink = selected || _hovered ? nl.fg : nl.fg3;
-    final glow = nl.glow.first;
-    final icon = Icon(widget.item.icon,
-        size: widget.horizontal ? 18 : 20,
-        color: selected ? nl.accentText : ink,
-        shadows: selected
-            ? [Shadow(color: glow.color, blurRadius: glow.blurRadius)]
-            : null);
-    final label = Text(widget.item.label,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        textAlign: widget.horizontal ? TextAlign.start : TextAlign.center,
-        style: NlType.text(widget.horizontal ? NlType.s3 : NlType.s1,
-            weight: FontWeight.w500, color: ink));
-    return Semantics(
-        button: true,
-        selected: selected,
-        child: Material(
-            type: MaterialType.transparency,
-            child: InkWell(
-                onTap: widget.onTap,
-                borderRadius: BorderRadius.circular(NlRadius.r2),
-                splashFactory: NoSplash.splashFactory,
-                overlayColor: const WidgetStatePropertyAll(Colors.transparent),
-                onHover: (value) => setState(() => _hovered = value),
-                onFocusChange: (value) => setState(() => _focused = value),
-                child: Stack(clipBehavior: Clip.none, children: [
-                  AnimatedContainer(
-                      duration: NlMotion.of(context, NlMotion.fast),
-                      curve: NlMotion.ease,
-                      width: widget.horizontal ? null : 60,
-                      constraints: BoxConstraints(
-                          minHeight: widget.horizontal ? 40 : 56),
-                      padding: widget.horizontal
-                          ? const EdgeInsets.symmetric(horizontal: NlSpace.s3)
-                          : const EdgeInsets.symmetric(vertical: NlSpace.s2),
-                      decoration: BoxDecoration(
-                          color: selected
-                              ? (widget.horizontal ? nl.surface : nl.surface2)
-                              : _hovered
-                                  ? nl.surface
-                                  : Colors.transparent,
-                          borderRadius: BorderRadius.circular(NlRadius.r2),
-                          border: selected && widget.horizontal
-                              ? Border.all(color: nl.ring)
-                              : null,
-                          boxShadow: _focused ? nl.focusRing : null),
-                      child: widget.horizontal
-                          ? Row(children: [
-                              icon,
-                              const SizedBox(width: NlSpace.s3),
-                              Expanded(child: label),
-                            ])
-                          : Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                  icon,
-                                  const SizedBox(height: NlSpace.s1),
-                                  label,
-                                ])),
-                  if (selected)
-                    Positioned(
-                        left: widget.horizontal ? -12 : -8,
-                        top: 12,
-                        bottom: 12,
-                        child: Container(
-                            width: 3,
-                            decoration: BoxDecoration(
-                                color: nl.accent,
-                                borderRadius: const BorderRadius.horizontal(
-                                    right: Radius.circular(3)),
-                                boxShadow: nl.glow))),
-                ]))));
+/// The largest local ID size at which [id] fits [width] on one line; the
+/// smallest one otherwise.
+double _idSize(BuildContext context, String id, double width) {
+  const sizes = [NlType.s7, NlType.s6, NlType.s5];
+  for (final size in sizes) {
+    final painter = TextPainter(
+        text: TextSpan(
+            text: id, style: NlType.monoText(size, weight: FontWeight.w500)),
+        textDirection: TextDirection.ltr,
+        textScaler: MediaQuery.textScalerOf(context),
+        maxLines: 1)
+      ..layout();
+    final fits = painter.width <= width;
+    painter.dispose();
+    if (fits) return size;
   }
+  return sizes.last;
 }
+
+enum _ServerState { unknown, unconfigured, paused, ready, registering, notReady }

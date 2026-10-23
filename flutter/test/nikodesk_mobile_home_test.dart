@@ -9,8 +9,8 @@ import 'package:flutter_hbb/nikodesk/policy.dart';
 import 'package:flutter_hbb/nikodesk/server_gateway.dart';
 import 'package:flutter_hbb/nikodesk/session_log.dart';
 import 'package:flutter_hbb/nikodesk/session_history.dart';
-import 'package:flutter_hbb/nikodesk/theme.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
+import 'package:flutter_hbb/nikodesk/nightline.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 // UI-only gateway; these tests do not represent an Android remote session.
@@ -98,10 +98,12 @@ void main() {
     await load(tester, gateway, deferSetup: false);
     expect(find.text('Connect to your server'), findsOneWidget);
     expect(find.text('Devices'), findsNothing);
-    await tester.enterText(find.byType(TextFormField).at(0), 'test.invalid:21116');
-    await tester.enterText(find.byType(TextFormField).at(1), 'test.invalid:21117');
     await tester.enterText(
-        find.byType(TextFormField).at(2), base64Encode(List.filled(32, 1)));
+        find.byKey(const ValueKey('niko-server-id')), 'test.invalid:21116');
+    await tester.enterText(
+        find.byKey(const ValueKey('niko-server-relay')), 'test.invalid:21117');
+    await tester.enterText(find.byKey(const ValueKey('niko-server-key')),
+        base64Encode(List.filled(32, 1)));
     await tester.ensureVisible(find.text('Save and enable private server'));
     await tester.runAsync(() async {
       await tester.tap(find.text('Save and enable private server'));
@@ -390,16 +392,16 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('nikodesk-quick-connect-toggle')));
     await tester.tap(find.byKey(const Key('nikodesk-quick-connect-toggle')));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byType(Switch).first);
-    await tester.tap(find.byType(Switch).first);
+    await tester.ensureVisible(find.byType(NlSwitch).first);
+    await tester.tap(find.byType(NlSwitch).first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Devices'));
     await tester.pumpAndSettle();
     expect(tester.widget<TextField>(find.byKey(const Key('nikodesk-search'))).controller!.text, 'Office');
-    expect(tester.widget<Switch>(find.byType(Switch).first).value, isTrue);
-    expect(tester.widget<ChoiceChip>(find.byWidgetPredicate((widget) => widget is ChoiceChip && widget.tooltip == 'Favorites')).selected, isTrue);
+    expect(tester.widget<NlSwitch>(find.byType(NlSwitch).first).value, isTrue);
+    expect(tester.widget<NlSegmented<String>>(find.byType(NlSegmented<String>)).selected, 'favorites');
     expect(find.byKey(const Key('nikodesk-device-connect-123456')), findsOneWidget);
     expect(find.byKey(const Key('nikodesk-device-connect-654321')), findsNothing);
     expect(tester.takeException(), isNull);
@@ -418,7 +420,9 @@ void main() {
       await tester.tap(find.text(english ? 'Sessions' : '会话'));
       await tester.pumpAndSettle();
       final history = find.byType(NikoSessionHistoryPage);
-      final action = find.descendant(of: history, matching: find.byType(NikoPrimaryButton));
+      final action = find.ancestor(
+          of: find.descendant(of: history, matching: find.text(english ? 'Files' : '传文件')),
+          matching: find.byType(NlButton));
       await revealScrollable(tester, action, page: history);
       expect(tester.getSize(action).height, greaterThanOrEqualTo(48));
       await revealScrollable(tester, find.byTooltip(english ? 'Delete record' : '删除该记录'), page: history);

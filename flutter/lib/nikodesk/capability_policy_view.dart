@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'capability_policy.dart';
 import 'capability_policy_native.dart';
+import 'nightline.dart';
 import 'server_scope.dart';
+import 'settings_kit.dart';
 import 'ui.dart';
 
 String nikoCapabilityName(NikoCapability kind) => switch (kind) {
@@ -27,36 +29,37 @@ class NikoMobileVoicePolicyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<String?>(
       valueListenable: scopeChanges ?? NikoServerScope.changes,
-      builder: (context, namespace, _) => NikoCard(
-          child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(nikoText('本机语音通话', 'Voice calls'),
-                    style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                Text(nikoText('语音请求默认关闭。打开后，每次通话仍需允许麦克风并手动选择本机音频设备；不会自动采集声音。',
-                    'Voice requests are off by default. Each call still requires microphone permission and a manual choice of local audio devices. Enabling requests does not start audio capture.')),
-                if (NikoServerScope.validate(namespace) == null) ...[
-                  const SizedBox(height: 8),
-                  Text(nikoText('请先配置有效的私有服务器，再设置本机语音请求。',
-                      'Configure a valid private server before setting voice requests.'))
-                ],
-                const SizedBox(height: 12),
-                OutlinedButton(
-                    key: const Key('nikodesk-mobile-voice-policy-open'),
-                    style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(48, 48)),
-                    onPressed: NikoServerScope.validate(namespace) == null
-                        ? null
-                        : () => showDialog<void>(
-                            context: context,
-                            builder: (_) => NikoCapabilityPolicyView(
-                                policy: policy ?? nativeNikoCapabilityPolicy,
-                                namespace: namespace!,
-                                scopeChanges: scopeChanges,
-                                voiceOnly: true)),
-                    child: Text(nikoText('设置语音请求', 'Set voice requests')))
-              ])));
+      builder: (context, namespace, _) {
+        final ready = NikoServerScope.validate(namespace) != null;
+        return NikoSettingsGroup(
+            title: nikoText('本机语音通话', 'Voice calls'),
+            children: [
+              NikoSettingRow(
+                  title: nikoText('语音请求', 'Voice requests'),
+                  description: nikoText(
+                      '语音请求默认关闭。打开后，每次通话仍需允许麦克风并手动选择本机音频设备；不会自动采集声音。',
+                      'Voice requests are off by default. Each call still requires microphone permission and a manual choice of local audio devices. Enabling requests does not start audio capture.'),
+                  trailing: NlButton.ghost(
+                      key: const Key('nikodesk-mobile-voice-policy-open'),
+                      small: true,
+                      onPressed: ready
+                          ? () => showDialog<void>(
+                              context: context,
+                              builder: (_) => NikoCapabilityPolicyView(
+                                  policy: policy ?? nativeNikoCapabilityPolicy,
+                                  namespace: namespace!,
+                                  scopeChanges: scopeChanges,
+                                  voiceOnly: true))
+                          : null,
+                      label: nikoText('设置语音请求', 'Set voice requests')),
+                  below: ready
+                      ? null
+                      : NikoSettingNote(
+                          nikoText('请先配置有效的私有服务器，再设置本机语音请求。',
+                              'Configure a valid private server before setting voice requests.'),
+                          tone: NlTone.warn)),
+            ]);
+      });
 }
 
 class NikoCapabilityPolicyView extends StatefulWidget {

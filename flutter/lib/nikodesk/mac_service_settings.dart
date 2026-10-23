@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 
+import 'nightline.dart';
+import 'settings_kit.dart';
 import 'ui.dart';
 
 class NikoMacServiceState {
@@ -205,36 +207,65 @@ class _ServiceState extends State<NikoMacServiceSettings> {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text(nikoText('系统后台服务', 'System background service'),
-            style: Theme.of(context).textTheme.titleSmall),
-        Text(_status, key: const Key('niko-mac-service-status')),
-        Text(nikoText(
+  Widget build(BuildContext context) {
+    final previous = _state.version('previous');
+    return NikoSettingsGroup(
+        title: nikoText('系统后台服务', 'System background service'),
+        description: nikoText(
             '由系统在你登录后运行远控核心，取代上面的后台恢复；校验通过的更新也由它直接安装，不必再手动替换应用。安装时系统会要求输入一次管理员密码。登录窗口访问仍在验证中，暂不可用。',
-            'Runs the remote-control core after you log in, replacing the background recovery above, and installs verified updates without replacing the app by hand. Installing it asks for an administrator password once. Login-window access is still being verified and not available yet.')),
-        if (!_state.installed && !_state.appSigned)
-          Text(nikoMacServiceError('app_not_signed_with_nikodesk_certificate')),
-        if (!_state.installed)
-          FilledButton(
-              key: const Key('niko-mac-service-install'),
-              onPressed: _busy || !_state.appSigned ? null : () => _set(true),
-              child: Text(nikoText(
-                  '安装系统后台服务', 'Install the system background service')))
-        else
-          OutlinedButton(
-              key: const Key('niko-mac-service-remove'),
-              onPressed: _busy ? null : () => _set(false),
-              child: Text(nikoText(
-                  '移除系统后台服务', 'Remove the system background service'))),
-        if (_state.canInstallUpdates && _state.version('previous') != null)
-          TextButton(
-              key: const Key('niko-mac-service-restore'),
-              onPressed: _busy ? null : () => _restore(_state.version('previous')!),
-              child: Text(nikoText('恢复上一个版本（${_state.version('previous')}）',
-                  'Restore the previous version (${_state.version('previous')})'))),
-        if (_busy) const LinearProgressIndicator(),
-        if (_notice != null)
-          Text(_notice!, style: Theme.of(context).textTheme.bodySmall)
-      ]);
+            'Runs the remote-control core after you log in, replacing the background recovery above, and installs verified updates without replacing the app by hand. Installing it asks for an administrator password once. Login-window access is still being verified and not available yet.'),
+        children: [
+          NikoSettingRow(
+              title: nikoText('状态', 'Status'),
+              busy: _busy,
+              leading: NlLed(!_state.installed
+                  ? NlLedState.off
+                  : _state.reachable
+                      ? NlLedState.ok
+                      : NlLedState.warn),
+              trailing: !_state.installed
+                  ? NlButton(
+                      key: const Key('niko-mac-service-install'),
+                      small: true,
+                      onPressed:
+                          _busy || !_state.appSigned ? null : () => _set(true),
+                      label: nikoText('安装系统后台服务',
+                          'Install the system background service'))
+                  : NlButton.ghost(
+                      key: const Key('niko-mac-service-remove'),
+                      small: true,
+                      onPressed: _busy ? null : () => _set(false),
+                      label: nikoText('移除系统后台服务',
+                          'Remove the system background service')),
+              below: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_status,
+                        key: const Key('niko-mac-service-status'),
+                        style: NlType.text(NlType.s2,
+                            color: NlColors.of(context).fg2)),
+                    if (!_state.installed && !_state.appSigned) ...[
+                      const SizedBox(height: NlSpace.s1),
+                      NikoSettingNote(
+                          nikoMacServiceError(
+                              'app_not_signed_with_nikodesk_certificate'),
+                          tone: NlTone.warn),
+                    ],
+                    if (_notice != null) ...[
+                      const SizedBox(height: NlSpace.s1),
+                      NikoSettingNote(_notice!),
+                    ],
+                  ])),
+          if (_state.canInstallUpdates && previous != null)
+            NikoSettingRow(
+                title: nikoText('恢复上一个版本', 'Restore the previous version'),
+                description: previous,
+                trailing: NlButton.ghost(
+                    key: const Key('niko-mac-service-restore'),
+                    small: true,
+                    icon: NlIcons.rotateCcw,
+                    onPressed: _busy ? null : () => _restore(previous),
+                    label: nikoText('恢复（$previous）', 'Restore ($previous)'))),
+        ]);
+  }
 }

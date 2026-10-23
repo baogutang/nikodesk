@@ -1,7 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import 'nightline.dart';
+import 'settings_kit.dart';
 import 'ui.dart';
 import 'wake_on_lan.dart';
 import 'wake_proxy.dart';
@@ -150,94 +153,121 @@ class _WakeSettingsState extends State<NikoWakeProxySettings> {
       };
 
   @override
-  Widget build(BuildContext context) =>
-      Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        SwitchListTile.adaptive(
-            key: const Key('wake-proxy-enabled'),
-            contentPadding: EdgeInsets.zero,
-            title: Text(
-                nikoText('让本机作为唤醒代理', 'Use this computer as a wake proxy')),
-            subtitle: Text(nikoText(
+  Widget build(BuildContext context) {
+    final nl = NlColors.of(context);
+    final title = nikoText('让本机作为唤醒代理', 'Use this computer as a wake proxy');
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      NikoSettingsGroup(children: [
+        NikoSettingRow(
+            title: title,
+            description: nikoText(
                 '默认关闭。在待开机电脑同网段的常开电脑上启用；只唤醒下列设备。远程使用还需要允许隧道请求，并批准本次代理连接。',
-                'Off by default. Enable on an always-on computer in the target LAN; only the targets below can be awakened. Remote use also requires tunnel requests to be allowed and this proxy connection to be approved.')),
-            value: _enabled,
-            onChanged:
-                _editable ? (value) => setState(() => _enabled = value) : null),
-        Semantics(liveRegion: true, child: Text(_state())),
-        if (_dirty)
-          Text(nikoText(
-              '修改尚未保存，点击保存后生效。', 'Changes are unsaved. Save to apply.')),
-        const SizedBox(height: 12),
-        for (final target in _targets)
-          Row(children: [
-            Expanded(
-                child:
-                    Text('${target.mac}\n${target.broadcast}:${target.port}')),
-            IconButton(
-                key: ValueKey(
-                    'wake-proxy-remove-${target.mac}-${target.broadcast}-${target.port}'),
-                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-                tooltip: nikoText('移除允许的设备', 'Remove permitted target'),
-                onPressed: _editable
-                    ? () => setState(() => _targets.remove(target))
-                    : null,
-                icon: const Icon(Icons.close)),
+                'Off by default. Enable on an always-on computer in the target LAN; only the targets below can be awakened. Remote use also requires tunnel requests to be allowed and this proxy connection to be approved.'),
+            busy: _busy,
+            trailing: NlSwitch(
+                switchKey: const Key('wake-proxy-enabled'),
+                semanticLabel: title,
+                value: _enabled,
+                onChanged: _editable
+                    ? (value) => setState(() => _enabled = value)
+                    : null),
+            below: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Semantics(liveRegion: true, child: NikoSettingNote(_state())),
+                  if (_dirty) ...[
+                    const SizedBox(height: NlSpace.s1),
+                    NikoSettingNote(
+                        nikoText('修改尚未保存，点击保存后生效。',
+                            'Changes are unsaved. Save to apply.'),
+                        tone: NlTone.warn),
+                  ],
+                  if (_error != null) ...[
+                    const SizedBox(height: NlSpace.s1),
+                    NikoSettingNote(_error!, tone: NlTone.danger),
+                  ],
+                ])),
+      ]),
+      NikoSettingsGroup(
+          title: nikoText('允许唤醒的设备', 'Permitted targets'),
+          children: [
+            for (final target in _targets)
+              NikoSettingRow(
+                  leading: Icon(NlIcons.power, size: 16, color: nl.fg3),
+                  title: target.mac,
+                  description: '${target.broadcast}:${target.port}',
+                  trailing: NlIconButton(
+                      key: ValueKey(
+                          'wake-proxy-remove-${target.mac}-${target.broadcast}-${target.port}'),
+                      icon: NlIcons.close,
+                      tooltip: nikoText('移除允许的设备', 'Remove permitted target'),
+                      onPressed: _editable
+                          ? () => setState(() => _targets.remove(target))
+                          : null)),
+            Padding(
+                padding: const EdgeInsets.symmetric(vertical: NlSpace.s3),
+                child: Wrap(
+                    spacing: NlSpace.s2,
+                    runSpacing: NlSpace.s2,
+                    crossAxisAlignment: WrapCrossAlignment.end,
+                    children: [
+                      SizedBox(
+                          width: 190,
+                          child: NlTextField(
+                              fieldKey: const Key('wake-proxy-mac'),
+                              controller: _mac,
+                              enabled: _editable,
+                              mono: true,
+                              label: nikoText('网卡 MAC', 'NIC MAC'),
+                              hint: 'AA:BB:CC:DD:EE:FF',
+                              inputFormatters: [
+                                LengthLimitingTextInputFormatter(17)
+                              ])),
+                      SizedBox(
+                          width: 170,
+                          child: NlTextField(
+                              fieldKey: const Key('wake-proxy-broadcast'),
+                              controller: _broadcast,
+                              enabled: _editable,
+                              mono: true,
+                              label: nikoText('广播地址', 'Broadcast address'),
+                              inputFormatters: [
+                                LengthLimitingTextInputFormatter(15)
+                              ])),
+                      SizedBox(
+                          width: 88,
+                          child: NlTextField(
+                              fieldKey: const Key('wake-proxy-port'),
+                              controller: _port,
+                              enabled: _editable,
+                              mono: true,
+                              keyboardType: TextInputType.number,
+                              label: nikoText('端口', 'Port'),
+                              inputFormatters: [
+                                LengthLimitingTextInputFormatter(5)
+                              ])),
+                      NlButton.ghost(
+                          key: const Key('wake-proxy-add'),
+                          icon: NlIcons.plus,
+                          onPressed: _editable ? _add : null,
+                          label: nikoText('添加设备', 'Add target')),
+                    ])),
           ]),
-        const SizedBox(height: 8),
-        TextField(
-            key: const Key('wake-proxy-mac'),
-            controller: _mac,
-            enabled: _editable,
-            autocorrect: false,
-            enableSuggestions: false,
-            maxLength: 17,
-            decoration:
-                nikoInput(nikoText('允许唤醒的网卡 MAC', 'Permitted NIC MAC'))),
-        const SizedBox(height: 8),
-        TextField(
-            key: const Key('wake-proxy-broadcast'),
-            controller: _broadcast,
-            enabled: _editable,
-            autocorrect: false,
-            enableSuggestions: false,
-            maxLength: 15,
-            decoration: nikoInput(nikoText(
-                '设备所在局域网的广播地址', 'Broadcast address in the target LAN'))),
-        const SizedBox(height: 8),
-        TextField(
-            key: const Key('wake-proxy-port'),
-            controller: _port,
-            enabled: _editable,
-            keyboardType: TextInputType.number,
-            maxLength: 5,
-            decoration: nikoInput(nikoText('唤醒端口', 'Wake port'))),
-        Wrap(spacing: 12, runSpacing: 8, children: [
-          OutlinedButton(
-              key: const Key('wake-proxy-add'),
-              style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
-              onPressed: _editable ? _add : null,
-              child: Text(nikoText('添加设备', 'Add target'))),
-          ElevatedButton(
-              key: const Key('wake-proxy-save'),
-              style: ElevatedButton.styleFrom(minimumSize: const Size(48, 48)),
-              onPressed: _editable ? _save : null,
-              child: Text(nikoText('保存代理设置', 'Save proxy settings'))),
-          TextButton(
-              key: const Key('wake-proxy-reload'),
-              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
-              onPressed: _busy ? null : _load,
-              child: Text(nikoText('重新读取', 'Reload'))),
-        ]),
-        if (_busy) const LinearProgressIndicator(),
-        if (_error != null)
-          Semantics(
-              liveRegion: true,
-              child: Text(_error!,
-                  style:
-                      TextStyle(color: Theme.of(context).colorScheme.error))),
-        Text(
-            nikoText('NAS 仅部署协调／中继服务器时不能直接作为此代理；可使用同网段运行 NikoDesk 的常开电脑。',
-                'A NAS running only rendezvous/relay services cannot serve as this proxy. Use an always-on computer running NikoDesk in the target LAN.'),
-            style: Theme.of(context).textTheme.bodySmall),
-      ]);
+      Wrap(spacing: NlSpace.s2, runSpacing: NlSpace.s2, children: [
+        NlButton(
+            key: const Key('wake-proxy-save'),
+            onPressed: _editable ? _save : null,
+            label: nikoText('保存代理设置', 'Save proxy settings')),
+        NlButton.quiet(
+            key: const Key('wake-proxy-reload'),
+            icon: NlIcons.refreshCw,
+            onPressed: _busy ? null : _load,
+            label: nikoText('重新读取', 'Reload')),
+      ]),
+      const SizedBox(height: NlSpace.s5),
+      NikoSettingNote(nikoText(
+          'NAS 仅部署协调／中继服务器时不能直接作为此代理；可使用同网段运行 NikoDesk 的常开电脑。',
+          'A NAS running only rendezvous/relay services cannot serve as this proxy. Use an always-on computer running NikoDesk in the target LAN.')),
+    ]);
+  }
 }

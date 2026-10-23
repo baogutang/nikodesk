@@ -30,6 +30,7 @@ import '../../nikodesk/cm_voice_panel.dart';
 import '../../nikodesk/cm_voice_start.dart';
 import '../../nikodesk/cm_tunnel_panel.dart';
 import '../../nikodesk/cm_permissions.dart';
+import '../../nikodesk/nightline.dart';
 
 /// Set only by this window's own close control, and only once the user has confirmed. Any other
 /// way the window can go - a session logout closing every window, the window manager, a native
@@ -512,16 +513,21 @@ class _CmHeaderState extends State<_CmHeader>
                 : nikoText('已断开', 'Disconnected')
             : client.authorized ? nikoText('已连接', 'Connected')
                 : nikoText('等待本机允许', 'Waiting for local approval'),
+        tone: client.disconnected
+            ? client.nikoCameraCleanup || client.nikoVoiceCleanup || client.nikoTunnelCleanup
+                ? NlTone.warn : NlTone.neutral
+            : client.authorized ? NlTone.ok : NlTone.warn,
+        // The card sets the time's style.
         duration: client.authorized && !client.disconnected
-            ? Obx(() => Text(formatDurationToTime(Duration(seconds: _time.value)),
-                style: Theme.of(context).textTheme.bodyMedium)) : null,
+            ? Obx(() => Text(formatDurationToTime(Duration(seconds: _time.value))))
+            : null,
         trailing: client.authorized && !client.disconnected &&
                 {ClientType.remote, ClientType.file, ClientType.camera}.contains(client.type_())
-            ? IconButton(
+            ? NlIconButton(
                 tooltip: client.type_() == ClientType.file
                     ? nikoText('传输记录', 'Transfer history') : nikoText('聊天', 'Chat'),
-                icon: Icon(client.type_() == ClientType.file
-                    ? Icons.folder_open_rounded : Icons.chat_bubble_outline_rounded),
+                icon: client.type_() == ClientType.file
+                    ? NlIcons.folderOpen : NlIcons.messageSquare,
                 onPressed: () => checkClickTime(client.id, () {
                   if (client.type_() == ClientType.file) {
                     gFFI.chatModel.toggleCMFilePage();

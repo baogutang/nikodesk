@@ -393,6 +393,7 @@ pub fn save_locally(json: &str, expires_at_ms: u64) -> SaveResult {
     };
     let result = with_write_lock(&Config::file(), &SETTINGS_WRITE_LOCK, gate(), deadline,
         &mut LocalSettingsBackend, |_, backend| transact(&settings, backend, deadline));
+    #[cfg(not(target_os = "ios"))]
     crate::rendezvous_mediator::RendezvousMediator::restart();
     result
 }
@@ -421,6 +422,7 @@ pub fn patch_locally(key: &str, value: &str, expires_at_ms: u64) -> SaveResult {
         super::auto_lock::cancel_pending();
     }
     if patch_changes_registration(result.ok, registration.as_deref(), &registration_options()) {
+        #[cfg(not(target_os = "ios"))]
         crate::rendezvous_mediator::RendezvousMediator::restart();
     }
     result

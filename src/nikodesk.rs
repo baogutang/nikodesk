@@ -429,12 +429,22 @@ fn video_pulse_line(
     )
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "android")))]
+#[cfg(not(any(
+    target_os = "macos",
+    target_os = "windows",
+    target_os = "android",
+    target_os = "ios"
+)))]
 fn initialize_inner() -> ResultType<()> {
     bail!("NikoDesk isolation is not supported on this platform")
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows", target_os = "android"))]
+#[cfg(any(
+    target_os = "macos",
+    target_os = "windows",
+    target_os = "android",
+    target_os = "ios"
+))]
 fn initialize_inner() -> ResultType<()> {
     #[cfg(unix)]
     if unsafe { hbb_common::libc::geteuid() } == 0 {
@@ -476,7 +486,7 @@ fn initialize_inner() -> ResultType<()> {
 
 fn install_policy() {
     let mut hard = config::HARD_SETTINGS.write().unwrap();
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     hard.insert("conn-type".into(), "outgoing".into());
     for key in [
         "disable-installation",
@@ -779,6 +789,7 @@ pub fn stop_after_settings_failure() {
     let mut options = Config::get_options();
     options.insert("stop-service".into(), "Y".into());
     Config::replace_options_cache_without_store(purified_options(options));
+    #[cfg(not(target_os = "ios"))]
     crate::rendezvous_mediator::RendezvousMediator::restart();
 }
 
@@ -935,6 +946,52 @@ fn validate_android_directory(app_dir: &str) -> ResultType<()> {
         bail!("NikoDesk requires its own Android application sandbox");
     }
     Ok(())
+}
+
+/// iOS shows the app's Documents directory in the Files app, so the
+/// configuration and identity live in a private directory under Library and
+/// only the file-transfer workspace stays in Documents. iOS hands out the
+/// container under /var, a link to /private/var, and storage hardening
+/// rejects symlinked path components. Returns the file-transfer workspace.
+#[cfg(target_os = "ios")]
+pub fn configure_ios_or_exit(documents: &str) -> String {
+    match configure_ios(documents) {
+        Ok(data) => data,
+        Err(err) => {
+            eprintln!("NikoDesk stopped: {err}");
+            std::process::exit(1);
+        }
+    }
+}
+
+#[cfg(any(target_os = "ios", test))]
+fn configure_ios(documents: &str) -> ResultType<String> {
+    let documents = std::fs::canonicalize(documents)
+        .map_err(|_| anyhow!("NikoDesk's iOS documents directory is not accessible"))?;
+    let container = match documents.parent() {
+        Some(container) if documents.ends_with("Documents") => container,
+        _ => bail!("NikoDesk configuration must remain in its iOS app container"),
+    };
+    let support = container.join("Library/Application Support");
+    std::fs::create_dir_all(&support)?;
+    let private = support
+        .join("NikoDesk")
+        .into_os_string()
+        .into_string()
+        .map_err(|_| anyhow!("NikoDesk's iOS configuration directory is not valid UTF-8"))?;
+    let mut configured = config::APP_DIR
+        .write()
+        .map_err(|_| anyhow!("NikoDesk's iOS configuration directory lock is poisoned"))?;
+    if !configured.is_empty() && *configured != private {
+        bail!("NikoDesk's iOS configuration directory cannot change while running");
+    }
+    *configured = private;
+    drop(configured);
+    let data = documents.join("data");
+    if let Err(e) = std::fs::create_dir_all(&data) {
+        hbb_common::log::warn!("Failed to create data dir {}", e);
+    }
+    Ok(data.to_string_lossy().into_owned())
 }
 
 pub fn is_saved_password_option(key: &str) -> bool {
@@ -1479,6 +1536,29 @@ mod tests {
         assert!(identity_file::prepare(&path).is_err());
         assert_eq!(fs::read_to_string(&target).unwrap(), "untouched");
     }
+    #[test]
+    fn ios_configuration_resolves_links_and_stays_out_of_documents() {
+        sodiumoxide::init().unwrap();
+        let temp = Temp::new();
+        let container = temp.0.join("container");
+        fs::create_dir_all(container.join("Documents")).unwrap();
+        symlink(&container, temp.0.join("var")).unwrap();
+        let documents = temp.0.join("var/Documents");
+        let data = configure_ios(documents.to_str().unwrap()).unwrap();
+        let container = fs::canonicalize(&container).unwrap();
+        let private = container.join("Library/Application Support/NikoDesk");
+        assert_eq!(*config::APP_DIR.read().unwrap(), private.to_str().unwrap());
+        assert_eq!(data, container.join("Documents/data").to_str().unwrap());
+        assert!(fs::metadata(&data).unwrap().is_dir());
+        let (_lock, _) = identity_file::prepare(&private.join("NikoDesk.toml")).unwrap();
+        assert_eq!(fs::symlink_metadata(&private).unwrap().mode() & 0o777, 0o700);
+        assert!(configure_ios(documents.to_str().unwrap()).is_ok());
+        fs::create_dir_all(temp.0.join("other/Documents")).unwrap();
+        assert!(configure_ios(temp.0.join("other/Documents").to_str().unwrap()).is_err());
+        assert!(configure_ios(container.to_str().unwrap()).is_err());
+        *config::APP_DIR.write().unwrap() = String::new();
+    }
+
     #[test]
     fn subprocess_identity_writer() {
         let Some(dir) = std::env::var_os("NIKODESK_TEST_IDENTITY_DIR") else {

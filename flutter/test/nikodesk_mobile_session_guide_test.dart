@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hbb/nikodesk/mobile_session_guide.dart';
+import 'package:flutter_hbb/nikodesk/nightline.dart';
 import 'package:flutter_hbb/nikodesk/theme.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,4 +32,31 @@ void main() {
       });
     }
   }
+
+  testWidgets('guide answers whether to open the gesture guide',
+      (tester) async {
+    NikoLanguage.english = true;
+    addTearDown(() => NikoLanguage.english = false);
+    final answers = <bool?>[];
+    await tester.pumpWidget(MaterialApp(
+        theme: nikoTheme(Brightness.light),
+        home: Builder(
+            builder: (context) => TextButton(
+                onPressed: () async => answers.add(
+                    await showNikoMobileSessionGuide(context, touchMode: true)),
+                child: const Text('open')))));
+    for (final close in [
+      () => tester.tap(find.byKey(const Key('nikodesk-guide-gestures'))),
+      () => tester.tap(find.byKey(const Key('nikodesk-guide-done'))),
+      () => tester.sendKeyEvent(LogicalKeyboardKey.escape),
+    ]) {
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      // Session chrome stays dark in the light app theme.
+      expect(NlColors.of(tester.element(find.text('Got it'))).isDark, isTrue);
+      await close();
+      await tester.pumpAndSettle();
+    }
+    expect(answers, [true, false, false]);
+  });
 }

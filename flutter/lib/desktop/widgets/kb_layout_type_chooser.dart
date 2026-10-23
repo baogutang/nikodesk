@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/nikodesk/kb_layout_chooser.dart';
 
 import '../../common.dart';
 
@@ -137,6 +138,8 @@ class KBLayoutTypeChooser extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final niko = nikoKbLayoutChooser(context, chosenType, cb);
+    if (niko != null) return niko;
     final imageWidth = width / 2 - dividerWidth;
     return SizedBox(
       width: width,

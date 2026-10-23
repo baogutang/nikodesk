@@ -29,6 +29,9 @@ mod nikodesk_security;
 mod nikodesk_input;
 #[cfg(not(any(target_os = "ios")))]
 pub mod ipc;
+#[cfg(all(target_os = "ios", feature = "nikodesk"))]
+#[path = "nikodesk/ios_ipc.rs"]
+pub mod ipc;
 #[cfg(not(any(
     target_os = "android",
     target_os = "ios",

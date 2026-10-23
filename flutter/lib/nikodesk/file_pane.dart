@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart' show getPlatformImage;
 import 'package:flutter_hbb/common/formatter/id_formatter.dart';
+import 'package:flutter_hbb/consts.dart' show StringExtension;
 import 'package:flutter_hbb/models/file_model.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 
 import 'nightline.dart';
@@ -9,7 +11,7 @@ import 'ui.dart';
 
 /// Nightline pieces for the hosted upstream file pane (FileManagerView). The
 /// pane hands over to these in the NikoDesk build only; other builds keep
-/// the upstream header, send button and row colours.
+/// the upstream header, send button, toolbar buttons and rows.
 
 /// Which side the pane shows, the peer id on the remote side, and the
 /// platform it runs.
@@ -67,7 +69,10 @@ class NikoFilePaneHeader extends StatelessWidget {
                                   weight: FontWeight.w500, color: nl.fg2)),
                         ],
                       ]),
-                      NlMonoLabel(name.isEmpty ? ' ' : name),
+                      Text(nikoPlatformName(name),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: NlType.text(NlType.s2, color: nl.fg3)),
                     ])),
               ]);
             }));
@@ -92,9 +97,7 @@ class NikoFileSendButton extends StatelessWidget {
                     selection.clear();
                   }
                 : null,
-            icon: local
-                ? Icons.arrow_forward_rounded
-                : Icons.arrow_back_rounded,
+            icon: local ? NlIcons.arrowRight : NlIcons.arrowLeft,
             label: local ? nikoText('发送', 'Send') : nikoText('接收', 'Receive'));
       });
 }
@@ -127,5 +130,204 @@ class NikoFileListColors {
         ring: nl.accent,
         selectedText: nl.fg,
         meta: nl.fg2);
+  }
+}
+
+/// The platform under the pane title, in the vendor's spelling; the session
+/// reports macOS as "Mac OS".
+String nikoPlatformName(String platform) =>
+    platform == 'Mac OS' ? 'macOS' : platform;
+
+/// The pane's toolbar button (upstream MenuButton) as a quiet icon button
+/// that draws the Lucide match of the upstream glyph. Null outside the
+/// NikoDesk build or a Nightline theme, where the upstream button stays.
+Widget? nikoMenuButton(BuildContext context,
+    {required Widget child,
+    required VoidCallback? onPressed,
+    required String? tooltip,
+    required EdgeInsetsGeometry padding}) {
+  if (!const bool.fromEnvironment('NIKODESK')) return null;
+  final nl = NlColors.maybeOf(context);
+  if (nl == null) return null;
+  final icon = _nikoToolIcon(child);
+  final label = tooltip ?? '';
+  return Padding(
+      padding: padding,
+      child: icon != null
+          ? NlIconButton(icon: icon, tooltip: label, onPressed: onPressed)
+          : Tooltip(
+              message: label,
+              excludeFromSemantics: true,
+              child: NlPressable(
+                  onTap: onPressed,
+                  semanticLabel: label,
+                  pressScale: .94,
+                  builder: (context, states) {
+                    final side = NlIconButton.sizeOf(context);
+                    return Container(
+                        width: side,
+                        height: side,
+                        padding: const EdgeInsets.all(NlSpace.s1),
+                        decoration: BoxDecoration(
+                            color: states.contains(WidgetState.hovered)
+                                ? nl.hover
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(NlRadius.r2),
+                            boxShadow: states.contains(WidgetState.focused)
+                                ? nl.focusRing
+                                : null),
+                        child: Opacity(
+                            opacity: onPressed == null ? .4 : 1,
+                            child: FittedBox(child: child)));
+                  })));
+}
+
+/// The glyph before the pane's path or search field, which upstream draws
+/// as a filled asset. Null outside the NikoDesk build or a Nightline theme.
+Widget? nikoPathFieldIcon(BuildContext context, {required bool search}) {
+  if (!const bool.fromEnvironment('NIKODESK')) return null;
+  final nl = NlColors.maybeOf(context);
+  if (nl == null) return null;
+  return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: NlSpace.s2),
+      child: Icon(search ? NlIcons.search : NlIcons.folderOpen,
+          size: 16, color: nl.fg3));
+}
+
+/// The upstream toolbar draws asset glyphs, the arrow turned for back and
+/// up; each has a Lucide counterpart.
+IconData? _nikoToolIcon(Widget child) {
+  var turns = 0;
+  var glyph = child;
+  if (glyph is RotatedBox && glyph.child != null) {
+    turns = glyph.quarterTurns % 4;
+    glyph = glyph.child!;
+  }
+  if (glyph is! SvgPicture) return null;
+  final loader = glyph.bytesLoader;
+  if (loader is! SvgAssetLoader) return null;
+  return switch ((loader.assetName, turns)) {
+    ('assets/arrow.svg', 2) => NlIcons.arrowLeft,
+    ('assets/arrow.svg', 3) => NlIcons.cornerLeftUp,
+    ('assets/search.svg', 0) => NlIcons.search,
+    ('assets/close.svg', 0) => NlIcons.close,
+    ('assets/refresh.svg', 0) => NlIcons.refreshCw,
+    ('assets/home.svg', 0) => NlIcons.house,
+    ('assets/folder_new.svg', 0) => NlIcons.folderPlus,
+    ('assets/trash.svg', 0) => NlIcons.trash2,
+    ('assets/dots.svg', 0) => NlIcons.ellipsis,
+    _ => null,
+  };
+}
+
+/// One directory entry in Nightline, laid out on the upstream columns: a
+/// Lucide glyph and the name, the modified time and the size. Rows have no
+/// fill until hovered or selected, and an accent ring while their context
+/// menu is open. The upstream pane keeps selection, double-click and the
+/// menu; this row only reports the gestures.
+class NikoFileRow extends StatefulWidget {
+  final Entry entry;
+  final bool selected;
+  final bool menuOpen;
+  final double height;
+  final double nameWidth;
+  final double modifiedWidth;
+  final String modified;
+  final String size;
+  final VoidCallback onTap;
+  final VoidCallback onSecondaryTap;
+  final GestureTapDownCallback onSecondaryTapDown;
+  const NikoFileRow(
+      {super.key,
+      required this.entry,
+      required this.selected,
+      required this.menuOpen,
+      required this.height,
+      required this.nameWidth,
+      required this.modifiedWidth,
+      required this.modified,
+      required this.size,
+      required this.onTap,
+      required this.onSecondaryTap,
+      required this.onSecondaryTapDown});
+
+  /// Matches the header's column dividers: one pixel with a pixel either
+  /// side.
+  static const gap = 3.0;
+
+  @override
+  State<NikoFileRow> createState() => _NikoFileRowState();
+}
+
+class _NikoFileRowState extends State<NikoFileRow> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final nl = NlColors.of(context);
+    final colors = NikoFileListColors.of(context);
+    final entry = widget.entry;
+    final (IconData glyph, Color ink) = entry.isDrive
+        ? (NlIcons.hardDrive, nl.fg2)
+        : entry.isFile
+            ? (NlIcons.file, nl.fg3)
+            : (NlIcons.folder, nl.accent);
+    final meta = NlType.text(NlType.s2, color: colors?.meta ?? nl.fg2);
+    Widget cell(String text) => Padding(
+        padding: const EdgeInsets.only(left: NlSpace.s1),
+        child: Text(text,
+            maxLines: 1, overflow: TextOverflow.ellipsis, style: meta));
+    return Semantics(
+        selected: widget.selected,
+        child: MouseRegion(
+            onEnter: (_) => setState(() => _hovered = true),
+            onExit: (_) => setState(() => _hovered = false),
+            child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: widget.onTap,
+                onSecondaryTap: widget.onSecondaryTap,
+                onSecondaryTapDown: widget.onSecondaryTapDown,
+                child: Container(
+                    height: widget.height,
+                    margin: const EdgeInsets.symmetric(vertical: 1),
+                    decoration: BoxDecoration(
+                        color: widget.selected
+                            ? colors?.selected ?? nl.selected
+                            : _hovered
+                                ? nl.hover
+                                : Colors.transparent,
+                        borderRadius: BorderRadius.circular(NlRadius.r2)),
+                    foregroundDecoration: widget.menuOpen
+                        ? BoxDecoration(
+                            borderRadius: BorderRadius.circular(NlRadius.r2),
+                            border: Border.all(color: colors?.ring ?? nl.accent))
+                        : null,
+                    child: Row(children: [
+                      SizedBox(
+                          width: widget.nameWidth,
+                          child: Tooltip(
+                              waitDuration: const Duration(milliseconds: 500),
+                              message: entry.name,
+                              child: Row(children: [
+                                Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: NlSpace.s2),
+                                    child: Icon(glyph, size: 16, color: ink)),
+                                Expanded(
+                                    // Cut the name, not a word, at the end.
+                                    child: Text(entry.name.nonBreaking,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: NlType.text(NlType.s3,
+                                            color: colors?.selectedText ??
+                                                nl.fg))),
+                              ]))),
+                      const SizedBox(width: NikoFileRow.gap),
+                      SizedBox(
+                          width: widget.modifiedWidth,
+                          child: cell(widget.modified.trimRight())),
+                      const SizedBox(width: NikoFileRow.gap),
+                      Expanded(child: cell(widget.size)),
+                    ])))));
   }
 }

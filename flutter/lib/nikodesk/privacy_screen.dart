@@ -8,6 +8,7 @@ import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 
+import 'nightline/icons.dart';
 import 'nightline/tokens.dart';
 import 'privacy_screen_policy.dart';
 import 'privacy_style.dart';
@@ -190,7 +191,12 @@ class NikoPrivacyScreenBadge extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(Icons.visibility_off_rounded, size: 16, color: ink),
+                      Icon(
+                          nightline
+                              ? NlIcons.eyeOff
+                              : Icons.visibility_off_rounded,
+                          size: nightline ? 14 : 16,
+                          color: ink),
                       const SizedBox(width: 6),
                       Text(
                           nikoPrivacyScreenLabel(NikoPrivacyScreenStatus.on),

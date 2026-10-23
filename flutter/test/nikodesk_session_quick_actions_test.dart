@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_hbb/nikodesk/nightline.dart';
 import 'package:flutter_hbb/nikodesk/session_quick_actions_view.dart';
 import 'package:flutter_hbb/nikodesk/session_shortcuts.dart';
 import 'package:flutter_hbb/nikodesk/theme.dart';
@@ -195,6 +196,10 @@ void main() {
         onClose: close ?? () {},
       );
 
+  NlSegmented<String?> viewStyle(WidgetTester tester) =>
+      tester.widget<NlSegmented<String?>>(
+          find.byKey(const Key('nikodesk-view-style')));
+
   testWidgets(
       'Control center exposes the physical keyboard mapping and Spaces actions',
       (tester) async {
@@ -224,10 +229,9 @@ void main() {
       expect(find.byKey(ValueKey('nikodesk-shortcut-${shortcut.name}')),
           findsOneWidget);
     }
-    final dropdown = find.byKey(const Key('nikodesk-mac-shortcut-mode'));
-    await tester.tap(dropdown);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('原样').last);
+    final original = find.text('原样');
+    await tester.ensureVisible(original);
+    await tester.tap(original);
     await tester.pumpAndSettle();
     expect(changes, [NikoMacShortcutMode.original]);
     expect(find.text('本地 Ctrl → 远端 Control。关闭常用快捷键的自动映射。'), findsOneWidget);
@@ -244,12 +248,14 @@ void main() {
                 view: (style) async => styles.add(style)))));
     expect(
         tester
-            .widget<OutlinedButton>(
+            .widget<NikoShortcutKey>(
                 find.byKey(const ValueKey('nikodesk-shortcut-copy')))
             .onPressed,
         isNull);
+    await tester.tap(find.byKey(const ValueKey('nikodesk-quick-display')));
+    await tester.pumpAndSettle();
+    expect(viewStyle(tester).onChanged, isNotNull);
     final fit = find.byKey(const ValueKey('nikodesk-view-adaptive'));
-    expect(tester.widget<OutlinedButton>(fit).onPressed, isNotNull);
     await tester.ensureVisible(fit);
     await tester.tap(fit);
     await tester.pumpAndSettle();
@@ -270,17 +276,16 @@ void main() {
     await tester.tap(copy);
     await tester.pump();
     expect(submissions, 1);
-    expect(tester.widget<OutlinedButton>(copy).onPressed, isNull);
-    expect(
-        tester
-            .widget<OutlinedButton>(
-                find.byKey(const ValueKey('nikodesk-view-original')))
-            .onPressed,
-        isNull);
+    expect(tester.widget<NikoShortcutKey>(copy).onPressed, isNull);
+    await tester.tap(find.byKey(const ValueKey('nikodesk-quick-display')));
+    await tester.pump();
+    expect(viewStyle(tester).onChanged, isNull);
     pending.complete();
     await tester.pumpAndSettle();
-    expect(tester.widget<OutlinedButton>(copy).onPressed, isNotNull);
     expect(find.text('已发送快捷键，执行结果请查看远端画面。'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('nikodesk-quick-keys')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<NikoShortcutKey>(copy).onPressed, isNotNull);
   });
 
   testWidgets('submission failure shows feedback without claiming success',
@@ -304,18 +309,16 @@ void main() {
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: panel(peerPlatform: 'Android', canvasAllowed: false))));
+    // A remote without desktop shortcuts opens on the picture.
+    expect(viewStyle(tester).onChanged, isNull);
+    expect(find.text('Remote video or display dimensions are not ready.'),
+        findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('nikodesk-quick-keys')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('nikodesk-shortcut-copy')), findsNothing);
     expect(
         find.text(
             'These desktop shortcuts are unavailable on this remote system.'),
-        findsOneWidget);
-    expect(
-        tester
-            .widget<OutlinedButton>(
-                find.byKey(const ValueKey('nikodesk-view-adaptive')))
-            .onPressed,
-        isNull);
-    expect(find.text('Remote video or display dimensions are not ready.'),
         findsOneWidget);
   });
 
@@ -329,10 +332,10 @@ void main() {
       return panel(keyboardAllowed: allowed);
     }))));
     final copy = find.byKey(const ValueKey('nikodesk-shortcut-copy'));
-    expect(tester.widget<OutlinedButton>(copy).onPressed, isNotNull);
+    expect(tester.widget<NikoShortcutKey>(copy).onPressed, isNotNull);
     change(() => allowed = false);
     await tester.pump();
-    expect(tester.widget<OutlinedButton>(copy).onPressed, isNull);
+    expect(tester.widget<NikoShortcutKey>(copy).onPressed, isNull);
   });
 
   for (final english in [false, true]) {
@@ -362,14 +365,15 @@ void main() {
                       close: () => closes++))),
         ));
         await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('nikodesk-quick-display')));
+        await tester.pumpAndSettle();
         final reset = find.byKey(const Key('nikodesk-reset-canvas'));
         await tester.ensureVisible(reset);
         await tester.tap(reset);
         await tester.pumpAndSettle();
         expect(resets, 1);
-        final close = find.text(english ? 'Close' : '关闭');
-        await tester.ensureVisible(close);
-        await tester.tap(close);
+        expect(find.byTooltip(english ? 'Close' : '关闭'), findsOneWidget);
+        await tester.tap(find.byKey(const Key('nikodesk-quick-close')));
         expect(closes, 1);
         expect(tester.takeException(), isNull);
       });

@@ -19,6 +19,7 @@ import '../consts.dart';
 import '../common.dart';
 import '../common/widgets/overlay.dart';
 import '../main.dart';
+import '../nikodesk/chat_view.dart' show NikoChatBubbleButton;
 import 'model.dart';
 
 class MessageKey {
@@ -164,6 +165,21 @@ class ChatModel with ChangeNotifier {
     if (overlayState == null) return;
 
     final overlay = OverlayEntry(builder: (context) {
+      if (const bool.fromEnvironment('NIKODESK')) {
+        return DraggableFloatWidget(
+            config: DraggableFloatWidgetBaseConfig(
+              initPositionYInTop: false,
+              initPositionYMarginBorder: 100,
+              borderTopContainTopBar: true,
+            ),
+            child: NikoChatBubbleButton(onPressed: () {
+              if (chatWindowOverlayEntry == null) {
+                showChatWindowOverlay();
+              } else {
+                hideChatWindowOverlay();
+              }
+            }));
+      }
       return DraggableFloatWidget(
         config: DraggableFloatWidgetBaseConfig(
           initPositionYInTop: false,

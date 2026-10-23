@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/nikodesk/nightline.dart';
 
 class DraggableDivider extends StatefulWidget {
   final Axis axis;
@@ -24,6 +25,9 @@ class DraggableDivider extends StatefulWidget {
 class _DraggableDividerState extends State<DraggableDivider> {
   @override
   Widget build(BuildContext context) {
+    final color = const bool.fromEnvironment('NIKODESK')
+        ? NlColors.maybeOf(context)?.line2 ?? widget.color
+        : widget.color;
     return Listener(
       onPointerMove: (event) {
         final dl = widget.axis == Axis.horizontal
@@ -37,7 +41,7 @@ class _DraggableDividerState extends State<DraggableDivider> {
         child: Padding(
           padding: widget.padding,
           child: Container(
-            decoration: BoxDecoration(color: widget.color),
+            decoration: BoxDecoration(color: color),
             width: widget.axis == Axis.horizontal
                 ? double.infinity
                 : widget.thickness,

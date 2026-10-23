@@ -781,7 +781,8 @@ class _RemotePageState extends State<RemotePage>
           if (const bool.fromEnvironment('NIKODESK'))
             // Below the session dock and its handle at the default top edge.
             NikoPrivacyConnectionPrompt(ffi: _ffi, top: 96,
-                onExplain: () => showNikoSessionQuickActions(_ffi)),
+                onExplain: () => showNikoSessionQuickActions(_ffi,
+                    section: NikoQuickSection.privacy)),
           if (const bool.fromEnvironment('NIKODESK'))
             NikoRemotePermissionNotice(ffi: _ffi),
           Stack(

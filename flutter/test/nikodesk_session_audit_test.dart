@@ -251,7 +251,7 @@ void main() {
     await tester.pumpAndSettle();
     delayed.complete(snapshot());
     await tester.pumpAndSettle();
-    expect(find.text('尚无已保存的原生会话结果。'), findsOneWidget);
+    expect(find.text('还没有会话结果'), findsOneWidget);
     expect(find.text('123456789'), findsNothing);
   });
   testWidgets('returning to the history page reads new native events',
@@ -467,7 +467,7 @@ void main() {
         .pumpWidget(page(api, namespace: 'c' * 64, onReconnect: connect));
     reconnects.single.completeError(StateError('Old scope response'));
     await tester.pumpAndSettle();
-    expect(find.text('尚无已保存的原生会话结果。'), findsOneWidget);
+    expect(find.text('还没有会话结果'), findsOneWidget);
     expect(find.text('无法发起连接，请重试。'), findsNothing);
     await tester.pumpWidget(page(api, onReconnect: connect));
     await tester.pumpAndSettle();

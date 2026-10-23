@@ -13,35 +13,77 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:dash_chat_2/dash_chat_2.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xterm/xterm.dart' show Terminal, TerminalView;
+import 'package:flutter_hbb/common/widgets/toolbar.dart'
+    show TRadioMenu, TTextMenu, TToggleMenu;
 import 'package:get/get.dart';
-import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/common.dart' hide Dialog;
+import 'package:flutter_hbb/desktop/widgets/kb_layout_type_chooser.dart';
+import 'package:flutter_hbb/consts.dart'
+    show kPeerPlatformMacOS, kPeerPlatformWindows;
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
 import 'package:flutter_hbb/models/native_model.dart';
+import 'package:flutter_hbb/nikodesk/chat_view.dart';
 import 'package:flutter_hbb/nikodesk/cm_permissions.dart';
+import 'package:flutter_hbb/nikodesk/connection_progress.dart';
+import 'package:flutter_hbb/nikodesk/connection_progress_view.dart';
 import 'package:flutter_hbb/nikodesk/device_store.dart';
+import 'package:flutter_hbb/nikodesk/display_options_view.dart';
 import 'package:flutter_hbb/nikodesk/file_conflict_dialog.dart';
 import 'package:flutter_hbb/nikodesk/first_server_setup.dart';
 import 'package:flutter_hbb/nikodesk/home_shell.dart';
+import 'package:flutter_hbb/nikodesk/mobile_more_actions.dart';
+import 'package:flutter_hbb/nikodesk/mobile_control_bar.dart';
+import 'package:flutter_hbb/nikodesk/mobile_chat_options.dart';
+import 'package:flutter_hbb/nikodesk/mobile_gesture_panel.dart';
+import 'package:flutter_hbb/nikodesk/mobile_key_bar.dart';
+import 'package:flutter_hbb/nikodesk/mobile_session_guide.dart';
+import 'package:flutter_hbb/nikodesk/mobile_home.dart';
 import 'package:flutter_hbb/nikodesk/metrics.dart';
 import 'package:flutter_hbb/nikodesk/nightline.dart';
 import 'package:flutter_hbb/nikodesk/permission_guide.dart';
 import 'package:flutter_hbb/nikodesk/policy.dart';
 import 'package:flutter_hbb/nikodesk/privacy_connection.dart';
+import 'package:flutter_hbb/nikodesk/privacy_screen_policy.dart';
 import 'package:flutter_hbb/nikodesk/privacy_style.dart';
 import 'package:flutter_hbb/nikodesk/privacy_style_model.dart';
 import 'package:flutter_hbb/nikodesk/quality_overlay.dart';
+import 'package:flutter_hbb/nikodesk/remote_resolution_policy.dart';
 import 'package:flutter_hbb/nikodesk/server_gateway.dart';
+import 'package:flutter_hbb/nikodesk/server_settings.dart';
+import 'package:flutter_hbb/nikodesk/wake_on_lan.dart';
+import 'package:flutter_hbb/nikodesk/wake_on_lan_view.dart';
+import 'package:flutter_hbb/nikodesk/wake_proxy.dart';
+import 'package:flutter_hbb/nikodesk/home_chrome.dart';
+import 'package:flutter_hbb/nikodesk/session_audit.dart';
+import 'package:flutter_hbb/nikodesk/session_audit_view.dart';
 import 'package:flutter_hbb/nikodesk/session_log.dart';
+import 'package:flutter_hbb/nikodesk/session_quick_actions_view.dart';
+import 'package:flutter_hbb/nikodesk/session_sheet.dart';
+import 'package:flutter_hbb/nikodesk/voice_session_native.dart';
+import 'package:flutter_hbb/nikodesk/voice_session_owner.dart';
+import 'package:flutter_hbb/nikodesk/session_shortcuts.dart';
 import 'package:flutter_hbb/nikodesk/session_toolbar.dart';
+import 'package:flutter_hbb/nikodesk/session_tools_view.dart';
+import 'package:flutter_hbb/nikodesk/terminal_look.dart';
+import 'package:flutter_hbb/nikodesk/theme.dart' show nikoSessionTheme;
+import 'package:flutter_hbb/nikodesk/tunnel_controller_view.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
 
+import 'nikodesk_tunnel_controller_test.dart' as tunnel;
+import 'nikodesk_voice_owner_test.dart' show voiceEnabled;
+import 'nikodesk_voice_session_model_test.dart' show voiceQueued;
 import 'support/nikodesk_cm_panels.dart';
+import 'support/nikodesk_component_sheet.dart';
 import 'support/nikodesk_fake_bridge.dart';
 import 'support/nikodesk_file_window.dart';
+import 'support/nikodesk_mobile_file_page.dart';
 
 const _out = String.fromEnvironment('NIKO_SHOT_DIR');
 const _cjk = String.fromEnvironment('NIKO_CJK_DIR');
@@ -65,6 +107,79 @@ class _EmptyGateway implements ServerGateway {
   Future<void> save(PrivateServerConfig config) async {}
 }
 
+/// Session results as the native store would return them, a few hours and
+/// a day old.
+class _Audit implements SessionAuditApi {
+  @override
+  Future<String> read(String namespace) async {
+    final now = DateTime.now();
+    int ago(Duration duration) => now.subtract(duration).millisecondsSinceEpoch;
+    String id(int n) => '${'$n' * 8}-1234-4234-8234-123456789abc';
+    Map<String, Object?> entry(int n, String peer, String role, String kind,
+        String phase, Duration age,
+        {Duration? length}) {
+      final start = ago(age);
+      final end = length == null ? null : start + length.inMilliseconds;
+      return {
+        'session': id(n),
+        'peerId': peer,
+        'role': role,
+        'kind': kind,
+        'phase': phase,
+        'startedAt': start,
+        'authenticatedAt': phase == 'not_authenticated' ? null : start + 1800,
+        'endedAt': end,
+        'durationMs': length?.inMilliseconds,
+      };
+    }
+
+    Map<String, Object?> event(int n, String role, String kind, String stage,
+            Duration age) =>
+        {
+          'id': id(n + 5),
+          'session': id(n),
+          'operation': id(n + 3),
+          'sequence': 1,
+          'peerId': '418223905',
+          'role': role,
+          'kind': kind,
+          'stage': stage,
+          'at': ago(age),
+        };
+    return jsonEncode({
+      'ok': true,
+      'status': 'ready',
+      'namespace': namespace,
+      'revision': 'b' * 64,
+      'incomplete': false,
+      'entries': [
+        entry(1, '731004562', 'receiver', 'desktop', 'authenticated',
+            const Duration(minutes: 40)),
+        entry(2, '418223905', 'controller', 'desktop', 'disconnected',
+            const Duration(hours: 2),
+            length: const Duration(hours: 1, minutes: 2, seconds: 13)),
+        entry(3, '660392148', 'controller', 'file_transfer', 'disconnected',
+            const Duration(days: 1, hours: 1),
+            length: const Duration(minutes: 6, seconds: 41)),
+        entry(4, '205118377', 'controller', 'desktop', 'not_authenticated',
+            const Duration(days: 1, hours: 3),
+            length: const Duration(seconds: 9)),
+      ],
+      'activities': [
+        event(1, 'receiver', 'voice', 'started', const Duration(minutes: 35)),
+        event(2, 'controller', 'terminal', 'cleanup_pending',
+            const Duration(hours: 2)),
+        event(3, 'receiver', 'camera', 'rejected',
+            const Duration(days: 1, hours: 2)),
+      ],
+    });
+  }
+
+  @override
+  Future<String> clear(String namespace, String revision) =>
+      read(namespace);
+}
+
 Future<void> _font(String family, List<String> paths) async {
   final loader = FontLoader(family);
   for (final path in paths) {
@@ -75,8 +190,13 @@ Future<void> _font(String family, List<String> paths) async {
 }
 
 Future<void> _loadFonts() async {
-  await _font('Inter',
-      ['assets/fonts/Inter-Regular.ttf', 'assets/fonts/Inter-SemiBold.ttf']);
+  await _font('Inter', [
+    'assets/fonts/Inter-Regular.ttf',
+    'assets/fonts/Inter-Medium.ttf',
+    'assets/fonts/Inter-SemiBold.ttf'
+  ]);
+  await _font('Lucide', ['assets/fonts/Lucide.ttf']);
+  await _font('gestureicons', ['assets/gestures.ttf']);
   await _font('JetBrains Mono', [
     'assets/fonts/JetBrainsMono-Regular.ttf',
     'assets/fonts/JetBrainsMono-Medium.ttf'
@@ -94,10 +214,20 @@ Future<void> _loadFonts() async {
 }
 
 Future<void> _capture(WidgetTester tester, Widget app, String name,
-    {Size size = const Size(1440, 900), Future<void> Function()? before}) async {
+    {Size size = const Size(1440, 900),
+    Future<void> Function()? before,
+    TargetPlatform platform = TargetPlatform.macOS,
+    EdgeInsets padding = EdgeInsets.zero}) async {
   tester.view.physicalSize = size * 2;
   tester.view.devicePixelRatio = 2;
+  tester.view.padding = FakeViewPadding(
+      left: padding.left * 2,
+      top: padding.top * 2,
+      right: padding.right * 2,
+      bottom: padding.bottom * 2);
   addTearDown(tester.view.reset);
+  // Density follows the platform: pointer metrics on macOS, touch on iOS.
+  debugDefaultTargetPlatformOverride = platform;
   // flutter_test draws Material shadows as solid black outlines; render
   // them as the app does, and restore the test default before it ends.
   final shadows = debugDisableShadows;
@@ -139,7 +269,40 @@ Future<void> _capture(WidgetTester tester, Widget app, String name,
     await tester.pumpWidget(const SizedBox());
   } finally {
     debugDisableShadows = shadows;
+    debugDefaultTargetPlatformOverride = null;
   }
+}
+
+/// The traffic lights the native window draws over the title strip.
+class _TrafficLights extends StatelessWidget {
+  final Widget child;
+  const _TrafficLights({required this.child});
+
+  @override
+  Widget build(BuildContext context) => Stack(children: [
+        Positioned.fill(child: child),
+        Positioned(
+            left: 20,
+            top: 8,
+            child: IgnorePointer(
+                child: Row(children: [
+              for (final color in const [
+                Color(0xFFFF5F57),
+                Color(0xFFFEBC2E),
+                Color(0xFF28C840)
+              ]) ...[
+                Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                            color: Colors.black.withOpacity(.12), width: .5))),
+                const SizedBox(width: 8),
+              ],
+            ]))),
+      ]);
 }
 
 void main() {
@@ -214,6 +377,143 @@ void main() {
               screenRecordingProbe: () => true,
               accessibilityProbe: () => false)));
 
+  Widget macShell(Brightness brightness, {String? select}) => MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(brightness: brightness, useMaterial3: true),
+      home: Scaffold(
+          body: _TrafficLights(
+              child: NikoHomeShell(
+                  store: store,
+                  gateway: _Gateway(),
+                  sessionLog: sessionLog,
+                  macTitleBar: true,
+                  deviceIdProvider: () => '590 216 734',
+                  temporaryPasswordProvider: () async => 'k7x2m9qa',
+                  screenRecordingProbe: () => true,
+                  accessibilityProbe: () => true))));
+
+  Widget mobile(Brightness brightness) => MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(brightness: brightness, useMaterial3: true),
+      home: NikoMobileHome(
+          store: store, gateway: _Gateway(), sessionLog: sessionLog));
+
+  Future<void> settle(WidgetTester tester) async {
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      for (var i = 0; i < 20; i++) {
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    });
+    await tester.pumpAndSettle();
+  }
+
+  for (final english in [true, false]) {
+    final lang = english ? 'en' : 'zh';
+    for (final brightness in Brightness.values) {
+      final b = brightness.name;
+      testWidgets('orbit desktop $b $lang', (tester) async {
+        NikoLanguage.english = english;
+        await _capture(tester, macShell(brightness), 'orbit-desktop-$b-$lang-1440x900');
+      }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
+      testWidgets('orbit desktop inspector $b $lang', (tester) async {
+        NikoLanguage.english = english;
+        await _capture(tester, macShell(brightness),
+            'orbit-desktop-inspector-$b-$lang-1440x900', before: () async {
+          await tester.tap(find.text('Office Workstation'));
+          await settle(tester);
+        });
+      }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
+      testWidgets('orbit desktop palette $b $lang', (tester) async {
+        NikoLanguage.english = english;
+        await _capture(tester, macShell(brightness),
+            'orbit-desktop-palette-$b-$lang-1440x900', before: () async {
+          await tester.tap(find.text(english ? 'Search and commands' : '搜索与命令'));
+          await settle(tester);
+        });
+      }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
+      testWidgets('orbit desktop narrow $b $lang', (tester) async {
+        NikoLanguage.english = english;
+        await _capture(tester, macShell(brightness),
+            'orbit-desktop-narrow-$b-$lang-1000x720',
+            size: const Size(1000, 720));
+      }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
+      for (final section in ['general', 'appearance', 'server', 'updates', 'about']) {
+        testWidgets('orbit settings $section $b $lang', (tester) async {
+          NikoLanguage.english = english;
+          await _capture(tester, macShell(brightness),
+              'orbit-settings-$section-$b-$lang-1440x900', before: () async {
+            await tester.tap(find.text(english ? 'Settings' : '设置'));
+            await settle(tester);
+            await tester.tap(find.byKey(Key('nikodesk-settings-nav-$section')));
+            await settle(tester);
+          });
+        }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
+      }
+      testWidgets('orbit history $b $lang', (tester) async {
+        NikoLanguage.english = english;
+        await _capture(tester, macShell(brightness),
+            'orbit-history-$b-$lang-1440x900', before: () async {
+          await tester.tap(find.text(english ? 'Sessions' : '会话'));
+          await settle(tester);
+        });
+      }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
+      for (final tab in ['sessions', 'settings']) {
+        testWidgets('orbit phone $tab $b $lang', (tester) async {
+          NikoLanguage.english = english;
+          await _capture(tester, mobile(brightness),
+              'orbit-phone-$tab-$b-$lang-390x844',
+              size: const Size(390, 844),
+              platform: TargetPlatform.iOS,
+              padding: const EdgeInsets.only(top: 47, bottom: 34),
+              before: () async {
+            await tester.tap(find.text(tab == 'sessions'
+                    ? (english ? 'Sessions' : '会话')
+                    : (english ? 'Settings' : '设置'))
+                .last);
+            await settle(tester);
+          });
+        }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
+      }
+      testWidgets('orbit settings narrow $b $lang', (tester) async {
+        NikoLanguage.english = english;
+        await _capture(tester, macShell(brightness),
+            'orbit-settings-narrow-$b-$lang-1000x720',
+            size: const Size(1000, 720), before: () async {
+          await tester.tap(find.text(english ? 'Settings' : '设置'));
+          await settle(tester);
+        });
+      }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
+      for (final (label, size) in [
+        ('ipad-landscape', const Size(1376, 1032)),
+        ('ipad-portrait', const Size(1032, 1376)),
+        ('phone', const Size(390, 844)),
+      ]) {
+        final phone = label == 'phone';
+        testWidgets('orbit $label $b $lang', (tester) async {
+          NikoLanguage.english = english;
+          await _capture(tester, mobile(brightness),
+              'orbit-$label-$b-$lang-${size.width.toInt()}x${size.height.toInt()}',
+              size: size,
+              platform: TargetPlatform.iOS,
+              padding: EdgeInsets.only(top: phone ? 47 : 24, bottom: phone ? 34 : 20));
+        }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
+      }
+      testWidgets('orbit ipad inspector $b $lang', (tester) async {
+        NikoLanguage.english = english;
+        await _capture(tester, mobile(brightness),
+            'orbit-ipad-inspector-$b-$lang-1376x1032',
+            size: const Size(1376, 1032),
+            platform: TargetPlatform.iOS,
+            padding: const EdgeInsets.only(top: 24, bottom: 20), before: () async {
+          await tester.tap(find.text('Studio Mac').last);
+          await settle(tester);
+        });
+      }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
+    }
+  }
+
   for (final english in [true, false]) {
     for (final brightness in Brightness.values) {
       final lang = english ? 'en' : 'zh';
@@ -253,7 +553,8 @@ void main() {
           tester,
           MaterialApp(
               debugShowCheckedModeBanner: false,
-              theme: nightlineTheme(brightness),
+              theme: nightlineTheme(brightness)
+                  .copyWith(platform: TargetPlatform.macOS),
               home: Scaffold(
                   body: NikoFirstServerSetup(
                       gateway: _EmptyGateway(),
@@ -263,6 +564,103 @@ void main() {
           'setup-${brightness.name}-${_cjk.isEmpty ? 'en' : 'zh'}-1100x760',
           size: const Size(1100, 760));
     }, skip: _out.isEmpty);
+    // Saving checks each field and says what is wrong under it.
+    testWidgets('first-time setup errors ${brightness.name}', (tester) async {
+      NikoLanguage.english = true;
+      await _capture(
+          tester,
+          MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: nightlineTheme(brightness)
+                  .copyWith(platform: TargetPlatform.macOS),
+              home: Scaffold(
+                  body: NikoFirstServerSetup(
+                      gateway: _EmptyGateway(),
+                      onSaved: () {},
+                      onLanguageChanged: () async {},
+                      child: const SizedBox()))),
+          'setup-errors-${brightness.name}-en-1100x760',
+          size: const Size(1100, 760), before: () async {
+        await tester.enterText(
+            find.byKey(const ValueKey('niko-server-id')), 'https://nas');
+        await tester.enterText(find.byKey(const ValueKey('niko-server-relay')),
+            'nas.example.net:21117');
+        await tester.tap(find.text('Save and enable private server'));
+      });
+    }, skip: _out.isEmpty);
+    // Settings opens the same form in a dialog.
+    // Wake-on-LAN through an online proxy on the target's network.
+    testWidgets('wake dialog ${brightness.name}', (tester) async {
+      NikoLanguage.english = _cjk.isEmpty;
+      const scope =
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+      final proxies = jsonEncode({
+        'schema': 1,
+        'namespace': scope,
+        'endpoints': [
+          {
+            'namespace': scope,
+            'peer_id': '123456789',
+            'local_port': 21129,
+            'target': {'host': '127.0.0.1', 'port': 21128},
+            'generation': '1',
+            'revision': '1',
+            'phase': 'Listening',
+            'reason': 'tunnel_listening',
+            'remote_phase': 'Running',
+            'local_resources_closed': false,
+          }
+        ],
+      });
+      await _capture(
+          tester,
+          MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: nightlineTheme(brightness)
+                  .copyWith(platform: TargetPlatform.macOS),
+              home: Builder(
+                  builder: (context) => Scaffold(
+                      body: TextButton(
+                          onPressed: () => showWakeOnLan(context,
+                              title: nikoText('唤醒书房台式机', 'Wake Studio PC'),
+                              initial: const WakeProfile(
+                                  '02:11:22:33:44:55', '192.168.1.255',
+                                  proxyId: '123456789'),
+                              proxies: NikoWakeTunnelDirectory(scope,
+                                  readStatus: () async => proxies),
+                              proxyLabels: {
+                                '123456789': nikoText('书房 NAS', 'Studio NAS')
+                              },
+                              connectProxy: () async {},
+                              send: (_) async => 3),
+                          child: const Text('Open'))))),
+          'wake-${brightness.name}-${_cjk.isEmpty ? 'en' : 'zh'}-1100x760',
+          size: const Size(1100, 760), before: () async {
+        await tester.tap(find.text('Open'));
+      });
+    }, skip: _out.isEmpty);
+    testWidgets('server settings dialog ${brightness.name}', (tester) async {
+      NikoLanguage.english = _cjk.isEmpty;
+      await _capture(
+          tester,
+          MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: nightlineTheme(brightness)
+                  .copyWith(platform: TargetPlatform.macOS),
+              home: Scaffold(
+                  body: Center(
+                      child: Dialog(
+                          child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 560),
+                              child: PrivateServerForm(
+                                  gateway: _EmptyGateway(),
+                                  initial: const PrivateServerConfig(
+                                      'nas.example.net:21116',
+                                      'nas.example.net:21117',
+                                      ''))))))),
+          'server-dialog-${brightness.name}-${_cjk.isEmpty ? 'en' : 'zh'}-1100x760',
+          size: const Size(1100, 760));
+    }, skip: _out.isEmpty);
   }
 
   testWidgets('home compact dark with navigation open', (tester) async {
@@ -270,7 +668,7 @@ void main() {
     await _capture(tester, shell(Brightness.dark),
         'home-dark-${_cjk.isEmpty ? 'en' : 'zh'}-compact-800x600',
         size: const Size(800, 600), before: () async {
-      await tester.tap(find.byIcon(Icons.menu_rounded));
+      await tester.tap(find.byTooltip('打开导航'));
     });
   }, skip: _out.isEmpty);
 
@@ -302,7 +700,9 @@ void main() {
           tester,
           MaterialApp(
               debugShowCheckedModeBanner: false,
-              theme: nightlineTheme(brightness),
+              // The connection manager is a desktop window.
+              theme: nightlineTheme(brightness)
+                  .copyWith(platform: TargetPlatform.macOS),
               home: Scaffold(
                   body: NikoCmSessionLayout(
                       header: NikoCmRequestHeader(
@@ -312,7 +712,7 @@ void main() {
                           status: zh ? '已连接' : 'Connected',
                           duration: const Text('00:12:48'),
                           trailing: NlIconButton(
-                              icon: Icons.chat_bubble_outline_rounded,
+                              icon: NlIcons.messageSquare,
                               tooltip: zh ? '聊天' : 'Chat',
                               onPressed: () {})),
                       permissions: NikoCmPermissions(
@@ -366,23 +766,26 @@ void main() {
 
   testWidgets('privacy style editor in the session window', (tester) async {
     NikoLanguage.english = _cjk.isEmpty;
-    await _capture(
-        tester,
-        MaterialApp(
-            debugShowCheckedModeBanner: false,
-            theme: nightlineTheme(Brightness.dark),
-            home: Scaffold(
-                body: SingleChildScrollView(
-                    padding: const EdgeInsets.all(NlSpace.s5),
-                    child: NlPanel(
-                        padding: const EdgeInsets.all(NlSpace.s4),
-                        child: NikoPrivacyStyleEditor(
-                            initial: const NikoPrivacyStyle(motion: false, clock: true),
-                            allowed: true,
-                            active: true,
-                            onApply: (_) async {}))))),
-        'privacy-style-dark-${_cjk.isEmpty ? 'en' : 'zh'}-480x900',
-        size: const Size(480, 900));
+    for (final b in Brightness.values) {
+      await _capture(
+          tester,
+          MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: nightlineTheme(b).copyWith(platform: TargetPlatform.macOS),
+              home: Scaffold(
+                  body: SingleChildScrollView(
+                      padding: const EdgeInsets.all(NlSpace.s5),
+                      child: NlPanel(
+                          padding: const EdgeInsets.all(NlSpace.s4),
+                          child: NikoPrivacyStyleEditor(
+                              initial: const NikoPrivacyStyle(
+                                  motion: false, clock: true),
+                              allowed: true,
+                              active: true,
+                              onApply: (_) async {}))))),
+          'privacy-style-${b.name}-${_cjk.isEmpty ? 'en' : 'zh'}-480x900',
+          size: const Size(480, 900));
+    }
   }, skip: _out.isEmpty);
 
   // The hosted upstream page reads native options; it runs here on the
@@ -432,6 +835,122 @@ void main() {
     }
   });
 
+  // The stock dialogs every part of the app opens through CustomAlertDialog:
+  // a msgBox error and a titled confirmation, over a session.
+  group('dialogs', () {
+    setUp(() async {
+      PlatformFFI.instance.ffiBindForTesting = NikoFakeBridge();
+      await initGlobalFFI();
+    });
+    for (final (device, size, platform, padding) in const [
+      ('desktop', Size(1100, 760), TargetPlatform.macOS, EdgeInsets.zero),
+      ('ipad', Size(1180, 820), TargetPlatform.iOS,
+          EdgeInsets.only(top: 24, bottom: 20)),
+      ('phone', Size(390, 844), TargetPlatform.iOS,
+          EdgeInsets.only(top: 47, bottom: 34)),
+    ]) {
+      for (final brightness in Brightness.values) {
+        for (final kind in ['error', 'confirm']) {
+          final name = 'dialog-$kind-$device-${brightness.name}-en-'
+              '${size.width.toInt()}x${size.height.toInt()}';
+          testWidgets(name, (tester) async {
+            NikoLanguage.english = true;
+            final dialog = kind == 'error'
+                ? CustomAlertDialog(
+                    title: null,
+                    content: msgboxContent('error', 'Connection Error',
+                        'Failed to connect via relay server'),
+                    actions: [
+                      dialogButton('Close', onPressed: () {}, isOutline: true),
+                      dialogButton('Retry', onPressed: () {}),
+                    ],
+                    onCancel: () {})
+                : CustomAlertDialog(
+                    title: const Text('Delete this device?'),
+                    content: const Text(
+                        'It leaves your list on this computer. Its saved password is removed too.'),
+                    actions: [
+                      dialogButton('Cancel',
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () {},
+                          isOutline: true),
+                      dialogButton('OK',
+                          icon: const Icon(Icons.done_rounded),
+                          onPressed: () {}),
+                    ],
+                    onSubmit: () {},
+                    onCancel: () {});
+            await _capture(
+                tester,
+                MaterialApp(
+                    debugShowCheckedModeBanner: false,
+                    theme: nightlineTheme(brightness).copyWith(platform: platform),
+                    home: Scaffold(
+                        body: Stack(children: [
+                      const Positioned.fill(child: _RemotePicture()),
+                      Positioned.fill(
+                          child: ColoredBox(
+                              color: brightness == Brightness.light
+                                  ? Colors.black12
+                                  : Colors.black45)),
+                      Positioned.fill(child: dialog),
+                    ]))),
+                name,
+                size: size,
+                platform: platform,
+                padding: padding);
+          }, skip: _out.isEmpty);
+        }
+      }
+    }
+  });
+
+  // The local keyboard type chooser, which a Windows or Linux computer
+  // shows on its first session to a Mac; the stock dialog and chooser run
+  // through their NikoDesk hooks.
+  group('keyboard type', () {
+    setUp(() async {
+      PlatformFFI.instance.ffiBindForTesting = NikoFakeBridge();
+      await initGlobalFFI();
+    });
+    for (final brightness in Brightness.values) {
+      final name = 'kb-layout-desktop-${brightness.name}-en-1100x760';
+      testWidgets(name, (tester) async {
+        NikoLanguage.english = true;
+        await _capture(
+            tester,
+            MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: nightlineTheme(brightness)
+                    .copyWith(platform: TargetPlatform.windows),
+                home: Scaffold(
+                    body: Stack(children: [
+                  const Positioned.fill(child: _RemotePicture()),
+                  Positioned.fill(
+                      child: ColoredBox(
+                          color: brightness == Brightness.light
+                              ? Colors.black12
+                              : Colors.black45)),
+                  Positioned.fill(
+                      child: CustomAlertDialog(
+                          title: Text(
+                              '${translate('Select local keyboard type')} (Windows)'),
+                          content: KBLayoutTypeChooser(
+                              chosenType: 'ISO'.obs,
+                              width: 360,
+                              height: 200,
+                              dividerWidth: 4,
+                              cb: (_) async => true),
+                          actions: [dialogButton('Close', onPressed: () {})],
+                          onCancel: () {})),
+                ]))),
+            name,
+            size: const Size(1100, 760),
+            platform: TargetPlatform.windows);
+      }, skip: _out.isEmpty);
+    }
+  });
+
   // The same tree FileManagerPage builds in the NikoDesk build, on real file
   // controllers with fixed directories; no session or native call is made.
   group('file transfer', () {
@@ -454,7 +973,8 @@ void main() {
               tester,
               MaterialApp(
                   debugShowCheckedModeBanner: false,
-                  theme: nightlineTheme(brightness),
+                  theme: nightlineTheme(brightness)
+                    .copyWith(platform: TargetPlatform.macOS),
                   home: const NikoTestFileWindow()),
               name,
               size: size);
@@ -466,7 +986,8 @@ void main() {
             tester,
             MaterialApp(
                 debugShowCheckedModeBanner: false,
-                theme: nightlineTheme(brightness),
+                theme: nightlineTheme(brightness)
+                    .copyWith(platform: TargetPlatform.macOS),
                 home: const NikoTestFileWindow()),
             'files-tasks-${brightness.name}-en-900x640',
             size: const Size(900, 640), before: () async {
@@ -479,7 +1000,8 @@ void main() {
             tester,
             MaterialApp(
                 debugShowCheckedModeBanner: false,
-                theme: nightlineTheme(brightness),
+                theme: nightlineTheme(brightness)
+                    .copyWith(platform: TargetPlatform.macOS),
                 home: Scaffold(
                     body: Center(
                         child: NikoFileConflictDialog(
@@ -499,10 +1021,28 @@ void main() {
           tester,
           MaterialApp(
               debugShowCheckedModeBanner: false,
-              theme: nightlineTheme(Brightness.dark),
+              theme: nightlineTheme(Brightness.dark)
+                  .copyWith(platform: TargetPlatform.macOS),
               home: const NikoTestFileWindow(withJobs: false)),
           'files-empty-dark-en-1280x720',
           size: const Size(1280, 720));
+    }, skip: _out.isEmpty);
+    // Search turns the path bar into a field that filters the list.
+    testWidgets('files-search-light-en-1280x720', (tester) async {
+      NikoLanguage.english = true;
+      await _capture(
+          tester,
+          MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: nightlineTheme(Brightness.light)
+                  .copyWith(platform: TargetPlatform.macOS),
+              home: const NikoTestFileWindow()),
+          'files-search-light-en-1280x720',
+          size: const Size(1280, 720), before: () async {
+        await tester.tap(find.byTooltip('Search').first);
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextField).first, 're');
+      });
     }, skip: _out.isEmpty);
     testWidgets('files-dark-zh-1440x900', (tester) async {
       NikoLanguage.english = false;
@@ -510,10 +1050,249 @@ void main() {
           tester,
           MaterialApp(
               debugShowCheckedModeBanner: false,
-              theme: nightlineTheme(Brightness.dark),
+              theme: nightlineTheme(Brightness.dark)
+                  .copyWith(platform: TargetPlatform.macOS),
               home: const NikoTestFileWindow()),
           'files-dark-zh-1440x900');
     }, skip: _out.isEmpty || _cjk.isEmpty);
+  });
+
+  // The phone and iPad file transfer page on the same fixed directories:
+  // both sides next to each other on an iPad in landscape, with the tasks
+  // beside them on a 13-inch one, and one side at a time in portrait and on
+  // a phone.
+  group('mobile file transfer', () {
+    setUp(() async {
+      PlatformFFI.instance.ffiBindForTesting = NikoFakeBridge();
+      await initGlobalFFI();
+    });
+    for (final brightness in Brightness.values) {
+      for (final (device, size) in const [
+        ('ipad', Size(1180, 820)),
+        ('ipad13', Size(1376, 1032)),
+        ('ipad-portrait', Size(820, 1180)),
+        ('phone', Size(390, 844)),
+      ]) {
+        for (final selecting in [false, true]) {
+          final name = 'mobile-files-$device${selecting ? '-select' : ''}-'
+              '${brightness.name}-${_cjk.isEmpty ? 'en' : 'zh'}-'
+              '${size.width.toInt()}x${size.height.toInt()}';
+          testWidgets(name, (tester) async {
+            NikoLanguage.english = _cjk.isEmpty;
+            await _capture(
+                tester,
+                MaterialApp(
+                    debugShowCheckedModeBanner: false,
+                    theme: nightlineTheme(brightness)
+                        .copyWith(platform: TargetPlatform.iOS),
+                    home: NikoTestMobileFilePage(selecting: selecting)),
+                name,
+                size: size,
+                platform: TargetPlatform.iOS,
+                padding: device == 'phone'
+                    ? const EdgeInsets.only(top: 47, bottom: 34)
+                    : const EdgeInsets.only(top: 24, bottom: 20));
+          }, skip: _out.isEmpty);
+        }
+        final menu = 'mobile-files-$device-menu-${brightness.name}-'
+            '${_cjk.isEmpty ? 'en' : 'zh'}-'
+            '${size.width.toInt()}x${size.height.toInt()}';
+        testWidgets(menu, (tester) async {
+          NikoLanguage.english = _cjk.isEmpty;
+          await _capture(
+              tester,
+              MaterialApp(
+                  debugShowCheckedModeBanner: false,
+                  theme: nightlineTheme(brightness)
+                      .copyWith(platform: TargetPlatform.iOS),
+                  home: const NikoTestMobileFilePage()),
+              menu,
+              size: size,
+              platform: TargetPlatform.iOS,
+              padding: device == 'phone'
+                  ? const EdgeInsets.only(top: 47, bottom: 34)
+                  : const EdgeInsets.only(top: 24, bottom: 20),
+              before: () async {
+            await tester.tap(find.byTooltip(nikoText('文件操作', 'File actions')));
+            await settle(tester);
+          });
+        }, skip: _out.isEmpty);
+      }
+    }
+  });
+
+  // The TCP tunnel window (desktop) and page (phone and iPad) with a
+  // listening tunnel, one waiting for approval and a wake proxy.
+  group('tunnel', () {
+    Map<String, dynamic> status(
+            int port, String phase, String host, int target) =>
+        {
+          ...tunnel.status(phase: phase, port: port, host: host),
+          'target': {'host': host, 'port': target},
+          'reason': phase == 'Listening'
+              ? 'tunnel_listening'
+              : 'tunnel_waiting_approval',
+          'remote_phase': phase == 'Listening' ? 'Running' : null,
+        };
+    Widget view(bool mobile) {
+      final model = tunnel.model();
+      for (final value in [
+        status(8000, 'Listening', '127.0.0.1', 22),
+        status(8443, 'WaitingApproval', 'nas.local', 443),
+        status(21129, 'Listening', '127.0.0.1', 21128),
+      ]) {
+        model.handleEvent(tunnel.event(value));
+      }
+      return NikoTunnelControllerView(
+          controller: model,
+          mobile: mobile,
+          sendCommand: (_) async => '{"ok":true,"reason":"queued"}');
+    }
+
+    for (final brightness in Brightness.values) {
+      for (final (device, size, platform) in const [
+        ('desktop', Size(1100, 760), TargetPlatform.macOS),
+        ('ipad', Size(1180, 820), TargetPlatform.iOS),
+        ('phone', Size(390, 844), TargetPlatform.iOS),
+      ]) {
+        final name = 'tunnel-$device-${brightness.name}-'
+            '${_cjk.isEmpty ? 'en' : 'zh'}-'
+            '${size.width.toInt()}x${size.height.toInt()}';
+        testWidgets(name, (tester) async {
+          NikoLanguage.english = _cjk.isEmpty;
+          final mobile = device != 'desktop';
+          await _capture(
+              tester,
+              MaterialApp(
+                  debugShowCheckedModeBanner: false,
+                  theme:
+                      nightlineTheme(brightness).copyWith(platform: platform),
+                  home: Scaffold(
+                      appBar: mobile
+                          ? AppBar(
+                              title: Text(nikoText('TCP 隧道', 'TCP tunnel')),
+                              centerTitle: true,
+                              leading: NlIconButton(
+                                  icon: NlIcons.arrowLeft,
+                                  tooltip:
+                                      nikoText('退出隧道会话', 'Exit tunnel session'),
+                                  onPressed: () {}))
+                          : null,
+                      body: view(mobile))),
+              name,
+              size: size,
+              platform: platform,
+              padding: device == 'phone'
+                  ? const EdgeInsets.only(top: 47, bottom: 34)
+                  : device == 'ipad'
+                      ? const EdgeInsets.only(top: 24, bottom: 20)
+                      : EdgeInsets.zero);
+        }, skip: _out.isEmpty);
+      }
+    }
+  });
+
+  // The remote terminal's content area in both themes: a prompt, git
+  // output and all sixteen colours as text and as backgrounds.
+  group('terminal', () {
+    const names = [
+      'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white'
+    ];
+    const prompt =
+        '\x1b[1;32mniko@studio\x1b[0m:\x1b[1;34m~/nikodesk\x1b[0m\$ ';
+    final sample = [
+      '${prompt}git status',
+      'On branch \x1b[36mmain\x1b[0m',
+      "Your branch is up to date with '\x1b[36morigin/main\x1b[0m'.",
+      '',
+      'Changes not staged for commit:',
+      '        \x1b[31mmodified:   flutter/lib/nikodesk/terminal_look.dart\x1b[0m',
+      '',
+      'Untracked files:',
+      '        \x1b[31mdocs/笔记.md\x1b[0m',
+      '',
+      '${prompt}palette',
+      [for (final (i, n) in names.indexed) '\x1b[3${i}m${n.padRight(9)}\x1b[0m']
+          .join(),
+      [for (final (i, n) in names.indexed) '\x1b[9${i}m${n.padRight(9)}\x1b[0m']
+          .join(),
+      [for (var i = 0; i < 8; i++) '\x1b[4${i}m        \x1b[0m '].join(),
+      [for (var i = 0; i < 8; i++) '\x1b[10${i}m        \x1b[0m '].join(),
+      '',
+      '${prompt}ls',
+      '\x1b[1;34mdocs\x1b[0m  \x1b[1;34mflutter\x1b[0m  \x1b[1;34mlibs\x1b[0m  '
+          'README.md  \x1b[1;32mbuild.sh\x1b[0m',
+      prompt,
+    ].join('\r\n');
+    for (final brightness in Brightness.values) {
+      final name = 'terminal-desktop-${brightness.name}-960x560';
+      testWidgets(name, (tester) async {
+        final terminal = Terminal(maxLines: 200)..write(sample);
+        await _capture(
+            tester,
+            MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: nightlineTheme(brightness)
+                    .copyWith(platform: TargetPlatform.macOS),
+                home: Builder(
+                    builder: (context) => Scaffold(
+                        body: TerminalView(terminal,
+                            theme: nikoTerminalTheme(NlColors.of(context)),
+                            textStyle: nikoTerminalStyle,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 2))))),
+            name,
+            size: const Size(960, 560),
+            platform: TargetPlatform.macOS);
+      }, skip: _out.isEmpty);
+    }
+  });
+
+  // The native session results, which release builds show on the Sessions
+  // page; the shell shots use the local initiation log instead.
+  group('orbit results', () {
+    const namespace =
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    Widget page(Brightness brightness) => MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: nightlineTheme(brightness),
+        home: Scaffold(
+            body: NlScrollWatcher(
+                header: (context, scrolled) => NikoPageBar(
+                    title: nikoText('会话记录', 'Session history'),
+                    subtitle: nikoText('每次会话的认证与结果', 'How each session went'),
+                    divider: scrolled),
+                child: NikoNativeSessionHistory(
+                    namespace: namespace,
+                    api: _Audit(),
+                    onReconnect: (_, __, ___) async {}))));
+    for (final english in [true, false]) {
+      final lang = english ? 'en' : 'zh';
+      for (final brightness in Brightness.values) {
+        final b = brightness.name;
+        for (final activities in [false, true]) {
+          final tab = activities ? 'capabilities' : 'connections';
+          for (final phone in [false, true]) {
+            final size = phone ? const Size(390, 844) : const Size(1100, 760);
+            final name =
+                'orbit-results-$tab-$b-$lang-${size.width.toInt()}x${size.height.toInt()}';
+            testWidgets(name, (tester) async {
+              NikoLanguage.english = english;
+              await _capture(tester, page(brightness), name,
+                  size: size,
+                  platform: phone ? TargetPlatform.iOS : TargetPlatform.macOS,
+                  padding: phone
+                      ? const EdgeInsets.only(top: 47, bottom: 34)
+                      : EdgeInsets.zero,
+                  before: activities
+                      ? () => tester.tap(find.byKey(
+                          const ValueKey('niko-audit-activities')))
+                      : null);
+            }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
+          }
+        }
+      }
+    }
   });
 
   // Connection manager cards with a terminal, camera, voice or tunnel panel,
@@ -525,7 +1304,8 @@ void main() {
             {bool running = false}) =>
         MaterialApp(
             debugShowCheckedModeBanner: false,
-            theme: nightlineTheme(brightness),
+            theme: nightlineTheme(brightness)
+                .copyWith(platform: TargetPlatform.macOS),
             home: Scaffold(body: NikoTestCmCard(panel, running: running)));
     for (final panel in NikoTestCmPanel.values) {
       for (final brightness in Brightness.values) {
@@ -578,34 +1358,39 @@ void main() {
 
   testWidgets('privacy arrival reminder in the session window', (tester) async {
     NikoLanguage.english = _cjk.isEmpty;
-    await _capture(
-        tester,
-        MaterialApp(
-            debugShowCheckedModeBanner: false,
-            theme: nightlineTheme(Brightness.dark),
-            home: Scaffold(
-                body: Stack(children: [
-              const Positioned.fill(child: _RemotePicture()),
-              // remote_page.dart places the reminder 96 px down on desktop,
-              // clear of a dock docked at the top edge.
-              Positioned(
-                  top: 96,
-                  left: 12,
-                  right: 12,
-                  child: Align(
-                      alignment: Alignment.topCenter,
-                      child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 480),
-                          child: NikoPrivacyArrivalView(
-                              allowed: false,
-                              auto: false,
-                              busy: false,
-                              onAuto: (_) {},
-                              onEnable: () {},
-                              onSkip: () {})))),
-            ]))),
-        'privacy-arrival-dark-${_cjk.isEmpty ? 'en' : 'zh'}-1000x560',
-        size: const Size(1000, 560));
+    // Dark: the remote has not allowed it; light: it can turn on now.
+    for (final b in Brightness.values) {
+      await _capture(
+          tester,
+          MaterialApp(
+              debugShowCheckedModeBanner: false,
+              // Desktop metrics, as in the session window.
+              theme: nightlineTheme(b)
+                  .copyWith(platform: TargetPlatform.macOS),
+              home: Scaffold(
+                  body: Stack(children: [
+                const Positioned.fill(child: _RemotePicture()),
+                // remote_page.dart places the reminder 96 px down on desktop,
+                // clear of a dock docked at the top edge.
+                Positioned(
+                    top: 96,
+                    left: 12,
+                    right: 12,
+                    child: Align(
+                        alignment: Alignment.topCenter,
+                        child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 480),
+                            child: NikoPrivacyArrivalView(
+                                allowed: b == Brightness.light,
+                                auto: b == Brightness.light,
+                                busy: false,
+                                onAuto: (_) {},
+                                onEnable: () {},
+                                onSkip: () {})))),
+              ]))),
+          'privacy-arrival-${b.name}-${_cjk.isEmpty ? 'en' : 'zh'}-1000x560',
+          size: const Size(1000, 560));
+    }
   }, skip: _out.isEmpty);
 
   testWidgets('home compact light, as in the real-app check', (tester) async {
@@ -614,6 +1399,691 @@ void main() {
         'home-light-${_cjk.isEmpty ? 'en' : 'zh'}-compact-800x600',
         size: const Size(800, 600));
   }, skip: _out.isEmpty);
+
+  // The card a session window shows until the first picture arrives.
+  for (final step in ['connecting', 'approval', 'video']) {
+    for (final english in [true, false]) {
+      final lang = english ? 'en' : 'zh';
+      testWidgets('session connecting $step $lang', (tester) async {
+        NikoLanguage.english = english;
+        final progress = NikoConnectionProgress()..begin();
+        if (step != 'connecting') progress.transportReady();
+        if (step == 'approval') {
+          progress.message('wait-remote-accept-nook', 'Prompt');
+        }
+        if (step == 'video') progress.authenticated(expectsFrame: true);
+        await _capture(
+            tester,
+            MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: nightlineTheme(Brightness.dark),
+                // The current step's bar sweeps forever; a still frame
+                // lets the capture settle.
+                builder: (context, child) => MediaQuery(
+                    data: MediaQuery.of(context)
+                        .copyWith(disableAnimations: true),
+                    child: child!),
+                home: Scaffold(
+                    backgroundColor: const Color(0xFF212121),
+                    body: Center(
+                        child: nikoConnectionProgressDialog(progress,
+                            onCancel: () {})))),
+            'session-connecting-$step-dark-$lang-900x620',
+            size: const Size(900, 620));
+      }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
+    }
+  }
+
+  // The control center over a session, as the dialog manager shows it.
+  for (final (device, size, platform) in const [
+    ('desktop', Size(1100, 760), TargetPlatform.macOS),
+    ('ipad', Size(1180, 820), TargetPlatform.iOS),
+    ('phone', Size(390, 844), TargetPlatform.iOS),
+  ]) {
+    for (final section in NikoQuickSection.values) {
+      for (final english in [true, false]) {
+        final lang = english ? 'en' : 'zh';
+        testWidgets('session control center $device ${section.name} $lang',
+            (tester) async {
+          NikoLanguage.english = english;
+          // Only a Windows or Linux desktop maps its keyboard to a Mac.
+          final desktop = device == 'desktop';
+          await _capture(
+              tester,
+              MaterialApp(
+                  debugShowCheckedModeBanner: false,
+                  // The theme is built before _capture overrides the
+                  // platform; give it the device's density here.
+                  theme: nightlineTheme(Brightness.dark)
+                      .copyWith(platform: platform),
+                  home: Scaffold(
+                      body: Stack(children: [
+                    const Positioned.fill(child: _RemotePicture()),
+                    const Positioned.fill(
+                        child: ColoredBox(color: Colors.black45)),
+                    Positioned.fill(
+                        child: NikoSessionSheet(
+                            onCancel: () {},
+                            child: NikoSessionQuickActionsPanel(
+                                peerPlatform: 'Mac OS',
+                                keyboardAllowed: true,
+                                canvasAllowed: true,
+                                viewStyle: 'adaptive',
+                                macShortcutMode: desktop
+                                    ? NikoMacShortcutMode.automatic
+                                    : null,
+                                onMacShortcutMode:
+                                    desktop ? (_) async {} : null,
+                                onShortcut: (_) async {},
+                                onViewStyle: (_) async {},
+                                onResetCanvas: desktop ? null : () {},
+                                remoteResolution: const NikoRemoteResolution(
+                                    current: NikoDisplayMode(2560, 1440),
+                                    original: NikoDisplayMode(2560, 1440),
+                                    capturedPixels: NikoDisplayMode(5120, 2880),
+                                    fit: NikoDisplayMode(1920, 1080)),
+                                autoFitResolution: false,
+                                onRemoteResolution: (_) async {},
+                                onAutoFitResolution: (_) async {},
+                                captureMode: NikoCaptureMode.fit,
+                                onCaptureMode: (_) async {},
+                                privacyScreen: NikoPrivacyScreenStatus.off,
+                                onPrivacyScreen: (_) async {},
+                                privacyPasswordExit: true,
+                                privacyStyle: NikoPrivacyStyleEditor(
+                                    initial:
+                                        const NikoPrivacyStyle(motion: false),
+                                    allowed: true,
+                                    active: false,
+                                    onApply: (_) async {}),
+                                initialSection: section,
+                                onClose: () {}))),
+                  ]))),
+              'session-control-$device-${section.name}-dark-$lang-'
+              '${size.width.toInt()}x${size.height.toInt()}',
+              size: size,
+              platform: platform);
+        }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
+      }
+    }
+  }
+
+  for (final (device, size) in [
+    ('ipad', Size(1180, 820)),
+    ('phone', Size(390, 844)),
+  ]) {
+    for (final english in [true, false]) {
+      final lang = english ? 'en' : 'zh';
+      testWidgets('session display options $device $lang', (tester) async {
+        NikoLanguage.english = english;
+        List<TRadioMenu<String>> radios(List<String> values, String selected) =>
+            [
+              for (final value in values)
+                TRadioMenu<String>(
+                    child: Text(value),
+                    value: value,
+                    groupValue: selected,
+                    onChanged: (_) {}),
+            ];
+        List<TToggleMenu> toggles(Map<String, bool> values) => [
+              for (final MapEntry(key: label, :value) in values.entries)
+                TToggleMenu(
+                    child: Text(label), value: value, onChanged: (_) {}),
+            ];
+        await _capture(
+            tester,
+            MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: nightlineTheme(Brightness.dark)
+                    .copyWith(platform: TargetPlatform.iOS),
+                home: Scaffold(
+                    body: Stack(children: [
+                  const Positioned.fill(child: _RemotePicture()),
+                  const Positioned.fill(
+                      child: ColoredBox(color: Colors.black45)),
+                  Positioned.fill(
+                      child: NikoSessionSheet(
+                          onCancel: () {},
+                          child: NikoDisplayOptionsPanel(
+                              connection: english
+                                  ? 'Relayed and encrypted connection (TCP)'
+                                  : '中继加密连接 (TCP)',
+                              displays: 2,
+                              currentDisplay: 0,
+                              onDisplay: (_) {},
+                              viewStyles: radios(
+                                  ['original', 'adaptive', 'custom'], 'custom'),
+                              customScale: (_) => NikoScaleSlider(
+                                  percent: 125,
+                                  position: .36,
+                                  divisions: 995,
+                                  onChanged: (_) {},
+                                  onStep: (_) {}),
+                              qualities: radios(
+                                  ['best', 'balanced', 'low', 'custom'],
+                                  'balanced'),
+                              codecs: radios(
+                                  ['auto', 'vp8', 'vp9', 'av1', 'h264', 'h265'],
+                                  'auto'),
+                              codecInUse: 'H265',
+                              onPictureMode: () {},
+                              resolution: '2560×1440',
+                              onResolution: () {},
+                              onVirtualDisplay: () {},
+                              cursors: toggles(english
+                                  ? {'Show remote cursor': true}
+                                  : {'显示远程光标': true}),
+                              toggles: toggles(english
+                                  ? {
+                                      'Lock canvas': false,
+                                      'Show quality monitor': true,
+                                      'Mute': false,
+                                      'Disable clipboard': false,
+                                      'Lock after session end': false,
+                                    }
+                                  : {
+                                      '锁定画布': false,
+                                      '显示质量监测': true,
+                                      '静音': false,
+                                      '禁用剪贴板': false,
+                                      '会话结束后锁定远程电脑': false,
+                                    }),
+                              onDiagnostics: () {},
+                              onClose: () {}))),
+                ]))),
+            'session-display-$device-dark-$lang-'
+            '${size.width.toInt()}x${size.height.toInt()}',
+            size: size,
+            platform: TargetPlatform.iOS);
+      }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
+    }
+  }
+
+  // The key bar over a session: a Mac from the iPad, a PC from a phone.
+  for (final (device, size, platform, keys) in [
+    ('ipad', const Size(1180, 820), kPeerPlatformMacOS, false),
+    ('phone', const Size(390, 844), kPeerPlatformWindows, true),
+  ]) {
+    for (final english in [true, false]) {
+      final lang = english ? 'en' : 'zh';
+      testWidgets('session key bar $device $lang', (tester) async {
+        NikoLanguage.english = english;
+        await _capture(
+            tester,
+            MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: nightlineTheme(Brightness.light)
+                    .copyWith(platform: TargetPlatform.iOS),
+                home: Scaffold(
+                    body: Stack(children: [
+                  const Positioned.fill(child: _RemotePicture()),
+                  NikoKeyBarFrame(
+                      keyboardIsVisible: true,
+                      child: NikoKeyBar(
+                          peerPlatform: platform,
+                          down: {
+                            keys ? NikoModifier.control : NikoModifier.command
+                          },
+                          more: !keys,
+                          fn: keys,
+                          onModifier: (_) {},
+                          onKey: (_) {},
+                          onShortcut: (_) {},
+                          onMore: () {},
+                          onFn: () {},
+                          onPin: () {})),
+                ]))),
+            'session-keys-$device-$lang-'
+            '${size.width.toInt()}x${size.height.toInt()}',
+            size: size,
+            platform: TargetPlatform.iOS);
+      }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
+    }
+  }
+
+  // The chat and voice choice over a session: a sheet on a phone, a card
+  // on an iPad.
+  for (final (device, size, padding) in const [
+    ('phone', Size(390, 844), EdgeInsets.only(top: 47, bottom: 34)),
+    ('ipad', Size(1180, 820), EdgeInsets.only(top: 24, bottom: 20)),
+  ]) {
+  for (final english in [true, false]) {
+    final lang = english ? 'en' : 'zh';
+    testWidgets('session chat options $device $lang', (tester) async {
+      NikoLanguage.english = english;
+      await _capture(
+          tester,
+          MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: nightlineTheme(Brightness.light)
+                  .copyWith(platform: TargetPlatform.iOS),
+              home: Scaffold(
+                  body: Stack(children: [
+                const Positioned.fill(child: _RemotePicture()),
+                // The dock's chat button opens it; here an unseen one does,
+                // below the iOS status bar, which takes taps of its own.
+                Positioned(
+                    left: 0,
+                    top: 120,
+                    child: Opacity(
+                        opacity: 0,
+                        child: Builder(
+                            builder: (context) => TextButton(
+                                onPressed: () => showNikoMobileChatOptions(
+                                    context,
+                                    onTextChat: () {},
+                                    onVoiceCall: () {}),
+                                child: const Text('open'))))),
+              ]))),
+          'session-chat-$device-$lang-${size.width.toInt()}x${size.height.toInt()}',
+          size: size,
+          platform: TargetPlatform.iOS,
+          padding: padding, before: () async {
+        await tester.tap(find.text('open'));
+      });
+    }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
+  }
+  }
+
+  // The chat window over a session, with the round button that brings it
+  // back once tucked away.
+  for (final (device, size, padding) in const [
+    ('ipad', Size(1180, 820), EdgeInsets.only(top: 24, bottom: 20)),
+    ('phone', Size(390, 844), EdgeInsets.only(top: 47, bottom: 34)),
+  ]) {
+    for (final english in [true, false]) {
+      final lang = english ? 'en' : 'zh';
+      testWidgets('session chat window $device $lang', (tester) async {
+        NikoLanguage.english = english;
+        final today = DateTime.now();
+        DateTime at(int minute) =>
+            DateTime(today.year, today.month, today.day, 14, minute);
+        final me = ChatUser(id: '', firstName: 'Me');
+        final peer = ChatUser(id: '123456789', firstName: 'Mac mini');
+        String t(String zh, String en) => english ? en : zh;
+        final messages = [
+          ChatMessage(
+              user: peer,
+              text: t('好的，稍等。', 'Sure, one moment.'),
+              createdAt: at(5)),
+          ChatMessage(
+              user: me,
+              text: t('顺便把日志发我一份', 'Send me the log too'),
+              createdAt: at(3)),
+          ChatMessage(
+              user: me,
+              text: t('收到，我看一下。', 'Got it, taking a look.'),
+              createdAt: at(3)),
+          ChatMessage(
+              user: peer,
+              text: t('构建跑完了，结果在桌面上。',
+                  'The build finished; the results are on the desktop.'),
+              createdAt: at(2)),
+        ];
+        final text = TextEditingController();
+        addTearDown(text.dispose);
+        final window = nikoChatWindowSize(size);
+        final wide = size.width >= 600;
+        await _capture(
+            tester,
+            MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: nightlineTheme(Brightness.light)
+                    .copyWith(platform: TargetPlatform.iOS),
+                home: Scaffold(
+                    body: Stack(children: [
+                  const Positioned.fill(child: _RemotePicture()),
+                  Positioned(
+                      left: wide ? null : (size.width - window.width) / 2,
+                      right: wide ? 24 : null,
+                      top: wide ? 80 : 120,
+                      width: window.width,
+                      height: window.height,
+                      child: Builder(
+                          builder: (context) => Theme(
+                              data: nikoSessionTheme(context),
+                              child: NikoChatWindowFrame(
+                                  onPanUpdate: (_) {},
+                                  onMinimize: () {},
+                                  onClose: () {},
+                                  child: NikoChatView(
+                                      me: me,
+                                      messages: messages,
+                                      onSend: (_) {},
+                                      textController: text))))),
+                  Positioned(
+                      right: 16,
+                      bottom: 120,
+                      width: 60,
+                      height: 60,
+                      child: NikoChatBubbleButton(onPressed: () {})),
+                ]))),
+            'session-chat-window-$device-$lang-'
+            '${size.width.toInt()}x${size.height.toInt()}',
+            size: size,
+            platform: TargetPlatform.iOS,
+            padding: padding);
+      }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
+    }
+  }
+
+  // The voice call panel over a session, before anything is prepared.
+  for (final (device, size, platform, padding) in const [
+    ('desktop', Size(1100, 760), TargetPlatform.macOS, EdgeInsets.zero),
+    ('ipad', Size(1180, 820), TargetPlatform.iOS,
+        EdgeInsets.only(top: 24, bottom: 20)),
+    ('phone', Size(390, 844), TargetPlatform.iOS,
+        EdgeInsets.only(top: 47, bottom: 34)),
+  ]) {
+    for (final english in [true, false]) {
+      final lang = english ? 'en' : 'zh';
+      testWidgets('session voice $device $lang', (tester) async {
+        NikoLanguage.english = english;
+        // Fixtures only: no native voice call is made.
+        final owner = NikoVoiceSessionOwner(
+            contextKey: 'session-A',
+            namespace: 'a' * 64,
+            peerId: '123456789',
+            isCurrent: () => true,
+            readAvailability: () async => voiceEnabled,
+            prepareNative: () async => '{"ok":true,"status":"queued"}',
+            commandNative: (c) async => voiceQueued(c));
+        addTearDown(owner.dispose);
+        await _capture(
+            tester,
+            MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: nightlineTheme(Brightness.light)
+                    .copyWith(platform: platform),
+                home: Scaffold(
+                    body: Stack(children: [
+                  const Positioned.fill(child: _RemotePicture()),
+                  Positioned(
+                      left: 0,
+                      top: 120,
+                      child: Opacity(
+                          opacity: 0,
+                          child: Builder(
+                              builder: (context) => TextButton(
+                                  onPressed: () =>
+                                      showNikoVoiceSession(context, owner),
+                                  child: const Text('open'))))),
+                ]))),
+            'session-voice-$device-$lang-'
+            '${size.width.toInt()}x${size.height.toInt()}',
+            size: size,
+            platform: platform,
+            padding: padding, before: () async {
+          await tester.tap(find.text('open'));
+        });
+      }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
+    }
+  }
+
+  // The picture modes and the diagnostics over a session.
+  for (final (device, size, platform) in const [
+    ('desktop', Size(1100, 760), TargetPlatform.macOS),
+    ('ipad', Size(1180, 820), TargetPlatform.iOS),
+    ('phone', Size(390, 844), TargetPlatform.iOS),
+  ]) {
+    for (final english in [true, false]) {
+      final lang = english ? 'en' : 'zh';
+      for (final tool in ['picture', 'diagnostics']) {
+        testWidgets('session $tool $device $lang', (tester) async {
+          NikoLanguage.english = english;
+          final metrics = SessionMetrics()
+            ..connection(secure: true, direct: false, transport: 'TCP')
+            ..relayTarget = 'relay.example.net:21117'
+            ..proxyInUse = false
+            ..update({
+              'fps': '{"0":59}',
+              'delay': '24',
+              'speed': '845.2kB/s',
+              'target_bitrate': '7200',
+              'codec_format': 'h265',
+              'chroma': '4:2:0',
+            })
+            ..hostVideo(jsonEncode({
+              'display': 0,
+              'width': 2560,
+              'height': 1440,
+              'encoder': 'H265',
+              'hardware': true,
+              'fps': 59.6,
+              'captureMs': 4.12,
+              'convertMs': 1.2,
+              'encodeMs': 3.4,
+            }));
+          await _capture(
+              tester,
+              MaterialApp(
+                  debugShowCheckedModeBanner: false,
+                  theme: nightlineTheme(Brightness.dark)
+                      .copyWith(platform: platform),
+                  home: Scaffold(
+                      body: Stack(children: [
+                    const Positioned.fill(child: _RemotePicture()),
+                    const Positioned.fill(
+                        child: ColoredBox(color: Colors.black45)),
+                    Positioned.fill(
+                        child: NikoSessionSheet(
+                            width: tool == 'picture' ? 590 : 690,
+                            onCancel: () {},
+                            child: tool == 'picture'
+                                ? NikoPictureModePanel(
+                                    loading: false,
+                                    mode: PictureMode.custom,
+                                    onMode: (_) {},
+                                    smoothFps: 120,
+                                    quality: 50,
+                                    onQuality: (_) {},
+                                    fps: 60,
+                                    onFps: (_) {},
+                                    supportsFps: true,
+                                    currentQuality: 'custom',
+                                    currentFps: '60',
+                                    message: english
+                                        ? 'Request sent and saved for this device. See diagnostics for observed results; the peer may adapt to its capabilities and load.'
+                                        : '请求已发送并按设备保存。请在诊断中查看实际结果；对端可能继续按能力和负载调整。',
+                                    onApply: () {},
+                                    onClose: () {})
+                                : NikoDiagnosticsPanel(
+                                    metrics: metrics,
+                                    sampling: true,
+                                    onSampling: (_) {},
+                                    onReloadSampling: () {},
+                                    resolutions: const [(2560, 1440)],
+                                    scale: 1,
+                                    onExport: () {},
+                                    onClose: () {}))),
+                  ]))),
+              'session-$tool-$device-dark-$lang-'
+              '${size.width.toInt()}x${size.height.toInt()}',
+              size: size,
+              platform: platform);
+        }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
+      }
+    }
+  }
+
+  for (final (device, size) in [
+    ('ipad', Size(1180, 820)),
+    ('phone', Size(390, 844)),
+  ]) {
+    for (final english in [true, false]) {
+      final lang = english ? 'en' : 'zh';
+      testWidgets('session more actions $device $lang', (tester) async {
+        NikoLanguage.english = english;
+        String translated(String key) => english
+            ? key
+            : const {
+                  'OS Password': '操作系统密码',
+                  'Send clipboard keystrokes': '发送剪贴板按键',
+                  'Reset canvas': '重置画布',
+                  'Note': '备注',
+                  'Insert Ctrl + Alt + Del': '插入 Ctrl + Alt + Del',
+                  'Restart remote device': '重启远程电脑',
+                  'Insert Lock': '锁定远程电脑',
+                  'Refresh': '刷新画面',
+                  'Start session recording': '开始录屏',
+                  'Copy Fingerprint': '复制指纹',
+                  'Back': '回退',
+                  'Home': '主页',
+                  'Apps': '应用',
+                  'Volume up': '提升音量',
+                  'Volume down': '降低音量',
+                  'Power': '电源',
+                }[key] ??
+                key;
+        List<TTextMenu> menus(List<String> keys) => [
+              for (final key in keys)
+                TTextMenu(child: Text(translated(key)), onPressed: () {}),
+            ];
+        // The iPad controls a Mac; the phone an Android phone.
+        final android = device == 'phone';
+        final entries = nikoMoreActionEntries(
+            phone: android
+                ? menus([
+                    'Back',
+                    'Home',
+                    'Apps',
+                    'Volume up',
+                    'Volume down',
+                    'Power'
+                  ])
+                : const [],
+            controls: menus([
+              if (!android) ...[
+                'OS Password',
+                'Send clipboard keystrokes',
+              ],
+              'Reset canvas',
+              'Note',
+              if (!android) ...[
+                'Insert Ctrl + Alt + Del',
+                'Restart remote device',
+                'Insert Lock',
+              ],
+              'Refresh',
+              'Start session recording',
+              'Copy Fingerprint',
+            ]),
+            translate: translated,
+            onEditOsPassword: () {})!;
+        final ink = NikoMobileControlBar.ink;
+        Widget button(IconData icon, String tooltip) => IconButton(
+            color: ink, tooltip: tooltip, icon: Icon(icon), onPressed: () {});
+        final more = nikoText('更多操作', 'More actions');
+        await _capture(
+            tester,
+            MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: nightlineTheme(Brightness.dark)
+                    .copyWith(platform: TargetPlatform.iOS),
+                home: Scaffold(
+                    backgroundColor: Colors.black,
+                    body: Column(children: [
+                      const Expanded(child: _RemotePicture()),
+                      // The session page's bar: 8 pt at the sides, 12
+                      // above and below, then the home indicator's inset.
+                      Padding(
+                          padding: const EdgeInsets.fromLTRB(8, 12, 8, 46),
+                          child: NikoMobileControlBar(
+                              actions: Row(children: [
+                                button(NlIcons.zap, 'Control center'),
+                                button(NlIcons.monitor, 'Display'),
+                                button(NlIcons.keyboard, 'Keyboard'),
+                                button(NlIcons.mouse, 'Mouse'),
+                                button(NlIcons.messageSquare, 'Chat'),
+                              ]),
+                              more: Builder(
+                                  builder: (anchor) => IconButton(
+                                      color: ink,
+                                      tooltip: more,
+                                      icon: const Icon(NlIcons.ellipsis),
+                                      onPressed: () =>
+                                          showNikoDockMenu(anchor, entries))),
+                              collapse: button(NlIcons.chevronDown, 'Hide'),
+                              endSession: IconButton(
+                                  tooltip: 'End',
+                                  icon: Icon(NlIcons.power,
+                                      color: NlColors.dark.dangerText),
+                                  onPressed: () {}))),
+                    ]))),
+            'session-more-$device-dark-$lang-'
+            '${size.width.toInt()}x${size.height.toInt()}',
+            size: size,
+            platform: TargetPlatform.iOS,
+            before: () => tester.tap(find.byTooltip(more)));
+      }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
+    }
+  }
+
+  for (final (device, size, touch) in [
+    ('ipad', Size(1180, 820), false),
+    ('phone', Size(390, 844), true),
+  ]) {
+    for (final english in [true, false]) {
+      final lang = english ? 'en' : 'zh';
+      testWidgets('session gestures $device $lang', (tester) async {
+        NikoLanguage.english = english;
+        await _capture(
+            tester,
+            MaterialApp(
+                debugShowCheckedModeBanner: false,
+                // A light app theme: session chrome stays dark.
+                theme: nightlineTheme(Brightness.light)
+                    .copyWith(platform: TargetPlatform.iOS),
+                home: Scaffold(
+                    backgroundColor: Colors.black,
+                    body: Column(children: [
+                      const Expanded(child: _RemotePicture()),
+                      Padding(
+                          padding: const EdgeInsets.only(bottom: 34),
+                          child: NikoGestureCard(
+                              child: NikoGesturePanel(
+                                  touchMode: touch,
+                                  onTouchMode: (_) {},
+                                  virtualMouse: true,
+                                  onVirtualMouse: (_) {},
+                                  mouseScale: 1.2,
+                                  onMouseScale: (_) {},
+                                  joystick: true,
+                                  onJoystick: (_) {},
+                                  relative: false,
+                                  onRelative: (_) {}))),
+                    ]))),
+            'session-gestures-$device-${touch ? 'touch' : 'mouse'}-$lang-'
+            '${size.width.toInt()}x${size.height.toInt()}',
+            size: size,
+            platform: TargetPlatform.iOS);
+      }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
+
+      testWidgets('session guide $device $lang', (tester) async {
+        NikoLanguage.english = english;
+        await _capture(
+            tester,
+            MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: nightlineTheme(Brightness.light)
+                    .copyWith(platform: TargetPlatform.iOS),
+                home: Scaffold(
+                    backgroundColor: Colors.black,
+                    body: Stack(children: [
+                      const Positioned.fill(child: _RemotePicture()),
+                      const Positioned.fill(
+                          child: ColoredBox(color: Colors.black45)),
+                      Positioned.fill(
+                          child: NikoMobileSessionGuide(touchMode: touch)),
+                    ]))),
+            'session-guide-$device-$lang-'
+            '${size.width.toInt()}x${size.height.toInt()}',
+            size: size,
+            platform: TargetPlatform.iOS,
+            padding: const EdgeInsets.only(bottom: 34));
+      }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
+    }
+  }
 
   testWidgets('session dock and telemetry', (tester) async {
     NikoLanguage.english = _cjk.isEmpty;
@@ -674,216 +2144,37 @@ void main() {
         'session-dark-${_cjk.isEmpty ? 'en' : 'zh'}-1440x900');
   }, skip: _out.isEmpty);
 
-  for (final brightness in Brightness.values) {
-    testWidgets('components ${brightness.name}', (tester) async {
-      NikoLanguage.english = true;
-      await _capture(
-          tester,
-          MaterialApp(
-              debugShowCheckedModeBanner: false,
-              theme: nightlineTheme(brightness),
-              builder: (context, child) => MediaQuery(
-                  data: MediaQuery.of(context).copyWith(disableAnimations: true),
-                  child: child!),
-              home: const Scaffold(body: _ComponentSheet())),
-          'components-${brightness.name}',
-          size: const Size(1200, 900));
-    }, skip: _out.isEmpty);
-  }
-}
-
-class _ComponentSheet extends StatefulWidget {
-  const _ComponentSheet();
-  @override
-  State<_ComponentSheet> createState() => _ComponentSheetState();
-}
-
-class _ComponentSheetState extends State<_ComponentSheet> {
-  String _filter = 'online';
-  final _chips = {'Screen': true, 'Input': true, 'Files': false, 'Audio': true};
-
-  @override
-  Widget build(BuildContext context) {
-    final nl = NlColors.of(context);
-    Widget section(String label, Widget child) => Padding(
-        padding: const EdgeInsets.only(bottom: NlSpace.s6),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          NlMonoLabel(label),
-          const SizedBox(height: NlSpace.s3),
-          child,
-        ]));
-    final swatches = {
-      'page': nl.page, 'bg': nl.bg, 'bg-2': nl.bg2, 'surface': nl.surface,
-      'surface-2': nl.surface2, 'overlay': nl.overlay, 'line': nl.line,
-      'line-2': nl.line2, 'fg': nl.fg, 'fg-2': nl.fg2, 'fg-3': nl.fg3,
-      'accent': nl.accent, 'accent-text': nl.accentText, 'accent-2': nl.accent2,
-      'ok': nl.ok, 'warn': nl.warn, 'danger': nl.danger,
-    };
-    return ColoredBox(
-        color: nl.bg,
-        child: Padding(
-            padding: const EdgeInsets.all(NlSpace.s8),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Expanded(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    Row(children: [
-                      const NlMark(),
-                      const SizedBox(width: NlSpace.s3),
-                      Text('Nightline · ${nl.isDark ? 'dark' : 'light'}',
-                          style: NlType.text(NlType.s6,
-                              weight: FontWeight.w600, color: nl.fg)),
-                    ]),
-                    const SizedBox(height: NlSpace.s6),
-                    section(
-                        'Buttons',
-                        Wrap(spacing: NlSpace.s2, runSpacing: NlSpace.s2, children: [
-                          NlButton(
-                              onPressed: () {},
-                              icon: Icons.bolt_rounded,
-                              label: 'Connect',
-                              shortcut: '⏎'),
-                          NlButton.ghost(
-                              onPressed: () {}, label: 'Cancel', shortcut: 'esc'),
-                          NlButton.danger(onPressed: () {}, label: 'Disconnect'),
-                          const NlButton(onPressed: null, label: 'Disabled'),
-                          NlButton.ghost(
-                              small: true,
-                              onPressed: () {},
-                              icon: Icons.key_rounded,
-                              label: 'Small ghost'),
-                          NlIconButton(
-                              icon: Icons.copy_rounded,
-                              tooltip: 'Copy',
-                              onPressed: () {}),
-                          NlIconButton(
-                              icon: Icons.visibility_rounded,
-                              tooltip: 'Show',
-                              active: true,
-                              onPressed: () {}),
-                        ])),
-                    section(
-                        'Segmented control',
-                        NlSegmented<String>(
-                            segments: const [
-                              NlSegment(value: 'all', label: 'All', count: '8'),
-                              NlSegment(value: 'online', label: 'Online', count: '5'),
-                              NlSegment(value: 'fav', label: 'Starred', count: '3'),
-                              NlSegment(value: 'recent', label: 'Recent', count: '6'),
-                            ],
-                            selected: _filter,
-                            onChanged: (value) => setState(() => _filter = value))),
-                    section(
-                        'Chips',
-                        Wrap(spacing: NlSpace.s2, runSpacing: NlSpace.s2, children: [
-                          for (final entry in _chips.entries)
-                            NlChip(
-                                label: entry.key,
-                                icon: Icons.check_rounded,
-                                selected: entry.value,
-                                strikeWhenOff: true,
-                                onChanged: (value) =>
-                                    setState(() => _chips[entry.key] = value)),
-                        ])),
-                    section(
-                        'Panel, list rows, LED, kbd',
-                        SizedBox(
-                            width: 420,
-                            child: NlPanel(
-                                child: Column(children: [
-                              const NlListRow(
-                                  divider: false,
-                                  leading: NlLed(NlLedState.ok),
-                                  title: 'Private server',
-                                  subtitle: 'desk.example.net',
-                                  trailing: NlMonoLabel('18 ms')),
-                              NlListRow(
-                                  leading: const NlLed(NlLedState.warn),
-                                  title: 'Accessibility',
-                                  subtitle: 'Required for remote input',
-                                  trailing: NlButton.ghost(
-                                      small: true, onPressed: () {}, label: 'Grant')),
-                              const NlListRow(
-                                  leading: NlLed(NlLedState.off),
-                                  title: 'Command palette',
-                                  trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                                    NlKbd('⌘'),
-                                    SizedBox(width: NlSpace.s1),
-                                    NlKbd('K'),
-                                  ])),
-                            ])))),
-                    section(
-                        'Mono labels',
-                        const Wrap(spacing: NlSpace.s4, children: [
-                          NlMonoLabel('Neutral'),
-                          NlMonoLabel('Accent', tone: NlTone.accent),
-                          NlMonoLabel('Ok', tone: NlTone.ok, leading: NlLed(NlLedState.live)),
-                          NlMonoLabel('Warn', tone: NlTone.warn),
-                          NlMonoLabel('Danger', tone: NlTone.danger),
-                        ])),
-                  ])),
-              const SizedBox(width: NlSpace.s8),
-              SizedBox(
-                  width: 420,
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    section(
-                        'Type · Inter / JetBrains Mono',
-                        Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              for (final size in NlType.scale.reversed)
-                                Text('${size.toInt()} · Remote desktop 远程桌面',
-                                    style: NlType.text(size,
-                                        weight: size >= NlType.s5
-                                            ? FontWeight.w600
-                                            : FontWeight.w400,
-                                        color: nl.fg)),
-                              const SizedBox(height: NlSpace.s2),
-                              Text('590 216 734 · 59 FPS · 24 MS',
-                                  style: NlType.monoText(NlType.s5,
-                                      weight: FontWeight.w500, color: nl.fg)),
-                            ])),
-                    section(
-                        'Elevation 1 · 2 · 3',
-                        Row(children: [
-                          for (final level in [1, 2, 3]) ...[
-                            Expanded(
-                                child: NlPanel(
-                                    elevation: level,
-                                    child: SizedBox(
-                                        height: 48,
-                                        child: Center(
-                                            child: NlMonoLabel('Level $level'))))),
-                            if (level < 3) const SizedBox(width: NlSpace.s4),
-                          ]
-                        ])),
-                    section(
-                        'Colour tokens',
-                        Wrap(spacing: NlSpace.s2, runSpacing: NlSpace.s2, children: [
-                          for (final entry in swatches.entries)
-                            SizedBox(
-                                width: 96,
-                                child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Container(
-                                          height: 28,
-                                          decoration: BoxDecoration(
-                                              color: entry.value,
-                                              borderRadius: BorderRadius.circular(
-                                                  NlRadius.r1),
-                                              border: Border.all(color: nl.line))),
-                                      const SizedBox(height: NlSpace.s1),
-                                      Text(entry.key,
-                                          style: NlType.monoText(NlType.s1,
-                                              color: nl.fg2)),
-                                    ])),
-                        ])),
-                  ])),
-            ])));
+  for (final preset in NlPreset.values) {
+    for (final brightness in Brightness.values) {
+      final name = 'components-${preset.name}-${brightness.name}';
+      Widget sheet() => MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: nightlineTheme(brightness, preset: preset)
+              .copyWith(platform: TargetPlatform.macOS),
+          builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: true),
+              child: child!),
+          home: const Scaffold(body: NikoComponentSheet()));
+      testWidgets(name, (tester) async {
+        NikoLanguage.english = true;
+        await _capture(tester, sheet(), name,
+            size: const Size(1600, 1120), before: () async {
+          NlToast.show(tester.element(find.byType(NikoComponentSheet)),
+              'Device ID copied',
+              tone: NlToastTone.ok, duration: const Duration(minutes: 1));
+        });
+        NlToast.dismiss();
+      }, skip: _out.isEmpty);
+      if (preset == NlPreset.orbit) {
+        testWidgets('$name-menu', (tester) async {
+          NikoLanguage.english = true;
+          await _capture(tester, sheet(), '$name-menu',
+              size: const Size(1600, 1120),
+              before: () =>
+                  tester.tap(find.byKey(NikoComponentSheet.menuKey)));
+        }, skip: _out.isEmpty);
+      }
+    }
   }
 }
 

@@ -22,6 +22,7 @@ class TerminalMouseInteraction extends StatefulWidget {
     this.focusNode,
     this.autofocus = false,
     this.textStyle = const TerminalStyle(),
+    this.theme = TerminalThemes.defaultTheme,
     this.deleteDetection = false,
     this.reportTouchInput = false,
     this.shortcuts,
@@ -36,6 +37,7 @@ class TerminalMouseInteraction extends StatefulWidget {
   final FocusNode? focusNode;
   final bool autofocus;
   final TerminalStyle textStyle;
+  final TerminalTheme theme;
   final bool deleteDetection;
   final bool reportTouchInput;
   final Map<ShortcutActivator, Intent>? shortcuts;
@@ -282,6 +284,7 @@ class _TerminalMouseInteractionState extends State<TerminalMouseInteraction> {
         focusNode: widget.focusNode,
         autofocus: widget.autofocus,
         textStyle: widget.textStyle,
+        theme: widget.theme,
         deleteDetection: widget.deleteDetection,
         backgroundOpacity: widget.backgroundOpacity,
         padding: widget.padding,

@@ -157,7 +157,7 @@ class _PanelState extends State<NikoTerminalCapabilityPanel> {
       Text(widget.status.scope),
       Text(_reasonLabel(widget.status.reason)),
       if (_message != null) Text(_message!),
-      Wrap(spacing: 8, runSpacing: nightline ? 8 : 0, children: [
+      NikoCmActions(runSpacing: 0, children: [
         if (phase == 'Pending') ...[
           FilledButton(
               onPressed: _busy ? null : () => _send(approve: true),
@@ -186,7 +186,7 @@ class _PanelState extends State<NikoTerminalCapabilityPanel> {
     if (nightline) {
       return NikoCmCapabilityFrame(
           label: nikoText('本机终端授权', 'Local terminal approval'),
-          icon: Icons.terminal_rounded,
+          icon: NlIcons.squareTerminal,
           tone: nikoCmPhaseTone(phase),
           title: title,
           children: children);

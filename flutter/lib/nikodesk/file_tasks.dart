@@ -296,23 +296,21 @@ class NikoFileTaskCard extends StatelessWidget {
     final cancelling = cancellation != NikoCancelState.none ||
         (job.state == JobState.done && job.err == 'cancel');
     final (IconData glyph, Color ink, Color wash) = failed
-        ? (Icons.error_outline_rounded, nl.dangerText, nl.dangerSoft)
+        ? (NlIcons.circleAlert, nl.dangerText, nl.dangerSoft)
         : cancelling || job.state == JobState.paused
-            ? (Icons.pause_rounded, nl.warnText, nl.warnSoft)
+            ? (NlIcons.pause, nl.warnText, nl.warnSoft)
             : !transfer || job.err == 'skipped'
                 ? (
-                    transfer
-                        ? Icons.redo_rounded
-                        : Icons.delete_outline_rounded,
+                    transfer ? NlIcons.redo2 : NlIcons.trash2,
                     nl.fg2,
                     nl.surface2
                   )
                 : job.state == JobState.done && !active
-                    ? (Icons.check_rounded, nl.okText, nl.okSoft)
+                    ? (NlIcons.check, nl.okText, nl.okSoft)
                     : (
                         job.isRemoteToLocal
-                            ? Icons.south_rounded
-                            : Icons.north_rounded,
+                            ? NlIcons.arrowDown
+                            : NlIcons.arrowUp,
                         nl.accentText,
                         nl.accentSoft
                       );
@@ -327,7 +325,9 @@ class NikoFileTaskCard extends StatelessWidget {
     Widget path(String label, String value) => Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              NlMonoLabel(label),
+              Text(label,
+                  style: NlType.text(NlType.s1,
+                      weight: FontWeight.w500, color: nl.fg3)),
               Text(
                   value.replaceAllMapped(
                       RegExp(r'[\\/]'), (match) => '${match[0]}​'),
@@ -371,7 +371,7 @@ class NikoFileTaskCard extends StatelessWidget {
                 if (removable)
                   NlIconButton(
                       key: Key('niko-file-remove-${job.id}'),
-                      icon: Icons.close_rounded,
+                      icon: NlIcons.close,
                       tooltip: nikoText('移除记录', 'Remove record'),
                       onPressed: onRemove),
               ]),
@@ -454,7 +454,7 @@ class NikoFileTaskCard extends StatelessWidget {
                     NlButton(
                         key: Key('niko-file-resend-${job.id}'),
                         small: true,
-                        icon: Icons.refresh_rounded,
+                        icon: NlIcons.rotateCcw,
                         onPressed: onRetry,
                         label: nikoText('重新发送', 'Resend')),
                 ]),
@@ -516,14 +516,20 @@ class NikoFileTasks extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(
               NlSpace.s4, NlSpace.s4, NlSpace.s4, NlSpace.s3),
           child: Row(children: [
-            Expanded(child: NlMonoLabel(nikoText('传输任务', 'Transfers'))),
+            Expanded(
+                child: Semantics(
+                    header: true,
+                    child: Text(nikoText('传输任务', 'Transfers'),
+                        style: NlType.text(NlType.s3,
+                            weight: FontWeight.w600, color: nl.fg)))),
             if (jobs.isNotEmpty)
               Text(
                   running > 0
                       ? nikoText('$running 进行中 · 共 ${jobs.length}',
                           '$running active · ${jobs.length}')
                       : '${jobs.length}',
-                  style: NlType.monoText(NlType.s1, color: nl.fg3)),
+                  style: NlType.text(NlType.s2, color: nl.fg3).copyWith(
+                      fontFeatures: const [FontFeature.tabularFigures()])),
           ])),
       Expanded(
           child: jobs.isEmpty
@@ -531,7 +537,8 @@ class NikoFileTasks extends StatelessWidget {
                   child: SingleChildScrollView(
                       padding: const EdgeInsets.all(NlSpace.s6),
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(Icons.swap_vert_rounded, size: 28, color: nl.fg3),
+                        NlIconTile(
+                            icon: NlIcons.arrowUpDown, color: nl.fg2, size: 40),
                         const SizedBox(height: NlSpace.s3),
                         Text(nikoText('暂无传输任务', 'No transfers yet'),
                             textAlign: TextAlign.center,
@@ -539,8 +546,12 @@ class NikoFileTasks extends StatelessWidget {
                                 weight: FontWeight.w600, color: nl.fg)),
                         const SizedBox(height: NlSpace.s1),
                         Text(
-                            nikoText('在一侧选中文件后点“发送”或“接收”；也可以把文件拖到远端一侧发送。',
-                                'Select files on one side and choose Send or Receive, or drop files on the remote side to send them.'),
+                            // Phones and iPads have no drop from the system.
+                            NlLayout.touch(context)
+                                ? nikoText('长按文件开始选择，在另一侧打开目标文件夹后传输。',
+                                    'Long-press files to choose them, then open the destination folder on the other side and transfer.')
+                                : nikoText('在一侧选中文件后点“发送”或“接收”；也可以把文件拖到远端一侧发送。',
+                                    'Select files on one side and choose Send or Receive, or drop files on the remote side to send them.'),
                             textAlign: TextAlign.center,
                             style: NlType.text(NlType.s2, color: nl.fg2)),
                       ])))
@@ -695,23 +706,31 @@ class NikoAppFileAreaNotice extends StatelessWidget {
       required this.onDismiss,
       required this.showGuide});
 
+  static String get _guideTitle =>
+      nikoText('应用文件区说明', 'About the app file area');
+
+  static String get _guide => nikoText(
+      '这里显示本应用可访问的文件。通过右上角菜单从系统导入；下载到这里的文件可选中后另存到系统。系统选择器可能需要你选择位置或授予访问权限。',
+      'This area shows files accessible to this app. Import from system files using the top-right menu. Select downloaded files here to save them to system files. The system picker may ask you to choose a location or grant access.');
+
   @override
   Widget build(BuildContext context) => ConstrainedBox(
       constraints: BoxConstraints(
           maxHeight: math.min(240, MediaQuery.sizeOf(context).height * .28)),
       child: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
+          child: NlColors.maybeOf(context) != null
+              ? _NightlineFileAreaNotice(
+                  status: status, onDismiss: onDismiss, showGuide: showGuide)
+              : Column(mainAxisSize: MainAxisSize.min, children: [
         if (showGuide)
           ExpansionTile(
-            title: Text(nikoText('应用文件区说明', 'About the app file area')),
+            title: Text(_guideTitle),
             childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             children: [
               ConstrainedBox(
                   constraints: const BoxConstraints(maxHeight: 140),
                   child: SingleChildScrollView(
-                      child: Text(nikoText(
-                          '这里显示本应用可访问的文件。通过右上角菜单从系统导入；下载到这里的文件可选中后另存到系统。系统选择器可能需要你选择位置或授予访问权限。',
-                          'This area shows files accessible to this app. Import from system files using the top-right menu. Select downloaded files here to save them to system files. The system picker may ask you to choose a location or grant access.'))))
+                      child: Text(_guide)))
             ],
           ),
         if (status != null)
@@ -731,6 +750,94 @@ class NikoAppFileAreaNotice extends StatelessWidget {
       ])));
 }
 
+/// Nightline: the guide as a quiet disclosure line that opens in place, and
+/// the last import or export result as a note that can be dismissed.
+class _NightlineFileAreaNotice extends StatefulWidget {
+  final String? status;
+  final VoidCallback onDismiss;
+  final bool showGuide;
+  const _NightlineFileAreaNotice(
+      {required this.status, required this.onDismiss, required this.showGuide});
+
+  @override
+  State<_NightlineFileAreaNotice> createState() => _NoticeState();
+}
+
+class _NoticeState extends State<_NightlineFileAreaNotice> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final nl = NlColors.of(context);
+    final duration = NlMotion.of(context, NlMotion.base);
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      if (widget.showGuide) ...[
+        NlPressable(
+            onTap: () => setState(() => _open = !_open),
+            pressScale: 1,
+            builder: (context, states) => Container(
+                constraints:
+                    BoxConstraints(minHeight: NlLayout.target(context)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: NlSpace.s4),
+                color: states.contains(WidgetState.pressed) ||
+                        states.contains(WidgetState.hovered)
+                    ? nl.hover
+                    : Colors.transparent,
+                child: Row(children: [
+                  Icon(NlIcons.info, size: 16, color: nl.fg3),
+                  const SizedBox(width: NlSpace.s2),
+                  Expanded(
+                      child: Text(NikoAppFileAreaNotice._guideTitle,
+                          style: NlType.text(NlType.s3, color: nl.fg2))),
+                  AnimatedRotation(
+                      turns: _open ? .5 : 0,
+                      duration: duration,
+                      curve: NlMotion.standard,
+                      child: Icon(NlIcons.chevronDown,
+                          size: 16, color: nl.fg3)),
+                ]))),
+        AnimatedSize(
+            duration: duration,
+            curve: NlMotion.standard,
+            alignment: Alignment.topCenter,
+            child: _open
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(NlSpace.s4 + 16 + NlSpace.s2,
+                        0, NlSpace.s4, NlSpace.s3),
+                    child: Text(NikoAppFileAreaNotice._guide,
+                        style: NlType.text(NlType.s3, color: nl.fg2)
+                            .copyWith(height: 20 / 13)))
+                : const SizedBox(width: double.infinity)),
+      ],
+      if (widget.status != null)
+        Padding(
+            padding: const EdgeInsets.fromLTRB(
+                NlSpace.s3, NlSpace.s1, NlSpace.s3, NlSpace.s2),
+            child: Container(
+                padding: const EdgeInsets.fromLTRB(
+                    NlSpace.s3, NlSpace.s1, NlSpace.s1, NlSpace.s1),
+                decoration: BoxDecoration(
+                    color: nl.surface2,
+                    borderRadius: BorderRadius.circular(NlRadius.r2),
+                    border: Border.all(color: nl.line)),
+                child: Row(children: [
+                  Icon(NlIcons.info, size: 16, color: nl.fg2),
+                  const SizedBox(width: NlSpace.s2),
+                  Expanded(
+                      child: Semantics(
+                          liveRegion: true,
+                          child: Text(widget.status!,
+                              style: NlType.text(NlType.s3, color: nl.fg)))),
+                  NlIconButton(
+                      icon: NlIcons.close,
+                      tooltip: nikoText('关闭操作结果', 'Dismiss result'),
+                      onPressed: widget.onDismiss),
+                ]))),
+    ]);
+  }
+}
+
 class NikoFilePaneTools extends StatelessWidget {
   final Widget child;
   const NikoFilePaneTools({super.key, required this.child});
@@ -740,17 +847,59 @@ class NikoFilePaneTools extends StatelessWidget {
       LayoutBuilder(builder: (context, constraints) {
         final scale =
             math.max(1.0, MediaQuery.textScalerOf(context).scale(16) / 16);
+        final nl = NlColors.maybeOf(context);
         // Two rows of 38 px icon buttons plus the send button fit in 320.
         return SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: SizedBox(
                 width: math.max(constraints.maxWidth, 320 * scale),
-                child: child));
+                child: nl == null
+                    ? child
+                    : Theme(data: _pathTheme(Theme.of(context), nl),
+                        child: child)));
       });
+
+  /// The upstream path bar draws its folders as text buttons between
+  /// chevrons, and its path and search field as a bare text field: here
+  /// quiet folder names, small chevrons and no second field frame.
+  static ThemeData _pathTheme(ThemeData theme, NlColors nl) => theme.copyWith(
+      iconTheme: theme.iconTheme.copyWith(size: 16, color: nl.fg3),
+      // The field's text, at the size of the folder names it replaces.
+      textTheme: theme.textTheme
+          .copyWith(bodyLarge: NlType.text(NlType.s3, color: nl.fg)),
+      textButtonTheme: TextButtonThemeData(
+          style: ButtonStyle(
+              minimumSize: const WidgetStatePropertyAll(Size(0, 28)),
+              padding: const WidgetStatePropertyAll(
+                  EdgeInsets.symmetric(horizontal: 6)),
+              shape: const WidgetStatePropertyAll(RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.all(Radius.circular(NlRadius.r1)))),
+              textStyle: WidgetStatePropertyAll(
+                  NlType.text(NlType.s3, weight: FontWeight.w500)),
+              foregroundColor: WidgetStateProperty.resolveWith((states) =>
+                  states.contains(WidgetState.hovered) ? nl.fg : nl.fg2),
+              overlayColor: WidgetStatePropertyAll(nl.hover),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              splashFactory: NoSplash.splashFactory)),
+      inputDecorationTheme: InputDecorationTheme(
+          filled: false,
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          isDense: true,
+          hintStyle: NlType.text(NlType.s3, color: nl.fg3),
+          contentPadding:
+              const EdgeInsets.symmetric(vertical: NlSpace.s2)));
 }
 
-double nikoFileRowExtent(BuildContext context, double base) => math.max(48,
-    base * math.max(1, MediaQuery.textScalerOf(context).scale(16) / 16) + 8);
+/// A directory row's or the header's height. Touch keeps 48 px targets; a
+/// pointer gets compact rows. Both grow with the text.
+double nikoFileRowExtent(BuildContext context, double base) {
+  final grown =
+      base * math.max(1, MediaQuery.textScalerOf(context).scale(16) / 16);
+  return NlLayout.touch(context) ? math.max(48, grown + 8) : grown + 2;
+}
 
 /// Keeps the real sortable columns and file list readable on a narrow window.
 class NikoFileDirectoryTable extends StatelessWidget {
@@ -762,12 +911,21 @@ class NikoFileDirectoryTable extends StatelessWidget {
       LayoutBuilder(builder: (context, constraints) {
         final scale =
             math.max(1.0, MediaQuery.textScalerOf(context).scale(16) / 16);
+        final theme = Theme.of(context);
+        final nl = NlColors.maybeOf(context);
         // Name 190 + modified 160 + dividers leave about 64 for the size.
         return SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: SizedBox(
                 width: math.max(constraints.maxWidth, 420 * scale),
                 height: constraints.maxHeight,
-                child: child));
+                // The header's sort arrow is a bare icon.
+                child: nl == null
+                    ? child
+                    : Theme(
+                        data: theme.copyWith(
+                            iconTheme: theme.iconTheme
+                                .copyWith(size: 14, color: nl.fg3)),
+                        child: child)));
       });
 }

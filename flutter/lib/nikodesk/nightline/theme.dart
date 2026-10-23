@@ -1,28 +1,30 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 
 import 'tokens.dart';
 
-/// The single entry point for the Nightline design system. Material widgets
-/// hosted on a Nightline page pick the tokens up through this theme; Nightline
-/// components read [NlColors] from it.
-ThemeData nightlineTheme(Brightness brightness) {
-  final nl = NlColors.forBrightness(brightness);
+/// The single entry point for the NikoDesk design system. Material widgets
+/// hosted on a design-system page pick the tokens up through this theme;
+/// design-system components read [NlColors] from it. [preset] defaults to
+/// the one the window loaded ([NlColors.active]).
+ThemeData nightlineTheme(Brightness brightness, {NlPreset? preset}) {
+  final nl = NlColors.palette(preset ?? NlColors.active, brightness);
   final light = brightness == Brightness.light;
-  final accentFill = nl.solid(nl.accentSoft);
+  final softFill = nl.solid(nl.accentSoft, nl.bg);
   final scheme = ColorScheme(
     brightness: brightness,
-    primary: nl.accent,
+    primary: nl.accentFill,
     onPrimary: nl.onAccent,
-    primaryContainer: accentFill,
+    primaryContainer: softFill,
     onPrimaryContainer: nl.accentText,
     secondary: nl.accent2,
-    onSecondary: light ? Colors.white : nl.onAccent,
-    secondaryContainer: accentFill,
+    onSecondary: Colors.white,
+    secondaryContainer: softFill,
     onSecondaryContainer: nl.accentText,
     tertiary: nl.ok,
-    onTertiary: light ? Colors.white : nl.onAccent,
+    onTertiary: light ? Colors.white : Colors.black,
     error: nl.danger,
     onError: nl.onDanger,
     errorContainer: nl.solid(nl.dangerSoft),
@@ -65,27 +67,31 @@ ThemeData nightlineTheme(Brightness brightness) {
     bodyLarge: t(NlType.s4),
     bodyMedium: t(NlType.s3),
     bodySmall: t(NlType.s2, FontWeight.w400, nl.fg2),
-    labelLarge: t(NlType.s3, FontWeight.w600),
+    labelLarge: t(NlType.s3, FontWeight.w500),
     labelMedium: t(NlType.s2, FontWeight.w500),
     labelSmall: t(NlType.s1, FontWeight.w500),
   );
   final r1 = BorderRadius.circular(NlRadius.r1);
   final r2 = BorderRadius.circular(NlRadius.r2);
   final r3 = BorderRadius.circular(NlRadius.r3);
+  final r4 = BorderRadius.circular(NlRadius.r4);
   OutlineInputBorder field(Color color, [double width = 1]) =>
       OutlineInputBorder(
           borderRadius: r2, borderSide: BorderSide(color: color, width: width));
   WidgetStateProperty<Color?> overlay(Color hover) =>
       WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.pressed)) return nl.selected;
         if (states.contains(WidgetState.focused)) return nl.accentSoft;
-        if (states.contains(WidgetState.hovered) ||
-            states.contains(WidgetState.pressed)) {
-          return hover;
-        }
+        if (states.contains(WidgetState.hovered)) return hover;
         return null;
       });
   const control = Size(32, 32);
-  final buttonText = t(NlType.s3, FontWeight.w600);
+  final buttonText = t(NlType.s3, FontWeight.w500);
+  // Menus and dialogs: a hairline in dark mode, where the drop shadow is
+  // lost against the background; light mode relies on the shadow alone.
+  final floatingSide =
+      light ? BorderSide.none : BorderSide(color: nl.line, width: 1);
+  final tooltipFill = light ? const Color(0xF21D1D1F) : const Color(0xF23A3A3D);
   return ThemeData(
     useMaterial3: true,
     brightness: brightness,
@@ -93,20 +99,28 @@ ThemeData nightlineTheme(Brightness brightness) {
     fontFamily: NlType.ui,
     fontFamilyFallback: NlType.uiFallback,
     textTheme: text,
-    primaryColor: nl.accent,
+    primaryColor: nl.accentFill,
     scaffoldBackgroundColor: nl.bg,
     canvasColor: nl.bg,
     cardColor: nl.surface,
     dividerColor: nl.line,
     disabledColor: nl.fg3,
     hintColor: nl.fg3,
-    hoverColor: nl.surface2.withOpacity(.7),
+    hoverColor: nl.hover,
     focusColor: nl.accentSoft,
-    highlightColor: nl.line.withOpacity(.5),
+    highlightColor: nl.selected,
     splashColor: Colors.transparent,
     splashFactory: NoSplash.splashFactory,
     materialTapTargetSize: MaterialTapTargetSize.padded,
     visualDensity: VisualDensity.standard,
+    pageTransitionsTheme: const PageTransitionsTheme(builders: {
+      // Native edge-swipe back on iPad and iPhone.
+      TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.android: NlPageTransitionsBuilder(),
+      TargetPlatform.macOS: NlPageTransitionsBuilder(),
+      TargetPlatform.windows: NlPageTransitionsBuilder(),
+      TargetPlatform.linux: NlPageTransitionsBuilder(),
+    }),
     // Upstream pages hosted in the shell (advanced settings, connection
     // manager) read these with non-null assertions.
     extensions: <ThemeExtension<dynamic>>[
@@ -119,8 +133,8 @@ ThemeData nightlineTheme(Brightness brightness) {
           highlight: nl.surface2,
           drag_indicator: nl.accent,
           shadow: Colors.black,
-          toastBg: NlColors.dark.bg,
-          toastText: NlColors.dark.fg),
+          toastBg: tooltipFill,
+          toastText: Colors.white),
       (light ? TabbarTheme.light : TabbarTheme.dark).copyWith(
           selectedTabIconColor: nl.accentText,
           unSelectedTabIconColor: nl.fg3,
@@ -135,12 +149,17 @@ ThemeData nightlineTheme(Brightness brightness) {
     dividerTheme: DividerThemeData(color: nl.line, thickness: 1, space: 1),
     // Upstream panes (file transfer, connection manager) tint their SVG
     // icons with the tab label colour; without it the icons draw black.
-    tabBarTheme: TabBarTheme(labelColor: nl.fg2, unselectedLabelColor: nl.fg3),
-    // Column headers read like the draft's table heads.
+    tabBarTheme: TabBarTheme(
+        labelColor: nl.fg2,
+        unselectedLabelColor: nl.fg3,
+        indicatorColor: nl.accent,
+        dividerColor: nl.line,
+        labelStyle: t(NlType.s3, FontWeight.w500),
+        unselectedLabelStyle: t(NlType.s3, FontWeight.w400),
+        overlayColor: overlay(nl.hover),
+        splashFactory: NoSplash.splashFactory),
     dataTableTheme: DataTableThemeData(
-        headingTextStyle: NlType.monoText(NlType.s1,
-                weight: FontWeight.w500, color: nl.fg3)
-            .copyWith(letterSpacing: NlType.s1 * NlType.labelTracking)),
+        headingTextStyle: t(NlType.s2, FontWeight.w500, nl.fg2)),
     iconTheme: IconThemeData(color: nl.fg2, size: 18),
     appBarTheme: AppBarTheme(
         backgroundColor: nl.bg,
@@ -148,12 +167,44 @@ ThemeData nightlineTheme(Brightness brightness) {
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
+        centerTitle: false,
         titleTextStyle: t(NlType.s5, FontWeight.w600),
-        iconTheme: IconThemeData(color: nl.fg2)),
+        iconTheme: IconThemeData(color: nl.fg2, size: 20)),
     drawerTheme: DrawerThemeData(
         backgroundColor: nl.bg2,
         surfaceTintColor: Colors.transparent,
+        scrimColor: nl.scrim,
         shape: const RoundedRectangleBorder()),
+    bottomSheetTheme: BottomSheetThemeData(
+        // A persistent sheet (the file page's selection bar) draws its own
+        // floating surface; modal sheets keep the overlay.
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        modalBackgroundColor: nl.overlay,
+        modalElevation: 1,
+        surfaceTintColor: Colors.transparent,
+        showDragHandle: true,
+        dragHandleColor: nl.line2,
+        dragHandleSize: const Size(36, 5),
+        modalBarrierColor: nl.scrim,
+        shape: const RoundedRectangleBorder(
+            borderRadius:
+                BorderRadius.vertical(top: Radius.circular(NlRadius.r4)))),
+    navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: nl.bg2,
+        surfaceTintColor: Colors.transparent,
+        indicatorColor: nl.accentSoft,
+        elevation: 0,
+        height: 64,
+        labelTextStyle: WidgetStateProperty.resolveWith((states) => t(
+            NlType.s1,
+            FontWeight.w500,
+            states.contains(WidgetState.selected) ? nl.accentText : nl.fg2)),
+        iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
+            size: 22,
+            color: states.contains(WidgetState.selected)
+                ? nl.accentText
+                : nl.fg2))),
     cardTheme: CardTheme(
         color: nl.surface,
         surfaceTintColor: Colors.transparent,
@@ -162,11 +213,12 @@ ThemeData nightlineTheme(Brightness brightness) {
             borderRadius: r3, side: BorderSide(color: nl.ring))),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: nl.surface,
-      border: field(nl.line),
-      enabledBorder: field(nl.line),
-      disabledBorder: field(nl.line.withOpacity(.5)),
-      focusedBorder: field(nl.accent),
+      fillColor: light ? nl.overlay : nl.surface,
+      hoverColor: Colors.transparent,
+      border: field(nl.line2),
+      enabledBorder: field(nl.line2),
+      disabledBorder: field(nl.line),
+      focusedBorder: field(nl.accent, 1.5),
       errorBorder: field(nl.danger),
       focusedErrorBorder: field(nl.danger, 1.5),
       hintStyle: t(NlType.s3, FontWeight.w400, nl.fg3),
@@ -176,13 +228,19 @@ ThemeData nightlineTheme(Brightness brightness) {
       errorStyle: t(NlType.s2, FontWeight.w400, nl.dangerText),
       prefixIconColor: nl.fg3,
       suffixIconColor: nl.fg3,
+      isDense: true,
       contentPadding: const EdgeInsets.symmetric(
           horizontal: NlSpace.s3, vertical: NlSpace.s3),
     ),
     textSelectionTheme: TextSelectionThemeData(
         cursorColor: nl.accent,
-        selectionColor: nl.accent.withOpacity(.28),
+        selectionColor: nl.accent.withOpacity(.26),
         selectionHandleColor: nl.accent),
+    cupertinoOverrideTheme: NoDefaultCupertinoThemeData(
+        brightness: brightness,
+        primaryColor: nl.accent,
+        scaffoldBackgroundColor: nl.bg,
+        barBackgroundColor: nl.bg2),
     filledButtonTheme: FilledButtonThemeData(
         style: ButtonStyle(
       minimumSize: const WidgetStatePropertyAll(control),
@@ -193,10 +251,11 @@ ThemeData nightlineTheme(Brightness brightness) {
       elevation: const WidgetStatePropertyAll(0),
       backgroundColor: WidgetStateProperty.resolveWith((states) =>
           states.contains(WidgetState.disabled)
-              ? nl.accent.withOpacity(.4)
-              : states.contains(WidgetState.hovered)
-                  ? Color.lerp(nl.accent, nl.fg, .08)
-                  : nl.accent),
+              ? nl.accentFill.withOpacity(.4)
+              : states.contains(WidgetState.hovered) ||
+                      states.contains(WidgetState.pressed)
+                  ? nl.accentHover
+                  : nl.accentFill),
       foregroundColor: WidgetStateProperty.resolveWith((states) =>
           states.contains(WidgetState.disabled)
               ? nl.onAccent.withOpacity(.6)
@@ -208,12 +267,13 @@ ThemeData nightlineTheme(Brightness brightness) {
     elevatedButtonTheme: ElevatedButtonThemeData(
         style: ButtonStyle(
       minimumSize: const WidgetStatePropertyAll(control),
-      shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: r2)),
+      shape: WidgetStatePropertyAll(RoundedRectangleBorder(
+          borderRadius: r2, side: BorderSide(color: nl.line2))),
       textStyle: WidgetStatePropertyAll(buttonText),
       elevation: const WidgetStatePropertyAll(0),
-      backgroundColor: WidgetStatePropertyAll(nl.surface2),
+      backgroundColor: WidgetStatePropertyAll(light ? nl.overlay : nl.surface2),
       foregroundColor: WidgetStatePropertyAll(nl.fg),
-      overlayColor: overlay(nl.line),
+      overlayColor: overlay(nl.hover),
       splashFactory: NoSplash.splashFactory,
     )),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -223,13 +283,12 @@ ThemeData nightlineTheme(Brightness brightness) {
           EdgeInsets.symmetric(horizontal: NlSpace.s4)),
       shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: r2)),
       side: WidgetStateProperty.resolveWith((states) => BorderSide(
-          color: states.contains(WidgetState.disabled)
-              ? nl.line
-              : nl.line2)),
+          color: states.contains(WidgetState.disabled) ? nl.line : nl.line2)),
+      backgroundColor: WidgetStatePropertyAll(light ? nl.overlay : null),
       textStyle: WidgetStatePropertyAll(buttonText),
       foregroundColor: WidgetStateProperty.resolveWith((states) =>
           states.contains(WidgetState.disabled) ? nl.fg3 : nl.fg),
-      overlayColor: overlay(nl.surface2),
+      overlayColor: overlay(nl.hover),
       tapTargetSize: MaterialTapTargetSize.padded,
       splashFactory: NoSplash.splashFactory,
     )),
@@ -253,20 +312,20 @@ ThemeData nightlineTheme(Brightness brightness) {
               : states.contains(WidgetState.hovered)
                   ? nl.fg
                   : nl.fg2),
-      overlayColor: overlay(nl.surface2),
+      overlayColor: overlay(nl.hover),
       tapTargetSize: MaterialTapTargetSize.padded,
       splashFactory: NoSplash.splashFactory,
     )),
     chipTheme: ChipThemeData(
       color: WidgetStateProperty.resolveWith((states) =>
-          states.contains(WidgetState.selected) ? accentFill : nl.surface),
+          states.contains(WidgetState.selected) ? softFill : nl.surface),
       side: WidgetStateBorderSide.resolveWith((states) => BorderSide(
           color: states.contains(WidgetState.selected)
               ? nl.accent.withOpacity(.45)
               : nl.line2)),
       labelStyle: t(NlType.s2, FontWeight.w500, nl.fg2),
       secondaryLabelStyle: t(NlType.s2, FontWeight.w500, nl.accentText),
-      shape: RoundedRectangleBorder(borderRadius: r1),
+      shape: RoundedRectangleBorder(borderRadius: r2),
       showCheckmark: false,
       checkmarkColor: nl.accentText,
       iconTheme: IconThemeData(color: nl.fg2, size: 14),
@@ -278,24 +337,32 @@ ThemeData nightlineTheme(Brightness brightness) {
       side: WidgetStatePropertyAll(BorderSide(color: nl.line)),
       textStyle: WidgetStatePropertyAll(t(NlType.s2, FontWeight.w500)),
       backgroundColor: WidgetStateProperty.resolveWith((states) =>
-          states.contains(WidgetState.selected) ? accentFill : nl.surface),
+          states.contains(WidgetState.selected)
+              ? (light ? nl.overlay : nl.surface2)
+              : nl.surface),
       foregroundColor: WidgetStateProperty.resolveWith((states) =>
           states.contains(WidgetState.disabled)
               ? nl.fg3
               : states.contains(WidgetState.selected)
-                  ? nl.accentText
+                  ? nl.fg
                   : nl.fg2),
       iconColor: WidgetStateProperty.resolveWith((states) =>
-          states.contains(WidgetState.selected) ? nl.accentText : nl.fg3),
-      overlayColor: overlay(nl.surface2),
+          states.contains(WidgetState.selected) ? nl.fg : nl.fg3),
+      overlayColor: overlay(nl.hover),
       splashFactory: NoSplash.splashFactory,
     )),
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith((states) =>
-          states.contains(WidgetState.selected) ? nl.onAccent : nl.fg2),
+          states.contains(WidgetState.disabled) ? nl.surface2 : Colors.white),
       trackColor: WidgetStateProperty.resolveWith((states) =>
-          states.contains(WidgetState.selected) ? nl.accent : nl.line2),
+          states.contains(WidgetState.selected)
+              ? (states.contains(WidgetState.disabled)
+                  ? nl.accent.withOpacity(.4)
+                  : nl.accent)
+              : nl.line2),
       trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
+      overlayColor: overlay(nl.hover),
+      thumbIcon: const WidgetStatePropertyAll(Icon(null)),
     ),
     checkboxTheme: CheckboxThemeData(
       fillColor: WidgetStateProperty.resolveWith((states) =>
@@ -303,30 +370,46 @@ ThemeData nightlineTheme(Brightness brightness) {
               ? nl.accent
               : Colors.transparent),
       checkColor: WidgetStatePropertyAll(nl.onAccent),
-      side: BorderSide(color: nl.fg3, width: 1.5),
+      side: BorderSide(color: nl.line2, width: 1.5),
       shape: RoundedRectangleBorder(borderRadius: r1),
+      overlayColor: overlay(nl.hover),
     ),
     radioTheme: RadioThemeData(
         fillColor: WidgetStateProperty.resolveWith((states) =>
-            states.contains(WidgetState.selected) ? nl.accent : nl.fg3)),
+            states.contains(WidgetState.selected) ? nl.accent : nl.line2),
+        overlayColor: overlay(nl.hover)),
     sliderTheme: SliderThemeData(
         activeTrackColor: nl.accent,
         inactiveTrackColor: nl.line2,
-        thumbColor: nl.accent,
+        thumbColor: Colors.white,
         overlayColor: nl.accentSoft,
-        trackHeight: 3,
-        valueIndicatorColor: nl.overlay,
-        valueIndicatorTextStyle: NlType.monoText(NlType.s2, color: nl.fg)),
+        trackHeight: 4,
+        trackShape: const _NlSliderTrack(),
+        valueIndicatorColor: tooltipFill,
+        valueIndicatorTextStyle:
+            NlType.monoText(NlType.s2, color: Colors.white)),
     progressIndicatorTheme: ProgressIndicatorThemeData(
         color: nl.accent,
         linearTrackColor: nl.line,
+        linearMinHeight: 3,
         circularTrackColor: Colors.transparent),
     scrollbarTheme: ScrollbarThemeData(
-        thumbColor: WidgetStatePropertyAll(nl.line2),
-        radius: const Radius.circular(NlRadius.pill)),
+        thickness: const WidgetStatePropertyAll(6),
+        thumbColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.hovered) ||
+                    states.contains(WidgetState.dragged)
+                ? nl.fg3.withOpacity(.55)
+                : nl.fg3.withOpacity(.32)),
+        radius: const Radius.circular(NlRadius.pill),
+        crossAxisMargin: 2,
+        mainAxisMargin: 2),
     listTileTheme: ListTileThemeData(
         iconColor: nl.fg2,
         textColor: nl.fg,
+        selectedColor: nl.fg,
+        selectedTileColor: nl.selected,
+        titleTextStyle: t(NlType.s3, FontWeight.w400),
+        subtitleTextStyle: t(NlType.s2, FontWeight.w400, nl.fg2),
         shape: RoundedRectangleBorder(borderRadius: r2)),
     expansionTileTheme: ExpansionTileThemeData(
         iconColor: nl.fg2,
@@ -338,59 +421,113 @@ ThemeData nightlineTheme(Brightness brightness) {
     dialogTheme: DialogTheme(
         backgroundColor: nl.overlay,
         surfaceTintColor: Colors.transparent,
-        elevation: 12,
-        shadowColor: Colors.black,
-        shape: RoundedRectangleBorder(
-            borderRadius: r3, side: BorderSide(color: nl.line)),
+        elevation: 24,
+        shadowColor: Colors.black.withOpacity(light ? .35 : .8),
+        insetPadding:
+            const EdgeInsets.symmetric(horizontal: NlSpace.s6, vertical: NlSpace.s6),
+        shape: RoundedRectangleBorder(borderRadius: r4, side: floatingSide),
         titleTextStyle: t(NlType.s5, FontWeight.w600),
         contentTextStyle: t(NlType.s3, FontWeight.w400, nl.fg2)),
     menuTheme: MenuThemeData(
         style: MenuStyle(
             backgroundColor: WidgetStatePropertyAll(nl.overlay),
             surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
-            elevation: const WidgetStatePropertyAll(8),
-            shadowColor: const WidgetStatePropertyAll(Colors.black),
-            shape: WidgetStatePropertyAll(RoundedRectangleBorder(
-                borderRadius: r3, side: BorderSide(color: nl.line))))),
+            elevation: const WidgetStatePropertyAll(10),
+            shadowColor:
+                WidgetStatePropertyAll(Colors.black.withOpacity(light ? .3 : .7)),
+            padding: const WidgetStatePropertyAll(EdgeInsets.all(NlSpace.s1)),
+            shape: WidgetStatePropertyAll(
+                RoundedRectangleBorder(borderRadius: r3, side: floatingSide)))),
     menuButtonTheme: MenuButtonThemeData(
         style: ButtonStyle(
       textStyle: WidgetStatePropertyAll(t(NlType.s3)),
+      minimumSize: const WidgetStatePropertyAll(Size(160, 30)),
       foregroundColor: WidgetStateProperty.resolveWith((states) =>
           states.contains(WidgetState.disabled) ? nl.fg3 : nl.fg),
       iconColor: WidgetStatePropertyAll(nl.fg2),
-      overlayColor: overlay(nl.surface2),
-      shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: r1)),
+      iconSize: const WidgetStatePropertyAll(16),
+      overlayColor: overlay(nl.hover),
+      shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: r2)),
       splashFactory: NoSplash.splashFactory,
     )),
     popupMenuTheme: PopupMenuThemeData(
         color: nl.overlay,
         surfaceTintColor: Colors.transparent,
-        elevation: 8,
-        shadowColor: Colors.black,
-        shape: RoundedRectangleBorder(
-            borderRadius: r3, side: BorderSide(color: nl.line)),
+        elevation: 10,
+        shadowColor: Colors.black.withOpacity(light ? .3 : .7),
+        menuPadding: const EdgeInsets.all(NlSpace.s1),
+        shape: RoundedRectangleBorder(borderRadius: r3, side: floatingSide),
         textStyle: t(NlType.s3),
         labelTextStyle: WidgetStateProperty.resolveWith((states) => t(
             NlType.s3,
             FontWeight.w400,
             states.contains(WidgetState.disabled) ? nl.fg3 : nl.fg))),
     tooltipTheme: TooltipThemeData(
-        decoration: BoxDecoration(
-            color: light ? nl.fg : Colors.black,
-            borderRadius: r1,
-            border: light ? null : Border.all(color: const Color(0x1AFFFFFF))),
-        textStyle:
-            t(NlType.s2, FontWeight.w400, light ? nl.bg : NlColors.dark.fg),
-        waitDuration: const Duration(milliseconds: 400)),
-    // Toasts stay dark in both modes, as in the draft.
+        decoration: BoxDecoration(color: tooltipFill, borderRadius: r2),
+        padding: const EdgeInsets.symmetric(
+            horizontal: NlSpace.s2, vertical: NlSpace.s1 + 1),
+        textStyle: t(NlType.s2, FontWeight.w500, Colors.white),
+        waitDuration: const Duration(milliseconds: 500),
+        exitDuration: const Duration(milliseconds: 80)),
+    // Toasts: a dark pill at the bottom in every preset and mode.
     snackBarTheme: SnackBarThemeData(
-        backgroundColor: NlColors.dark.bg,
-        contentTextStyle: t(NlType.s3, FontWeight.w400, NlColors.dark.fg),
-        actionTextColor: NlColors.dark.accentText,
+        backgroundColor: tooltipFill,
+        contentTextStyle: t(NlType.s3, FontWeight.w500, Colors.white),
+        actionTextColor: light ? const Color(0xFF6CB4FF) : nl.accentText,
         behavior: SnackBarBehavior.floating,
-        elevation: 8,
-        shape: RoundedRectangleBorder(
-            borderRadius: r2,
-            side: const BorderSide(color: Color(0x2E7FC8FF)))),
+        elevation: 0,
+        insetPadding: const EdgeInsets.fromLTRB(
+            NlSpace.s4, NlSpace.s4, NlSpace.s4, NlSpace.s6),
+        shape: RoundedRectangleBorder(borderRadius: r3)),
   );
+}
+
+/// Desktop and Android page transition: the incoming page fades in while
+/// rising 12 px, the outgoing one dims slightly.
+class NlPageTransitionsBuilder extends PageTransitionsBuilder {
+  const NlPageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+      PageRoute<T> route,
+      BuildContext context,
+      Animation<double> animation,
+      Animation<double> secondaryAnimation,
+      Widget child) {
+    if (NlMotion.reduced(context)) return child;
+    final enter = CurvedAnimation(
+        parent: animation, curve: NlMotion.ease, reverseCurve: NlMotion.exit);
+    final leave = CurvedAnimation(parent: secondaryAnimation, curve: NlMotion.standard);
+    return FadeTransition(
+        opacity: Tween<double>(begin: 1, end: .92).animate(leave),
+        child: FadeTransition(
+            opacity: enter,
+            child: SlideTransition(
+                position: Tween<Offset>(
+                        begin: const Offset(0, .015), end: Offset.zero)
+                    .animate(enter),
+                child: child)));
+  }
+}
+
+/// The track runs edge to edge: the thumb, not the hover halo, sets the
+/// inset, so a slider lines up with the fields and switches around it.
+class _NlSliderTrack extends RoundedRectSliderTrackShape {
+  const _NlSliderTrack();
+
+  @override
+  Rect getPreferredRect(
+      {required RenderBox parentBox,
+      Offset offset = Offset.zero,
+      required SliderThemeData sliderTheme,
+      bool isEnabled = false,
+      bool isDiscrete = false}) {
+    final thumb =
+        sliderTheme.thumbShape!.getPreferredSize(isEnabled, isDiscrete).width;
+    final height = sliderTheme.trackHeight!;
+    final width = parentBox.size.width - thumb;
+    return Rect.fromLTWH(offset.dx + thumb / 2,
+        offset.dy + (parentBox.size.height - height) / 2,
+        width < 0 ? 0 : width, height);
+  }
 }

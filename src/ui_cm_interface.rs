@@ -221,6 +221,7 @@ impl Client {
         self.niko_camera=Some(status.clone());
         true
     }
+    #[cfg(not(target_os = "ios"))]
     fn accepts_cleanup_dispatch(&self, data: &Data) -> bool {
         if self.niko_tunnel_cleanup {
             #[cfg(not(any(target_os="android",target_os="ios")))]

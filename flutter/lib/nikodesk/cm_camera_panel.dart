@@ -303,7 +303,8 @@ class _CameraPanelState extends State<NikoCameraCapabilityPanel> {
   Widget _button(String label, String op,
           {bool enabled = true, bool primary = false}) =>
       ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 48),
+          constraints:
+              BoxConstraints(minHeight: nikoCmButtonSize(context)?.height ?? 0),
           child: primary
               ? FilledButton(
                   onPressed: !_busy && enabled ? () => _send(op) : null,
@@ -331,6 +332,19 @@ class _CameraPanelState extends State<NikoCameraCapabilityPanel> {
         liveRegion: true,
         child: Text(label,
             style: nightline ? null : Theme.of(context).textTheme.titleSmall));
+    final chooseDevice = _busy
+        ? null
+        : (String? uid) => setState(() {
+              _uid = uid;
+              _token = null;
+              _fps.clear();
+            });
+    final chooseFormat = _busy
+        ? null
+        : (String? token) => setState(() {
+              _token = token;
+              _fps.clear();
+            });
     final children = <Widget>[
       Text(nikoText('仅本机普通用户；系统许可与此会话授权分别确认。',
           'Regular local user only. System permission and this session’s approval are separate.')),
@@ -345,7 +359,8 @@ class _CameraPanelState extends State<NikoCameraCapabilityPanel> {
         Text(nikoText('上次停止结果未确认，选择与启动已暂停。',
             'Previous shutdown is unconfirmed. Selection and startup are blocked.')),
       if (_message != null) Semantics(liveRegion: true, child: Text(_message!)),
-      if (widget.refreshStatus != null)
+      // The design system refreshes from the card's heading.
+      if (widget.refreshStatus != null && !nightline)
         ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 48),
             child: OutlinedButton(
@@ -356,7 +371,7 @@ class _CameraPanelState extends State<NikoCameraCapabilityPanel> {
         const SizedBox(height: 8),
         Text(nikoText('点击后才读取本机设备；不会自动请求系统权限或开启摄像头。',
             'Devices are read only after you click. System permission and capture are never started automatically.')),
-        Wrap(spacing: 8, runSpacing: 8, children: [
+        NikoCmActions(children: [
           _button(nikoText('读取本机摄像头', 'Read local cameras'), 'enumerate'),
           if (catalog != null && catalog.authorization != 'authorized')
             _button(
@@ -373,7 +388,18 @@ class _CameraPanelState extends State<NikoCameraCapabilityPanel> {
           if (catalog.devices.isEmpty)
             Text(nikoText('未读取到可选择的摄像头，请检查设备与系统许可后重试。',
                 'No selectable cameras were read. Check devices and system permission, then retry.')),
-          if (catalog.devices.isNotEmpty)
+          if (catalog.devices.isNotEmpty && nightline)
+            NlSelect<String>(
+                key: const ValueKey('niko-camera-device'),
+                label: nikoText('本机摄像头', 'Local camera'),
+                placeholder: nikoText('选择本机摄像头', 'Choose a local camera'),
+                value: _device?.uid,
+                options: [
+                  for (final d in catalog.devices)
+                    NlSelectOption(d.uid, _deviceName(d))
+                ],
+                onChanged: chooseDevice)
+          else if (catalog.devices.isNotEmpty)
             DropdownButtonFormField<String>(
                 key: const ValueKey('niko-camera-device'),
                 isExpanded: true,
@@ -386,40 +412,51 @@ class _CameraPanelState extends State<NikoCameraCapabilityPanel> {
                         child: Text(_deviceName(d),
                             maxLines: 2, overflow: TextOverflow.ellipsis)))
                     .toList(),
-                onChanged: _busy
-                    ? null
-                    : (uid) => setState(() {
-                          _uid = uid;
-                          _token = null;
-                          _fps.clear();
-                        })),
+                onChanged: chooseDevice),
           if (_device != null && _device!.formats.isEmpty)
             _button(
                 nikoText('读取所选设备格式', 'Read selected camera formats'), 'probe'),
           if (_device != null && _device!.formats.isNotEmpty) ...[
             const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-                key: const ValueKey('niko-camera-format'),
-                isExpanded: true,
-                value: _format?.token,
-                decoration:
-                    nikoInput(nikoText('选择原生格式', 'Choose a native format')),
-                items: _device!.formats
-                    .map((f) => DropdownMenuItem(
-                        value: f.token,
-                        enabled: f.width <= 1920 && f.height <= 1080,
-                        child: Text(_formatLabel(f),
-                            maxLines: 2, overflow: TextOverflow.ellipsis)))
-                    .toList(),
-                onChanged: _busy
-                    ? null
-                    : (token) => setState(() {
-                          _token = token;
-                          _fps.clear();
-                        })),
+            if (nightline)
+              NlSelect<String>(
+                  key: const ValueKey('niko-camera-format'),
+                  label: nikoText('原生格式', 'Native format'),
+                  placeholder: nikoText('选择原生格式', 'Choose a native format'),
+                  value: _format?.token,
+                  options: [
+                    for (final f in _device!.formats)
+                      NlSelectOption(f.token, _formatLabel(f),
+                          enabled: f.width <= 1920 && f.height <= 1080)
+                  ],
+                  onChanged: chooseFormat)
+            else
+              DropdownButtonFormField<String>(
+                  key: const ValueKey('niko-camera-format'),
+                  isExpanded: true,
+                  value: _format?.token,
+                  decoration:
+                      nikoInput(nikoText('选择原生格式', 'Choose a native format')),
+                  items: _device!.formats
+                      .map((f) => DropdownMenuItem(
+                          value: f.token,
+                          enabled: f.width <= 1920 && f.height <= 1080,
+                          child: Text(_formatLabel(f),
+                              maxLines: 2, overflow: TextOverflow.ellipsis)))
+                      .toList(),
+                  onChanged: chooseFormat),
             Text(nikoText('当前传输上限为 1920 × 1080；不自动替换所选原生格式。',
                 'The current stream limit is 1920 × 1080. Selected native formats are never substituted automatically.')),
-            if (_format?.schema == 'mac-fps-range-v1')
+            if (_format?.schema == 'mac-fps-range-v1' && nightline)
+              NlTextField(
+                  fieldKey: const ValueKey('niko-camera-fps'),
+                  controller: _fps,
+                  enabled: !_busy,
+                  keyboardType: TextInputType.number,
+                  label: nikoText('帧率', 'Frame rate'),
+                  hint: nikoText('范围内 1–60 的整数', 'An integer 1–60 in range'),
+                  onChanged: (_) => setState(() {}))
+            else if (_format?.schema == 'mac-fps-range-v1')
               TextField(
                   key: const ValueKey('niko-camera-fps'),
                   controller: _fps,
@@ -456,7 +493,14 @@ class _CameraPanelState extends State<NikoCameraCapabilityPanel> {
     if (nightline) {
       return NikoCmCapabilityFrame(
           label: nikoText('本机摄像头授权', 'Local camera approval'),
-          icon: Icons.videocam_outlined,
+          icon: NlIcons.webcam,
+          action: widget.refreshStatus == null
+              ? null
+              : NlIconButton(
+                  key: const ValueKey('niko-camera-refresh'),
+                  icon: NlIcons.refreshCw,
+                  tooltip: nikoText('刷新本机会话状态', 'Refresh local session status'),
+                  onPressed: _busy ? null : _refresh),
           tone: nikoCmPhaseTone(phase),
           title: title,
           children: children);
