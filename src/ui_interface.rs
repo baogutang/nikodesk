@@ -184,7 +184,9 @@ pub fn use_texture_render() -> bool {
     #[cfg(target_os = "ios")]
     return false;
 
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "nikodesk", feature = "flutter"))]
+    return crate::nikodesk::texture_render::enabled();
+    #[cfg(all(target_os = "macos", not(all(feature = "nikodesk", feature = "flutter"))))]
     return cfg!(feature = "flutter")
         && LocalConfig::get_option(keys::OPTION_TEXTURE_RENDER) == "Y";
 

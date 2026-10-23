@@ -50,6 +50,8 @@ pub mod hwcodec;
 pub mod nikodesk_vt;
 #[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
 pub mod nikodesk_texture;
+#[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+pub mod nikodesk_vtdec;
 #[cfg(feature = "mediacodec")]
 pub mod mediacodec;
 pub mod vpxcodec;

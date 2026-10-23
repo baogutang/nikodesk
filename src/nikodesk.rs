@@ -103,6 +103,9 @@ pub(crate) mod mac_menu_bar;
 #[cfg(target_os = "macos")]
 #[path = "nikodesk/display_events.rs"]
 pub(crate) mod display_events;
+#[cfg(all(target_os = "macos", feature = "flutter"))]
+#[path = "nikodesk/texture_render.rs"]
+pub(crate) mod texture_render;
 #[cfg(all(test, target_os = "macos"))]
 #[path = "nikodesk/sck_capture_test.rs"]
 mod sck_capture_test;

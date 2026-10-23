@@ -372,6 +372,7 @@ class SessionMetrics {
               'vram',
               'ffmpeg-hw-device',
               'ffmpeg-software',
+              'videotoolbox-texture',
               'mediacodec',
               'unknown'
             ].contains(backend)) throw const FormatException();
@@ -388,6 +389,9 @@ class SessionMetrics {
             hardware != false) throw const FormatException();
         if (const ['vram', 'ffmpeg-hw-device'].contains(backend) &&
             hardware != true) throw const FormatException();
+        if (backend == 'videotoolbox-texture' && hardware is! bool) {
+          throw const FormatException();
+        }
         final safe = <String, Object?>{
           'decoderBackend': backend,
           'hardwareDecoder': hardware

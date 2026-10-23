@@ -280,6 +280,10 @@ pub type FlutterRgbaRendererPluginOnRgba = unsafe extern "C" fn(
     dst_rgba_stride: c_int,
 );
 
+#[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+pub type FlutterRgbaRendererPluginOnPixelBuffer =
+    unsafe extern "C" fn(texture_rgba: *mut c_void, buffer: *mut c_void);
+
 #[cfg(feature = "vram")]
 pub type FlutterGpuTextureRendererPluginCApiSetTexture =
     unsafe extern "C" fn(output: *mut c_void, texture: *mut c_void);
@@ -307,6 +311,10 @@ struct VideoRenderer {
     on_rgba_func: Option<Symbol<'static, FlutterRgbaRendererPluginOnRgba>>,
     #[cfg(feature = "vram")]
     on_texture_func: Option<Symbol<'static, FlutterGpuTextureRendererPluginCApiSetTexture>>,
+    #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+    niko_watch: Arc<std::sync::Mutex<crate::nikodesk::texture_render::Watch>>,
+    #[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+    niko_on_pixel_buffer_func: Option<Symbol<'static, FlutterRgbaRendererPluginOnPixelBuffer>>,
 }
 
 impl Default for VideoRenderer {
@@ -359,6 +367,12 @@ impl Default for VideoRenderer {
             on_rgba_func,
             #[cfg(feature = "vram")]
             on_texture_func,
+            #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+            niko_watch: Default::default(),
+            #[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+            niko_on_pixel_buffer_func: crate::nikodesk::texture_render::pixel_buffer_func(
+                &TEXTURE_RGBA_RENDERER_PLUGIN,
+            ),
         }
     }
 }
@@ -470,6 +484,8 @@ impl VideoRenderer {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn on_rgba(&self, display: usize, rgba: &scrap::ImageRgb) -> bool {
         let mut write_lock = self.map_display_sessions.write().unwrap();
+        #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+        self.niko_watch_frame(&write_lock, display);
         let opt_info = if !self.is_support_multi_ui_session {
             write_lock.values_mut().next()
         } else {
@@ -503,6 +519,8 @@ impl VideoRenderer {
             }
         }
         if let Some(func) = &self.on_rgba_func {
+            #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+            crate::nikodesk::texture_render::submitting();
             #[cfg(feature = "nikodesk")]
             let submit_timer = crate::nikodesk::video_metrics::measure(crate::nikodesk::video_metrics::Stage::NativeSubmit);
             unsafe {
@@ -515,6 +533,8 @@ impl VideoRenderer {
                     rgba.align() as _,
                 )
             };
+            #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+            self.niko_watch.lock().unwrap().submitted();
             #[cfg(feature = "nikodesk")]
             drop(submit_timer);
             #[cfg(feature = "nikodesk")]
@@ -563,6 +583,64 @@ impl VideoRenderer {
         }
         if info.notify_render_type != Some(RenderType::Texture) {
             info.notify_render_type = Some(RenderType::Texture);
+            true
+        } else {
+            false
+        }
+    }
+
+    // Each window gets the frames of every display. Only those of displays it
+    // has a texture for count, or all while it has none: a texture that
+    // failed to register leaves it without any.
+    #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+    fn niko_watch_frame(&self, displays: &HashMap<usize, DisplaySessionInfo>, display: usize) {
+        if !self.is_support_multi_ui_session || displays.is_empty() || displays.contains_key(&display) {
+            self.niko_watch.lock().unwrap().frame();
+        }
+    }
+
+    // As on_rgba, for a VideoToolbox picture the texture keeps as it is.
+    #[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+    pub fn niko_on_pixel_buffer(&self, display: usize, buffer: *mut c_void) -> bool {
+        use crate::nikodesk::video_metrics::{count, measure, Counter, Stage};
+        let mut write_lock = self.map_display_sessions.write().unwrap();
+        self.niko_watch_frame(&write_lock, display);
+        let opt_info = if !self.is_support_multi_ui_session {
+            write_lock.values_mut().next()
+        } else {
+            write_lock.get_mut(&display)
+        };
+        let Some(info) = opt_info else {
+            count(Counter::NoTarget);
+            return false;
+        };
+        if info.texture_rgba_ptr == usize::default() {
+            count(Counter::NoPointer);
+            return false;
+        }
+        let size = scrap::nikodesk_vtdec::picture_size(buffer);
+        if info.size != size && info.size != (0, 0) {
+            hbb_common::throttled_log!(
+                std::time::Duration::from_secs(5),
+                warn,
+                "picture {size:?} is not display {:?}",
+                info.size
+            );
+            count(Counter::SizeMismatch);
+            return false;
+        }
+        let Some(func) = &self.niko_on_pixel_buffer_func else {
+            count(Counter::MissingPlugin);
+            return false;
+        };
+        crate::nikodesk::texture_render::submitting();
+        let submit_timer = measure(Stage::NativeSubmit);
+        unsafe { func(info.texture_rgba_ptr as _, buffer) };
+        drop(submit_timer);
+        self.niko_watch.lock().unwrap().submitted();
+        count(Counter::NativeCalls);
+        if info.notify_render_type != Some(RenderType::PixelBuffer) {
+            info.notify_render_type = Some(RenderType::PixelBuffer);
             true
         } else {
             false
@@ -976,6 +1054,20 @@ impl InvokeUiSession for FlutterHandler {
             if session.renderer.on_texture(display, texture) {
                 if let Some(stream) = &session.event_stream {
                     stream.add(EventToUI::Texture(display, true));
+                }
+            }
+        }
+    }
+
+    #[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+    fn niko_on_pixel_buffer(&self, display: usize, buffer: *mut c_void) {
+        let use_texture_render = self.use_texture_render.load(Ordering::Relaxed);
+        for (_, session) in self.session_handlers.read().unwrap().iter() {
+            if use_texture_render || session.displays.len() > 1 {
+                if session.renderer.niko_on_pixel_buffer(display, buffer) {
+                    if let Some(stream) = &session.event_stream {
+                        stream.add(EventToUI::Texture(display, false));
+                    }
                 }
             }
         }
@@ -2718,6 +2810,10 @@ mod native_video_telemetry_tests {
             on_rgba_func: None,
             #[cfg(feature = "vram")]
             on_texture_func: None,
+            #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+            niko_watch: Default::default(),
+            #[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+            niko_on_pixel_buffer_func: None,
         };
         let rgba = scrap::ImageRgb::new(scrap::ImageFormat::ARGB, 1);
         assert!(!renderer.on_rgba(0, &rgba));

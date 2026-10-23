@@ -120,6 +120,8 @@ pub struct Decoder {
     valid: bool,
     #[cfg(feature = "hwcodec")]
     i420: Vec<u8>,
+    #[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+    niko_vt: Option<crate::nikodesk_vtdec::VtDecoder>,
 }
 
 #[derive(Debug, Clone)]
@@ -609,6 +611,12 @@ impl Decoder {
         } else {
             log::info!("create {format:?} decoder success");
         }
+        #[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+        let niko_vt = (valid
+            && matches!(format, CodecFormat::H264 | CodecFormat::H265)
+            && crate::nikodesk_vtdec::wanted())
+        .then(|| crate::nikodesk_vtdec::VtDecoder::new(format == CodecFormat::H265))
+        .flatten();
         Decoder {
             vp8,
             vp9,
@@ -629,6 +637,8 @@ impl Decoder {
             valid,
             #[cfg(feature = "hwcodec")]
             i420: vec![],
+            #[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+            niko_vt,
         }
     }
 
@@ -647,6 +657,8 @@ impl Decoder {
         if self.av1.is_some() { return ("aom-av1", Some(false)); }
         #[cfg(feature = "vram")]
         if self.h264_vram.is_some() || self.h265_vram.is_some() { return ("vram", Some(true)); }
+        #[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+        if let Some(vt) = self.niko_vt.as_ref().filter(|vt| vt.started()) { return ("videotoolbox-texture", Some(vt.hardware())); }
         #[cfg(feature = "hwcodec")]
         if let Some(decoder) = self.h264_ram.as_ref().or(self.h265_ram.as_ref()) {
             let hardware = decoder.info.hwdevice != hwcodec::ffmpeg::AVHWDeviceType::AV_HWDEVICE_TYPE_NONE;
@@ -697,6 +709,10 @@ impl Decoder {
                     *_pixelbuffer = false;
                     return Decoder::handle_vram_video_frame(decoder, h264s, _texture);
                 }
+                #[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+                if self.niko_vt.is_some() {
+                    return self.niko_handle_vt_video_frame(h264s, rgb, _texture, _pixelbuffer);
+                }
                 #[cfg(feature = "hwcodec")]
                 if let Some(decoder) = &mut self.h264_ram {
                     return Decoder::handle_hwram_video_frame(decoder, h264s, rgb, &mut self.i420);
@@ -710,6 +726,10 @@ impl Decoder {
                 if let Some(decoder) = &mut self.h265_vram {
                     *_pixelbuffer = false;
                     return Decoder::handle_vram_video_frame(decoder, h265s, _texture);
+                }
+                #[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+                if self.niko_vt.is_some() {
+                    return self.niko_handle_vt_video_frame(h265s, rgb, _texture, _pixelbuffer);
                 }
                 #[cfg(feature = "hwcodec")]
                 if let Some(decoder) = &mut self.h265_ram {
@@ -811,6 +831,57 @@ impl Decoder {
             }
         }
         return Ok(ret);
+    }
+
+    // Pictures from VideoToolbox go out in `texture` with `pixelbuffer` false;
+    // frames it cannot take go to ffmpeg's decoder and out in `rgb`.
+    #[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+    fn niko_handle_vt_video_frame(
+        &mut self,
+        frames: &EncodedVideoFrames,
+        rgb: &mut ImageRgb,
+        texture: &mut ImageTexture,
+        pixelbuffer: &mut bool,
+    ) -> ResultType<bool> {
+        use crate::nikodesk_vtdec::Decoded;
+        let mut ret = false;
+        for (i, frame) in frames.frames.iter().enumerate() {
+            let Some(vt) = self.niko_vt.as_mut() else {
+                break;
+            };
+            match vt.decode(&frame.data, texture)? {
+                Decoded::Picture => {
+                    *pixelbuffer = false;
+                    ret = true;
+                }
+                Decoded::Nothing => {}
+                handover @ (Decoded::NotYet | Decoded::Unsupported) => {
+                    if matches!(handover, Decoded::Unsupported) {
+                        // An earlier picture in `texture` goes with it.
+                        self.niko_vt = None;
+                        ret = false;
+                    }
+                    let rest = EncodedVideoFrames {
+                        frames: frames.frames[i..].to_vec(),
+                        ..Default::default()
+                    };
+                    let ram = if self.format == CodecFormat::H265 {
+                        &mut self.h265_ram
+                    } else {
+                        &mut self.h264_ram
+                    };
+                    let Some(decoder) = ram else {
+                        bail!("{:?} decoder not available", self.format);
+                    };
+                    if Decoder::handle_hwram_video_frame(decoder, &rest, rgb, &mut self.i420)? {
+                        *pixelbuffer = true;
+                        ret = true;
+                    }
+                    break;
+                }
+            }
+        }
+        Ok(ret)
     }
 
     #[cfg(feature = "vram")]

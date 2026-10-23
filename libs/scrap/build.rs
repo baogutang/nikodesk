@@ -247,6 +247,9 @@ fn main() {
             cc::Build::new().cpp(true).flag("-std=c++17").flag("-fobjc-arc").flag("-fblocks")
                 .file("src/common/nikodesk_texture.mm").compile("nikodesk_texture");
             println!("cargo:rerun-if-changed=src/common/nikodesk_texture.mm");
+            cc::Build::new().cpp(true).flag("-std=c++17").flag("-fobjc-arc").flag("-fblocks")
+                .file("src/common/nikodesk_vtdec.mm").compile("nikodesk_vtdec");
+            println!("cargo:rerun-if-changed=src/common/nikodesk_vtdec.mm");
             for framework in ["VideoToolbox", "CoreMedia", "CoreVideo"] {
                 println!("cargo:rustc-link-lib=framework={framework}");
             }

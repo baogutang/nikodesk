@@ -57,6 +57,8 @@ class NikoNative {
     if (!File('${config.path}/NikoDesk-$profile.toml').existsSync()) {
       throw StateError('The core did not select the "$profile" profile');
     }
+    // No Flutter textures here: frames come from the soft renderer.
+    await native.bind.mainSetLocalOption(key: 'use-texture-render', value: 'N');
     return native;
   }
 

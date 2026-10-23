@@ -213,6 +213,27 @@ void main() {
         isTrue);
     expect(metrics.current('deltaQueuePeak'), {'0': null});
   });
+  test('the Mac texture decoder reports whether it runs in hardware', () {
+    final metrics = ready();
+    expect(
+        metrics.updateNative(
+            jsonEncode(snapshot(rows: [
+              row(backend: 'videotoolbox-texture', hardware: true)
+            ])),
+            jsonEncode(authority()),
+            scope),
+        isTrue);
+    expect(metrics.current('decoderBackend'), {'0': 'videotoolbox-texture'});
+    expect(metrics.current('hardwareDecoder'), {'0': true});
+    expect(
+        metrics.updateNative(
+            jsonEncode(snapshot(
+                sequence: '2',
+                rows: [row(backend: 'videotoolbox-texture', hardware: null)])),
+            jsonEncode(authority()),
+            scope),
+        isFalse);
+  });
   test('MediaCodec hardware remains unknown and missing displays stay unknown',
       () {
     final metrics = ready();

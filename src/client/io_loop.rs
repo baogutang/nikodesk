@@ -2910,6 +2910,8 @@ impl<T: InvokeUiSession> Remote<T> {
                 } else {
                     #[cfg(all(feature = "vram", feature = "flutter"))]
                     handler.on_texture(display, _texture);
+                    #[cfg(all(feature = "nikodesk", feature = "hwcodec", feature = "flutter", target_os = "macos"))]
+                    handler.niko_on_pixel_buffer(display, _texture);
                 }
             },
         );
