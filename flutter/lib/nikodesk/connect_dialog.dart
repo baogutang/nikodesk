@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 
+import 'device_identity.dart';
 import 'nightline/tokens.dart';
 import 'policy.dart';
 import 'server_gateway.dart';
@@ -132,6 +133,7 @@ Future<bool> nikoConnectWithPassword(
           {bool isFileTransfer, String? password})?
       onConnect,
   void Function()? onDispatched,
+  Future<String> Function()? ownIdLoader,
 }) async {
   if (!validDeviceId(id)) {
     nikoNotice(
@@ -140,6 +142,11 @@ Future<bool> nikoConnectWithPassword(
             'Enter a numeric device ID with 6–16 digits.'));
     return false;
   }
+  if (nikoIsOwnDevice(id, await (ownIdLoader ?? nikoOwnDeviceId)())) {
+    if (context.mounted) nikoRefuseOwnDevice(context);
+    return false;
+  }
+  if (!context.mounted) return false;
   final namespace = expectedServerNamespace ?? NikoServerScope.current;
   final auth = await nikoAskCredentialConnect(context, id, alias,
       namespace: namespace ?? '',
@@ -157,7 +164,8 @@ Future<bool> nikoConnectWithPassword(
       gateway: gateway,
       expectedServerNamespace: namespace,
       onConnect: onConnect,
-      onDispatched: onDispatched);
+      onDispatched: onDispatched,
+      ownIdLoader: ownIdLoader);
 }
 
 Future<bool> nikoDispatchConnection(
@@ -175,12 +183,17 @@ Future<bool> nikoDispatchConnection(
           {bool isFileTransfer, String? password})?
       onConnect,
   void Function()? onDispatched,
+  Future<String> Function()? ownIdLoader,
 }) async {
   if (!validDeviceId(id) || (password.trim().isEmpty && !useSavedCredential)) {
     nikoNotice(
         context,
         nikoText('安全策略：必须输入远端密码才能发起连接。',
             'Policy: the remote password is required before connecting.'));
+    return false;
+  }
+  if (nikoIsOwnDevice(id, await (ownIdLoader ?? nikoOwnDeviceId)())) {
+    if (context.mounted) nikoRefuseOwnDevice(context);
     return false;
   }
   try {

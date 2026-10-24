@@ -8,6 +8,7 @@ import 'package:flutter_hbb/models/platform_model.dart';
 
 import 'connect_dialog.dart';
 import 'credential_connect_dialog.dart';
+import 'device_identity.dart';
 import 'device_store.dart';
 import 'home_board.dart';
 import 'home_chrome.dart';
@@ -48,6 +49,10 @@ class NikoDevicePage extends StatefulWidget {
   /// This computer's ID and access panel, shown in the inspector while no
   /// device is selected.
   final Widget? localPanel;
+
+  /// Test hooks; native builds ask the service and the peer store.
+  final Future<String> Function()? ownDeviceId;
+  final NikoPeerIdentity Function(String id)? peerIdentity;
   const NikoDevicePage(
       {super.key,
       this.store,
@@ -62,7 +67,9 @@ class NikoDevicePage extends StatefulWidget {
       this.active = true,
       this.credentialStatusLoader,
       this.board,
-      this.localPanel});
+      this.localPanel,
+      this.ownDeviceId,
+      this.peerIdentity});
   @override
   State<NikoDevicePage> createState() => _NikoDevicePageState();
 }
@@ -81,6 +88,8 @@ class _NikoDevicePageState extends State<NikoDevicePage>
   late final AnimationController _floating;
   bool _inspectorOpen = true;
   List<DeviceEntry> _devices = [];
+  String _ownId = '';
+  final Map<String, (DateTime?, NikoPeerIdentity)> _identities = {};
   ServerSnapshot? _server;
   String? _error;
   String? _notice;
@@ -104,6 +113,23 @@ class _NikoDevicePageState extends State<NikoDevicePage>
       widget.native ??
       (widget.gateway == null || widget.gateway is NativeServerGateway);
   bool get _credentialNative => _native || widget.credentialStatusLoader != null;
+  Future<String> _ownDeviceId() =>
+      widget.ownDeviceId?.call() ??
+      (_native ? nikoOwnDeviceId() : Future.value(''));
+  NikoPeerIdentity _identity(DeviceEntry device) =>
+      _identities[device.id]?.$2 ?? const NikoPeerIdentity();
+
+  /// Peer files change only when a session succeeds, so a device is reread
+  /// only when its last-session time moves.
+  void _readIdentities(List<DeviceEntry> devices) {
+    final read = widget.peerIdentity ?? (_native ? nikoPeerIdentity : null);
+    if (read == null) return;
+    for (final device in devices) {
+      final cached = _identities[device.id];
+      if (cached != null && cached.$1 == device.lastConnectedAt) continue;
+      _identities[device.id] = (device.lastConnectedAt, read(device.id));
+    }
+  }
   Future<String> _credentialStatus(String namespace, String id) =>
       (widget.credentialStatusLoader ?? nikoCredentialStatus)(namespace, id);
   // The store is created on first access, which can happen before the first
@@ -258,10 +284,19 @@ class _NikoDevicePageState extends State<NikoDevicePage>
     _refreshing = true;
     try {
       Future<void> loadDirectory() async {
+        final ownId = _ownDeviceId().catchError((Object _) => '');
         final directory = await _store.load();
+        final own = await ownId;
         if (!mounted) return;
+        // A self-session once saved this computer's own ID as a device; it is
+        // hidden, not deleted, so the directory file stays as written.
+        final devices = directory.devices
+            .where((device) => !nikoIsOwnDevice(device.id, own))
+            .toList();
+        _readIdentities(devices);
         setState(() {
-          _devices = directory.devices;
+          _ownId = own;
+          _devices = devices;
           _loading = false;
           if (directory.recovered) {
             _notice = nikoText('设备目录损坏，已保留损坏文件并恢复可用备份（无备份时为空目录）。',
@@ -367,7 +402,8 @@ class _NikoDevicePageState extends State<NikoDevicePage>
                         connToken: connToken)
             : widget.onConnect,
         expectedServerNamespace: namespace,
-        credentialStatusLoader: widget.credentialStatusLoader);
+        credentialStatusLoader: widget.credentialStatusLoader,
+        ownIdLoader: _ownDeviceId);
     if (mounted) _password.clear();
     // History currently distinguishes control and files only. Do not label
     // a tunnel request as a successful control session.
@@ -386,6 +422,10 @@ class _NikoDevicePageState extends State<NikoDevicePage>
           context,
           nikoText('请输入 6–16 位数字设备 ID。',
               'Enter a numeric device ID with 6–16 digits.'));
+      return;
+    }
+    if (nikoIsOwnDevice(raw, _ownId)) {
+      nikoRefuseOwnDevice(context);
       return;
     }
     final namespace = _dispatchNamespace;
@@ -603,6 +643,10 @@ class _NikoDevicePageState extends State<NikoDevicePage>
     final result = await showDialog<DeviceEntry>(
         context: context, builder: (_) => _DeviceDialog(device: device));
     if (result == null || !mounted) return;
+    if (nikoIsOwnDevice(result.id, _ownId)) {
+      nikoRefuseOwnDevice(context);
+      return;
+    }
     try {
       await _store.save(result);
       await _refresh();
@@ -773,7 +817,7 @@ class _NikoDevicePageState extends State<NikoDevicePage>
             (filter != 'favorites' || device.favorite) &&
             (filter != 'recent' || device.lastConnectedAt != null) &&
             (group == null || device.group.trim() == group) &&
-            '${device.id} ${device.alias} ${device.group}'
+            '${device.id} ${device.alias} ${device.group} ${_identity(device).name} ${_identity(device).platformLabel}'
                 .toLowerCase()
                 .contains(query))
         .toList();
@@ -1491,6 +1535,7 @@ class _NikoDevicePageState extends State<NikoDevicePage>
             width: cardWidth,
             child: _DeviceCard(
                 device: device,
+                identity: _identity(device),
                 online: _online[device.id],
                 selected: _board.selected == device.id,
                 canConnect: _canConnect,
@@ -1513,6 +1558,7 @@ class _NikoDevicePageState extends State<NikoDevicePage>
             for (var i = 0; i < devices.length; i++)
               _DeviceRow(
                   device: devices[i],
+                  identity: _identity(devices[i]),
                   divider: i > 0,
                   online: _online[devices[i].id],
                   selected: _board.selected == devices[i].id,
@@ -1564,6 +1610,7 @@ class _NikoDevicePageState extends State<NikoDevicePage>
         : _DeviceInspector(
             key: ValueKey('nikodesk-inspector-${device.id}'),
             device: device,
+            identity: _identity(device),
             online: _online[device.id],
             canConnect: _canConnect,
             native: _native,
@@ -1727,8 +1774,41 @@ class _Star extends StatelessWidget {
 
 typedef _MenuOpener = void Function(Offset? at, Rect? anchor);
 
+/// An unnamed device shows the host name it reported in its last session.
+String _deviceTitle(DeviceEntry device, NikoPeerIdentity identity) =>
+    device.alias.isEmpty && identity.name.isNotEmpty
+        ? identity.name
+        : device.title;
+
+class _DeviceIdLine extends StatelessWidget {
+  final DeviceEntry device;
+  final NikoPeerIdentity identity;
+  final double size;
+  final Color color;
+  const _DeviceIdLine(
+      {required this.device,
+      required this.identity,
+      required this.size,
+      required this.color});
+
+  @override
+  Widget build(BuildContext context) => Text.rich(
+      TextSpan(children: [
+        if (identity.platformLabel.isNotEmpty)
+          TextSpan(
+              text: '${identity.platformLabel} · ',
+              style: NlType.text(size, color: color)),
+        TextSpan(
+            text: nikoGroupedId(device.id),
+            style: NlType.monoText(size, color: color)),
+      ]),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis);
+}
+
 class _DeviceCard extends StatelessWidget {
   final DeviceEntry device;
+  final NikoPeerIdentity identity;
   final bool? online;
   final bool selected;
   final bool canConnect;
@@ -1741,6 +1821,7 @@ class _DeviceCard extends StatelessWidget {
 
   const _DeviceCard(
       {required this.device,
+      required this.identity,
       required this.online,
       required this.selected,
       required this.canConnect,
@@ -1767,15 +1848,16 @@ class _DeviceCard extends StatelessWidget {
             _Star(favorite: device.favorite, onTap: onFavorite),
           ]),
           const SizedBox(height: NlSpace.s3),
-          Text(device.title,
+          Text(_deviceTitle(device, identity),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: NlType.text(NlType.s4, weight: FontWeight.w600, color: nl.fg)),
           const SizedBox(height: 2),
-          Text(nikoGroupedId(device.id),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: NlType.monoText(NlType.s2, color: nl.fg3)),
+          _DeviceIdLine(
+              device: device,
+              identity: identity,
+              size: NlType.s2,
+              color: nl.fg3),
           const SizedBox(height: NlSpace.s2 + 2),
           _Presence(
               online: online,
@@ -1827,6 +1909,7 @@ class _DeviceCard extends StatelessWidget {
 
 class _DeviceRow extends StatelessWidget {
   final DeviceEntry device;
+  final NikoPeerIdentity identity;
   final bool divider;
   final bool? online;
   final bool selected;
@@ -1840,6 +1923,7 @@ class _DeviceRow extends StatelessWidget {
 
   const _DeviceRow(
       {required this.device,
+      required this.identity,
       required this.divider,
       required this.online,
       required this.selected,
@@ -1875,15 +1959,16 @@ class _DeviceRow extends StatelessWidget {
             child: LayoutBuilder(builder: (context, box) {
               final scale = MediaQuery.textScalerOf(context).scale(1);
               final narrow = box.maxWidth / scale < 560;
-              final title = Text(device.title,
+              final title = Text(_deviceTitle(device, identity),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: NlType.text(NlType.s3,
                       weight: FontWeight.w500, color: nl.fg));
-              final id = Text(nikoGroupedId(device.id),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: NlType.monoText(NlType.s1, color: nl.fg3));
+              final id = _DeviceIdLine(
+                  device: device,
+                  identity: identity,
+                  size: NlType.s1,
+                  color: nl.fg3);
               final presence = _Presence(
                   online: online,
                   detail:
@@ -1942,6 +2027,7 @@ class _DeviceRow extends StatelessWidget {
 
 class _DeviceInspector extends StatelessWidget {
   final DeviceEntry device;
+  final NikoPeerIdentity identity;
   final bool? online;
   final bool canConnect;
   final bool native;
@@ -1960,6 +2046,7 @@ class _DeviceInspector extends StatelessWidget {
   const _DeviceInspector(
       {super.key,
       required this.device,
+      required this.identity,
       required this.online,
       required this.canConnect,
       required this.native,
@@ -2015,7 +2102,7 @@ class _DeviceInspector extends StatelessWidget {
                         child: NlDeviceGlyph(
                             id: device.id, size: 56, online: online)),
                     const SizedBox(height: NlSpace.s4),
-                    Text(device.title,
+                    Text(_deviceTitle(device, identity),
                         style: NlType.text(NlType.s6,
                             weight: FontWeight.w600, color: nl.fg)),
                     const SizedBox(height: NlSpace.s1),
@@ -2062,6 +2149,10 @@ class _DeviceInspector extends StatelessWidget {
                         onPressed: onWake),
                     const SizedBox(height: NlSpace.s6),
                     NlSectionLabel(nikoText('详情', 'Details')),
+                    if (identity.platformLabel.isNotEmpty)
+                      info(nikoText('系统', 'System'), identity.platformLabel),
+                    if (identity.name.isNotEmpty)
+                      info(nikoText('主机名', 'Host name'), identity.name),
                     info(nikoText('分组', 'Group'),
                         device.group.trim().isEmpty ? '—' : device.group.trim()),
                     info(

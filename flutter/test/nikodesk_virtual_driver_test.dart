@@ -13,6 +13,7 @@ String reply(
         String phase = 'idle',
         bool ok = false,
         bool joined = false,
+        bool elevated = true,
         String reason = 'unchecked'}) =>
     jsonEncode({
       'ok': ok,
@@ -20,7 +21,7 @@ String reply(
       'job_id': job,
       'phase': phase,
       'reason': reason,
-      'elevated': true,
+      'elevated': elevated,
       'os_supported': true,
       'joined': joined
     });
@@ -120,6 +121,27 @@ void main() {
     expect(find.text('安装驱动'), findsOneWidget);
     expect(find.textContaining('usbmmidd_v2'), findsOneWidget);
     expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    model.dispose();
+  });
+  testWidgets('a non-elevated client says why both actions are disabled',
+      (tester) async {
+    final model = NikoVirtualDriver(
+        command: (_) async => reply(elevated: false),
+        currentNamespace: () => scope);
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: NikoVirtualDriverSettings(model: model)))));
+    await tester.pumpAndSettle();
+    expect(find.text('需要管理员权限'), findsOneWidget);
+    expect(find.textContaining('以管理员身份运行'), findsOneWidget);
+    expect(find.textContaining('隐私屏不需要它'), findsOneWidget);
+    for (final label in ['安装驱动', '检查驱动']) {
+      final button = tester.widget<ButtonStyleButton>(find.ancestor(
+          of: find.text(label), matching: find.bySubtype<ButtonStyleButton>()));
+      expect(button.onPressed, isNull, reason: label);
+    }
     await tester.pumpWidget(const SizedBox());
     model.dispose();
   });

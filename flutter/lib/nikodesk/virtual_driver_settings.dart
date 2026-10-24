@@ -7,8 +7,8 @@ import 'ui.dart';
 
 String _driverReason(String reason) => switch (reason) {
       'administrator_required' => nikoText(
-          '请在本机明确以管理员身份重新打开 NikoDesk，再安装或检查驱动。',
-          'Explicitly reopen NikoDesk as Administrator locally to install or check the driver.'),
+          '安装和检查要管理员权限，只能在这台电脑前操作：退出 NikoDesk，右键 NikoDesk 选「以管理员身份运行」，在系统确认框里点「是」，再回到这里。远程会话看不到、也点不了这个系统确认框。',
+          'Installing or checking needs Administrator rights and has to be done at this computer: quit NikoDesk, right-click it, choose Run as administrator, confirm the system prompt, then come back here. A remote session cannot see or click that prompt.'),
       'os_unsupported' => nikoText(
           '虚拟屏驱动需要 Windows 10 2004 或更新版本；普通远控不受这个门槛影响。',
           'The virtual display driver requires Windows 10 2004 or newer. Ordinary remote control is unaffected.'),
@@ -97,6 +97,8 @@ class _DriverSettingsState extends State<NikoVirtualDriverSettings> {
               nikoText('等待本机确认', 'Waiting for local confirmation'),
             'installing' => nikoText('正在安装驱动并检查', 'Installing and checking the driver'),
             'probing' => nikoText('正在接入虚拟屏检查', 'Checking with a temporary display'),
+            _ when reply != null && !reply.elevated =>
+              nikoText('需要管理员权限', 'Administrator rights needed'),
             _ => nikoText('虚拟屏驱动尚未确认就绪',
                 'Virtual display driver readiness is unconfirmed')
           };
@@ -105,8 +107,8 @@ class _DriverSettingsState extends State<NikoVirtualDriverSettings> {
       Text(label, style: Theme.of(context).textTheme.titleSmall),
       const SizedBox(height: 8),
       Text(nikoText(
-          '使用随 NikoDesk 提供的 Amyuni 已签名驱动，和 RustDesk 是同一个，全机共享。安装和检查都需要本机确认；检查时会短暂接入一块虚拟屏，屏幕可能闪烁。',
-          'Uses the signed Amyuni driver bundled with NikoDesk, the same machine-wide driver RustDesk uses. Installing and checking need local confirmation; the check briefly attaches a virtual display and the screen may flicker.')),
+          '只有「允许连接创建虚拟屏」用这个驱动，隐私屏不需要它。使用随 NikoDesk 提供的 Amyuni 已签名驱动，和 RustDesk 是同一个，全机共享。安装和检查都需要本机确认；检查时会短暂接入一块虚拟屏，屏幕可能闪烁。',
+          'Only virtual displays use this driver; the privacy screen does not need it. Uses the signed Amyuni driver bundled with NikoDesk, the same machine-wide driver RustDesk uses. Installing and checking need local confirmation; the check briefly attaches a virtual display and the screen may flicker.')),
       if (reply != null && !reply.elevated)
         Text(_driverReason('administrator_required')),
       if (reply != null && !reply.osSupported)

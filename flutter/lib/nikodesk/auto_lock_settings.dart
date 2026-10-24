@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
@@ -109,6 +110,15 @@ class _NikoAutoLockSettingsState extends State<NikoAutoLockSettings> {
         below: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           NikoSettingNote(nikoText('主控端主动选择的“断开后锁屏”也遵循同样的会话与取消规则。',
               'The controller’s “Lock after disconnect” also follows these session and cancellation rules.')),
+          // The portable client runs in the user session and cannot reach the
+          // secure desktop that shows the Windows sign-in screen.
+          if (Platform.isWindows) ...[
+            const SizedBox(height: NlSpace.s2),
+            NikoSettingNote(
+                nikoText('便携版 NikoDesk 在 Windows 锁屏后看不到、也操作不了登录界面，远程只会看到黑屏，要回到电脑前解锁。',
+                    'After Windows locks, portable NikoDesk cannot see or use the sign-in screen. A remote session only shows black until someone unlocks the computer in person.'),
+                tone: NlTone.warn),
+          ],
           if (_error != null) ...[
             const SizedBox(height: NlSpace.s2),
             NikoSettingNote(_error!,
