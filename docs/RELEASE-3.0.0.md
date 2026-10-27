@@ -32,7 +32,16 @@
 
 ## 已知限制
 
-（发布前补完：Windows 安装版的实机验收状态、各平台实机检查情况。）
+- **Windows 安装版和后台服务还没有在真机上装过**：只在 CI 里构建，做了安装包静态检查和单元测试。安装、开机启动、远程操作锁屏、登录界面和管理员确认窗口、开始菜单入口和“设置 → 应用”卸载都还没实测。遇到问题请截下安装助手的提示。
+- 3.0 新界面还没有在 Windows、Android 真机上看过。iPad 上已安装并能启动，界面和会话还没看。
+- 设备卡片的上次画面：软件解码的路径在本机真实会话里验证过；Mac 控制端硬件解码（纹理渲染）时存画面的路径还没在真实远控窗口里看过。
+- 2.2.0 的已知限制仍然有效：
+  - 从控制端按“锁定远程屏幕”没有单独测过；
+  - iOS 15 和 16 上的 VideoToolbox 解码没有真机测过；
+  - 隐私屏全屏空间的修复还没有在真实的空间切换中验证；
+  - 第一次真实的自动更新还没有发生；
+  - 注销后（登录窗口）的远控还没有提供；
+  - 5K 原生编码默认不开启。
 
 ## Changes
 
@@ -64,7 +73,16 @@
 
 ## Known limitations
 
-(To be completed before release: the Windows installer's real-device status and each platform's real-device checks.)
+- **The Windows installer and its background service have not been installed on a real machine yet.** They are built in CI, with static package checks and unit tests. Installation, startup with Windows, remote control of the lock screen, the sign-in screen and administrator prompts, the Start menu entry and uninstalling from Settings > Apps are all untested. If something goes wrong, take a screenshot of the assistant's message.
+- The 3.0 interface has not been seen on a real Windows or Android device. On the iPad it is installed and starts; its screens and sessions have not been looked at.
+- Device screens on the tiles: the software-decoding path was verified in a real session on the developer's Mac; keeping pictures from a Mac controller's hardware-decoded (texture) path has not been seen in a real session window.
+- The 2.2.0 limitations still apply:
+  - **Lock remote screen** pressed from a controller was not tested on its own;
+  - VideoToolbox decoding on iOS 15 and 16 has not run on a real device;
+  - the privacy-screen fix for full-screen Spaces has not been checked with a real Space switch;
+  - the first real automatic update has not happened yet;
+  - remote control at the login window (after logout) is not available yet;
+  - native encoding at 5K stays off by default.
 
 ## 安装包 / Packages
 
