@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NikoDesk 会话记录</title>
+<meta name="description" content="NikoDesk 3.0 样稿：会话记录，谁在什么时候连了哪台设备，用了多久，怎么结束的。">
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="app.css">
+<script src="comp.js" defer></script>
+</head>
+<body>
+<!-- icons -->
+<a class="skip" href="#main">跳到内容</a>
+<div class="app">
+  <!-- side:history -->
+  <main class="main" id="main">
+    <div class="page">
+      <div class="page-head">
+        <h1>会话记录</h1>
+        <div class="tools"><button class="btn btn-quiet" type="button">导出</button></div>
+      </div>
+      <div class="filters">
+        <div class="tabs" role="tablist" aria-label="记录范围">
+          <button type="button" role="tab" aria-selected="true">本机控制别人</button>
+          <button type="button" role="tab" aria-selected="false" tabindex="-1">别人控制本机</button>
+        </div>
+      </div>
+      <section class="card" data-region="history" aria-label="会话列表">
+        <div data-show="full">
+          <table class="table">
+            <thead><tr><th>开始时间</th><th>设备</th><th class="opt">方式</th><th class="opt">时长</th><th>结果</th></tr></thead>
+            <tbody>
+              <tr><td class="num">今天 12:58</td><td>家里的 Windows</td><td class="opt quiet">远程控制</td><td class="opt num quiet">40 秒</td><td class="quiet">你断开</td></tr>
+              <tr><td class="num">今天 12:39</td><td>家里的 Windows</td><td class="opt quiet">远程控制</td><td class="opt num quiet">19 分钟</td><td class="quiet">你断开</td></tr>
+              <tr><td class="num">今天 09:12</td><td>办公室 Mac mini</td><td class="opt quiet">传输文件</td><td class="opt num quiet">3 分钟</td><td class="quiet">完成</td></tr>
+              <tr><td class="num">昨天 21:40</td><td>客厅 NAS</td><td class="opt quiet">远程控制</td><td class="opt num quiet">0 秒</td><td class="result-bad">对方离线</td></tr>
+              <tr><td class="num">昨天 20:05</td><td>爸妈的笔记本</td><td class="opt quiet">远程控制</td><td class="opt num quiet">0 秒</td><td class="result-bad">密码不对</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div data-show="loading" class="skeleton" role="status" aria-label="正在读取会话记录"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div data-show="empty" class="empty">
+          <h2>还没有会话记录</h2>
+          <p>每次连接的时间、对象、时长和结束原因都会记在这里，只存在本机。</p>
+          <a class="btn" href="home.html">去连接一台设备</a>
+        </div>
+        <div data-show="error" class="failed" role="alert">
+          <div class="failed-head"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg><h2>会话记录读不出来</h2></div>
+          <p>记录文件可能损坏了。再读一次；还是不行，可以在设置里清空记录，新的会话照常记录。</p>
+          <button class="btn" type="button">再读一次</button>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</body>
+</html>

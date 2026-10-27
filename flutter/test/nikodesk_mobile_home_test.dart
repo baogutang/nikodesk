@@ -113,7 +113,7 @@ void main() {
       }
     });
     await tester.pumpAndSettle();
-    expect(find.text('Controller configuration enabled'), findsOneWidget);
+    expect(find.byKey(const Key('nikodesk-hero-id')), findsOneWidget);
     expect(find.text('Devices'), findsOneWidget);
     expect(find.text('Registered'), findsNothing);
     expect(find.text('Connect to your server'), findsNothing);
@@ -156,7 +156,7 @@ void main() {
             alias: 'Office computer with a long label',
             group: 'Remote work devices')));
         await load(tester, configured(), brightness: brightness);
-        expect(find.text('Controller configuration enabled'), findsOneWidget);
+        expect(find.byKey(const Key('nikodesk-hero-id')), findsOneWidget);
         expect(find.text('Registered'), findsNothing);
         expect(tester.takeException(), isNull);
         await tester.tap(find.text('Sessions'));
@@ -189,9 +189,9 @@ void main() {
         onConnect: (_, __, ___, {isFileTransfer = false, password}) async {
       calls++;
     });
-    expect(find.text('Set up your private server'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('nikodesk-hero-connect')),
-        warnIfMissed: false);
+    expect(find.text('Set up your private server first'), findsOneWidget);
+    // Without a server the panel offers setup, not a connect button.
+    expect(find.byKey(const Key('nikodesk-hero-connect')), findsNothing);
     expect(calls, 0);
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
@@ -205,12 +205,12 @@ void main() {
     await tester.pumpAndSettle();
     gateway.snapshot = configured().snapshot;
     await tester.runAsync(() async {
-      await tester.tap(find.text('Devices'));
+      await tester.tap(find.text('Remote control'));
       await tester.pump();
       for (var i = 0; i < 250; i++) {
         await tester.pump();
         await Future<void>.delayed(const Duration(milliseconds: 20));
-        if (find.text('Controller configuration enabled').evaluate().isNotEmpty) {
+        if (find.byKey(const Key('nikodesk-hero-id')).evaluate().isNotEmpty) {
           break;
         }
       }
@@ -314,7 +314,7 @@ void main() {
     expect(hiddenEditor.widget.focusNode.hasFocus, isFalse);
     await tester.pumpAndSettle();
     await tester.runAsync(() async {
-      await tester.tap(find.text('Devices'));
+      await tester.tap(find.text('Remote control'));
       for (var i = 0; i < 10; i++) {
         await tester.pump();
         await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -357,25 +357,17 @@ void main() {
     });
   }
 
-  testWidgets('saved mobile devices are available on the first screen', (tester) async {
+  testWidgets('saved mobile devices sit below the connect panel', (tester) async {
     await tester.binding.setSurfaceSize(const Size(320, 700));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.runAsync(() => store.save(const DeviceEntry(id: '123456', alias: 'Office')));
     await load(tester, configured());
+    expect(find.byKey(const Key('nikodesk-hero-id')).hitTestable(), findsOneWidget);
     final action = find.byKey(const Key('nikodesk-device-connect-123456'));
+    await tester.ensureVisible(action);
+    await tester.pumpAndSettle();
     expect(action.hitTestable(), findsOneWidget);
-    expect(find.byKey(const Key('nikodesk-hero-password')), findsNothing);
-    await tester.tap(find.byKey(const Key('nikodesk-quick-connect-toggle')));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('nikodesk-hero-id')), '654321');
-    await tester.enterText(find.byKey(const Key('nikodesk-hero-password')), 'synthetic-secret');
-    await tester.ensureVisible(find.byKey(const Key('nikodesk-quick-connect-toggle')));
-    await tester.tap(find.byKey(const Key('nikodesk-quick-connect-toggle')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('nikodesk-quick-connect-toggle')));
-    await tester.pumpAndSettle();
-    expect(tester.widget<TextField>(find.byKey(const Key('nikodesk-hero-id'))).controller!.text, '654321');
-    expect(tester.widget<TextField>(find.byKey(const Key('nikodesk-hero-password'))).controller!.text, isEmpty);
+    expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -387,23 +379,28 @@ void main() {
       await store.save(const DeviceEntry(id: '654321', alias: 'Guest'));
     });
     await load(tester, configured());
-    await tester.enterText(find.byKey(const Key('nikodesk-search')), 'Office');
-    await tester.tap(find.byTooltip('Favorites'));
-    await tester.ensureVisible(find.byKey(const Key('nikodesk-quick-connect-toggle')));
-    await tester.tap(find.byKey(const Key('nikodesk-quick-connect-toggle')));
+    await tester.tap(find.byKey(const Key('nikodesk-hero-options')));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byType(NlSwitch).first);
-    await tester.tap(find.byType(NlSwitch).first);
+    await tester.tap(find.text('Force private relay'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Devices'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('nikodesk-search')), 'Office');
+    await tester.tap(find.text('Favorites'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Devices'));
     await tester.pumpAndSettle();
     expect(tester.widget<TextField>(find.byKey(const Key('nikodesk-search'))).controller!.text, 'Office');
-    expect(tester.widget<NlSwitch>(find.byType(NlSwitch).first).value, isTrue);
     expect(tester.widget<NlSegmented<String>>(find.byType(NlSegmented<String>)).selected, 'favorites');
-    expect(find.byKey(const Key('nikodesk-device-connect-123456')), findsOneWidget);
-    expect(find.byKey(const Key('nikodesk-device-connect-654321')), findsNothing);
+    expect(find.text('Office'), findsWidgets);
+    expect(find.text('Guest'), findsNothing);
+    await tester.tap(find.text('Remote control'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('nikodesk-hero-options')));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(NlIcons.check), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
@@ -417,7 +414,7 @@ void main() {
           alias: 'Office computer with a long label', forceRelay: true,
           fileTransfer: true, startedAt: DateTime.utc(2026, 9, 30))));
       await load(tester, configured(), brightness: Brightness.dark, scale: 2);
-      await tester.tap(find.text(english ? 'Sessions' : '会话'));
+      await tester.tap(find.text(english ? 'Sessions' : '会话记录'));
       await tester.pumpAndSettle();
       final history = find.byType(NikoSessionHistoryPage);
       final action = find.ancestor(

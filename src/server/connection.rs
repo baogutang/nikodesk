@@ -2261,10 +2261,13 @@ impl Connection {
         }
         #[cfg(target_os = "windows")]
         {
-            platform_additions.insert(
-                "is_installed".into(),
-                json!(crate::platform::is_installed()),
-            );
+            #[cfg(not(feature = "nikodesk"))]
+            let installed = crate::platform::is_installed();
+            // NikoDesk is installed as its SYSTEM service worker, the server
+            // that reaches the secure desktop; the upstream check is off.
+            #[cfg(feature = "nikodesk")]
+            let installed = crate::nikodesk::background::is_system_worker();
+            platform_additions.insert("is_installed".into(), json!(installed));
             if !cfg!(feature="nikodesk") && crate::platform::is_installed() {
                 platform_additions.extend(virtual_display_manager::get_platform_additions());
             }

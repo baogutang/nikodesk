@@ -9,6 +9,7 @@ import 'package:flutter_hbb/models/platform_model.dart';
 import 'connect_dialog.dart';
 import 'credential_connect_dialog.dart';
 import 'device_identity.dart';
+import 'device_screens.dart';
 import 'device_store.dart';
 import 'home_board.dart';
 import 'home_chrome.dart';
@@ -46,9 +47,20 @@ class NikoDevicePage extends StatefulWidget {
   /// State shared with the home chrome; the page keeps its own otherwise.
   final NikoDeviceBoard? board;
 
-  /// This computer's ID and access panel, shown in the inspector while no
-  /// device is selected.
+  /// This computer's ID and access card, beside the connect panel on the
+  /// home layout.
   final Widget? localPanel;
+
+  final NikoDeviceLayout layout;
+
+  /// Opens the devices screen from the home layout's device wall.
+  final VoidCallback? onManage;
+
+  /// The last picture of a device's screen, when one was kept.
+  final ImageProvider? Function(String id)? screenOf;
+
+  /// A warning about this device itself, such as an expiring signature.
+  final String? warning;
 
   /// Test hooks; native builds ask the service and the peer store.
   final Future<String> Function()? ownDeviceId;
@@ -68,6 +80,10 @@ class NikoDevicePage extends StatefulWidget {
       this.credentialStatusLoader,
       this.board,
       this.localPanel,
+      this.layout = NikoDeviceLayout.home,
+      this.onManage,
+      this.screenOf,
+      this.warning,
       this.ownDeviceId,
       this.peerIdentity});
   @override
@@ -86,22 +102,24 @@ class _NikoDevicePageState extends State<NikoDevicePage>
   final _scroll = ScrollController();
   late final NikoDeviceBoard _board = widget.board ?? NikoDeviceBoard();
   late final AnimationController _floating;
-  bool _inspectorOpen = true;
   List<DeviceEntry> _devices = [];
   String _ownId = '';
   final Map<String, (DateTime?, NikoPeerIdentity)> _identities = {};
+  final Map<String, (DateTime, ImageProvider)> _screens = {};
   ServerSnapshot? _server;
   String? _error;
   String? _notice;
   bool _loading = true;
   bool _refreshing = false;
   bool _connecting = false;
+
+  /// Only a session started from the panel's own fields spins its button.
+  bool _heroDispatching = false;
   bool _fileTransfer = false;
   bool _tunnel = false;
   bool _forceRelay = false;
   bool _rememberPassword = false;
   bool _legacyAvailable = false;
-  bool _quickExpanded = false;
   final Map<String, bool> _online = {};
   final Map<String, Duration> _onlineObserved = {};
   final Stopwatch _onlineClock = Stopwatch()..start();
@@ -130,6 +148,35 @@ class _NikoDevicePageState extends State<NikoDevicePage>
       _identities[device.id] = (device.lastConnectedAt, read(device.id));
     }
   }
+  ImageProvider? _screen(String id) =>
+      widget.screenOf?.call(id) ?? _screens[id]?.$2;
+
+  /// The core rewrites a device's screen at most every 30 seconds while
+  /// connected, so a file is read again only when it changes.
+  Future<void> _readScreens(List<DeviceEntry> devices) async {
+    if (!_native || widget.screenOf != null) return;
+    final directory = nikoDeviceScreensDirectory(_store.serverNamespace);
+    if (directory == null) return;
+    var changed = false;
+    for (final device in devices) {
+      final file = File('${directory.path}/${device.id}.png');
+      try {
+        final stat = await file.stat();
+        if (stat.type == FileSystemEntityType.notFound) {
+          changed |= _screens.remove(device.id) != null;
+          continue;
+        }
+        if (_screens[device.id]?.$1 == stat.modified) continue;
+        _screens[device.id] =
+            (stat.modified, MemoryImage(await file.readAsBytes()));
+        changed = true;
+      } catch (_) {
+        // A screen being replaced is read on the next refresh.
+      }
+    }
+    if (changed && mounted) setState(() {});
+  }
+
   Future<String> _credentialStatus(String namespace, String id) =>
       (widget.credentialStatusLoader ?? nikoCredentialStatus)(namespace, id);
   // The store is created on first access, which can happen before the first
@@ -294,6 +341,7 @@ class _NikoDevicePageState extends State<NikoDevicePage>
             .where((device) => !nikoIsOwnDevice(device.id, own))
             .toList();
         _readIdentities(devices);
+        unawaited(_readScreens(devices));
         setState(() {
           _ownId = own;
           _devices = devices;
@@ -444,13 +492,18 @@ class _NikoDevicePageState extends State<NikoDevicePage>
         auth = NikoConnectAuth(_password.text, remember: _rememberPassword);
       }
     }
-    await _dispatch(normalizeDeviceId(raw),
-        password: auth?.password ?? _password.text,
-        auth: auth,
-        expectedNamespace: namespace,
-        fileTransfer: _fileTransfer,
-        forceRelay: _forceRelay,
-        tunnel: _tunnel);
+    setState(() => _heroDispatching = true);
+    try {
+      await _dispatch(normalizeDeviceId(raw),
+          password: auth?.password ?? _password.text,
+          auth: auth,
+          expectedNamespace: namespace,
+          fileTransfer: _fileTransfer,
+          forceRelay: _forceRelay,
+          tunnel: _tunnel);
+    } finally {
+      if (mounted) setState(() => _heroDispatching = false);
+    }
   }
 
   Future<void> _wake(DeviceEntry device) async {
@@ -747,6 +800,7 @@ class _NikoDevicePageState extends State<NikoDevicePage>
     if (confirmed != true) return;
     try {
       await _store.remove(device.id);
+      unawaited(nikoForgetDeviceScreen(_store.serverNamespace, device.id));
       await _refresh();
     } catch (_) {
       if (mounted) {
@@ -754,19 +808,6 @@ class _NikoDevicePageState extends State<NikoDevicePage>
             context, nikoText('移除失败，请重试。', 'Remove failed. Please retry.'));
       }
     }
-  }
-
-  NlLedState _registrationLed() {
-    if (_server == null) return NlLedState.off;
-    if (widget.controllerOnly) {
-      return _server?.enabled == true ? NlLedState.ok : NlLedState.warn;
-    }
-    if (_server?.enabled != true) return NlLedState.warn;
-    return switch (_server?.registrationStatus) {
-      1 => NlLedState.ok,
-      null => NlLedState.off,
-      _ => NlLedState.warn,
-    };
   }
 
   String _registration() {
@@ -795,9 +836,7 @@ class _NikoDevicePageState extends State<NikoDevicePage>
 
   bool get _configured => _server?.config.isValid == true;
 
-  /// With no devices or no server the connect form is the page's hero;
-  /// otherwise it folds into the quick-connect row above the devices.
-  bool get _showHero => _devices.isEmpty || !_configured;
+  bool get _serverPending => _server == null && _error == null;
 
   DeviceEntry? get _selectedDevice {
     final id = _board.selected;
@@ -808,6 +847,17 @@ class _NikoDevicePageState extends State<NikoDevicePage>
     return null;
   }
 
+  /// The device of the latest session, for the home panel's resume row.
+  DeviceEntry? get _lastDevice {
+    DeviceEntry? last;
+    for (final device in _devices) {
+      final at = device.lastConnectedAt;
+      if (at == null) continue;
+      if (last == null || at.isAfter(last.lastConnectedAt!)) last = device;
+    }
+    return last;
+  }
+
   List<DeviceEntry> _visibleDevices() {
     final query = _search.text.trim().toLowerCase();
     final filter = _board.filter;
@@ -815,6 +865,7 @@ class _NikoDevicePageState extends State<NikoDevicePage>
     final visible = _devices
         .where((device) =>
             (filter != 'favorites' || device.favorite) &&
+            (filter != 'online' || _online[device.id] == true) &&
             (filter != 'recent' || device.lastConnectedAt != null) &&
             (group == null || device.group.trim() == group) &&
             '${device.id} ${device.alias} ${device.group} ${_identity(device).name} ${_identity(device).platformLabel}'
@@ -835,30 +886,17 @@ class _NikoDevicePageState extends State<NikoDevicePage>
     return visible;
   }
 
-  void _setQuick(bool expanded, {bool focus = false}) {
-    setState(() => _quickExpanded = expanded);
-    if (!expanded) _password.clear();
-    if (expanded && focus) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _canConnect) _idFocus.requestFocus();
-      });
-    }
-  }
-
   void _quickConnectRequested() {
     if (_scroll.hasClients) {
       _scroll.animateTo(0,
           duration: NlMotion.of(context, NlMotion.slow), curve: NlMotion.ease);
     }
-    if (_showHero) {
-      if (_canConnect) _idFocus.requestFocus();
-    } else {
-      _setQuick(true, focus: true);
-    }
+    if (_canConnect) _idFocus.requestFocus();
   }
 
   void _select(DeviceEntry device) {
-    _board.select(_board.selected == device.id ? null : device.id);
+    _board.select(device.id);
+    if (_floating.value == 0) _floating.forward();
   }
 
   void _closeInspector() {
@@ -869,18 +907,16 @@ class _NikoDevicePageState extends State<NikoDevicePage>
   void _showMenu(DeviceEntry device, {Offset? at, Rect? anchor}) {
     final online = _online[device.id];
     showNlMenu(context, position: at, anchor: anchor, entries: [
-      if (at != null) ...[
-        NlMenuItem(
-            label: nikoText('远程控制', 'Remote control'),
-            icon: NlIcons.monitor,
-            enabled: _canConnect,
-            onSelected: () => _connectWithDialog(device)),
-        NlMenuItem(
-            label: nikoText('文件传输', 'File transfer'),
-            icon: NlIcons.folder,
-            enabled: _canConnect,
-            onSelected: () => _connectWithDialog(device, fileTransfer: true)),
-      ],
+      NlMenuItem(
+          label: nikoText('远程控制', 'Remote control'),
+          icon: NlIcons.monitor,
+          enabled: _canConnect,
+          onSelected: () => _connectWithDialog(device)),
+      NlMenuItem(
+          label: nikoText('文件传输', 'File transfer'),
+          icon: NlIcons.folder,
+          enabled: _canConnect,
+          onSelected: () => _connectWithDialog(device, fileTransfer: true)),
       NlMenuItem(
           label: nikoText('TCP 隧道', 'TCP tunnel'),
           icon: NlIcons.cable,
@@ -899,7 +935,7 @@ class _NikoDevicePageState extends State<NikoDevicePage>
           icon: NlIcons.star,
           onSelected: () => _favorite(device)),
       NlMenuItem(
-          label: nikoText('编辑', 'Edit'),
+          label: nikoText('重命名和分组', 'Rename and group'),
           icon: NlIcons.pencil,
           onSelected: () => _edit(device)),
       if (_native)
@@ -910,28 +946,11 @@ class _NikoDevicePageState extends State<NikoDevicePage>
             onSelected: () => _forgetCredential(device)),
       const NlMenuDivider(),
       NlMenuItem(
-          label: nikoText('移除', 'Remove'),
+          label: nikoText('从列表中移除', 'Remove from list'),
           icon: NlIcons.trash2,
           danger: true,
           onSelected: () => _remove(device)),
     ]);
-  }
-
-  String _subtitle() {
-    if (_showHero) {
-      return nikoText('自己的服务器，熟悉的工作空间。', 'Your server. Your workspace.');
-    }
-    final filter = _board.filter;
-    final count = nikoText('${_devices.length} 台设备', '${_devices.length} devices');
-    final online = _board.onlineCount;
-    final parts = [
-      if (filter.startsWith('group:'))
-        '${nikoText('分组', 'Group')} · ${filter.substring(6)}'
-      else
-        count,
-      if (_online.isNotEmpty) nikoText('$online 台在线', '$online online'),
-    ];
-    return parts.join(' · ');
   }
 
   @override
@@ -945,146 +964,463 @@ class _NikoDevicePageState extends State<NikoDevicePage>
     return _page(context);
   }
 
-  Widget _page(BuildContext context) {
+  Widget _page(BuildContext context) => FocusTraversalGroup(
+      child: widget.layout == NikoDeviceLayout.manage
+          ? _managePage(context)
+          : _homePage(context));
+
+  // -- Home: the connect panel leads, devices show their screens below.
+
+  Widget _homePage(BuildContext context) {
     final nl = NlColors.of(context);
     final devices = _visibleDevices();
-    return FocusTraversalGroup(
+    return ColoredBox(
+        color: nl.bg,
         child: LayoutBuilder(builder: (context, constraints) {
-      final width = constraints.maxWidth;
-      final narrow = width < 520;
-      final searchInBody = width < 760;
-      final side = width < NlLayout.compactMax ? NlSpace.s4 : NlSpace.s6;
-      final selected = _selectedDevice;
-      final dock = width >= 820;
-      final hasInspector = selected != null || widget.localPanel != null;
-      final page = NlScrollWatcher(
-          header: (context, scrolled) => NikoPageBar(
-              title: nikoText('我的设备', 'My devices'),
-              subtitle: _subtitle(),
-              divider: scrolled,
-              actions: _headerActions(context,
-                  width: width, dock: dock && hasInspector)),
-          child: SingleChildScrollView(
-              controller: _scroll,
-              padding: EdgeInsets.fromLTRB(side, NlSpace.s2, side, NlSpace.s10),
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (searchInBody) ...[
-                      _searchField(),
-                      const SizedBox(height: NlSpace.s3),
-                    ],
-                    ..._banners(context),
-                    _quickConnect(context, constraints),
-                    const SizedBox(height: NlSpace.s6),
-                    _filterBar(context, width - 2 * side, narrow: narrow),
-                    const SizedBox(height: NlSpace.s3),
-                    if (_loading)
-                      const Padding(
-                          padding: EdgeInsets.all(NlSpace.s8),
-                          child: Center(child: NlSpinner(size: 20)))
-                    else if (devices.isEmpty)
-                      _empty(context)
-                    else
-                      LayoutBuilder(
-                          builder: (context, box) =>
-                              _devicesView(context, box.maxWidth, devices)),
-                  ])));
-      if (dock && hasInspector) {
-        return ColoredBox(
-            color: nl.bg,
-            child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(child: page),
-                  NlSidePanel(
-                      open: _inspectorOpen || selected != null,
-                      width: 300,
-                      child: DecoratedBox(
-                          decoration: BoxDecoration(
-                              color: nl.bg2,
-                              border:
-                                  Border(left: BorderSide(color: nl.line))),
-                          child: _inspector(context, selected,
-                              docked: true))),
-                ]));
-      }
-      return ColoredBox(
-          color: nl.bg,
-          child: Stack(fit: StackFit.expand, children: [
-            page,
-            if (hasInspector) _floatingInspector(context, width, selected),
-          ]));
-    }));
+          final width = constraints.maxWidth;
+          final side = width < NlLayout.compactMax ? NlSpace.s4 : NlSpace.s6;
+          final local = widget.controllerOnly ? null : widget.localPanel;
+          final launch = _launchPanel(context, compact: width < 600);
+          final top = local != null && width >= 920
+              ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(flex: 7, child: launch),
+                  const SizedBox(width: NlSpace.s4),
+                  Expanded(flex: 5, child: local),
+                ])
+              : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  launch,
+                  if (local != null) ...[
+                    const SizedBox(height: NlSpace.s4),
+                    local,
+                  ],
+                ]);
+          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            const _HomeBar(),
+            Expanded(
+                child: SingleChildScrollView(
+                    controller: _scroll,
+                    padding:
+                        EdgeInsets.fromLTRB(side, 0, side, NlSpace.s10),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          ..._banners(context),
+                          top,
+                          const SizedBox(height: NlSpace.s8),
+                          _wallHeader(context, compact: width < 600),
+                          const SizedBox(height: NlSpace.s3),
+                          if (_loading)
+                            _wallSkeleton(context, width - 2 * side)
+                          else if (devices.isEmpty)
+                            _empty(context)
+                          else
+                            _wall(context, width - 2 * side, devices),
+                        ]))),
+          ]);
+        }));
   }
 
-  List<Widget> _headerActions(BuildContext context,
-      {required double width, required bool dock}) {
-    final add = _error != null ? null : () => _edit();
-    return [
-      if (width >= 760) SizedBox(width: 220, child: _searchField()),
-      if (width >= 520 && _devices.isNotEmpty) _viewToggle(),
-      if (width < 640)
-        NlIconButton(
-            icon: NlIcons.plus,
-            tooltip: nikoText('添加设备', 'Add device'),
-            onPressed: add)
-      else
-        NlButton.ghost(
-            icon: NlIcons.plus,
-            label: nikoText('添加设备', 'Add device'),
-            onPressed: add),
-      if (widget.localPanel != null)
-        dock
-            ? NlIconButton(
-                icon: NlIcons.panelRight,
-                tooltip: _inspectorOpen
-                    ? nikoText('隐藏本机信息', 'Hide this computer')
-                    : nikoText('显示本机信息', 'Show this computer'),
-                active: _inspectorOpen,
-                onPressed: () =>
-                    setState(() => _inspectorOpen = !_inspectorOpen))
-            : NlIconButton(
-                icon: NlIcons.monitorSmartphone,
-                tooltip: nikoText('本机信息', 'This computer'),
-                onPressed: () {
-                  _board.select(null);
-                  _floating.forward();
-                }),
-    ];
-  }
-
-  Widget _searchField() => NlSearchField(
-      fieldKey: const Key('nikodesk-search'),
-      controller: _search,
-      focusNode: _searchFocus,
-      hint: nikoText('搜索设备', 'Search devices'),
-      clearLabel: nikoText('清除搜索', 'Clear search'),
-      onChanged: (_) => setState(() {}));
-
-  Widget _viewToggle() => NlSegmented<NikoDeviceView>(
-          small: true,
-          segments: [
-            NlSegment(
-                value: NikoDeviceView.grid,
-                label: nikoText('网格', 'Grid'),
-                icon: NlIcons.layoutGrid,
-                iconOnly: true),
-            NlSegment(
-                value: NikoDeviceView.list,
-                label: nikoText('列表', 'List'),
-                icon: NlIcons.list,
-                iconOnly: true),
+  /// The one committed surface: connecting is the main task, so it is the
+  /// first thing on the home screen, in the logo blue.
+  Widget _launchPanel(BuildContext context, {required bool compact}) {
+    final nl = NlColors.of(context);
+    final pad = compact ? NlSpace.s5 : NlSpace.s8;
+    final last = _lastDevice;
+    // Setup is offered only once a read says no server is set; while the
+    // read is pending or has failed, the fields stay in place, disabled, so
+    // the panel does not flash a setup prompt on every launch.
+    final fields = _server == null || _configured;
+    final help = !fields
+        ? null
+        : _serverPending
+            ? nikoText('正在读取私服设置…', 'Reading server settings…')
+            : _error != null
+                ? nikoText('暂时不能连接，原因见上方提示。',
+                    'Connecting is unavailable for now. See the notice above.')
+                : !_canConnect && !_connecting
+                    ? _registration()
+                    : nikoText('对方 NikoDesk 首页上的设备代码。密码可以现在填，也可以连接时再输。',
+                        'The device code shown on the other NikoDesk. Type the password now or when asked.');
+    final title = Text(nikoText('控制另一台设备', 'Control another device'),
+        style: NlType.text(compact ? NlType.s6 : 24,
+                weight: FontWeight.w600, color: nl.brandInk)
+            .copyWith(height: 1.3));
+    return Container(
+        constraints: const BoxConstraints(minHeight: 300),
+        padding: EdgeInsets.fromLTRB(pad, pad, pad, compact ? pad : NlSpace.s6),
+        decoration: BoxDecoration(
+            color: nl.brand, borderRadius: BorderRadius.circular(NlRadius.r3)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          // Phones give the modes a full row of equal parts.
+          if (compact) ...[
+            title,
+            if (fields) ...[
+              const SizedBox(height: NlSpace.s3),
+              _modes(context, expand: true),
+            ],
+          ] else
+            Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: NlSpace.s4,
+                runSpacing: NlSpace.s3,
+                children: [title, if (fields) _modes(context)]),
+          SizedBox(height: compact ? NlSpace.s5 : NlSpace.s6),
+          if (fields) ...[
+            _connectFields(context, compact: compact),
+            const SizedBox(height: NlSpace.s2),
+            Text(help!,
+                style: NlType.text(NlType.s3, color: nl.brandInk2)),
+          ] else
+            _setupPrompt(context),
+          if (_configured && last != null) ...[
+            const SizedBox(height: NlSpace.s6),
+            _resume(context, last),
           ],
-          selected: _board.view,
-          onChanged: (view) => _board.view = view);
+        ]));
+  }
+
+  Widget _modes(BuildContext context, {bool expand = false}) {
+    final mode = _tunnel
+        ? 2
+        : _fileTransfer
+            ? 1
+            : 0;
+    return _BrandModes(
+        selected: mode,
+        enabled: _canConnect,
+        expand: expand,
+        modes: [
+          (NlIcons.monitor, nikoText('远程控制', 'Control')),
+          (NlIcons.folder, nikoText('文件传输', 'Files')),
+          (NlIcons.cable, nikoText('TCP 隧道', 'TCP tunnel')),
+        ],
+        onChanged: (value) => setState(() {
+              _fileTransfer = value == 1;
+              _tunnel = value == 2;
+            }));
+  }
+
+  Widget _connectFields(BuildContext context, {required bool compact}) {
+    final nl = NlColors.of(context);
+    Widget labelled(String label, Widget field) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label,
+                  style: NlType.text(NlType.s2,
+                      weight: FontWeight.w500, color: nl.brandInk2)),
+              const SizedBox(height: 6),
+              field,
+            ]);
+    final id = labelled(
+        nikoText('对方设备代码', 'Device code'),
+        NlTextField(
+            fieldKey: const Key('nikodesk-hero-id'),
+            controller: _temporary,
+            focusNode: _idFocus,
+            enabled: _canConnect,
+            mono: true,
+            large: true,
+            hint: '123 456 789',
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.next));
+    final password = labelled(
+        nikoText('密码', 'Password'),
+        NlTextField(
+            fieldKey: const Key('nikodesk-hero-password'),
+            controller: _password,
+            enabled: _canConnect,
+            obscure: true,
+            large: true,
+            hint: nikoText('可留空', 'Optional'),
+            revealLabel: nikoText('显示密码', 'Show password'),
+            hideLabel: nikoText('隐藏密码', 'Hide password'),
+            onSubmitted: _canConnect ? (_) => _connectHero() : null));
+    final button = _BrandConnect(
+        label: nikoText(
+            _tunnel
+                ? '打开隧道'
+                : _fileTransfer
+                    ? '传输文件'
+                    : '连接',
+            _tunnel
+                ? 'Open tunnel'
+                : _fileTransfer
+                    ? 'Transfer'
+                    : 'Connect'),
+        busy: _heroDispatching,
+        expand: compact,
+        onPressed: _canConnect ? _connectHero : null,
+        onOptions: (anchor) => showNlMenu(context, anchor: anchor, entries: [
+              NlMenuHeader(nikoText('这次连接', 'This connection')),
+              NlMenuItem(
+                  label: nikoText('强制经私服中继', 'Force private relay'),
+                  icon: NlIcons.route,
+                  checked: _forceRelay,
+                  enabled: _canConnect,
+                  onSelected: () => setState(() => _forceRelay = !_forceRelay)),
+            ]));
+    // The box sits on the fields' left edge and the whole row toggles it.
+    final remember = _credentialNative && _store.serverNamespace != null
+        ? MergeSemantics(
+            child: NlPressable(
+                onTap: !_canConnect
+                    ? null
+                    : () => setState(() => _rememberPassword = !_rememberPassword),
+                button: false,
+                pressScale: 1,
+                builder: (context, states) => ConstrainedBox(
+                    constraints: BoxConstraints(
+                        minHeight: NlLayout.touch(context) ? 44 : 32),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Theme(
+                          data: Theme.of(context).copyWith(
+                              checkboxTheme: CheckboxThemeData(
+                                  side: BorderSide(
+                                      color: nl.brandInk2, width: 1.5),
+                                  fillColor: WidgetStateProperty.resolveWith(
+                                      (states) =>
+                                          states.contains(WidgetState.selected)
+                                              ? nl.brandInk
+                                              : Colors.transparent),
+                                  checkColor: WidgetStatePropertyAll(nl.brand))),
+                          child: SizedBox.square(
+                              dimension: 18,
+                              child: Checkbox(
+                                  key: const Key('nikodesk-hero-remember'),
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: const VisualDensity(
+                                      horizontal: -4, vertical: -4),
+                                  value: _rememberPassword,
+                                  onChanged: !_canConnect
+                                      ? null
+                                      : (value) => setState(() =>
+                                          _rememberPassword = value == true)))),
+                      const SizedBox(width: NlSpace.s2),
+                      Flexible(
+                          child: Text(
+                              nikoText('记住这个密码', 'Remember this password'),
+                              style:
+                                  NlType.text(NlType.s3, color: nl.brandInk2))),
+                    ]))))
+        : null;
+    final fields = compact
+        ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            id,
+            const SizedBox(height: NlSpace.s3),
+            password,
+            const SizedBox(height: NlSpace.s3),
+            button,
+          ])
+        : Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Expanded(flex: 5, child: id),
+            const SizedBox(width: NlSpace.s3),
+            Expanded(flex: 3, child: password),
+            const SizedBox(width: NlSpace.s3),
+            button,
+          ]);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      fields,
+      if (remember != null) ...[
+        const SizedBox(height: NlSpace.s1),
+        Align(alignment: Alignment.centerLeft, child: remember),
+      ],
+    ]);
+  }
+
+  Widget _setupPrompt(BuildContext context) {
+    final nl = NlColors.of(context);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(nikoText('先连上自己的服务器', 'Set up your private server first'),
+          style: NlType.text(NlType.s5,
+              weight: FontWeight.w600, color: nl.brandInk)),
+      const SizedBox(height: NlSpace.s2),
+      Text(
+          nikoText('填好 ID 服务器、中继服务器和公钥后，就能用设备代码连接其他电脑。',
+              'Enter the ID server, relay server and public key, then connect to other computers by their device codes.'),
+          style: NlType.text(NlType.s3, color: nl.brandInk2)),
+      const SizedBox(height: NlSpace.s5),
+      _BrandButton(
+          icon: NlIcons.server,
+          label: nikoText('配置服务器', 'Configure server'),
+          onPressed: _configure),
+    ]);
+  }
+
+  Widget _resume(BuildContext context, DeviceEntry device) {
+    final nl = NlColors.of(context);
+    final title = _deviceTitle(device, _identity(device));
+    return Container(
+        padding: const EdgeInsets.only(top: NlSpace.s4),
+        decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: nl.brandTrack))),
+        child: Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: NlSpace.s3,
+            runSpacing: NlSpace.s2,
+            children: [
+              Text.rich(
+                  TextSpan(children: [
+                    TextSpan(text: nikoText('上次连接 ', 'Last session ')),
+                    TextSpan(
+                        text: title,
+                        style: TextStyle(
+                            color: nl.brandInk, fontWeight: FontWeight.w600)),
+                    TextSpan(
+                        text: nikoText('，${_ago(device.lastConnectedAt!)}',
+                            ', ${_ago(device.lastConnectedAt!)}')),
+                  ]),
+                  style: NlType.text(NlType.s3, color: nl.brandInk2)),
+              _BrandButton(
+                  ghost: true,
+                  icon: NlIcons.rotateCw,
+                  label: nikoText('重新连接', 'Reconnect'),
+                  onPressed:
+                      _canConnect ? () => _connectWithDialog(device) : null),
+            ]));
+  }
+
+  Widget _wallHeader(BuildContext context, {required bool compact}) {
+    final nl = NlColors.of(context);
+    final filter = _board.filter;
+    final heading = Row(mainAxisSize: MainAxisSize.min, children: [
+      Flexible(
+          child: Semantics(
+              header: true,
+              child: Text(nikoText('我的设备', 'My devices'),
+                  style: NlType.text(NlType.s5,
+                      weight: FontWeight.w600, color: nl.fg)))),
+      if (_devices.isNotEmpty) ...[
+        const SizedBox(width: NlSpace.s2),
+        Text('${_devices.length}', style: NlType.text(NlType.s4, color: nl.fg3)),
+      ],
+    ]);
+    final filters = _devices.isEmpty
+        ? null
+        : NlSegmented<String>(
+            small: true,
+            expand: compact,
+            segments: [
+              NlSegment(value: 'all', label: nikoText('全部', 'All')),
+              NlSegment(value: 'online', label: nikoText('在线', 'Online')),
+              NlSegment(value: 'favorites', label: nikoText('收藏', 'Favorites')),
+            ],
+            selected: const {'all', 'online', 'favorites'}.contains(filter)
+                ? filter
+                : '',
+            onChanged: (value) => _board.filter = value);
+    if (compact) {
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Align(alignment: Alignment.centerLeft, child: heading),
+        if (filters != null) ...[
+          const SizedBox(height: NlSpace.s3),
+          filters,
+        ],
+      ]);
+    }
+    return Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: NlSpace.s4,
+        runSpacing: NlSpace.s3,
+        children: [
+          heading,
+          Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: NlSpace.s3,
+              runSpacing: NlSpace.s2,
+              children: [
+                if (filters != null) filters,
+                if (widget.onManage != null)
+                  NlButton.quiet(
+                      label: nikoText('管理设备', 'Manage devices'),
+                      onPressed: widget.onManage),
+              ]),
+        ]);
+  }
+
+  int _columns(BuildContext context, double width) {
+    final scale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.6);
+    // Phones keep two tiles a row; wider windows give each tile room.
+    final minimum = (width < NlLayout.compactMax
+            ? 150
+            : NlLayout.touch(context)
+                ? 240
+                : 220) *
+        scale;
+    return (width / minimum).floor().clamp(1, 5);
+  }
+
+  Widget _wall(BuildContext context, double width, List<DeviceEntry> devices) {
+    final columns = _columns(context, width);
+    const gap = NlSpace.s4;
+    final tile = (width - gap * (columns - 1)) / columns;
+    return Wrap(spacing: gap, runSpacing: gap, children: [
+      for (final device in devices)
+        SizedBox(
+            width: tile,
+            child: _DeviceTile(
+                device: device,
+                identity: _identity(device),
+                online: _online[device.id],
+                canConnect: _canConnect,
+                picture: _screen(device.id),
+                lastSession: device.lastConnectedAt == null
+                    ? null
+                    : _ago(device.lastConnectedAt!),
+                onConnect: () => _connectWithDialog(device),
+                onMenu: (at, anchor) =>
+                    _showMenu(device, at: at, anchor: anchor))),
+      if (_board.filter == 'all' && _search.text.trim().isEmpty)
+        SizedBox(
+            width: tile,
+            child: _AddTile(onTap: _error != null ? null : () => _edit())),
+    ]);
+  }
+
+  Widget _wallSkeleton(BuildContext context, double width) {
+    final nl = NlColors.of(context);
+    final columns = _columns(context, width);
+    const gap = NlSpace.s4;
+    final tile = (width - gap * (columns - 1)) / columns;
+    return Semantics(
+        label: nikoText('正在读取设备', 'Loading devices'),
+        child: Wrap(spacing: gap, runSpacing: gap, children: [
+          for (var i = 0; i < columns; i++)
+            Container(
+                width: tile,
+                padding: const EdgeInsets.all(NlSpace.s2),
+                decoration: BoxDecoration(
+                    color: nl.surface,
+                    borderRadius: BorderRadius.circular(NlRadius.r3),
+                    border: Border.all(color: nl.ring)),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      AspectRatio(
+                          aspectRatio: 16 / 9,
+                          child: LayoutBuilder(
+                              builder: (context, box) => NlSkeleton(
+                                  width: box.maxWidth,
+                                  height: box.maxHeight,
+                                  radius: NlRadius.r2))),
+                      const SizedBox(height: NlSpace.s3),
+                      NlSkeleton(width: tile * .55, height: 14),
+                      const SizedBox(height: NlSpace.s2),
+                      NlSkeleton(width: tile * .35),
+                    ])),
+        ]));
+  }
 
   List<Widget> _banners(BuildContext context) {
     final nl = NlColors.of(context);
     Widget banner(IconData icon, String text,
             {Color? ink, Color? fill, Widget? action}) =>
         Padding(
-            padding: const EdgeInsets.only(bottom: NlSpace.s3),
+            padding: const EdgeInsets.only(bottom: NlSpace.s4),
             child: NlPanel(
                 color: fill,
                 padding: const EdgeInsets.symmetric(
@@ -1101,10 +1437,13 @@ class _NikoDevicePageState extends State<NikoDevicePage>
                   ],
                 ])));
     return [
+      if (widget.warning != null)
+        banner(NlIcons.triangleAlert, widget.warning!,
+            ink: nl.warnText, fill: nl.warnSoft),
       if (_error != null)
         banner(NlIcons.circleAlert, _error!,
             ink: nl.dangerText,
-            fill: nl.solid(nl.dangerSoft, nl.surface),
+            fill: nl.dangerSoft,
             action: NlButton.ghost(
                 small: true,
                 label: nikoText('重试', 'Retry'),
@@ -1122,542 +1461,211 @@ class _NikoDevicePageState extends State<NikoDevicePage>
     ];
   }
 
-  Widget _quickConnect(BuildContext context, BoxConstraints constraints) {
-    if (_showHero) return _hero(context, constraints, inline: true);
+  /// [framed] is false inside the device list, which is already a panel.
+  Widget _empty(BuildContext context, {bool framed = true}) {
+    final searching = _search.text.trim().isNotEmpty;
+    final filtered = _board.filter != 'all';
+    const padding =
+        EdgeInsets.symmetric(horizontal: NlSpace.s6, vertical: NlSpace.s8);
+    Widget frame(Widget child) => framed
+        ? NlPanel(padding: padding, child: child)
+        : Padding(padding: padding, child: child);
+    return frame(NlEmptyState(
+            compact: true,
+            icon: _devices.isEmpty ? NlIcons.monitorSmartphone : NlIcons.search,
+            title: _devices.isEmpty
+                ? nikoText('还没有设备', 'No devices yet')
+                : nikoText('没有符合的设备', 'No matching devices'),
+            message: _devices.isEmpty
+                ? nikoText('用设备代码连接一次，它就会出现在这里；也可以先添加，起个好记的名字。密码默认不保存。',
+                    'Connect once by device code and it appears here, or add it first with a name you will remember. Passwords are not saved by default.')
+                : nikoText('换个关键词，或者看全部设备。', 'Try another search, or show all devices.'),
+            action: _devices.isEmpty
+                ? NlButton(
+                    icon: NlIcons.plus,
+                    label: nikoText('添加设备', 'Add device'),
+                    onPressed: _error != null ? null : () => _edit())
+                : searching || filtered
+                    ? NlButton.ghost(
+                        label: nikoText('显示全部设备', 'Show all devices'),
+                        onPressed: () => setState(() {
+                              _search.clear();
+                              _board.filter = 'all';
+                            }))
+                    : null));
+  }
+
+  // -- Devices: a list beside the selected device's detail.
+
+  Widget _managePage(BuildContext context) {
     final nl = NlColors.of(context);
+    final devices = _visibleDevices();
+    return LayoutBuilder(builder: (context, constraints) {
+      final width = constraints.maxWidth;
+      final side = width < NlLayout.compactMax ? NlSpace.s4 : NlSpace.s6;
+      final wide = width >= 880;
+      final selected = _selectedDevice ??
+          (wide && devices.isNotEmpty ? devices.first : null);
+      final count = nikoText('${_devices.length} 台', '${_devices.length}');
+      final online = _board.onlineCount;
+      final page = NlScrollWatcher(
+          header: (context, scrolled) => NikoPageBar(
+              title: nikoText('设备', 'Devices'),
+              subtitle: _online.isEmpty
+                  ? count
+                  : nikoText('$count，$online 台在线', '$count, $online online'),
+              divider: scrolled,
+              actions: [
+                NlButton.ghost(
+                    icon: NlIcons.plus,
+                    label: nikoText('添加设备', 'Add device'),
+                    onPressed: _error != null ? null : () => _edit()),
+              ]),
+          child: SingleChildScrollView(
+              controller: _scroll,
+              padding: EdgeInsets.fromLTRB(side, NlSpace.s2, side, NlSpace.s10),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ..._banners(context),
+                    if (wide)
+                      Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                                width: 340,
+                                child: _listCard(context, devices,
+                                    selected: selected)),
+                            const SizedBox(width: NlSpace.s4),
+                            Expanded(
+                                child: selected == null
+                                    ? const SizedBox.shrink()
+                                    : _detail(context, selected)),
+                          ])
+                    else
+                      _listCard(context, devices, selected: _selectedDevice),
+                  ])));
+      return ColoredBox(
+          color: nl.bg,
+          child: Stack(fit: StackFit.expand, children: [
+            page,
+            if (!wide) _floatingDetail(context, width, _selectedDevice),
+          ]));
+    });
+  }
+
+  Widget _listCard(BuildContext context, List<DeviceEntry> devices,
+      {required DeviceEntry? selected}) {
+    final filter = _board.filter;
+    final group = filter.startsWith('group:') ? filter.substring(6) : null;
+    final groups = _board.groups;
     return NlPanel(
-        padding: EdgeInsets.zero,
+        padding: const EdgeInsets.all(NlSpace.s3),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          NlPressable(
-              key: const Key('nikodesk-quick-connect'),
-              onTap: () => _setQuick(!_quickExpanded, focus: !_quickExpanded),
-              pressScale: 1,
-              builder: (context, states) => AnimatedContainer(
-                  duration: NlMotion.of(context, NlMotion.instant),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: NlSpace.s4, vertical: NlSpace.s3),
-                  decoration: BoxDecoration(
-                      color: states.contains(WidgetState.hovered)
-                          ? nl.hover
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.vertical(
-                          top: const Radius.circular(NlRadius.r3),
-                          bottom: Radius.circular(
-                              _quickExpanded ? 0 : NlRadius.r3)),
-                      boxShadow: states.contains(WidgetState.focused)
-                          ? nl.focusRing
-                          : null),
-                  child: Row(children: [
-                    Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                            color: nl.accentSoft,
-                            borderRadius: BorderRadius.circular(NlRadius.r2)),
-                        child:
-                            Icon(NlIcons.zap, size: 16, color: nl.accentText)),
-                    const SizedBox(width: NlSpace.s3),
-                    Expanded(
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                          Text(nikoText('快速连接', 'Quick connect'),
-                              key: const Key('nikodesk-quick-connect-toggle'),
-                              style: NlType.text(NlType.s4,
-                                  weight: FontWeight.w600, color: nl.fg)),
-                          const SizedBox(height: 2),
-                          Row(children: [
-                            NlLed(_registrationLed()),
-                            const SizedBox(width: NlSpace.s2),
-                            Flexible(
-                                child: Text(_registration(),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: NlType.text(NlType.s2,
-                                        color: nl.fg2))),
-                          ]),
-                        ])),
-                    AnimatedRotation(
-                        turns: _quickExpanded ? .5 : 0,
-                        duration: NlMotion.of(context, NlMotion.base),
-                        curve: NlMotion.ease,
-                        child: Icon(NlIcons.chevronDown,
-                            size: 16, color: nl.fg3)),
-                  ]))),
-          ClipRect(
-              child: AnimatedSize(
-                  duration: NlMotion.of(context, NlMotion.slow),
-                  curve: NlMotion.ease,
-                  alignment: Alignment.topCenter,
-                  child: _quickExpanded
-                      ? Container(
-                          decoration: BoxDecoration(
-                              border: Border(top: BorderSide(color: nl.line))),
-                          padding: const EdgeInsets.all(NlSpace.s4),
-                          child: _hero(context, constraints, inline: false))
-                      : const SizedBox(width: double.infinity))),
+          _searchField(),
+          const SizedBox(height: NlSpace.s3),
+          SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: [
+                NlSegmented<String>(
+                    small: true,
+                    segments: [
+                      NlSegment(
+                          value: 'all',
+                          label: nikoText('全部', 'All'),
+                          count: _devices.isEmpty ? null : '${_devices.length}'),
+                      NlSegment(
+                          value: 'favorites', label: nikoText('收藏', 'Favorites')),
+                      NlSegment(value: 'recent', label: nikoText('最近', 'Recent')),
+                    ],
+                    selected: group == null ? filter : '',
+                    onChanged: (value) => _board.filter = value),
+                for (final name in groups.keys) ...[
+                  const SizedBox(width: NlSpace.s2),
+                  NlChip(
+                      label: name,
+                      icon: NlIcons.tag,
+                      selected: group == name,
+                      onChanged: (_) => _board.filter =
+                          group == name ? 'all' : 'group:$name'),
+                ],
+              ])),
+          const SizedBox(height: NlSpace.s2),
+          if (_loading)
+            Padding(
+                padding: const EdgeInsets.all(NlSpace.s2),
+                child: Column(children: [
+                  for (var i = 0; i < 4; i++)
+                    const Padding(
+                        padding: EdgeInsets.symmetric(vertical: NlSpace.s2),
+                        child: NlSkeleton(height: 36, radius: NlRadius.r2)),
+                ]))
+          else if (devices.isEmpty)
+            _empty(context, framed: false)
+          else
+            for (final device in devices)
+              _DeviceListItem(
+                  device: device,
+                  identity: _identity(device),
+                  online: _online[device.id],
+                  selected: selected?.id == device.id,
+                  picture: _screen(device.id),
+                  lastSession: device.lastConnectedAt == null
+                      ? null
+                      : _ago(device.lastConnectedAt!),
+                  onSelect: () => _select(device),
+                  onMenu: (at, anchor) =>
+                      _showMenu(device, at: at, anchor: anchor)),
         ]));
   }
 
-  /// The connect form and the server state beside it.
-  Widget _hero(BuildContext context, BoxConstraints constraints,
-      {required bool inline}) {
-    final nl = NlColors.of(context);
-    final scale = MediaQuery.textScalerOf(context).scale(1);
-    final narrow = constraints.maxWidth / scale < 520;
-    final mode = _tunnel
-        ? 2
-        : _fileTransfer
-            ? 1
-            : 0;
-    final idField = NlTextField(
-        fieldKey: const Key('nikodesk-hero-id'),
-        controller: _temporary,
-        focusNode: _idFocus,
-        enabled: _canConnect,
-        mono: true,
-        large: true,
-        label: nikoText('远端设备 ID', 'Remote device ID'),
-        hint: '123 456 789',
-        keyboardType: TextInputType.number,
-        textInputAction: TextInputAction.next);
-    final passwordField = NlTextField(
-        fieldKey: const Key('nikodesk-hero-password'),
-        controller: _password,
-        enabled: _canConnect,
-        obscure: true,
-        large: true,
-        label: nikoText('远端密码', 'Remote password'),
-        revealLabel: nikoText('显示密码', 'Show password'),
-        hideLabel: nikoText('隐藏密码', 'Hide password'),
-        onSubmitted: _canConnect ? (_) => _connectHero() : null);
-    final modes = NlSegmented<int>(
-        expand: narrow,
-        segments: [
-          NlSegment(
-              value: 0,
-              key: const Key('nikodesk-connect-mode-0'),
-              label: nikoText('远程控制', 'Control'),
-              icon: NlIcons.monitor),
-          NlSegment(
-              value: 1,
-              key: const Key('nikodesk-connect-mode-1'),
-              label: nikoText('文件传输', 'Files'),
-              icon: NlIcons.folder),
-          NlSegment(
-              value: 2,
-              key: const Key('nikodesk-connect-mode-2'),
-              label: nikoText('TCP 隧道', 'TCP tunnel'),
-              icon: NlIcons.cable),
-        ],
-        selected: mode,
-        onChanged: !_canConnect
-            ? null
-            : (value) => setState(() {
-                  _fileTransfer = value == 1;
-                  _tunnel = value == 2;
-                }));
-    final relay = MergeSemantics(
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-      NlSwitch(
-          value: _forceRelay,
-          onChanged: !_canConnect
-              ? null
-              : (value) => setState(() => _forceRelay = value)),
-      const SizedBox(width: NlSpace.s2),
-      Flexible(
-          child: Text(nikoText('强制私服中继', 'Force private relay'),
-              style: NlType.text(NlType.s3, color: nl.fg2))),
-    ]));
-    final remember = _credentialNative && _store.serverNamespace != null
-        ? MergeSemantics(
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Checkbox(
-                key: const Key('nikodesk-hero-remember'),
-                value: _rememberPassword,
-                onChanged: !_canConnect
-                    ? null
-                    : (value) =>
-                        setState(() => _rememberPassword = value == true)),
-            Flexible(
-                child: Text(nikoText('记住密码', 'Remember password'),
-                    style: NlType.text(NlType.s3, color: nl.fg2))),
-          ]))
-        : null;
-    final connect = NlButton(
-        key: const Key('nikodesk-hero-connect'),
-        large: true,
-        icon: _tunnel
-            ? NlIcons.cable
-            : _fileTransfer
-                ? NlIcons.folder
-                : NlIcons.arrowRight,
-        label: nikoText(
-            _tunnel
-                ? '打开隧道'
-                : _fileTransfer
-                    ? '传输文件'
-                    : '连接',
-            _tunnel
-                ? 'Open tunnel'
-                : _fileTransfer
-                    ? 'Transfer'
-                    : 'Connect'),
-        onPressed: _canConnect ? _connectHero : null);
-    final form = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      if (inline) ...[
-        Text(nikoText('连接远程设备', 'Connect to a device'),
-            style: NlType.text(NlType.s6, weight: FontWeight.w600, color: nl.fg)),
-        const SizedBox(height: NlSpace.s1),
-        Text(
-            nikoText('输入对方 ID 和密码，由你的私服协调连接。',
-                'Enter the remote ID and password. Your private server coordinates the connection.'),
-            style: NlType.text(NlType.s3, color: nl.fg2)),
-        const SizedBox(height: NlSpace.s5),
-      ],
-      Align(alignment: Alignment.centerLeft, child: modes),
-      const SizedBox(height: NlSpace.s4),
-      if (narrow) ...[
-        idField,
-        const SizedBox(height: NlSpace.s3),
-        passwordField,
-      ] else
-        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Expanded(flex: 3, child: idField),
-          const SizedBox(width: NlSpace.s3),
-          Expanded(flex: 2, child: passwordField),
-        ]),
-      const SizedBox(height: NlSpace.s4),
-      Wrap(
-          spacing: NlSpace.s5,
-          runSpacing: NlSpace.s3,
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Wrap(
-                spacing: NlSpace.s5,
-                runSpacing: NlSpace.s2,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [relay, if (remember != null) remember]),
-            connect,
-          ]),
-    ]);
-    final status = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [
-        NlLed(_configured
-            ? NlLedState.ok
-            : _server == null
-                ? NlLedState.off
-                : NlLedState.warn),
-        const SizedBox(width: NlSpace.s2),
-        Expanded(
-            child: Text(
-                _configured
-                    ? nikoText('私服配置完整', 'Private server configured')
-                    : _server == null
-                        ? nikoText('私服配置状态未知', 'Server settings unknown')
-                        : nikoText('先连接自己的服务器', 'Set up your private server'),
-                style: NlType.text(NlType.s4,
-                    weight: FontWeight.w600, color: nl.fg))),
-      ]),
-      const SizedBox(height: NlSpace.s2),
-      Text(
-          _configured || _server == null
-              ? _registration()
-              : nikoText('需要 ID 服务器、中继地址与公钥。未配置时无法连接。',
-                  'Enter your ID server, relay and public key. Connections are disabled until configured.'),
-          style: NlType.text(NlType.s3, color: nl.fg2)),
-      const SizedBox(height: NlSpace.s1),
-      Text(
-          _online.isEmpty
-              ? nikoText('设备在线状态：未知 · 建立会话后再验证认证与加密',
-                  'Device availability: unknown · Authentication and encryption are checked per session')
-              : nikoText('设备在线状态来自私服 · 认证与加密逐会话验证',
-                  'Availability comes from your server · Auth and encryption are checked per session'),
-          style: NlType.text(NlType.s2, color: nl.fg3)),
-      const SizedBox(height: NlSpace.s4),
-      NlButton.ghost(
-          small: true,
-          icon: NlIcons.server,
-          label: nikoText('配置服务器', 'Configure server'),
-          onPressed: _configure),
-    ]);
-    final wide = constraints.maxWidth >= 860;
-    final body = wide
-        ? IntrinsicHeight(
-            child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Expanded(child: form),
-            Padding(
-                padding: const EdgeInsets.symmetric(horizontal: NlSpace.s6),
-                child: VerticalDivider(width: 1, color: nl.line)),
-            SizedBox(width: 280, child: status),
-          ]))
-        : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            form,
-            Padding(
-                padding: const EdgeInsets.symmetric(vertical: NlSpace.s5),
-                child: Divider(height: 1, color: nl.line)),
-            status,
-          ]);
-    if (!inline) return body;
-    return NlPanel(
-        padding: EdgeInsets.all(narrow ? NlSpace.s4 : NlSpace.s6),
-        radius: NlRadius.r4,
-        child: body);
-  }
+  Widget _detail(BuildContext context, DeviceEntry device) => _DeviceDetail(
+      key: ValueKey('nikodesk-detail-${device.id}'),
+      device: device,
+      identity: _identity(device),
+      online: _online[device.id],
+      canConnect: _canConnect,
+      native: _native,
+      picture: _screen(device.id),
+      lastSession:
+          device.lastConnectedAt == null ? null : _date(device.lastConnectedAt!),
+      lastAgo:
+          device.lastConnectedAt == null ? null : _ago(device.lastConnectedAt!),
+      onConnect: () => _connectWithDialog(device),
+      onFiles: () => _connectWithDialog(device, fileTransfer: true),
+      onTunnel: () => _connectWithDialog(device, tunnel: true),
+      onWake: _canConnect && _online[device.id] != true
+          ? () => _wake(device)
+          : null,
+      onFavorite: () => _favorite(device),
+      onEdit: () => _edit(device),
+      onForget: () => _forgetCredential(device),
+      onRemove: () => _remove(device),
+      onCopy: () {
+        Clipboard.setData(ClipboardData(text: device.id));
+        nikoNotice(context, nikoText('已复制设备代码', 'Device code copied'));
+      });
 
-  Widget _filterBar(BuildContext context, double width,
-      {required bool narrow}) {
-    final nl = NlColors.of(context);
-    final filter = _board.filter;
-    final group = filter.startsWith('group:') ? filter.substring(6) : null;
-    final tiny = width < 340;
-    return Row(children: [
-      Expanded(
-          child: Align(
-              alignment: Alignment.centerLeft,
-              child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-        NlSegmented<String>(
-              segments: [
-                NlSegment(
-                    value: 'all',
-                    label: nikoText('全部', 'All'),
-                    count: _devices.isEmpty || tiny ? null : '${_devices.length}'),
-                NlSegment(
-                    value: 'favorites',
-                    label: nikoText('收藏', 'Favorites'),
-                    icon: NlIcons.star,
-                    iconOnly: tiny),
-                NlSegment(
-                    value: 'recent',
-                    label: nikoText('最近', 'Recent'),
-                    icon: NlIcons.history,
-                    iconOnly: tiny),
-              ],
-              selected: group == null ? filter : '',
-              onChanged: (value) => _board.filter = value),
-        if (group != null) ...[
-          const SizedBox(width: NlSpace.s2),
-          NlChip(
-              label: group,
-              icon: NlIcons.tag,
-              selected: true,
-              onChanged: (_) => _board.filter = 'all'),
-        ],
-      ])))),
-      if (narrow && _devices.isNotEmpty) ...[
-        const SizedBox(width: NlSpace.s2),
-        _viewToggle(),
-      ],
-      if (!narrow && _online.isNotEmpty) ...[
-        const SizedBox(width: NlSpace.s3),
-        Text(nikoText('在线状态来自私服', 'Availability from your server'),
-            style: NlType.text(NlType.s2, color: nl.fg3)),
-      ],
-    ]);
-  }
+  Widget _searchField() => NlSearchField(
+      fieldKey: const Key('nikodesk-search'),
+      controller: _search,
+      focusNode: _searchFocus,
+      hint: nikoText('名称或设备代码', 'Name or device code'),
+      clearLabel: nikoText('清除搜索', 'Clear search'),
+      onChanged: (_) => setState(() {}));
 
-  Widget _empty(BuildContext context) {
-    final searching = _search.text.trim().isNotEmpty;
-    return NlEmptyState(
-        compact: true,
-        icon: _devices.isEmpty ? NlIcons.monitorSmartphone : NlIcons.search,
-        title: _devices.isEmpty
-            ? nikoText('把常用电脑放在这里', 'Keep your computers here')
-            : nikoText('没有匹配的设备', 'No matching devices'),
-        message: _devices.isEmpty
-            ? nikoText('添加设备 ID 和别名。默认不保存密码；连接时可选择在认证成功后保存到本机系统安全存储。',
-                'Add a device ID and alias. Passwords are not saved by default; when connecting, you can choose to save them to this device’s secure storage after authentication succeeds.')
-            : nikoText('试试其他关键词或筛选条件。', 'Try another search or filter.'),
-        action: _devices.isEmpty
-            ? NlButton(
-                icon: NlIcons.plus,
-                label: nikoText('添加设备', 'Add device'),
-                onPressed: _error != null ? null : () => _edit())
-            : searching
-                ? NlButton.ghost(
-                    label: nikoText('清除搜索', 'Clear search'),
-                    onPressed: () => setState(_search.clear))
-                : null);
-  }
-
-  Widget _devicesView(
-      BuildContext context, double width, List<DeviceEntry> devices) {
-    final known = devices.any((device) => _online.containsKey(device.id));
-    final sections = known
-        ? [
-            (
-              nikoText('在线', 'Online'),
-              devices.where((device) => _online[device.id] == true).toList()
-            ),
-            (
-              nikoText('离线', 'Offline'),
-              devices.where((device) => _online[device.id] == false).toList()
-            ),
-            (
-              nikoText('状态未知', 'Unknown'),
-              devices.where((device) => !_online.containsKey(device.id)).toList()
-            ),
-          ]
-        : [(null, devices)];
-    final grid = _board.view == NikoDeviceView.grid;
-    return AnimatedSwitcher(
-        duration: NlMotion.of(context, NlMotion.base),
-        switchInCurve: NlMotion.ease,
-        switchOutCurve: NlMotion.exit,
-        child: Column(
-            key: ValueKey(_board.view),
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final (title, items) in sections)
-                if (items.isNotEmpty) ...[
-                  if (title != null)
-                    NlSectionLabel('$title · ${items.length}',
-                        padding: const EdgeInsets.only(
-                            top: NlSpace.s2, bottom: NlSpace.s3)),
-                  grid ? _grid(context, width, items) : _list(context, items),
-                  const SizedBox(height: NlSpace.s4),
-                ],
-            ]));
-  }
-
-  Widget _grid(BuildContext context, double width, List<DeviceEntry> devices) {
-    final scale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.6);
-    final minimum = (NlLayout.touch(context) ? 250 : 228) * scale;
-    final columns = (width / minimum).floor().clamp(1, 6);
-    const gap = NlSpace.s3;
-    final cardWidth = (width - gap * (columns - 1)) / columns;
-    return Wrap(spacing: gap, runSpacing: gap, children: [
-      for (final device in devices)
-        SizedBox(
-            width: cardWidth,
-            child: _DeviceCard(
-                device: device,
-                identity: _identity(device),
-                online: _online[device.id],
-                selected: _board.selected == device.id,
-                canConnect: _canConnect,
-                lastSession: device.lastConnectedAt == null
-                    ? null
-                    : _ago(device.lastConnectedAt!),
-                onSelect: () => _select(device),
-                onConnect: () => _connectWithDialog(device),
-                onFiles: () => _connectWithDialog(device, fileTransfer: true),
-                onFavorite: () => _favorite(device),
-                onMenu: (at, anchor) =>
-                    _showMenu(device, at: at, anchor: anchor))),
-    ]);
-  }
-
-  Widget _list(BuildContext context, List<DeviceEntry> devices) =>
-      NlPanel(
-          padding: EdgeInsets.zero,
-          child: Column(children: [
-            for (var i = 0; i < devices.length; i++)
-              _DeviceRow(
-                  device: devices[i],
-                  identity: _identity(devices[i]),
-                  divider: i > 0,
-                  online: _online[devices[i].id],
-                  selected: _board.selected == devices[i].id,
-                  canConnect: _canConnect,
-                  lastSession: devices[i].lastConnectedAt == null
-                      ? null
-                      : _ago(devices[i].lastConnectedAt!),
-                  onSelect: () => _select(devices[i]),
-                  onConnect: () => _connectWithDialog(devices[i]),
-                  onFiles: () =>
-                      _connectWithDialog(devices[i], fileTransfer: true),
-                  onFavorite: () => _favorite(devices[i]),
-                  onMenu: (at, anchor) =>
-                      _showMenu(devices[i], at: at, anchor: anchor)),
-          ]));
-
-  Widget _inspector(BuildContext context, DeviceEntry? device,
-      {required bool docked}) {
-    final nl = NlColors.of(context);
-    final child = device == null
-        ? Column(
-            key: const ValueKey('nikodesk-inspector-local'),
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-                NikoWindowDrag(
-                    child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                            NlSpace.s5, NlSpace.s3, NlSpace.s2, 0),
-                        child: Row(children: [
-                          Expanded(
-                              child: Text(nikoText('本机', 'This computer'),
-                                  style: NlType.text(NlType.s2,
-                                      weight: FontWeight.w500,
-                                      color: nl.fg3))),
-                          NlIconButton(
-                              icon: NlIcons.close,
-                              tooltip: nikoText('关闭', 'Close'),
-                              onPressed: docked
-                                  ? () =>
-                                      setState(() => _inspectorOpen = false)
-                                  : _closeInspector),
-                        ]))),
-                Expanded(
-                    child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(
-                            NlSpace.s5, NlSpace.s2, NlSpace.s5, NlSpace.s5),
-                        child: widget.localPanel ?? const SizedBox.shrink())),
-              ])
-        : _DeviceInspector(
-            key: ValueKey('nikodesk-inspector-${device.id}'),
-            device: device,
-            identity: _identity(device),
-            online: _online[device.id],
-            canConnect: _canConnect,
-            native: _native,
-            lastSession:
-                device.lastConnectedAt == null ? null : _date(device.lastConnectedAt!),
-            onClose: _closeInspector,
-            onConnect: () => _connectWithDialog(device),
-            onFiles: () => _connectWithDialog(device, fileTransfer: true),
-            onTunnel: () => _connectWithDialog(device, tunnel: true),
-            onWake: _canConnect && _online[device.id] != true
-                ? () => _wake(device)
-                : null,
-            onFavorite: () => _favorite(device),
-            onEdit: () => _edit(device),
-            onForget: () => _forgetCredential(device),
-            onRemove: () => _remove(device),
-            onCopy: () {
-              Clipboard.setData(ClipboardData(text: device.id));
-              nikoNotice(
-                  context, nikoText('已复制设备 ID', 'Device ID copied'));
-            });
-    return AnimatedSwitcher(
-        duration: NlMotion.of(context, NlMotion.base),
-        switchInCurve: NlMotion.ease,
-        switchOutCurve: NlMotion.exit,
-        layoutBuilder: (current, previous) => Stack(
-            fit: StackFit.expand,
-            children: [...previous, if (current != null) current]),
-        transitionBuilder: (child, animation) => FadeTransition(
-            opacity: animation,
-            child: SlideTransition(
-                position: Tween(begin: const Offset(.03, 0), end: Offset.zero)
-                    .animate(animation),
-                child: child)),
-        child: child);
-  }
-
-  /// The inspector over the page on windows too narrow to dock it.
-  Widget _floatingInspector(
+  /// The detail over the list on windows too narrow to show both.
+  Widget _floatingDetail(
       BuildContext context, double width, DeviceEntry? device) {
     final nl = NlColors.of(context);
-    final panel = (width - NlSpace.s8).clamp(280.0, 360.0);
+    final panel = (width - NlSpace.s8).clamp(280.0, 420.0);
     return AnimatedBuilder(
         animation: _floating,
         builder: (context, _) {
           final t = NlMotion.ease.transform(_floating.value);
-          if (_floating.value == 0) return const SizedBox.shrink();
+          if (_floating.value == 0 || device == null) {
+            return const SizedBox.shrink();
+          }
           return Stack(children: [
             Positioned.fill(
                 child: GestureDetector(
@@ -1672,11 +1680,26 @@ class _NikoDevicePageState extends State<NikoDevicePage>
                 child: Container(
                     clipBehavior: Clip.antiAlias,
                     decoration: BoxDecoration(
-                        color: nl.bg2,
+                        color: nl.bg,
                         borderRadius: BorderRadius.circular(NlRadius.r4),
-                        border: Border.all(color: nl.line),
                         boxShadow: nl.shadow3),
-                    child: _inspector(context, device, docked: false))),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Align(
+                              alignment: Alignment.centerRight,
+                              child: Padding(
+                                  padding: const EdgeInsets.all(NlSpace.s2),
+                                  child: NlIconButton(
+                                      icon: NlIcons.close,
+                                      tooltip: nikoText('关闭', 'Close'),
+                                      onPressed: _closeInspector))),
+                          Expanded(
+                              child: SingleChildScrollView(
+                                  padding: const EdgeInsets.fromLTRB(
+                                      NlSpace.s3, 0, NlSpace.s3, NlSpace.s4),
+                                  child: _detail(context, device))),
+                        ]))),
           ]);
         });
   }
@@ -1688,7 +1711,7 @@ class _NikoDevicePageState extends State<NikoDevicePage>
 
   String _ago(DateTime date) {
     final elapsed = DateTime.now().difference(date.toLocal());
-    if (elapsed.inMinutes < 1) return nikoText('刚刚', 'Just now');
+    if (elapsed.inMinutes < 1) return nikoText('刚刚', 'just now');
     if (elapsed.inHours < 1) {
       return nikoText('${elapsed.inMinutes} 分钟前', '${elapsed.inMinutes} min ago');
     }
@@ -1699,17 +1722,261 @@ class _NikoDevicePageState extends State<NikoDevicePage>
       return nikoText('${elapsed.inDays} 天前', '${elapsed.inDays} d ago');
     }
     final local = date.toLocal();
-    return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}';
+    return nikoText('${local.month} 月 ${local.day} 日', '${local.month}/${local.day}');
+  }
+}
+
+/// The page top on the home layout: no title, only the window's drag strip
+/// and, with the sidebar hidden, the control that opens it.
+class _HomeBar extends StatelessWidget {
+  const _HomeBar();
+
+  @override
+  Widget build(BuildContext context) {
+    final frame = NikoHomeFrame.maybeOf(context);
+    final leading = frame?.leading;
+    return NikoWindowDrag(
+        child: SizedBox(
+            height: leading == null ? NlSpace.s6 : 52,
+            width: double.infinity,
+            child: leading == null
+                ? null
+                : Padding(
+                    padding: EdgeInsets.only(
+                        left: (frame?.insetLeft ?? 0) + NlSpace.s3),
+                    child: Align(alignment: Alignment.centerLeft, child: leading))));
+  }
+}
+
+/// Connection modes on the brand panel: a darker track, the selected mode
+/// a white chip labelled in the panel blue.
+class _BrandModes extends StatelessWidget {
+  final int selected;
+  final bool enabled;
+  final List<(IconData, String)> modes;
+  final ValueChanged<int> onChanged;
+
+  /// Fill the width in equal parts; labels wrap rather than overflow.
+  final bool expand;
+  const _BrandModes(
+      {required this.selected,
+      required this.enabled,
+      required this.modes,
+      required this.onChanged,
+      this.expand = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final nl = NlColors.of(context);
+    final touch = NlLayout.touch(context);
+    return Container(
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+            color: nl.brandTrack,
+            borderRadius: BorderRadius.circular(NlRadius.r2)),
+        // A wrapped label keeps every segment the same height.
+        child: IntrinsicHeight(
+            child: Row(
+            mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+          for (var i = 0; i < modes.length; i++)
+            _grow(expand, Semantics(
+                inMutuallyExclusiveGroup: true,
+                selected: i == selected,
+                child: NlPressable(
+                    key: Key('nikodesk-connect-mode-$i'),
+                    onTap: enabled ? () => onChanged(i) : null,
+                    selected: i == selected,
+                    pressScale: 1,
+                    builder: (context, states) {
+                      final on = i == selected;
+                      final ink = on
+                          ? nl.brand
+                          : states.contains(WidgetState.hovered)
+                              ? nl.brandInk
+                              : nl.brandInk2;
+                      return AnimatedContainer(
+                          duration: NlMotion.of(context, NlMotion.instant),
+                          constraints:
+                              BoxConstraints(minHeight: touch ? 36 : 28),
+                          padding: EdgeInsets.symmetric(
+                              horizontal: expand ? NlSpace.s2 : NlSpace.s3,
+                              vertical: 2),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                              color: on ? nl.brandInk : Colors.transparent,
+                              borderRadius:
+                                  BorderRadius.circular(NlRadius.r2 - 2),
+                              boxShadow: states.contains(WidgetState.focused)
+                                  ? [BoxShadow(color: nl.brandInk, spreadRadius: 2)]
+                                  : null),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            Icon(modes[i].$1, size: 14, color: ink),
+                            const SizedBox(width: 6),
+                            Flexible(
+                                child: Text(modes[i].$2,
+                                    maxLines: 2,
+                                    textAlign: TextAlign.center,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: NlType.text(NlType.s3,
+                                        weight: on
+                                            ? FontWeight.w600
+                                            : FontWeight.w500,
+                                        color: ink))),
+                          ]));
+                    }))),
+        ])));
+  }
+}
+
+/// The connect button on the brand panel: white, labelled in the panel
+/// blue, with the connection options behind its arrow.
+class _BrandConnect extends StatelessWidget {
+  final String label;
+  final bool busy;
+  final bool expand;
+  final VoidCallback? onPressed;
+  final void Function(Rect anchor) onOptions;
+  const _BrandConnect(
+      {required this.label,
+      required this.busy,
+      required this.onPressed,
+      required this.onOptions,
+      this.expand = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final nl = NlColors.of(context);
+    final height = NlLayout.touch(context) ? 52.0 : 44.0;
+    final enabled = onPressed != null && !busy;
+    Widget part(
+            {Key? key,
+            required VoidCallback? onTap,
+            required BorderRadius radius,
+            required Widget child,
+            EdgeInsets padding =
+                const EdgeInsets.symmetric(horizontal: NlSpace.s6)}) =>
+        NlPressable(
+            key: key,
+            onTap: onTap,
+            pressScale: .98,
+            builder: (context, states) => AnimatedContainer(
+                duration: NlMotion.of(context, NlMotion.instant),
+                height: height,
+                padding: padding,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                    color: states.contains(WidgetState.hovered) ||
+                            states.contains(WidgetState.pressed)
+                        ? nl.brandInk2
+                        : nl.brandInk,
+                    borderRadius: radius,
+                    boxShadow: states.contains(WidgetState.focused)
+                        ? [BoxShadow(color: nl.brandInk, spreadRadius: 2)]
+                        : null),
+                child: child));
+    return AnimatedOpacity(
+        opacity: onPressed == null ? .6 : 1,
+        duration: NlMotion.of(context, NlMotion.fast),
+        child: Row(
+            mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+            children: [
+          _grow(expand, part(
+              key: const Key('nikodesk-hero-connect'),
+              onTap: enabled ? onPressed : null,
+              radius: const BorderRadius.horizontal(
+                  left: Radius.circular(NlRadius.r2)),
+              padding: EdgeInsets.symmetric(
+                  horizontal: expand ? NlSpace.s4 : NlSpace.s6),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (busy) ...[
+                  NlSpinner(size: 14, color: nl.brand),
+                  const SizedBox(width: NlSpace.s2),
+                ],
+                Flexible(
+                    child: Text(label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: NlType.text(NlType.s5,
+                            weight: FontWeight.w600, color: nl.brand))),
+              ]))),
+          Container(width: 1, height: height, color: nl.brandInk2),
+          Builder(
+              builder: (context) => part(
+                  key: const Key('nikodesk-hero-options'),
+                  onTap: onPressed == null ? null : () => onOptions(nlAnchorOf(context)),
+                  radius: const BorderRadius.horizontal(
+                      right: Radius.circular(NlRadius.r2)),
+                  padding: const EdgeInsets.symmetric(horizontal: NlSpace.s3),
+                  child: Semantics(
+                      label: nikoText('连接选项', 'Connection options'),
+                      child: Icon(NlIcons.chevronDown, size: 16, color: nl.brand)))),
+        ]));
+  }
+}
+
+Widget _grow(bool expand, Widget child) =>
+    expand ? Expanded(child: child) : child;
+
+/// A button on the brand panel: white, or outlined in white when [ghost].
+class _BrandButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+  final bool ghost;
+  const _BrandButton(
+      {required this.icon,
+      required this.label,
+      required this.onPressed,
+      this.ghost = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final nl = NlColors.of(context);
+    final ink = ghost ? nl.brandInk : nl.brand;
+    return AnimatedOpacity(
+        opacity: onPressed == null ? .6 : 1,
+        duration: NlMotion.of(context, NlMotion.fast),
+        child: NlPressable(
+            onTap: onPressed,
+            pressScale: .98,
+            builder: (context, states) {
+              final hovered = states.contains(WidgetState.hovered) ||
+                  states.contains(WidgetState.pressed);
+              return AnimatedContainer(
+                  duration: NlMotion.of(context, NlMotion.instant),
+                  height: NlLayout.touch(context) ? 40 : 32,
+                  padding: const EdgeInsets.symmetric(horizontal: NlSpace.s4),
+                  decoration: BoxDecoration(
+                      color: ghost
+                          ? (hovered ? nl.brandTrack : Colors.transparent)
+                          : (hovered ? nl.brandInk2 : nl.brandInk),
+                      borderRadius: BorderRadius.circular(NlRadius.r2),
+                      border: ghost ? Border.all(color: nl.brandInk2) : null,
+                      boxShadow: states.contains(WidgetState.focused)
+                          ? [BoxShadow(color: nl.brandInk, spreadRadius: 2)]
+                          : null),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(icon, size: 15, color: ink),
+                    const SizedBox(width: 6),
+                    Flexible(
+                        child: Text(label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: NlType.text(NlType.s3,
+                                weight: FontWeight.w600, color: ink))),
+                  ]));
+            }));
   }
 }
 
 /// Online state as a dot and a word: green 在线, grey 离线, and a hollow
-/// ring for 在线未知. "Unknown" stays a first-class state so presence is
+/// ring for 状态未知. Unknown stays a first-class state so presence is
 /// never overstated, but it is not a warning either.
 class _Presence extends StatelessWidget {
   final bool? online;
-  final String? detail;
-  const _Presence({required this.online, this.detail});
+  const _Presence({required this.online});
 
   @override
   Widget build(BuildContext context) {
@@ -1717,22 +1984,10 @@ class _Presence extends StatelessWidget {
     final (Color ink, String label) = switch (online) {
       true => (nl.okText, nikoText('在线', 'Online')),
       false => (nl.fg2, nikoText('离线', 'Offline')),
-      null => (nl.fg3, nikoText('在线未知', 'Unknown')),
+      null => (nl.fg3, nikoText('状态未知', 'Unknown')),
     };
     return Row(mainAxisSize: MainAxisSize.min, children: [
-      Container(
-          width: 7,
-          height: 7,
-          decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: switch (online) {
-                true => nl.ok,
-                false => nl.fg3,
-                null => Colors.transparent,
-              },
-              border: online == null
-                  ? Border.all(color: nl.fg3, width: 1.2)
-                  : null)),
+      _Dot(online: online),
       const SizedBox(width: 6),
       Flexible(
           child: Text(label,
@@ -1741,34 +1996,30 @@ class _Presence extends StatelessWidget {
               style: NlType.text(NlType.s2,
                   weight: online == true ? FontWeight.w500 : FontWeight.w400,
                   color: ink))),
-      if (detail != null)
-        Flexible(
-            child: Text(' · $detail',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: NlType.text(NlType.s2, color: nl.fg3))),
     ]);
   }
 }
 
-class _Star extends StatelessWidget {
-  final bool favorite;
-  final VoidCallback onTap;
-  const _Star({required this.favorite, required this.onTap});
+class _Dot extends StatelessWidget {
+  final bool? online;
+  const _Dot({required this.online});
 
   @override
   Widget build(BuildContext context) {
     final nl = NlColors.of(context);
-    return Semantics(
-        toggled: favorite,
-        child: NlIconButton(
-            icon: favorite ? Icons.star_rounded : NlIcons.star,
-            iconSize: favorite ? 18 : null,
-            color: favorite ? nl.warn : null,
-            tooltip: favorite
-                ? nikoText('取消收藏', 'Remove favorite')
-                : nikoText('收藏', 'Favorite'),
-            onPressed: onTap));
+    return Container(
+        width: 7,
+        height: 7,
+        decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: switch (online) {
+              true => nl.ok,
+              false => nl.fg3,
+              null => Colors.transparent,
+            },
+            border: online == null
+                ? Border.all(color: nl.fg3, width: 1.2)
+                : null));
   }
 }
 
@@ -1780,164 +2031,355 @@ String _deviceTitle(DeviceEntry device, NikoPeerIdentity identity) =>
         ? identity.name
         : device.title;
 
-class _DeviceIdLine extends StatelessWidget {
-  final DeviceEntry device;
-  final NikoPeerIdentity identity;
-  final double size;
-  final Color color;
-  const _DeviceIdLine(
-      {required this.device,
-      required this.identity,
-      required this.size,
-      required this.color});
+/// Controllers that cannot be controlled themselves.
+bool _controllerPlatform(NikoPeerIdentity identity) =>
+    const {'android', 'ios'}.contains(identity.platform.toLowerCase());
 
-  @override
-  Widget build(BuildContext context) => Text.rich(
-      TextSpan(children: [
-        if (identity.platformLabel.isNotEmpty)
-          TextSpan(
-              text: '${identity.platformLabel} · ',
-              style: NlType.text(size, color: color)),
-        TextSpan(
-            text: nikoGroupedId(device.id),
-            style: NlType.monoText(size, color: color)),
-      ]),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis);
-}
+IconData _deviceIcon(NikoPeerIdentity identity) =>
+    switch (identity.platform.toLowerCase()) {
+      'android' || 'ios' => NlIcons.tablet,
+      'linux' => NlIcons.server,
+      'mac os' || 'macos' => NlIcons.laptop,
+      _ => NlIcons.monitor,
+    };
 
-class _DeviceCard extends StatelessWidget {
-  final DeviceEntry device;
-  final NikoPeerIdentity identity;
+/// A device's last screen, or a plain field that says why there is none.
+/// [chip] lays the online state over the picture.
+class _Screen extends StatelessWidget {
+  final ImageProvider? picture;
   final bool? online;
-  final bool selected;
-  final bool canConnect;
-  final String? lastSession;
-  final VoidCallback onSelect;
-  final VoidCallback onConnect;
-  final VoidCallback onFiles;
-  final VoidCallback onFavorite;
-  final _MenuOpener onMenu;
-
-  const _DeviceCard(
-      {required this.device,
-      required this.identity,
+  final IconData icon;
+  final String? reason;
+  final bool chip;
+  final double aspect;
+  final double radius;
+  final Widget? overlay;
+  const _Screen(
+      {required this.picture,
       required this.online,
-      required this.selected,
-      required this.canConnect,
-      required this.lastSession,
-      required this.onSelect,
-      required this.onConnect,
-      required this.onFiles,
-      required this.onFavorite,
-      required this.onMenu});
+      required this.icon,
+      this.reason,
+      this.chip = true,
+      this.aspect = 16 / 9,
+      this.radius = NlRadius.r2,
+      this.overlay});
 
   @override
   Widget build(BuildContext context) {
     final nl = NlColors.of(context);
-    return NlCard(
-        selected: selected,
-        onTap: onSelect,
-        onContextMenu: (at) => onMenu(at, null),
-        padding: const EdgeInsets.fromLTRB(
-            NlSpace.s4, NlSpace.s4, NlSpace.s3, NlSpace.s3),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            NlDeviceGlyph(id: device.id, size: 44, online: online),
-            const Spacer(),
-            _Star(favorite: device.favorite, onTap: onFavorite),
-          ]),
-          const SizedBox(height: NlSpace.s3),
-          Text(_deviceTitle(device, identity),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: NlType.text(NlType.s4, weight: FontWeight.w600, color: nl.fg)),
-          const SizedBox(height: 2),
-          _DeviceIdLine(
-              device: device,
-              identity: identity,
-              size: NlType.s2,
-              color: nl.fg3),
-          const SizedBox(height: NlSpace.s2 + 2),
-          _Presence(
-              online: online,
-              detail: device.group.trim().isEmpty ? null : device.group.trim()),
-          const SizedBox(height: NlSpace.s3),
-          LayoutBuilder(builder: (context, box) {
-            final connect = NlButton(
-                key: Key('nikodesk-device-connect-${device.id}'),
-                small: true,
-                label: nikoText('连接', 'Connect'),
-                onPressed: canConnect ? onConnect : null);
-            final files = NlIconButton(
-                icon: NlIcons.folder,
-                tooltip: nikoText('文件传输', 'File transfer'),
-                onPressed: canConnect ? onFiles : null);
-            final more = Builder(
-                builder: (context) => NlIconButton(
-                    icon: NlIcons.ellipsis,
-                    tooltip: nikoText('更多', 'More'),
-                    onPressed: () => onMenu(null, nlAnchorOf(context))));
-            final last = lastSession == null
-                ? null
-                : Text(lastSession!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.end,
-                    style: NlType.text(NlType.s1, color: nl.fg3));
-            // Large text on a narrow card: the actions wrap instead.
-            if (box.maxWidth / MediaQuery.textScalerOf(context).scale(1) <
-                200) {
-              return Wrap(
-                  spacing: NlSpace.s1,
-                  runSpacing: NlSpace.s1,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [connect, files, more, if (last != null) last]);
-            }
-            return Row(children: [
-              connect,
-              const SizedBox(width: NlSpace.s1),
-              files,
-              more,
-              const SizedBox(width: NlSpace.s2),
-              Expanded(child: last ?? const SizedBox.shrink()),
-            ]);
-          }),
+    final small = reason == null;
+    Widget none() => ColoredBox(
+        color: nl.surface2,
+        child: Center(
+            child: Padding(
+                padding: const EdgeInsets.all(NlSpace.s2),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(icon, size: small ? 16 : 26, color: nl.fg3),
+                  if (!small) ...[
+                    const SizedBox(height: NlSpace.s2),
+                    Text(reason!,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: NlType.text(NlType.s2, color: nl.fg2)),
+                  ],
+                ]))));
+    final image = picture == null
+        ? none()
+        : online == false
+            ? Opacity(
+                opacity: .55,
+                child: ColorFiltered(
+                    colorFilter: const ColorFilter.matrix([
+                      .2126, .7152, .0722, 0, 0, //
+                      .2126, .7152, .0722, 0, 0, //
+                      .2126, .7152, .0722, 0, 0, //
+                      0, 0, 0, 1, 0,
+                    ]),
+                    child: Image(
+                        image: picture!,
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                        errorBuilder: (_, __, ___) => none())))
+            : Image(
+                image: picture!,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+                errorBuilder: (_, __, ___) => none());
+    return AspectRatio(
+        aspectRatio: aspect,
+        child: ClipRRect(
+            borderRadius: BorderRadius.circular(radius),
+            child: Stack(fit: StackFit.expand, children: [
+              image,
+              if (chip && online != null)
+                Positioned(
+                    left: NlSpace.s2,
+                    top: NlSpace.s2,
+                    child: _StateChip(online: online!)),
+              if (overlay != null) overlay!,
+            ])));
+  }
+}
+
+/// The online state laid over a picture: a dark chip that reads on any
+/// screen behind it.
+class _StateChip extends StatelessWidget {
+  final bool online;
+  const _StateChip({required this.online});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+        height: 22,
+        padding: const EdgeInsets.symmetric(horizontal: 7),
+        decoration: BoxDecoration(
+            color: NlDock.chip, borderRadius: BorderRadius.circular(NlRadius.r1)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: online ? NlColors.orbitDark.ok : NlDock.ink2)),
+          const SizedBox(width: 5),
+          Text(online ? nikoText('在线', 'Online') : nikoText('离线', 'Offline'),
+              style: NlType.text(NlType.s1,
+                  weight: FontWeight.w500, color: NlDock.ink)),
         ]));
   }
 }
 
-class _DeviceRow extends StatelessWidget {
+String? _screenReason(DeviceEntry device, NikoPeerIdentity identity) {
+  if (_controllerPlatform(identity)) {
+    return nikoText('只能控制别人，不能被控制', 'Controls others; cannot be controlled');
+  }
+  if (device.lastConnectedAt == null) {
+    return nikoText('还没连接过，暂无画面', 'Not connected yet, no picture');
+  }
+  return nikoText('下次连接后显示画面', 'The picture appears after the next session');
+}
+
+/// A device on the home wall: its last screen, its name and how it was
+/// last seen. The whole tile connects; the menu holds everything else.
+class _DeviceTile extends StatelessWidget {
   final DeviceEntry device;
   final NikoPeerIdentity identity;
-  final bool divider;
   final bool? online;
-  final bool selected;
   final bool canConnect;
+  final ImageProvider? picture;
   final String? lastSession;
-  final VoidCallback onSelect;
   final VoidCallback onConnect;
-  final VoidCallback onFiles;
-  final VoidCallback onFavorite;
   final _MenuOpener onMenu;
 
-  const _DeviceRow(
+  const _DeviceTile(
       {required this.device,
       required this.identity,
-      required this.divider,
       required this.online,
-      required this.selected,
       required this.canConnect,
+      required this.picture,
       required this.lastSession,
-      required this.onSelect,
       required this.onConnect,
-      required this.onFiles,
-      required this.onFavorite,
       required this.onMenu});
 
   @override
   Widget build(BuildContext context) {
     final nl = NlColors.of(context);
+    final controller = _controllerPlatform(identity);
+    final title = _deviceTitle(device, identity);
+    final caption = [
+      if (identity.platformLabel.isNotEmpty)
+        identity.platformLabel
+      else
+        nikoGroupedId(device.id),
+      lastSession ?? nikoText('从未连接', 'never connected'),
+    ].join(nikoText('，', ', '));
+    return Semantics(
+        button: true,
+        label: nikoText('连接$title', 'Connect to $title'),
+        child: NlPressable(
+            key: Key('nikodesk-device-connect-${device.id}'),
+            onTap: canConnect && !controller ? onConnect : null,
+            onContextMenu: (at) => onMenu(at, null),
+            pressScale: .99,
+            builder: (context, states) {
+              final hovered = states.contains(WidgetState.hovered);
+              final focused = states.contains(WidgetState.focused);
+              final live = hovered || focused;
+              return AnimatedContainer(
+                  duration: NlMotion.of(context, NlMotion.base),
+                  curve: NlMotion.ease,
+                  transform: Matrix4.translationValues(0, hovered ? -1 : 0, 0),
+                  padding: const EdgeInsets.fromLTRB(
+                      NlSpace.s2, NlSpace.s2, NlSpace.s1, NlSpace.s2),
+                  decoration: BoxDecoration(
+                      color: nl.surface,
+                      borderRadius: BorderRadius.circular(NlRadius.r3),
+                      border: Border.all(color: hovered ? nl.line2 : nl.ring),
+                      boxShadow: [
+                        if (focused) ...nl.focusRing else ...nl.shadow1,
+                      ]),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _Screen(
+                            picture: picture,
+                            online: online,
+                            icon: _deviceIcon(identity),
+                            reason: _screenReason(device, identity),
+                            overlay: live && canConnect && !controller
+                                ? Positioned(
+                                    right: NlSpace.s2,
+                                    bottom: NlSpace.s2,
+                                    child: Container(
+                                        height: 28,
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: NlSpace.s3),
+                                        alignment: Alignment.center,
+                                        decoration: BoxDecoration(
+                                            color: nl.accentFill,
+                                            borderRadius: BorderRadius.circular(
+                                                NlRadius.r2)),
+                                        child: Text(nikoText('连接', 'Connect'),
+                                            style: NlType.text(NlType.s2,
+                                                weight: FontWeight.w600,
+                                                color: nl.onAccent))))
+                                : null),
+                        const SizedBox(height: NlSpace.s2 + 2),
+                        Row(children: [
+                          const SizedBox(width: NlSpace.s1),
+                          Expanded(
+                              child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                Row(children: [
+                                  Flexible(
+                                      child: Text(title,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: NlType.text(NlType.s4,
+                                              weight: FontWeight.w600,
+                                              color: nl.fg))),
+                                  if (device.favorite) ...[
+                                    const SizedBox(width: NlSpace.s1),
+                                    Icon(Icons.star_rounded,
+                                        size: 14, color: nl.fg3),
+                                  ],
+                                ]),
+                                const SizedBox(height: 2),
+                                Text(caption,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: NlType.text(NlType.s2, color: nl.fg3)),
+                              ])),
+                          Builder(
+                              builder: (context) => NlIconButton(
+                                  icon: NlIcons.ellipsis,
+                                  tooltip: nikoText('$title 的更多操作',
+                                      'More for $title'),
+                                  onPressed: () =>
+                                      onMenu(null, nlAnchorOf(context)))),
+                        ]),
+                      ]));
+            }));
+  }
+}
+
+/// The last tile on the wall: add a device by its code.
+class _AddTile extends StatelessWidget {
+  final VoidCallback? onTap;
+  const _AddTile({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final nl = NlColors.of(context);
+    return NlPressable(
+        onTap: onTap,
+        pressScale: .99,
+        semanticLabel: nikoText('添加设备', 'Add device'),
+        // Laid out like a device tile, so a row of tiles ends level.
+        builder: (context, states) => AnimatedContainer(
+            duration: NlMotion.of(context, NlMotion.instant),
+            padding: const EdgeInsets.fromLTRB(
+                NlSpace.s2, NlSpace.s2, NlSpace.s1, NlSpace.s2),
+            decoration: BoxDecoration(
+                color: states.contains(WidgetState.hovered)
+                    ? nl.surface
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(NlRadius.r3),
+                border: Border.all(color: nl.line2),
+                boxShadow:
+                    states.contains(WidgetState.focused) ? nl.focusRing : null),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Center(child: Icon(NlIcons.plus, size: 24, color: nl.fg2))),
+              const SizedBox(height: NlSpace.s2 + 2),
+              Row(children: [
+                const SizedBox(width: NlSpace.s1),
+                Expanded(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                      Text(nikoText('添加设备', 'Add device'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: NlType.text(NlType.s4,
+                              weight: FontWeight.w600, color: nl.fg)),
+                      const SizedBox(height: 2),
+                      Text(nikoText('用设备代码添加，起个好记的名字', 'By device code, with a name'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: NlType.text(NlType.s2, color: nl.fg3)),
+                    ])),
+                // Holds the height of the device tiles' menu button.
+                ExcludeSemantics(
+                    child: Visibility(
+                        visible: false,
+                        maintainSize: true,
+                        maintainAnimation: true,
+                        maintainState: true,
+                        child: NlIconButton(
+                            icon: NlIcons.ellipsis, tooltip: '', onPressed: null))),
+              ]),
+            ])));
+  }
+}
+
+/// One device in the devices list: a small screen, the name and its state.
+class _DeviceListItem extends StatelessWidget {
+  final DeviceEntry device;
+  final NikoPeerIdentity identity;
+  final bool? online;
+  final bool selected;
+  final ImageProvider? picture;
+  final String? lastSession;
+  final VoidCallback onSelect;
+  final _MenuOpener onMenu;
+
+  const _DeviceListItem(
+      {required this.device,
+      required this.identity,
+      required this.online,
+      required this.selected,
+      required this.picture,
+      required this.lastSession,
+      required this.onSelect,
+      required this.onMenu});
+
+  @override
+  Widget build(BuildContext context) {
+    final nl = NlColors.of(context);
+    final (String state, Color ink) = switch (online) {
+      true => (nikoText('在线', 'Online'), nl.okText),
+      false => (nikoText('离线', 'Offline'), nl.fg2),
+      null => (
+          _controllerPlatform(identity)
+              ? nikoText('只能控制别人', 'Controller only')
+              : nikoText('状态未知', 'Unknown'),
+          nl.fg3
+        ),
+    };
     return NlPressable(
         onTap: onSelect,
         onContextMenu: (at) => onMenu(at, null),
@@ -1945,94 +2387,67 @@ class _DeviceRow extends StatelessWidget {
         pressScale: 1,
         builder: (context, states) => AnimatedContainer(
             duration: NlMotion.of(context, NlMotion.instant),
-            padding: const EdgeInsets.symmetric(
-                horizontal: NlSpace.s3, vertical: NlSpace.s2),
+            margin: const EdgeInsets.only(bottom: 2),
+            padding: const EdgeInsets.all(NlSpace.s2),
             decoration: BoxDecoration(
                 color: selected
-                    ? nl.solid(nl.accentSoft, nl.surface)
+                    ? nl.accentSoft
                     : states.contains(WidgetState.hovered)
                         ? nl.hover
                         : Colors.transparent,
-                border: divider ? Border(top: BorderSide(color: nl.line)) : null,
+                borderRadius: BorderRadius.circular(NlRadius.r2),
                 boxShadow:
                     states.contains(WidgetState.focused) ? nl.focusRing : null),
-            child: LayoutBuilder(builder: (context, box) {
-              final scale = MediaQuery.textScalerOf(context).scale(1);
-              final narrow = box.maxWidth / scale < 560;
-              final title = Text(_deviceTitle(device, identity),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: NlType.text(NlType.s3,
-                      weight: FontWeight.w500, color: nl.fg));
-              final id = _DeviceIdLine(
-                  device: device,
-                  identity: identity,
-                  size: NlType.s1,
-                  color: nl.fg3);
-              final presence = _Presence(
-                  online: online,
-                  detail:
-                      device.group.trim().isEmpty ? null : device.group.trim());
-              final more = Builder(
-                  builder: (context) => NlIconButton(
-                      icon: NlIcons.ellipsis,
-                      tooltip: nikoText('更多', 'More'),
-                      onPressed: () => onMenu(null, nlAnchorOf(context))));
-              final connect = NlButton(
-                  key: Key('nikodesk-device-connect-${device.id}'),
-                  small: true,
-                  label: nikoText('连接', 'Connect'),
-                  onPressed: canConnect ? onConnect : null);
-              if (narrow) {
-                return Row(children: [
-                  NlDeviceGlyph(id: device.id, size: 32, online: online),
-                  const SizedBox(width: NlSpace.s3),
-                  Expanded(
-                      child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [title, id, presence])),
-                  more,
-                  const SizedBox(width: NlSpace.s1),
-                  connect,
-                ]);
-              }
-              return Row(children: [
-                NlDeviceGlyph(id: device.id, size: 32, online: online),
-                const SizedBox(width: NlSpace.s3),
-                Expanded(
-                    flex: 3,
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [title, id])),
-                Expanded(flex: 2, child: presence),
-                if (lastSession != null && box.maxWidth > 680)
-                  SizedBox(
-                      width: 96,
-                      child: Text(lastSession!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: NlType.text(NlType.s2, color: nl.fg3))),
-                _Star(favorite: device.favorite, onTap: onFavorite),
-                NlIconButton(
-                    icon: NlIcons.folder,
-                    tooltip: nikoText('文件传输', 'File transfer'),
-                    onPressed: canConnect ? onFiles : null),
-                more,
-                const SizedBox(width: NlSpace.s1),
-                connect,
-              ]);
-            })));
+            child: Row(children: [
+              SizedBox(
+                  width: 72,
+                  child: _Screen(
+                      picture: picture,
+                      online: online,
+                      icon: _deviceIcon(identity),
+                      chip: false,
+                      aspect: 16 / 10,
+                      radius: NlRadius.r1)),
+              const SizedBox(width: NlSpace.s3),
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text(_deviceTitle(device, identity),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: NlType.text(NlType.s4,
+                            weight: FontWeight.w600, color: nl.fg)),
+                    const SizedBox(height: 2),
+                    Row(children: [
+                      _Dot(online: online),
+                      const SizedBox(width: 6),
+                      Text(state, style: NlType.text(NlType.s2, color: ink)),
+                      if (lastSession != null) ...[
+                        const SizedBox(width: NlSpace.s2),
+                        Flexible(
+                            child: Text(lastSession!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: NlType.text(NlType.s2, color: nl.fg3))),
+                      ],
+                    ]),
+                  ])),
+            ])));
   }
 }
 
-class _DeviceInspector extends StatelessWidget {
+/// The selected device: its screen beside who it is, what to do with it
+/// and the facts the last session left.
+class _DeviceDetail extends StatelessWidget {
   final DeviceEntry device;
   final NikoPeerIdentity identity;
   final bool? online;
   final bool canConnect;
   final bool native;
+  final ImageProvider? picture;
   final String? lastSession;
-  final VoidCallback onClose;
+  final String? lastAgo;
   final VoidCallback onConnect;
   final VoidCallback onFiles;
   final VoidCallback onTunnel;
@@ -2043,15 +2458,16 @@ class _DeviceInspector extends StatelessWidget {
   final VoidCallback onRemove;
   final VoidCallback onCopy;
 
-  const _DeviceInspector(
+  const _DeviceDetail(
       {super.key,
       required this.device,
       required this.identity,
       required this.online,
       required this.canConnect,
       required this.native,
+      required this.picture,
       required this.lastSession,
-      required this.onClose,
+      required this.lastAgo,
       required this.onConnect,
       required this.onFiles,
       required this.onTunnel,
@@ -2065,131 +2481,149 @@ class _DeviceInspector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final nl = NlColors.of(context);
-    Widget info(String label, String value) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: NlSpace.s2),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          SizedBox(
-              width: 88,
-              child: Text(label, style: NlType.text(NlType.s2, color: nl.fg3))),
-          Expanded(
-              child: Text(value,
-                  style: NlType.text(NlType.s2, color: nl.fg))),
+    final controller = _controllerPlatform(identity);
+    final connectable = canConnect && !controller;
+    Widget fact(String label, String value) => SizedBox(
+        width: 168,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: NlType.text(NlType.s2, color: nl.fg3)),
+          const SizedBox(height: 2),
+          Text(value,
+              style: NlType.text(NlType.s3, weight: FontWeight.w600, color: nl.fg)),
         ]));
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      NikoWindowDrag(
-          child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                  NlSpace.s5, NlSpace.s3, NlSpace.s2, 0),
-              child: Row(children: [
-                Expanded(
-                    child: Text(nikoText('设备', 'Device'),
-                        style: NlType.text(NlType.s2,
-                            weight: FontWeight.w500, color: nl.fg3))),
-                NlIconButton(
-                    icon: NlIcons.close,
-                    tooltip: nikoText('关闭', 'Close'),
-                    onPressed: onClose),
-              ]))),
-      Expanded(
-          child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(
-                  NlSpace.s5, NlSpace.s2, NlSpace.s5, NlSpace.s6),
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Align(
-                        alignment: Alignment.centerLeft,
-                        child: NlDeviceGlyph(
-                            id: device.id, size: 56, online: online)),
-                    const SizedBox(height: NlSpace.s4),
-                    Text(_deviceTitle(device, identity),
-                        style: NlType.text(NlType.s6,
-                            weight: FontWeight.w600, color: nl.fg)),
-                    const SizedBox(height: NlSpace.s1),
-                    Row(children: [
-                      Flexible(
-                          child: Text(nikoGroupedId(device.id),
-                              style: NlType.monoText(NlType.s3, color: nl.fg2))),
-                      const SizedBox(width: NlSpace.s1),
-                      NlIconButton(
-                          icon: NlIcons.copy,
-                          tooltip: nikoText('复制设备 ID', 'Copy device ID'),
-                          iconSize: 14,
-                          onPressed: onCopy),
-                    ]),
-                    const SizedBox(height: NlSpace.s1),
-                    _Presence(online: online),
-                    const SizedBox(height: NlSpace.s5),
-                    NlButton(
-                        expand: true,
-                        icon: NlIcons.monitor,
-                        label: nikoText('远程控制', 'Remote control'),
-                        onPressed: canConnect ? onConnect : null),
-                    const SizedBox(height: NlSpace.s2),
-                    Row(children: [
-                      Expanded(
-                          child: NlButton.ghost(
-                              expand: true,
-                              icon: NlIcons.folder,
-                              label: nikoText('传文件', 'Files'),
-                              onPressed: canConnect ? onFiles : null)),
-                      const SizedBox(width: NlSpace.s2),
-                      Expanded(
-                          child: NlButton.ghost(
-                              expand: true,
-                              icon: NlIcons.cable,
-                              label: nikoText('隧道', 'Tunnel'),
-                              onPressed: canConnect ? onTunnel : null)),
-                    ]),
-                    const SizedBox(height: NlSpace.s2),
-                    NlButton.ghost(
-                        expand: true,
-                        icon: NlIcons.power,
-                        label: nikoText('远程开机', 'Wake-on-LAN'),
-                        onPressed: onWake),
-                    const SizedBox(height: NlSpace.s6),
-                    NlSectionLabel(nikoText('详情', 'Details')),
-                    if (identity.platformLabel.isNotEmpty)
-                      info(nikoText('系统', 'System'), identity.platformLabel),
-                    if (identity.name.isNotEmpty)
-                      info(nikoText('主机名', 'Host name'), identity.name),
-                    info(nikoText('分组', 'Group'),
-                        device.group.trim().isEmpty ? '—' : device.group.trim()),
-                    info(
-                        nikoText('连接方式', 'Route'),
-                        device.forceRelay
-                            ? nikoText('强制私服中继', 'Private relay only')
-                            : nikoText('自动（直连或中继）', 'Automatic (direct or relay)')),
-                    info(nikoText('上次连接', 'Last session'),
-                        lastSession ?? nikoText('尚未连接', 'Never')),
-                    const SizedBox(height: NlSpace.s5),
-                    Wrap(spacing: NlSpace.s1, runSpacing: NlSpace.s1, children: [
-                      NlButton.quiet(
-                          small: true,
-                          icon: NlIcons.star,
-                          label: device.favorite
-                              ? nikoText('取消收藏', 'Unfavorite')
-                              : nikoText('收藏', 'Favorite'),
-                          onPressed: onFavorite),
-                      NlButton.quiet(
-                          small: true,
-                          icon: NlIcons.pencil,
-                          label: nikoText('编辑', 'Edit'),
-                          onPressed: onEdit),
-                      if (native)
-                        NlButton.quiet(
-                            small: true,
-                            icon: NlIcons.keyRound,
-                            label: nikoText('忘记密码', 'Forget password'),
-                            onPressed: canConnect ? onForget : null),
-                      NlButton.quiet(
-                          small: true,
-                          icon: NlIcons.trash2,
-                          label: nikoText('移除', 'Remove'),
-                          onPressed: onRemove),
-                    ]),
-                  ]))),
+    final screen = _Screen(
+        picture: picture,
+        online: online,
+        icon: _deviceIcon(identity),
+        reason: _screenReason(device, identity),
+        chip: false,
+        aspect: 16 / 10,
+        overlay: picture != null && lastAgo != null
+            ? Positioned(
+                left: NlSpace.s2,
+                top: NlSpace.s2,
+                child: Container(
+                    height: 22,
+                    padding: const EdgeInsets.symmetric(horizontal: 7),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                        color: NlDock.chip,
+                        borderRadius: BorderRadius.circular(NlRadius.r1)),
+                    child: Text(nikoText('上次画面，$lastAgo', 'Last picture, $lastAgo'),
+                        style: NlType.text(NlType.s1, color: NlDock.ink))))
+            : null);
+    final who = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(
+            child: Text(_deviceTitle(device, identity),
+                style: NlType.text(NlType.s6,
+                    weight: FontWeight.w600, color: nl.fg))),
+        Semantics(
+            toggled: device.favorite,
+            child: NlIconButton(
+                icon: device.favorite ? Icons.star_rounded : NlIcons.star,
+                iconSize: device.favorite ? 18 : null,
+                color: device.favorite ? nl.fg : null,
+                tooltip: device.favorite
+                    ? nikoText('取消收藏', 'Remove favorite')
+                    : nikoText('收藏', 'Favorite'),
+                onPressed: onFavorite)),
+      ]),
+      const SizedBox(height: NlSpace.s1),
+      Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: NlSpace.s3,
+          runSpacing: NlSpace.s1,
+          children: [
+            _Presence(online: online),
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              Text(nikoText('设备代码 ', 'Code '),
+                  style: NlType.text(NlType.s2, color: nl.fg3)),
+              Text(nikoGroupedId(device.id),
+                  style: NlType.monoText(NlType.s2, color: nl.fg2)),
+              NlIconButton(
+                  icon: NlIcons.copy,
+                  tooltip: nikoText('复制设备代码', 'Copy device code'),
+                  iconSize: 13,
+                  onPressed: onCopy),
+            ]),
+          ]),
+      const SizedBox(height: NlSpace.s4),
+      Wrap(spacing: NlSpace.s2, runSpacing: NlSpace.s2, children: [
+        NlButton(
+            icon: NlIcons.monitor,
+            label: nikoText('连接', 'Connect'),
+            onPressed: connectable ? onConnect : null),
+        NlButton.ghost(
+            icon: NlIcons.folder,
+            label: nikoText('传输文件', 'Files'),
+            onPressed: connectable ? onFiles : null),
+        NlButton.ghost(
+            icon: NlIcons.cable,
+            label: nikoText('TCP 隧道', 'TCP tunnel'),
+            onPressed: connectable ? onTunnel : null),
+        if (onWake != null)
+          NlButton.ghost(
+              icon: NlIcons.power,
+              label: nikoText('远程开机', 'Wake-on-LAN'),
+              onPressed: onWake),
+      ]),
     ]);
+    return NlPanel(
+        padding: const EdgeInsets.all(NlSpace.s5),
+        child: LayoutBuilder(builder: (context, box) {
+          final side = box.maxWidth >= 620;
+          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            if (side)
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                SizedBox(width: box.maxWidth * .44, child: screen),
+                const SizedBox(width: NlSpace.s5),
+                Expanded(child: who),
+              ])
+            else ...[
+              screen,
+              const SizedBox(height: NlSpace.s4),
+              who,
+            ],
+            const SizedBox(height: NlSpace.s5),
+            Divider(height: 1, color: nl.line),
+            const SizedBox(height: NlSpace.s4),
+            Wrap(spacing: NlSpace.s5, runSpacing: NlSpace.s4, children: [
+              if (identity.platformLabel.isNotEmpty)
+                fact(nikoText('系统', 'System'), identity.platformLabel),
+              if (identity.name.isNotEmpty)
+                fact(nikoText('主机名', 'Host name'), identity.name),
+              fact(nikoText('分组', 'Group'),
+                  device.group.trim().isEmpty ? nikoText('未分组', 'None') : device.group.trim()),
+              fact(
+                  nikoText('连接方式', 'Route'),
+                  device.forceRelay
+                      ? nikoText('只走私服中继', 'Private relay only')
+                      : nikoText('自动选择直连或中继', 'Direct or relay')),
+              fact(nikoText('上次连接', 'Last session'),
+                  lastSession ?? nikoText('从未连接', 'Never')),
+            ]),
+            const SizedBox(height: NlSpace.s5),
+            Wrap(spacing: NlSpace.s1, runSpacing: NlSpace.s1, children: [
+              NlButton.quiet(
+                  small: true,
+                  icon: NlIcons.pencil,
+                  label: nikoText('重命名和分组', 'Rename and group'),
+                  onPressed: onEdit),
+              if (native)
+                NlButton.quiet(
+                    small: true,
+                    icon: NlIcons.keyRound,
+                    label: nikoText('忘记已保存密码', 'Forget saved password'),
+                    onPressed: canConnect ? onForget : null),
+              NlButton.quiet(
+                  small: true,
+                  icon: NlIcons.trash2,
+                  label: nikoText('从列表中移除', 'Remove from list'),
+                  onPressed: onRemove),
+            ]),
+          ]);
+        }));
   }
 }
 

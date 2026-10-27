@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NikoDesk 远程控制</title>
+<meta name="description" content="NikoDesk 3.0 样稿：首页，本机设备代码和临时密码，输入对方设备代码发起连接，我的设备按上次的屏幕画面排开。">
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="app.css">
+<script src="comp.js" defer></script>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="display:none">
+<symbol id="i-remote" viewBox="0 0 24 24"><path d="M13 3H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-3"/><path d="M8 21h8"/><path d="M12 17v4"/><path d="m17 8 5-5"/><path d="M17 3h5v5"/></symbol>
+<symbol id="i-devices" viewBox="0 0 24 24"><path d="M18 8V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h8"/><path d="M10 19v-4"/><path d="M7 19h5"/><rect width="6" height="10" x="16" y="12" rx="2"/></symbol>
+<symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></symbol>
+<symbol id="i-laptop" viewBox="0 0 24 24"><path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/></symbol>
+<symbol id="i-server" viewBox="0 0 24 24"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 6h.01"/><path d="M6 18h.01"/></symbol>
+<symbol id="i-tablet" viewBox="0 0 24 24"><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M12 18h.01"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></symbol>
+<symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+<symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+<symbol id="i-star" viewBox="0 0 24 24"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></symbol>
+<symbol id="i-keyboard" viewBox="0 0 24 24"><path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/><path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/></symbol>
+<symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+<symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+<symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="i-up" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></symbol>
+<symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+<symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+<symbol id="i-send" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+<symbol id="i-receive" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></symbol>
+<symbol id="i-pointer" viewBox="0 0 24 24"><path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"/></symbol>
+<symbol id="i-clipboard" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
+<symbol id="i-sound" viewBox="0 0 24 24"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/></symbol>
+<symbol id="i-key" viewBox="0 0 24 24"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5"/></symbol>
+<symbol id="i-power" viewBox="0 0 24 24"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></symbol>
+<symbol id="i-camera" viewBox="0 0 24 24"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect width="14" height="12" x="2" y="6" rx="2"/></symbol>
+<symbol id="i-terminal" viewBox="0 0 24 24"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></symbol>
+<symbol id="i-tunnel" viewBox="0 0 24 24"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><path d="M8 12h8"/></symbol>
+<symbol id="i-folder-plus" viewBox="0 0 24 24"><path d="M12 10v6"/><path d="M9 13h6"/><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+<symbol id="i-fit" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
+</svg>
+<a class="skip" href="#main">跳到内容</a>
+<div class="app">
+  <aside class="side" aria-label="导航">
+    <a class="brand" href="home.html" aria-label="NikoDesk 首页"><img src="logo.png" alt="" width="24" height="24">NikoDesk</a>
+    <button class="side-search" type="button" aria-keyshortcuts="Meta+K"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>搜索设备和命令<kbd>⌘K</kbd></button>
+    <nav class="nav" aria-label="主导航">
+      <a href="home.html" aria-current="page"><svg class="icon icon-l" aria-hidden="true"><use href="#i-remote"/></svg>远程控制</a>
+      <a href="devices.html"><svg class="icon icon-l" aria-hidden="true"><use href="#i-devices"/></svg>设备</a>
+      <a href="history.html"><svg class="icon icon-l" aria-hidden="true"><use href="#i-history"/></svg>会话记录</a>
+      <a href="settings.html"><svg class="icon icon-l" aria-hidden="true"><use href="#i-settings"/></svg>设置</a>
+    </nav>
+    <div class="side-foot">
+      <span class="server live" data-live="on" role="status">已连接 desk.example.net</span>
+      <span class="version">NikoDesk 3.0.0</span>
+    </div>
+  </aside>
+  <main class="main" id="main">
+    <div class="page">
+      <div class="home-top">
+        <section class="launch" aria-labelledby="launch-h">
+          <div class="launch-head">
+            <h1 id="launch-h">控制另一台设备</h1>
+            <div class="seg seg-on-brand" role="tablist" aria-label="连接方式">
+              <button type="button" role="tab" aria-selected="true"><svg class="icon" aria-hidden="true"><use href="#i-remote"/></svg>远程控制</button>
+              <button type="button" role="tab" aria-selected="false" tabindex="-1"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg>文件传输</button>
+              <button type="button" role="tab" aria-selected="false" tabindex="-1"><svg class="icon" aria-hidden="true"><use href="#i-camera"/></svg>摄像头</button>
+              <button type="button" role="tab" aria-selected="false" tabindex="-1"><svg class="icon" aria-hidden="true"><use href="#i-terminal"/></svg>终端</button>
+            </div>
+          </div>
+          <form class="connect" action="session.html" method="get">
+            <div class="field">
+              <label for="peer">对方设备代码</label>
+              <div class="connect-row">
+                <input class="input input-xl" id="peer" name="peer" inputmode="numeric" autocomplete="off" placeholder="123 456 789" aria-describedby="peer-help">
+                <div class="split-btn">
+                  <button class="btn btn-xl btn-on-brand" type="submit">连接</button>
+                  <button class="btn btn-xl btn-on-brand btn-more" type="button" popovertarget="connect-options" aria-label="连接选项"><svg class="icon" aria-hidden="true"><use href="#i-down"/></svg></button>
+                </div>
+              </div>
+              <p class="launch-help" id="peer-help">对方 NikoDesk 首页上的 9 到 10 位数字。连过的设备在下面点一下就能连。</p>
+            </div>
+          </form>
+          <div class="resume">
+            <span>上次连接 <b>家里的 Windows</b>，10 分钟前结束</span>
+            <a class="btn btn-ghost-on-brand" href="session.html"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>重新连接</a>
+          </div>
+          <div class="menu" id="connect-options" popover>
+            <p class="note">这次连接</p>
+            <label class="check"><input type="checkbox" name="view-only">只看不操作</label>
+            <label class="check"><input type="checkbox" name="privacy">连上后打开隐私屏</label>
+            <label class="check"><input type="checkbox" name="lock-after" checked>结束后锁定对方屏幕</label>
+          </div>
+        </section>
+
+        <section class="card self" data-region="self" aria-labelledby="self-h">
+          <div class="card-head">
+            <h2 id="self-h">本机</h2>
+            <span class="pill" data-tone="ok" data-show="full" role="status"><span class="live" data-live="on">可以被控制</span></span>
+            <span class="pill" data-tone="warn" data-show="warn" role="status">还不能被控制</span>
+          </div>
+          <div class="kv">
+            <span class="label" id="code-l">设备代码</span>
+            <div class="code-row">
+              <span class="code" aria-labelledby="code-l">590 216 734</span>
+              <button class="icon-btn" type="button" data-copy="590216734" aria-label="复制设备代码"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg></button>
+            </div>
+            <span class="device-name">Studio 的 Mac mini，macOS 15.6</span>
+          </div>
+          <div class="kv">
+            <span class="label" id="pass-l">临时密码</span>
+            <div class="code-row">
+              <span class="secret" id="secret" data-secret="k7m2q9xd" aria-labelledby="pass-l">••••••••</span>
+              <button class="icon-btn" type="button" data-reveal-secret="secret" aria-pressed="false" aria-label="显示密码"><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg></button>
+              <button class="icon-btn" type="button" aria-label="换一个临时密码"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg></button>
+              <button class="icon-btn" type="button" data-copy="k7m2q9xd" aria-label="复制临时密码"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg></button>
+            </div>
+          </div>
+          <p class="self-warn"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg><span>没有授权“屏幕录制”，别人连进来只能看到黑屏。<a href="settings.html#service">去授权</a></span></p>
+          <div class="self-foot rule-top">
+            <label class="check"><span class="switch"><input type="checkbox" role="switch" checked><span></span></span>接受别人连接</label>
+            <a href="settings.html#security">设置固定密码</a>
+          </div>
+        </section>
+      </div>
+
+      <section class="devices" data-region="devices" aria-labelledby="dev-h">
+        <div class="section-head">
+          <h2 id="dev-h">我的设备<span class="count">7</span></h2>
+          <div class="tools">
+            <div class="seg" role="tablist" aria-label="筛选设备">
+              <button type="button" role="tab" aria-selected="true">全部</button>
+              <button type="button" role="tab" aria-selected="false" tabindex="-1">在线</button>
+              <button type="button" role="tab" aria-selected="false" tabindex="-1">收藏</button>
+            </div>
+            <a class="btn btn-quiet" href="devices.html">管理设备</a>
+          </div>
+        </div>
+
+        <div class="tiles" data-show="full">
+          <article class="tile">
+            <div class="shot"><img src="img/p1015.jpg" alt="" width="1600" height="1000"><span class="chip live" data-live="on">在线</span><span class="go-label" aria-hidden="true">连接</span></div>
+            <div class="tile-body"><span><b>家里的 Windows</b><small>Windows 11，10 分钟前</small></span><button class="icon-btn" type="button" popovertarget="tile-menu" aria-label="家里的 Windows 的更多操作"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg></button></div>
+            <a class="go" href="session.html" aria-label="连接家里的 Windows"></a>
+          </article>
+          <article class="tile">
+            <div class="shot"><img src="img/p1043.jpg" alt="" width="1600" height="1000"><span class="chip live" data-live="on">在线</span><span class="go-label" aria-hidden="true">连接</span></div>
+            <div class="tile-body"><span><b>办公室 Mac mini</b><small>macOS 15，昨天</small></span><button class="icon-btn" type="button" popovertarget="tile-menu" aria-label="办公室 Mac mini 的更多操作"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg></button></div>
+            <a class="go" href="session.html" aria-label="连接办公室 Mac mini"></a>
+          </article>
+          <article class="tile">
+            <div class="shot"><img src="img/p1067.jpg" alt="" width="1600" height="1000"><span class="chip live" data-live="on">在线</span><span class="go-label" aria-hidden="true">连接</span></div>
+            <div class="tile-body"><span><b>公司的工作站</b><small>Windows 11，10 月 25 日</small></span><button class="icon-btn" type="button" popovertarget="tile-menu" aria-label="公司的工作站的更多操作"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg></button></div>
+            <a class="go" href="session.html" aria-label="连接公司的工作站"></a>
+          </article>
+          <article class="tile">
+            <div class="shot" data-off><img src="img/p1018.jpg" alt="" width="1600" height="1000"><span class="chip live">离线</span></div>
+            <div class="tile-body"><span><b>爸妈的笔记本</b><small>Windows 10，9 月 30 日</small></span><button class="icon-btn" type="button" popovertarget="tile-menu" aria-label="爸妈的笔记本的更多操作"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg></button></div>
+            <a class="go" href="session.html?session=failed" aria-label="连接爸妈的笔记本"></a>
+          </article>
+          <article class="tile">
+            <div class="shot"><span class="none"><svg class="icon icon-xl" aria-hidden="true"><use href="#i-server"/></svg>这台设备没有屏幕画面</span><span class="chip live" data-live="on">在线</span></div>
+            <div class="tile-body"><span><b>客厅 NAS</b><small>Linux，3 天前</small></span><button class="icon-btn" type="button" popovertarget="tile-menu" aria-label="客厅 NAS 的更多操作"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg></button></div>
+            <a class="go" href="files.html" aria-label="向客厅 NAS 传输文件"></a>
+          </article>
+          <article class="tile">
+            <div class="shot"><span class="none"><svg class="icon icon-xl" aria-hidden="true"><use href="#i-monitor"/></svg>还没连接过，暂无画面</span></div>
+            <div class="tile-body"><span><b>会议室电脑</b><small>540 221 096，从未连接</small></span><button class="icon-btn" type="button" popovertarget="tile-menu" aria-label="会议室电脑的更多操作"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg></button></div>
+            <a class="go" href="session.html?session=password" aria-label="连接会议室电脑"></a>
+          </article>
+          <article class="tile">
+            <div class="shot"><span class="none"><svg class="icon icon-xl" aria-hidden="true"><use href="#i-tablet"/></svg>只能控制别人，不能被控制</span></div>
+            <div class="tile-body"><span><b>测试用 Android 平板</b><small>Android 14</small></span><button class="icon-btn" type="button" popovertarget="tile-menu" aria-label="测试用 Android 平板的更多操作"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg></button></div>
+          </article>
+          <article class="tile tile-add">
+            <div class="shot"><span class="none"><svg class="icon icon-xl" aria-hidden="true"><use href="#i-plus"/></svg>添加设备</span></div>
+            <div class="tile-body"><span><b>用设备代码添加</b><small>起个好记的名字</small></span></div>
+            <a class="go" href="#add" data-open="add" aria-label="添加设备"></a>
+          </article>
+        </div>
+        <div class="tiles" data-show="loading" role="status" aria-label="正在读取我的设备">
+          <div class="tile-ghost"><i></i><i></i><i></i></div><div class="tile-ghost"><i></i><i></i><i></i></div><div class="tile-ghost"><i></i><i></i><i></i></div><div class="tile-ghost"><i></i><i></i><i></i></div>
+        </div>
+        <div data-show="empty" class="empty">
+          <h3>还没有设备</h3>
+          <p>在上面输入对方的设备代码连接一次，它就会带着屏幕画面出现在这里。</p>
+          <a class="btn" href="#peer">输入设备代码</a>
+        </div>
+        <div data-show="error" class="failed" role="alert">
+          <div class="failed-head"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg><h3>读不到我的设备</h3></div>
+          <p>设备列表被别的 NikoDesk 窗口占用了。关掉其他 NikoDesk 窗口后再读一次。</p>
+          <button class="btn" type="button">再读一次</button>
+        </div>
+      </section>
+
+      <div class="menu" id="tile-menu" popover>
+        <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-remote"/></svg>连接</button>
+        <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg>传输文件</button>
+        <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-terminal"/></svg>打开终端</button>
+        <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-power"/></svg>网络唤醒</button>
+        <hr>
+        <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-star"/></svg>收藏</button>
+        <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg>重命名和分组</button>
+      </div>
+
+      <p class="credits">示例画面里的照片来自 Unsplash：<a href="https://unsplash.com/photos/-oWyJoSqBRM">Alexey Topolyanskiy</a>、<a href="https://unsplash.com/photos/mWRR1xj95hg">Christian Joudrey</a>、<a href="https://unsplash.com/photos/-icmOdYWXuQ">Kevin Young</a>、<a href="https://unsplash.com/photos/Kt5hRENuotI">Andrew Ridley</a>。</p>
+    </div>
+  </main>
+</div>
+
+<dialog class="dialog" id="add" aria-labelledby="add-h">
+  <form method="dialog">
+    <h2 id="add-h">添加设备</h2>
+    <div class="field">
+      <label for="add-code">设备代码</label>
+      <input class="input" id="add-code" name="code" inputmode="numeric" autocomplete="off" required placeholder="123 456 789" aria-describedby="add-code-help">
+      <p class="help" id="add-code-help">对方 NikoDesk 首页上的那串数字。</p>
+    </div>
+    <div class="field">
+      <label for="add-name">名称（可不填）</label>
+      <input class="input" id="add-name" name="name" autocomplete="off" placeholder="书房的电脑">
+    </div>
+    <div class="actions">
+      <button class="btn" type="button" data-close>取消</button>
+      <button class="btn btn-primary" type="submit">添加</button>
+    </div>
+  </form>
+</dialog>
+</body>
+</html>

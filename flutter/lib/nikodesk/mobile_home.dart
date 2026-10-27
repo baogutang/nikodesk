@@ -7,6 +7,8 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 
 import 'device_page.dart';
+import 'device_screens.dart';
+import 'ios_signing.dart';
 import 'link_handler.dart';
 import 'device_store.dart';
 import 'home_board.dart';
@@ -35,34 +37,41 @@ class NikoMobileHome extends StatefulWidget {
   final Future<void> Function(BuildContext, String, bool,
       {bool isFileTransfer, String? password})? onConnect;
 
+  /// Devices' last screens; null reads the ones the core keeps.
+  final ImageProvider? Function(String id)? screenOf;
+
   const NikoMobileHome(
-      {super.key, this.store, this.gateway, this.sessionLog, this.onConnect});
+      {super.key,
+      this.store,
+      this.gateway,
+      this.sessionLog,
+      this.onConnect,
+      this.screenOf});
 
   @override
   State<NikoMobileHome> createState() => _NikoMobileHomeState();
 }
 
-enum _MobileDestination { devices, sessions, settings }
+enum _MobileDestination { home, devices, sessions, settings }
 
 class _NikoMobileHomeState extends State<NikoMobileHome> {
-  _MobileDestination _destination = _MobileDestination.devices;
+  _MobileDestination _destination = _MobileDestination.home;
   final _board = NikoDeviceBoard();
   late final _gateway = widget.gateway ?? NativeServerGateway();
   StreamSubscription? _links;
+  DateTime? _signingExpiry;
   bool get _native =>
       widget.gateway == null || widget.gateway is NativeServerGateway;
 
   @override
   void initState() {
     super.initState();
-    // Phones start with the denser list; the toggle on the page changes it.
-    final views = WidgetsBinding.instance.platformDispatcher.views;
-    if (views.isNotEmpty &&
-        views.first.physicalSize.shortestSide / views.first.devicePixelRatio <
-            NlLayout.compactMax) {
-      _board.view = NikoDeviceView.list;
-    }
     NikoServerScope.changes.addListener(_scopeChanged);
+    if (_native) {
+      nikoSigningExpiry().then((expiry) {
+        if (mounted && expiry != null) setState(() => _signingExpiry = expiry);
+      });
+    }
     if (const bool.fromEnvironment('NIKODESK_PROBE') && _native) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(nikoProbeBoot(context));
@@ -108,7 +117,7 @@ class _NikoMobileHomeState extends State<NikoMobileHome> {
   /// Shows the device page, then hands it the request once its fields can
   /// take focus again.
   void _onDevices(bool Function() request) {
-    _go(_MobileDestination.devices);
+    _go(_MobileDestination.home);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) request();
     });
@@ -128,14 +137,16 @@ class _NikoMobileHomeState extends State<NikoMobileHome> {
       ]);
 
   IconData _icon(_MobileDestination destination) => switch (destination) {
+        _MobileDestination.home => NlIcons.screenShare,
         _MobileDestination.devices => NlIcons.monitorSmartphone,
         _MobileDestination.sessions => NlIcons.history,
         _MobileDestination.settings => NlIcons.settings,
       };
 
   String _label(_MobileDestination destination) => switch (destination) {
+        _MobileDestination.home => nikoText('远程控制', 'Remote control'),
         _MobileDestination.devices => nikoText('设备', 'Devices'),
-        _MobileDestination.sessions => nikoText('会话', 'Sessions'),
+        _MobileDestination.sessions => nikoText('会话记录', 'Sessions'),
         _MobileDestination.settings => nikoText('设置', 'Settings'),
       };
 
@@ -149,36 +160,51 @@ class _NikoMobileHomeState extends State<NikoMobileHome> {
             body: NikoFirstServerSetup(
                 gateway: _gateway,
                 onLanguageChanged: _setLanguage,
-                onSaved: () => _go(_MobileDestination.devices),
+                onSaved: () => _go(_MobileDestination.home),
                 child: Builder(builder: _home))));
   }
 
   Widget _home(BuildContext context) {
-    final pages = <_MobileDestination, Widget>{
-      _MobileDestination.devices: NikoDevicePage(
+    final onDevices = _destination == _MobileDestination.home ||
+        _destination == _MobileDestination.devices;
+    // Home and Devices are one page in two layouts, so a connection started
+    // from either has one owner.
+    final slots = <Widget>[
+      NikoDevicePage(
           key: ValueKey(
               'devices-${widget.store?.directory.path ?? DeviceStore.instance.directory.path}'),
           controllerOnly: true,
           native: _native,
-          active: _destination == _MobileDestination.devices,
+          active: onDevices,
           store: widget.store,
           gateway: _gateway,
           sessionLog: widget.sessionLog,
           board: _board,
+          layout: _destination == _MobileDestination.devices
+              ? NikoDeviceLayout.manage
+              : NikoDeviceLayout.home,
+          onManage: () => _go(_MobileDestination.devices),
           onConnect: widget.onConnect,
+          screenOf: widget.screenOf,
+          warning: nikoSigningWarning(_signingExpiry, DateTime.now()),
           onOpenSettings: () => _go(_MobileDestination.settings),
           onLanguageChanged: () => setState(() {})),
-      _MobileDestination.sessions: NikoSessionHistoryPage(
+      NikoSessionHistoryPage(
           key: ValueKey(
               'history-${widget.sessionLog?.directory.path ?? SessionLogStore.instance.directory.path}'),
           store: widget.sessionLog,
           gateway: _gateway,
           active: _destination == _MobileDestination.sessions,
           onConnect: widget.onConnect),
-      _MobileDestination.settings: _MobileServerSettings(
+      _MobileServerSettings(
           gateway: _gateway,
           active: _destination == _MobileDestination.settings,
           onLanguageChanged: _setLanguage),
+    ];
+    final slot = switch (_destination) {
+      _MobileDestination.home || _MobileDestination.devices => 0,
+      _MobileDestination.sessions => 1,
+      _MobileDestination.settings => 2,
     };
     final body = Column(children: [
       if (_native)
@@ -190,13 +216,10 @@ class _NikoMobileHomeState extends State<NikoMobileHome> {
             padding: EdgeInsets.symmetric(horizontal: NlSpace.s4),
             child: NikoTunnelCleanupEntryPoint()),
       Expanded(
-          child: IndexedStack(
-              index: pages.keys.toList().indexOf(_destination),
-              children: pages.entries
-                  .map((entry) => ExcludeFocus(
-                      excluding: _destination != entry.key,
-                      child: entry.value))
-                  .toList())),
+          child: IndexedStack(index: slot, children: [
+        for (var i = 0; i < slots.length; i++)
+          ExcludeFocus(excluding: i != slot, child: slots[i]),
+      ])),
     ]);
     final apple = Platform.isIOS || Platform.isMacOS;
     SingleActivator key(LogicalKeyboardKey key) =>
@@ -208,10 +231,11 @@ class _NikoMobileHomeState extends State<NikoMobileHome> {
               _onDevices(_board.requestQuickConnect),
           key(LogicalKeyboardKey.keyF): () =>
               _onDevices(_board.requestFocusSearch),
-          key(LogicalKeyboardKey.digit1): () => _go(_MobileDestination.devices),
-          key(LogicalKeyboardKey.digit2): () =>
-              _go(_MobileDestination.sessions),
+          key(LogicalKeyboardKey.digit1): () => _go(_MobileDestination.home),
+          key(LogicalKeyboardKey.digit2): () => _go(_MobileDestination.devices),
           key(LogicalKeyboardKey.digit3): () =>
+              _go(_MobileDestination.sessions),
+          key(LogicalKeyboardKey.digit4): () =>
               _go(_MobileDestination.settings),
         },
         child: Focus(
@@ -230,25 +254,9 @@ class _NikoMobileHomeState extends State<NikoMobileHome> {
                                 ? '${_board.devices.length}'
                                 : null),
                     ],
-                    selected: _destination == _MobileDestination.devices &&
-                            _board.filter.startsWith('group:')
-                        ? -1
-                        : _MobileDestination.values.indexOf(_destination),
-                    onSelect: (index) {
-                      final destination = _MobileDestination.values[index];
-                      if (destination == _MobileDestination.devices &&
-                          _board.filter.startsWith('group:')) {
-                        _board.filter = 'all';
-                      }
-                      _go(destination);
-                    },
+                    selected: _MobileDestination.values.indexOf(_destination),
+                    onSelect: (index) => _go(_MobileDestination.values[index]),
                     body: body,
-                    sections: nikoBoardSections(context, _board,
-                        devicesShown:
-                            _destination == _MobileDestination.devices,
-                        onDevices: _onDevices),
-                    onQuickConnect: () =>
-                        _onDevices(_board.requestQuickConnect),
                     onSearch: _openPalette))));
   }
 }
@@ -265,6 +273,7 @@ class _MobileServerSettings extends StatefulWidget {
 }
 
 class _MobileServerSettingsState extends State<_MobileServerSettings> {
+  late final _signing = nikoSigningExpiry();
   late final _gateway = widget.gateway ?? NativeServerGateway();
   late Future<ServerSnapshot> _snapshot = _gateway.read();
 
@@ -337,7 +346,8 @@ class _MobileServerSettingsState extends State<_MobileServerSettings> {
   @override
   Widget build(BuildContext context) {
     final native = widget.gateway == null || widget.gateway is NativeServerGateway;
-    return NlScrollWatcher(
+    return NikoSettingsCards(
+        child: NlScrollWatcher(
         header: (context, scrolled) => NikoPageBar(
             title: nikoText('设置', 'Settings'),
             subtitle: nikoText('私有服务器、语言与使用指南', 'Server, language and guides'),
@@ -374,6 +384,8 @@ class _MobileServerSettingsState extends State<_MobileServerSettings> {
                           widget.onLanguageChanged?.call();
                         }
                       })),
+              if (native) const NikoDeviceScreensSetting(),
+              if (native) NikoSigningRow(expiry: _signing),
             ]),
             if (native) const NikoMobileVoicePolicyCard(),
             NikoSettingsGroup(title: nikoText('使用指南', 'Guides'), children: [
@@ -405,6 +417,6 @@ class _MobileServerSettingsState extends State<_MobileServerSettings> {
                 loadInfo: () => ProductBuildInfo.read(
                     nativeVersionLoader: native ? bind.mainGetVersion : null)),
           ],
-        ));
+        )));
   }
 }

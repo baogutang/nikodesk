@@ -67,7 +67,7 @@ class NikoMobileFileRow extends StatelessWidget {
     final date = '${at.year}-${two(at.month)}-${two(at.day)} '
         '${two(at.hour)}:${two(at.minute)}';
     return entry.isFile
-        ? '$date · ${readableFileSize(entry.size.toDouble())}'
+        ? '$date$nikoSep${readableFileSize(entry.size.toDouble())}'
         : date;
   }
 
@@ -257,7 +257,7 @@ class _PathBarState extends State<NikoMobilePathBar> {
         };
     final current = _controller.sortBy.value;
     showNlMenu(anchor, anchor: nlAnchorOf(anchor), width: 220, entries: [
-      NlMenuHeader('${order(current, _controller.sortAscending)} · '
+      NlMenuHeader('${order(current, _controller.sortAscending)}$nikoSep'
           '${nikoText('再选一次反转', 'choose again to reverse')}'),
       for (final sort in SortBy.values)
         NlMenuItem(
@@ -624,7 +624,7 @@ class _SplitHeader extends StatelessWidget {
                         TextSpan(
                             text: id,
                             style: NlType.monoText(NlType.s2, color: nl.fg2)),
-                      if (platform.isNotEmpty) TextSpan(text: ' · $platform'),
+                      if (platform.isNotEmpty) TextSpan(text: '$nikoSep$platform'),
                     ]),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

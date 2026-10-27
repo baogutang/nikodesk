@@ -7,6 +7,7 @@ import 'server_scope.dart';
 import 'session_log.dart';
 import 'session_audit_view.dart';
 import 'history_kit.dart';
+import 'home_board.dart';
 import 'nightline.dart';
 import 'settings_kit.dart';
 import 'theme.dart';
@@ -320,7 +321,8 @@ class _NikoSessionHistoryPageState extends State<NikoSessionHistoryPage> {
     Widget row(SessionLogEntry entry, bool first) {
       final details = [
         if (entry.title != entry.id)
-          Text(entry.id, style: NlType.monoText(NlType.s1, color: nl.fg3)),
+          Text(nikoGroupedId(entry.id),
+              style: NlType.monoText(NlType.s1, color: nl.fg3)),
         if (entry.forceRelay) NlBadge(nikoText('中继', 'Relay')),
       ];
       return NikoHistoryRow(
@@ -415,7 +417,7 @@ class _NikoSessionHistoryPageState extends State<NikoSessionHistoryPage> {
                                 ?.copyWith(fontWeight: FontWeight.w700)),
                         const SizedBox(height: 2),
                         Text(
-                            '${entry.id} · ${_time(entry.startedAt)}${entry.forceRelay ? ' · ${nikoText('中继', 'relay')}' : ''}',
+                            '${nikoGroupedId(entry.id)}$nikoSep${_time(entry.startedAt)}${entry.forceRelay ? '$nikoSep${nikoText('中继', 'relay')}' : ''}',
                             style: TextStyle(fontSize: 11.5, color: muted)),
                       ]);
                   final actions = Wrap(

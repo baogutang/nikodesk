@@ -16,10 +16,8 @@ import tempfile
 
 PACKAGES = {
     'NikoDesk-macos-arm64.dmg', 'NikoDesk-macos-arm64.zip',
-    'NikoDesk-windows-x64.exe', 'NikoDesk-windows-x64.zip',
+    'NikoDesk-windows-x64-setup.exe',
     'NikoDesk-android-arm64.apk',
-    'NikoDesk-windows-x64-setup-validation.exe',
-    'NikoDesk-windows-x64-setup-validation.zip',
 }
 GATES = {
     'source-review', 'security-regression', 'macos-package-settings',

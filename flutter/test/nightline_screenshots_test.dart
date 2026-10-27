@@ -38,6 +38,8 @@ import 'package:flutter_hbb/nikodesk/display_options_view.dart';
 import 'package:flutter_hbb/nikodesk/file_conflict_dialog.dart';
 import 'package:flutter_hbb/nikodesk/first_server_setup.dart';
 import 'package:flutter_hbb/nikodesk/home_shell.dart';
+import 'package:flutter_hbb/nikodesk/install_assistant.dart';
+import 'package:flutter_hbb/nikodesk/windows_install.dart';
 import 'package:flutter_hbb/nikodesk/mobile_more_actions.dart';
 import 'package:flutter_hbb/nikodesk/mobile_control_bar.dart';
 import 'package:flutter_hbb/nikodesk/mobile_chat_options.dart';
@@ -77,6 +79,8 @@ import 'package:flutter_hbb/nikodesk/tunnel_controller_view.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
 
 import 'nikodesk_tunnel_controller_test.dart' as tunnel;
+import 'nikodesk_unattended_install_test.dart'
+    show InstallTransportDouble, installComplete, installIdle, installModel;
 import 'nikodesk_voice_owner_test.dart' show voiceEnabled;
 import 'nikodesk_voice_session_model_test.dart' show voiceQueued;
 import 'support/nikodesk_cm_panels.dart';
@@ -87,6 +91,14 @@ import 'support/nikodesk_mobile_file_page.dart';
 
 const _out = String.fromEnvironment('NIKO_SHOT_DIR');
 const _cjk = String.fromEnvironment('NIKO_CJK_DIR');
+
+/// Devices' last screens for the website's pictures, one `<id>.png` each.
+const _screensDir = String.fromEnvironment('NIKO_SCREENS_DIR');
+
+ImageProvider? _screenOf(String id) {
+  final file = File('$_screensDir/$id.png');
+  return file.existsSync() ? FileImage(file) : null;
+}
 
 class _Gateway implements ServerGateway {
   @override
@@ -373,6 +385,7 @@ void main() {
               gateway: _Gateway(),
               sessionLog: sessionLog,
               deviceIdProvider: () => '590 216 734',
+              hostNameProvider: () => 'Studio-iMac',
               temporaryPasswordProvider: () async => 'k7x2m9qa',
               screenRecordingProbe: () => true,
               accessibilityProbe: () => false)));
@@ -388,6 +401,7 @@ void main() {
                   sessionLog: sessionLog,
                   macTitleBar: true,
                   deviceIdProvider: () => '590 216 734',
+                  hostNameProvider: () => 'Studio-iMac',
                   temporaryPasswordProvider: () async => 'k7x2m9qa',
                   screenRecordingProbe: () => true,
                   accessibilityProbe: () => true))));
@@ -421,7 +435,9 @@ void main() {
         NikoLanguage.english = english;
         await _capture(tester, macShell(brightness),
             'orbit-desktop-inspector-$b-$lang-1440x900', before: () async {
-          await tester.tap(find.text('Office Workstation'));
+          await tester.tap(find.text(english ? 'Devices' : '设备').first);
+          await settle(tester);
+          await tester.tap(find.text('Office Workstation').first);
           await settle(tester);
         });
       }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
@@ -429,7 +445,7 @@ void main() {
         NikoLanguage.english = english;
         await _capture(tester, macShell(brightness),
             'orbit-desktop-palette-$b-$lang-1440x900', before: () async {
-          await tester.tap(find.text(english ? 'Search and commands' : '搜索与命令'));
+          await tester.tap(find.text(english ? 'Search' : '搜索与命令').first);
           await settle(tester);
         });
       }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
@@ -455,7 +471,7 @@ void main() {
         NikoLanguage.english = english;
         await _capture(tester, macShell(brightness),
             'orbit-history-$b-$lang-1440x900', before: () async {
-          await tester.tap(find.text(english ? 'Sessions' : '会话'));
+          await tester.tap(find.text(english ? 'Sessions' : '会话记录'));
           await settle(tester);
         });
       }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
@@ -469,7 +485,7 @@ void main() {
               padding: const EdgeInsets.only(top: 47, bottom: 34),
               before: () async {
             await tester.tap(find.text(tab == 'sessions'
-                    ? (english ? 'Sessions' : '会话')
+                    ? (english ? 'Sessions' : '会话记录')
                     : (english ? 'Settings' : '设置'))
                 .last);
             await settle(tester);
@@ -507,10 +523,72 @@ void main() {
             size: const Size(1376, 1032),
             platform: TargetPlatform.iOS,
             padding: const EdgeInsets.only(top: 24, bottom: 20), before: () async {
+          await tester.tap(find.text(english ? 'Devices' : '设备').first);
+          await settle(tester);
           await tester.tap(find.text('Studio Mac').last);
           await settle(tester);
         });
       }, skip: _out.isEmpty || (!english && _cjk.isEmpty));
+    }
+  }
+
+  // The website's pictures (rustdesk/website/assets/screens): every
+  // permission granted and the connected devices showing their last screens.
+  Widget siteShell(Brightness brightness) => MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(brightness: brightness, useMaterial3: true),
+      home: Scaffold(
+          body: NikoHomeShell(
+              store: store,
+              gateway: _Gateway(),
+              sessionLog: sessionLog,
+              deviceIdProvider: () => '590 216 734',
+              hostNameProvider: () => 'Studio-iMac',
+              temporaryPasswordProvider: () async => 'k7x2m9qa',
+              screenRecordingProbe: () => true,
+              accessibilityProbe: () => true,
+              screenOf: _screenOf)));
+  Widget siteMobile(Brightness brightness) => MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(brightness: brightness, useMaterial3: true),
+      home: NikoMobileHome(
+          store: store,
+          gateway: _Gateway(),
+          sessionLog: sessionLog,
+          screenOf: _screenOf));
+  for (final english in [true, false]) {
+    final lang = english ? 'en' : 'zh';
+    final skip = _out.isEmpty || _screensDir.isEmpty || (!english && _cjk.isEmpty);
+    for (final brightness in Brightness.values) {
+      testWidgets('site home ${brightness.name} $lang', (tester) async {
+        NikoLanguage.english = english;
+        await _capture(tester, siteShell(brightness),
+            'site-home-${brightness.name}-$lang-1440x900');
+      }, skip: skip);
+    }
+    testWidgets('site devices $lang', (tester) async {
+      NikoLanguage.english = english;
+      await _capture(tester, siteShell(Brightness.light),
+          'site-devices-light-$lang-1440x900', before: () async {
+        await tester.tap(find.text(english ? 'Devices' : '设备').first);
+        await settle(tester);
+        await tester.tap(find.text('Studio Mac').last);
+        await settle(tester);
+      });
+    }, skip: skip);
+    for (final (label, size, phone) in [
+      ('ipad', const Size(1376, 1032), false),
+      ('phone', const Size(390, 844), true),
+    ]) {
+      testWidgets('site $label $lang', (tester) async {
+        NikoLanguage.english = english;
+        await _capture(tester, siteMobile(Brightness.light),
+            'site-$label-light-$lang-${size.width.toInt()}x${size.height.toInt()}',
+            size: size,
+            platform: TargetPlatform.iOS,
+            padding: EdgeInsets.only(
+                top: phone ? 47 : 24, bottom: phone ? 34 : 20));
+      }, skip: skip);
     }
   }
 
@@ -661,6 +739,59 @@ void main() {
           'server-dialog-${brightness.name}-${_cjk.isEmpty ? 'en' : 'zh'}-1100x760',
           size: const Size(1100, 760));
     }, skip: _out.isEmpty);
+    for (final (state, reply) in [
+      ('steps', installIdle),
+      ('done', installComplete),
+    ]) {
+      testWidgets('install assistant $state ${brightness.name}', (tester) async {
+        NikoLanguage.english = _cjk.isEmpty;
+        final transport = InstallTransportDouble()
+          ..onCurrent = (() async => reply())
+          ..onStatus = ((_) async => reply());
+        await _capture(
+            tester,
+            MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: nightlineTheme(brightness)
+                    .copyWith(platform: TargetPlatform.windows),
+                home: Scaffold(
+                    body: NikoInstallAssistant(
+                        gateway: _EmptyGateway(),
+                        model: installModel(transport),
+                        setup: r'C:\Users\me\AppData\Local\Programs\NikoDesk\package-1\nikodesk-setup.exe',
+                        windows: NikoWindowsInstall(
+                            run: (_, __) async => ProcessResult(1, 0, '', ''),
+                            executable: r'C:\Users\me\AppData\Local\Programs\NikoDesk\package-1\NikoDesk.exe',
+                            environment: const {
+                              'LOCALAPPDATA': r'C:\Users\me\AppData\Local',
+                              'APPDATA': r'C:\Users\me\AppData\Roaming',
+                            }),
+                        readVersion: () async => '3.0.0'))),
+            'install-$state-${brightness.name}-${_cjk.isEmpty ? 'en' : 'zh'}-1100x860',
+            size: const Size(1100, 860),
+            platform: TargetPlatform.windows);
+      }, skip: _out.isEmpty);
+    }
+    testWidgets('uninstall ${brightness.name}', (tester) async {
+      NikoLanguage.english = _cjk.isEmpty;
+      await _capture(
+          tester,
+          MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: nightlineTheme(brightness)
+                  .copyWith(platform: TargetPlatform.windows),
+              home: Scaffold(
+                  body: NikoUninstallAssistant(
+                      model: installModel(InstallTransportDouble()),
+                      setup: r'C:\Users\me\AppData\Local\Programs\NikoDesk\package-1\nikodesk-setup.exe',
+                      windows: NikoWindowsInstall(
+                          run: (_, __) async => ProcessResult(1, 0, '', ''),
+                          environment: const {}),
+                      quit: () async {}))),
+          'uninstall-${brightness.name}-${_cjk.isEmpty ? 'en' : 'zh'}-1100x760',
+          size: const Size(1100, 760),
+          platform: TargetPlatform.windows);
+    }, skip: _out.isEmpty);
   }
 
   testWidgets('home compact dark with navigation open', (tester) async {
@@ -673,7 +804,7 @@ void main() {
   }, skip: _out.isEmpty);
 
   for (final brightness in Brightness.values) {
-    for (final (page, label) in [('settings', '设置'), ('history', '会话')]) {
+    for (final (page, label) in [('settings', '设置'), ('history', '会话记录')]) {
       testWidgets('$page ${brightness.name}', (tester) async {
         NikoLanguage.english = _cjk.isEmpty;
         await _capture(tester, shell(brightness),
@@ -751,7 +882,7 @@ void main() {
     NikoLanguage.english = _cjk.isEmpty;
     await _capture(tester, shell(Brightness.dark),
         'dialog-dark-${_cjk.isEmpty ? 'en' : 'zh'}-1440x900', before: () async {
-      await tester.tap(find.text(_cjk.isEmpty ? 'Sessions' : '会话'));
+      await tester.tap(find.text(_cjk.isEmpty ? 'Sessions' : '会话记录'));
       await tester.pumpAndSettle();
       await tester.runAsync(() async {
         for (var i = 0; i < 20; i++) {
@@ -1044,6 +1175,18 @@ void main() {
         await tester.enterText(find.byType(TextField).first, 're');
       });
     }, skip: _out.isEmpty);
+    testWidgets('files-light-zh-1280x720', (tester) async {
+      NikoLanguage.english = false;
+      await _capture(
+          tester,
+          MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: nightlineTheme(Brightness.light)
+                  .copyWith(platform: TargetPlatform.macOS),
+              home: const NikoTestFileWindow()),
+          'files-light-zh-1280x720',
+          size: const Size(1280, 720));
+    }, skip: _out.isEmpty || _cjk.isEmpty);
     testWidgets('files-dark-zh-1440x900', (tester) async {
       NikoLanguage.english = false;
       await _capture(

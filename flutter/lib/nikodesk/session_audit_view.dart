@@ -368,13 +368,13 @@ class _NikoNativeSessionHistoryState extends State<NikoNativeSessionHistory>
         title: _peer(nl, entry.peerId),
         subtitle: _what(
             nl,
-            '${entry.role == 'controller' ? nikoText('主控', 'Controller') : nikoText('被控', 'Receiver')} · ${_kind(entry.kind)}',
+            '${entry.role == 'controller' ? nikoText('主控', 'Controller') : nikoText('被控', 'Receiver')}$nikoSep${_kind(entry.kind)}',
             NikoHistoryStatus(_phase(entry.phase),
                 state: _phaseLed(entry.phase),
                 textKey: ValueKey('niko-audit-phase-${entry.session}'))),
         footer: times.isEmpty
             ? null
-            : Text(times.join(' · '),
+            : Text(times.join(nikoSep),
                 style: NlType.text(NlType.s1, color: nl.fg3)),
         actions: [
           if (_canReconnect(entry))
@@ -399,12 +399,12 @@ class _NikoNativeSessionHistoryState extends State<NikoNativeSessionHistory>
           title: _peer(nl, event.peerId),
           subtitle: _what(
               nl,
-              '${event.role == 'controller' ? nikoText('本机主控', 'Local controller') : nikoText('本机被控', 'Local receiver')} · ${_capability(event.kind)}',
+              '${event.role == 'controller' ? nikoText('本机主控', 'Local controller') : nikoText('本机被控', 'Local receiver')}$nikoSep${_capability(event.kind)}',
               NikoHistoryStatus(_stage(event.stage),
                   state: _stageLed(event.stage),
                   textKey: ValueKey('niko-audit-event-${event.id}'))),
           footer: Text(
-              '${nikoText('连接', 'Session')} ${event.session.substring(0, 8)} · ${nikoText('操作', 'Operation')} ${event.operation.substring(0, 8)}',
+              '${nikoText('连接', 'Session')} ${event.session.substring(0, 8)}$nikoSep${nikoText('操作', 'Operation')} ${event.operation.substring(0, 8)}',
               style: NlType.monoText(NlType.s1, color: nl.fg3)));
 
   @override

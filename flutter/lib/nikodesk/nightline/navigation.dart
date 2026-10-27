@@ -22,8 +22,9 @@ class NlSidebar extends StatelessWidget {
     final nl = NlColors.of(context);
     return Container(
         width: width,
-        decoration: BoxDecoration(
-            color: nl.bg2, border: Border(right: BorderSide(color: nl.line))),
+        // The sidebar sits on the window canvas itself; the page beside it
+        // separates by its raised surfaces, not by a rule.
+        color: nl.bg2,
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           if (header != null) header!,
           Expanded(
@@ -108,27 +109,35 @@ class NlSidebarItem extends StatelessWidget {
         builder: (context, states) {
           final hovered = states.contains(WidgetState.hovered);
           final pressed = states.contains(WidgetState.pressed);
+          // The current place is a raised chip on the canvas, its icon in
+          // the accent; other rows only wash on hover.
           return AnimatedContainer(
               duration: NlMotion.of(context, NlMotion.instant),
-              height: touch ? 40 : 30,
-              margin: const EdgeInsets.only(bottom: 1),
-              padding: const EdgeInsets.symmetric(horizontal: NlSpace.s2 + 2),
+              height: touch ? 44 : 36,
+              margin: const EdgeInsets.only(bottom: 2),
+              padding: const EdgeInsets.symmetric(horizontal: NlSpace.s3),
               decoration: BoxDecoration(
-                  color: selected || pressed
-                      ? nl.selected
-                      : hovered
-                          ? nl.hover
-                          : Colors.transparent,
+                  color: selected
+                      ? nl.surface
+                      : pressed
+                          ? nl.selected
+                          : hovered
+                              ? nl.hover
+                              : Colors.transparent,
                   borderRadius: BorderRadius.circular(NlRadius.r2),
+                  border: Border.all(
+                      color: selected ? nl.ring : Colors.transparent),
                   boxShadow: states.contains(WidgetState.focused)
                       ? nl.focusRing
-                      : null),
+                      : selected
+                          ? nl.shadow1
+                          : null),
               child: Row(children: [
                 if (leading != null)
                   SizedBox(width: 18, child: Center(child: leading))
                 else if (icon != null)
                   Icon(icon,
-                      size: touch ? 18 : 16,
+                      size: touch ? 20 : 18,
                       color: selected ? nl.accentText : nl.fg2),
                 if (leading != null || icon != null)
                   const SizedBox(width: NlSpace.s2 + 2),
@@ -136,8 +145,8 @@ class NlSidebarItem extends StatelessWidget {
                     child: Text(label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: NlType.text(touch ? NlType.s4 : NlType.s3,
-                            weight: selected ? FontWeight.w500 : FontWeight.w400,
+                        style: NlType.text(touch ? NlType.s5 : NlType.s4,
+                            weight: selected ? FontWeight.w600 : FontWeight.w400,
                             color: selected || hovered ? nl.fg : nl.fg2))),
                 if (count != null)
                   Text(count!,

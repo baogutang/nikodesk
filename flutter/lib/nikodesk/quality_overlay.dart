@@ -50,7 +50,7 @@ class _NikoQualityOverlayState extends State<NikoQualityOverlay> {
       return value.entries
           .map((e) =>
               '${e.key}: ${e.value == null ? nikoText('未知', 'Unknown') : _format(e.value!, unit)}')
-          .join(' · ');
+          .join(nikoSep);
     }
     return _format(value, unit);
   }
@@ -72,7 +72,7 @@ class _NikoQualityOverlayState extends State<NikoQualityOverlay> {
     if (metrics.direct == null) return nikoText('未知', 'Unknown');
     final route =
         metrics.direct! ? nikoText('直连', 'Direct') : nikoText('中继', 'Relay');
-    return metrics.transport == null ? route : '$route · ${metrics.transport}';
+    return metrics.transport == null ? route : '$route$nikoSep${metrics.transport}';
   }
 
   String _duration(Duration? value) =>
@@ -125,7 +125,7 @@ class _NikoQualityOverlayState extends State<NikoQualityOverlay> {
   String _hostPicture(NikoHostVideo host) {
     final kind =
         host.hardware ? nikoText('硬件', 'hardware') : nikoText('软件', 'software');
-    final codec = host.encoder.isEmpty ? '' : ' · ${host.encoder} $kind';
+    final codec = host.encoder.isEmpty ? '' : '$nikoSep${host.encoder} $kind';
     return '${host.width}×${host.height}$codec';
   }
 
@@ -134,8 +134,8 @@ class _NikoQualityOverlayState extends State<NikoQualityOverlay> {
     final capture = host.captureIncludesWait
         ? nikoText('采集(含等待)', 'capture (incl. wait)')
         : nikoText('采集', 'capture');
-    return '$capture ${ms(host.captureMs)} · ${nikoText('转换', 'convert')} '
-        '${ms(host.convertMs)} · ${nikoText('编码', 'encode')} ${ms(host.encodeMs)} ms';
+    return '$capture ${ms(host.captureMs)}$nikoSep${nikoText('转换', 'convert')} '
+        '${ms(host.convertMs)}$nikoSep${nikoText('编码', 'encode')} ${ms(host.encodeMs)} ms';
   }
 
   String? _frameCap(NikoHostVideo? host) {
@@ -331,7 +331,7 @@ class _NikoQualityOverlayState extends State<NikoQualityOverlay> {
             Row(children: [
               figure('FPS', fps == null ? '—' : fps.round().toString()),
               const SizedBox(width: NlSpace.s2),
-              figure('RTT · ms', rtt == null ? '—' : rtt.round().toString()),
+              figure('RTT (ms)', rtt == null ? '—' : rtt.round().toString()),
               const SizedBox(width: NlSpace.s2),
               figure('Mbit/s',
                   kib == null ? '—' : (kib * 8192 / 1e6).toStringAsFixed(1)),

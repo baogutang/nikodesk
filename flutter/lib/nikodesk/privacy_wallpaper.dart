@@ -261,7 +261,7 @@ class _NikoPrivacyPill extends StatelessWidget {
                     fontFamilyFallback: NlType.monoFallback,
                     color: Color(0xFF93A1AD))),
             const SizedBox(width: 6),
-            Text(nikoText('退出 · 需本机登录密码', 'to exit · local login password'),
+            Text(nikoText('退出，需要本机登录密码', 'to exit, with the local login password'),
                 style: const TextStyle(fontSize: 9, color: Color(0xFF93A1AD))),
           ])));
 }

@@ -11,17 +11,22 @@ class NikoLanguage {
   }
 }
 
-/// The colour preset, kept in the local option [option].
+/// The colour preset, kept in the local option [option]. 3.0 has one look;
+/// a "clay" option saved by 2.x loads it too.
 class NikoAppearance {
   static const option = 'niko-ui-preset';
 
   static void usePreference(String preset) {
-    NlColors.active = preset == 'clay' ? NlPreset.clay : NlPreset.orbit;
+    NlColors.active = NlPreset.orbit;
   }
 }
 
 String nikoText(String chinese, String english) =>
     NikoLanguage.english ? english : chinese;
+
+/// Joins the parts of a meta line, such as a size and a speed, the way the
+/// interface language writes a list; never with middle dots.
+String get nikoSep => nikoText('，', ', ');
 
 class NikoTokens {
   static const gap = 16.0;

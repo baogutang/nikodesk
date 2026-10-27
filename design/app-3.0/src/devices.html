@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NikoDesk 设备</title>
+<meta name="description" content="NikoDesk 3.0 样稿：设备，左边列表，右边是选中设备的屏幕画面、系统信息、最近会话和操作。">
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="app.css">
+<script src="comp.js" defer></script>
+</head>
+<body>
+<!-- icons -->
+<a class="skip" href="#main">跳到内容</a>
+<div class="app">
+  <!-- side:devices -->
+  <main class="main" id="main">
+    <div class="page">
+      <div class="page-head">
+        <h1>设备</h1>
+        <div class="tools"><button class="btn" type="button" data-open="add"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>添加设备</button></div>
+      </div>
+
+      <div class="split" data-region="devices">
+        <section class="card list" aria-label="设备列表">
+          <div class="search">
+            <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+            <input class="input" type="search" name="q" placeholder="名称或设备代码" aria-label="搜索设备" autocomplete="off">
+          </div>
+          <div class="seg" role="tablist" aria-label="分组">
+            <button type="button" role="tab" aria-selected="true">全部 7</button>
+            <button type="button" role="tab" aria-selected="false" tabindex="-1">收藏 2</button>
+            <button type="button" role="tab" aria-selected="false" tabindex="-1">家 3</button>
+            <button type="button" role="tab" aria-selected="false" tabindex="-1">公司 3</button>
+          </div>
+          <ul data-show="full">
+            <li><a class="item" href="devices.html?device=1" aria-current="true"><span class="shot"><img src="img/p1015.jpg" alt="" width="1600" height="1000"></span><span class="who-t"><b>家里的 Windows</b><small><span class="live" data-live="on">在线</span>10 分钟前</small></span></a></li>
+            <li><a class="item" href="devices.html?device=2"None><span class="shot"><img src="img/p1043.jpg" alt="" width="1600" height="1000"></span><span class="who-t"><b>办公室 Mac mini</b><small><span class="live" data-live="on">在线</span>昨天 21:40</small></span></a></li>
+            <li><a class="item" href="devices.html?device=3"None><span class="shot"><img src="img/p1067.jpg" alt="" width="1600" height="1000"></span><span class="who-t"><b>公司的工作站</b><small><span class="live" data-live="on">在线</span>10 月 25 日</small></span></a></li>
+            <li><a class="item" href="devices.html?device=4"None><span class="shot" data-off><img src="img/p1018.jpg" alt="" width="1600" height="1000"></span><span class="who-t"><b>爸妈的笔记本</b><small><span class="live">离线</span>9 月 30 日</small></span></a></li>
+            <li><a class="item" href="devices.html?device=5"None><span class="shot"><span class="none"><svg class="icon" aria-hidden="true"><use href="#i-server"/></svg></span></span><span class="who-t"><b>客厅 NAS</b><small><span class="live" data-live="on">在线</span>3 天前</small></span></a></li>
+            <li><a class="item" href="devices.html?device=6"None><span class="shot"><span class="none"><svg class="icon" aria-hidden="true"><use href="#i-monitor"/></svg></span></span><span class="who-t"><b>会议室电脑</b><small>状态未知，从未连接</small></span></a></li>
+            <li><a class="item" href="devices.html?device=7"None><span class="shot"><span class="none"><svg class="icon" aria-hidden="true"><use href="#i-tablet"/></svg></span></span><span class="who-t"><b>测试用 Android 平板</b><small>只能控制别人</small></span></a></li>
+          </ul>
+          <div data-show="loading" class="skeleton" role="status" aria-label="正在读取设备"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div data-show="empty" class="empty"><h2>设备列表是空的</h2><p>连接过的设备会自动加进来；也可以先用设备代码添加。</p><button class="btn" type="button" data-open="add">添加设备</button></div>
+          <div data-show="error" class="failed" role="alert"><div class="failed-head"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg><h2>设备列表打不开</h2></div><p>列表文件被别的 NikoDesk 窗口占用了。关掉其他 NikoDesk 窗口后再读一次。</p><button class="btn" type="button">再读一次</button></div>
+        </section>
+
+        <section class="card detail" aria-labelledby="detail-h" data-show="full">
+          <div class="detail-top">
+            <div class="shot"><img src="img/p1015.jpg" alt="家里的 Windows 上次连接时的屏幕画面" width="1600" height="1000"><span class="chip">上次画面，10 分钟前</span></div>
+            <div class="detail-id">
+              <div class="detail-title">
+                <div>
+                  <h2 id="detail-h">家里的 Windows</h2>
+                  <p class="sub"><span class="live" data-live="on">在线</span><span>设备代码 418 223 905</span></p>
+                </div>
+                <div class="tools">
+                  <button class="icon-btn star" type="button" aria-pressed="true" aria-label="收藏家里的 Windows"><svg class="icon" aria-hidden="true"><use href="#i-star"/></svg></button>
+                  <button class="icon-btn" type="button" popovertarget="detail-menu" aria-label="家里的 Windows 的更多操作"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg></button>
+                </div>
+              </div>
+              <div class="actions-row">
+                <a class="btn btn-primary" href="session.html">连接</a>
+                <a class="btn" href="files.html"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg>传输文件</a>
+                <button class="btn" type="button"><svg class="icon" aria-hidden="true"><use href="#i-terminal"/></svg>终端</button>
+                <button class="btn" type="button"><svg class="icon" aria-hidden="true"><use href="#i-camera"/></svg>摄像头</button>
+              </div>
+              <dl class="facts">
+                <div><dt>系统</dt><dd>Windows 11 家庭版</dd></div>
+                <div><dt>NikoDesk</dt><dd>2.2.0 便携版</dd></div>
+                <div><dt>连接路线</dt><dd>经私有服务器中转</dd></div>
+                <div><dt>屏幕</dt><dd>3840 × 2160</dd></div>
+                <div><dt>分组</dt><dd>家</dd></div>
+                <div><dt>上次连接</dt><dd>今天 12:58</dd></div>
+              </dl>
+            </div>
+          </div>
+          <div class="note-warn">
+            <svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
+            <div><b>这台电脑用的是 Windows 便携版</b><p>锁屏、登录界面和管理员确认窗口远程都操作不了。在那台电脑上装一次正式版就能解决。<a href="#">怎么安装</a></p></div>
+          </div>
+          <div class="rule-top">
+            <div class="section-head"><h3>最近会话</h3><a class="btn btn-quiet" href="history.html">全部记录</a></div>
+            <table class="table">
+              <tbody>
+                <tr><td class="num">今天 12:58</td><td class="quiet">远程控制</td><td class="quiet num">40 秒</td><td class="quiet">你断开</td></tr>
+                <tr><td class="num">今天 12:39</td><td class="quiet">远程控制</td><td class="quiet num">19 分钟</td><td class="quiet">你断开</td></tr>
+                <tr><td class="num">10 月 24 日</td><td class="quiet">传输文件</td><td class="quiet num">2 分钟</td><td class="quiet">完成</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="credits">照片：<a href="https://unsplash.com/photos/-oWyJoSqBRM">Alexey Topolyanskiy</a>、<a href="https://unsplash.com/photos/mWRR1xj95hg">Christian Joudrey</a>、<a href="https://unsplash.com/photos/-icmOdYWXuQ">Kevin Young</a>、<a href="https://unsplash.com/photos/Kt5hRENuotI">Andrew Ridley</a>，来自 Unsplash。</p>
+        </section>
+      </div>
+      <div class="menu" id="detail-menu" popover>
+        <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-power"/></svg>网络唤醒</button>
+        <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg>重命名和分组</button>
+        <hr>
+        <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg>从列表中移除</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<dialog class="dialog" id="add" aria-labelledby="add-h">
+  <form method="dialog">
+    <h2 id="add-h">添加设备</h2>
+    <div class="field">
+      <label for="add-code">设备代码</label>
+      <input class="input" id="add-code" name="code" inputmode="numeric" autocomplete="off" required placeholder="123 456 789" aria-describedby="add-code-help">
+      <p class="help" id="add-code-help">对方 NikoDesk 首页上的那串数字。</p>
+    </div>
+    <div class="field">
+      <label for="add-name">名称（可不填）</label>
+      <input class="input" id="add-name" name="name" autocomplete="off" placeholder="书房的电脑">
+    </div>
+    <div class="field">
+      <label for="add-group">分组</label>
+      <div class="select-wrap">
+        <select class="input select" id="add-group" name="group"><option>不分组</option><option>家</option><option>公司</option></select>
+        <svg class="icon" aria-hidden="true"><use href="#i-down"/></svg>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn" type="button" data-close>取消</button>
+      <button class="btn btn-primary" type="submit">添加</button>
+    </div>
+  </form>
+</dialog>
+</body>
+</html>

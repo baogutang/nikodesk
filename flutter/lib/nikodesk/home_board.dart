@@ -4,6 +4,11 @@ import 'device_store.dart';
 
 enum NikoDeviceView { grid, list }
 
+/// How the device page lays out: the home screen leads with the connect
+/// panel and shows devices by their screens; the devices screen is a list
+/// beside the selected device's detail.
+enum NikoDeviceLayout { home, manage }
+
 /// What the device workspace shares with the home chrome around it: the
 /// directory summary the sidebar lists, and the filter, view and selection
 /// the sidebar and command palette change. The device page owns the data
@@ -20,7 +25,7 @@ class NikoDeviceBoard extends ChangeNotifier {
   Map<String, bool> get online => _online;
   bool get canConnect => _canConnect;
 
-  /// 'all', 'favorites', 'recent' or 'group:<name>'.
+  /// 'all', 'online', 'favorites', 'recent' or 'group:<name>'.
   String get filter => _filter;
   NikoDeviceView get view => _view;
 

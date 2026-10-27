@@ -128,11 +128,11 @@ void main() {
 
     // The header names the order on screen: upstream sorts the largest
     // file first when ascending.
-    await sortBy('Size', header: 'A → Z · choose again to reverse');
+    await sortBy('Size', header: 'A → Z, choose again to reverse');
     expect(top('IMG_2041.HEIC'), lessThan(top('notes.md')));
-    await sortBy('Size', header: 'Largest first · choose again to reverse');
+    await sortBy('Size', header: 'Largest first, choose again to reverse');
     expect(top('notes.md'), lessThan(top('IMG_2041.HEIC')));
-    await sortBy('Name', header: 'Smallest first · choose again to reverse');
+    await sortBy('Name', header: 'Smallest first, choose again to reverse');
     expect(top('IMG_2041.HEIC'), lessThan(top('notes.md')));
   }, skip: !_niko);
 
@@ -312,7 +312,7 @@ void main() {
       expect(_shown('App files'), findsOneWidget);
       expect(_shown('Remote'), findsOneWidget);
       // The remote side's ID and platform follow its name.
-      expect(find.text('418 223 905 · macOS'), findsOneWidget);
+      expect(find.text('418 223 905, macOS'), findsOneWidget);
       // The guide to the app file area stays while both sides show.
       expect(_shown('About the app file area'), findsOneWidget);
       // The tasks wait behind a Files | Tasks switch.

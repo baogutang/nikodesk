@@ -75,7 +75,7 @@ Future<void> _chooseWindows(WidgetTester tester) async {
   await tester.ensureVisible(find.byKey(const ValueKey('niko-camera-format')));
   await tester.tap(find.byKey(const ValueKey('niko-camera-format')));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('1920 × 1080 · 30000/1001 FPS').last);
+  await tester.tap(find.text('1920 × 1080${nikoSep}30000/1001 FPS').last);
   await tester.pumpAndSettle();
 }
 
@@ -179,7 +179,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('niko-camera-format')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('1280 × 720 · 15.0–60.0 FPS').last);
+    await tester.tap(find.text('1280 × 720${nikoSep}15.0–60.0 FPS').last);
     await tester.pumpAndSettle();
     expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
         isNull);

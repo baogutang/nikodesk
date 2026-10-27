@@ -195,26 +195,17 @@ class NlDeviceGlyph extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final nl = NlColors.of(context);
-    final color = online == false
-        ? Color.lerp(nl.tile(id), nl.isDark ? nl.surface2 : const Color(0xFF8E8E93), .55)!
-        : nl.tile(id);
+    // A neutral mark: devices are told apart by name and picture, not by
+    // colour. Offline devices fade.
     final tile = Container(
         width: size,
         height: size,
         decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(size * .26),
-            gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color.lerp(color, Colors.white, .16)!, color]),
-            boxShadow: [
-              BoxShadow(
-                  color: color.withOpacity(nl.isDark ? .0 : .28),
-                  offset: Offset(0, size * .05),
-                  blurRadius: size * .18,
-                  spreadRadius: -size * .04),
-            ]),
-        child: Icon(iconFor(kind), size: size * .46, color: Colors.white));
+            color: nl.surface2,
+            borderRadius: BorderRadius.circular(size * .24)),
+        child: Icon(iconFor(kind),
+            size: size * .5,
+            color: online == false ? nl.fg3 : nl.fg2));
     if (online == null) return tile;
     final dot = size * .26;
     return SizedBox(

@@ -1,731 +1,207 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NikoDesk - Remote desktop on your own server</title>
-<meta name="description" content="NikoDesk brings your familiar computer with you. Remote control, file transfer and your own server, in one considered workspace.">
-<link rel="icon" href="assets/favicon.png?v=5" type="image/png">
-<link rel="apple-touch-icon" href="assets/logo.png?v=5">
-<meta property="og:title" content="NikoDesk - Remote desktop on your own server">
-<meta property="og:description" content="Your familiar desktop. Wherever you work. Remote access on your own terms.">
-<meta property="og:image" content="https://baogutang.github.io/nikodesk/assets/og-2.1.png?v=210">
-<meta property="og:image:alt" content="NikoDesk 2.1 home in the Orbit palette: sidebar, device grid and this computer's health, invented data">
+<title>NikoDesk, remote desktop through your own server</title>
+<meta name="description" content="NikoDesk is an open-source remote desktop built on RustDesk. Mac, Windows, iPad and Android connect through registration and relay servers you run.">
+<meta property="og:title" content="NikoDesk, remote desktop through your own server">
+<meta property="og:description" content="Mac, Windows, iPad and Android, connected through a server you run.">
+<meta property="og:image" content="https://baogutang.github.io/nikodesk/assets/og-3.0.png">
+<meta property="og:image:alt" content="The NikoDesk 3.0 home screen: the blue connect panel over devices shown by their last screens">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://baogutang.github.io/nikodesk/">
 <link rel="canonical" href="https://baogutang.github.io/nikodesk/">
 <link rel="alternate" hreflang="en" href="https://baogutang.github.io/nikodesk/">
 <link rel="alternate" hreflang="zh-CN" href="https://baogutang.github.io/nikodesk/zh/">
-<style>
-/* ============================================================
-   NikoDesk site · warm editorial edition
-   Magazine serif headlines, chaptered layout, film grain,
-   warm paper + terracotta brand family.
-   The hero shows 2.1 interface screenshots; the theme switch
-   lives in assets/demo.js and assets/demo.css.
-   ============================================================ */
-@font-face { font-family: "Fira Code"; src: url("assets/fonts/fira-code-400.woff2?v=5") format("woff2"); font-weight: 400; font-display: swap; }
-
-:root {
-  --paper: #F4EEE2;
-  --paper-2: #EDE5D5;
-  --card: #FBF7EE;
-  --ink: #221B12;
-  --ink-2: #4A4132;
-  --mut: #7C7261;
-  --line: #D8CDB8;
-  --line-soft: #E4DCCB;
-  --acc: #C24F29;
-  --acc-deep: #A03F20;
-  --dark: #241C12;
-  --dark-ink: #EFE6D4;
-  --serif: "New York", Georgia, "Times New Roman", serif;
-  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-  --mono: "Fira Code", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --ease: cubic-bezier(0.32, 0.72, 0, 1);
-}
-* { box-sizing: border-box; margin: 0; padding: 0; }
-html { scroll-behavior: smooth; scroll-padding-top: 96px; overflow-x: hidden; overflow-x: clip; }
-@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
-body {
-  font-family: var(--sans);
-  background: var(--paper); color: var(--ink);
-  line-height: 1.8; -webkit-font-smoothing: antialiased;
-}
-a { color: inherit; text-decoration: none; }
-img { display: block; max-width: 100%; }
-section[id] { scroll-margin-top: 84px; }
-::selection { background: rgba(194, 79, 41, 0.22); }
-:focus-visible { outline: 2px solid var(--acc); outline-offset: 3px; border-radius: 4px; }
-.skip-link { position: fixed; top: 10px; left: 16px; z-index: 70; background: var(--ink); color: var(--paper); padding: 10px 18px; border-radius: 999px; font-size: 13px; transform: translateY(-200%); transition: transform .3s var(--ease); }
-.skip-link:focus { transform: none; }
-/* grid children may shrink so long code/text cannot blow out tracks */
-.hero-grid > *, .phil > *, .deploy-grid > *, .faq-grid > *, .band-cols > *, .dl-rows > *, .fit-grid > *, .foot > * { min-width: 0; }
-
-/* Film grain */
-.grain {
-  position: fixed; inset: -50%; z-index: 60; pointer-events: none; opacity: 0.05;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-@media (prefers-reduced-motion: no-preference) {
-  .grain { animation: grain 9s steps(6) infinite; }
-  @keyframes grain {
-    0%,100% { transform: translate(0,0); } 20% { transform: translate(-2%,2%); }
-    40% { transform: translate(2%,-1%); } 60% { transform: translate(-1%,-2%); } 80% { transform: translate(1%,2%); }
-  }
-}
-
-.wrap { max-width: 1160px; margin: 0 auto; padding: 0 32px; }
-
-/* ---------- Masthead ---------- */
-.topbar { border-bottom: 1px solid var(--line); }
-.topbar-in { display: flex; align-items: center; gap: 28px; height: 76px; }
-.masthead { display: flex; align-items: center; gap: 11px; }
-.masthead img { width: 30px; height: 30px; border-radius: 8px; }
-.masthead .name { font-family: var(--serif); font-size: 21px; font-weight: 700; letter-spacing: 0.01em; }
-.masthead .issue { font-family: var(--mono); font-size: 10px; color: var(--mut); letter-spacing: 0.14em; border-left: 1px solid var(--line); padding-left: 11px; margin-left: 2px; }
-.nav-links { display: flex; gap: 26px; margin: 0 auto; font-size: 13.5px; color: var(--ink-2); }
-.nav-links a { position: relative; padding: 4px 0; }
-.nav-links a::after { content: ""; position: absolute; left: 0; bottom: 0; width: 100%; height: 1px; background: var(--acc); transform: scaleX(0); transform-origin: right; transition: transform 0.5s var(--ease); }
-.nav-links a:hover::after { transform: scaleX(1); transform-origin: left; }
-.nav-lang { font-size: 13px; color: var(--mut); }
-.nav-lang:hover { color: var(--acc); }
-.nav-cta { display: inline-flex; align-items: center; gap: 9px; font-size: 13.5px; font-weight: 600; color: var(--paper); background: var(--ink); border-radius: 999px; padding: 9px 10px 9px 18px; transition: background .4s var(--ease), transform .4s var(--ease); }
-.nav-cta .ic { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: rgba(244,238,226,0.16); font-size: 12px; transition: transform .4s var(--ease); }
-.nav-cta:hover { background: var(--acc); }
-.nav-cta:hover .ic { transform: translate(1.5px, -1.5px); }
-@media (max-width: 860px) { .nav-links { display: none; } .masthead .issue { display: none; } }
-
-/* ---------- Hero ---------- */
-.hero { padding: 92px 0 0; position: relative; }
-.hero-eyebrow { display: flex; align-items: center; gap: 16px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--acc); }
-.hero-eyebrow::after { content: ""; flex: 1; max-width: 120px; height: 1px; background: var(--acc); opacity: 0.5; }
-.hero-eyebrow .ver { color: var(--mut); letter-spacing: 0.12em; }
-.hero h1 {
-  margin-top: 34px; max-width: 16ch;
-  font-family: var(--serif); font-weight: 700;
-  font-size: clamp(46px, 7.2vw, 96px); line-height: 1.14; letter-spacing: -0.01em;
-}
-.hero h1 em { font-style: italic; color: var(--acc); position: relative; }
-.hero h1 em::after {
-  content: ""; position: absolute; left: 0; right: 0; bottom: 0.08em; height: 0.1em;
-  background: currentColor; opacity: 0.22; border-radius: 2px;
-}
-.hero-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 60px; align-items: end; margin-top: 44px; }
-.hero .sub { font-size: 17px; line-height: 2.0; color: var(--ink-2); max-width: 44ch; }
-.hero .sub b { color: var(--ink); }
-.hero-side { border-left: 1px solid var(--line); padding-left: 28px; }
-.hero-fact { display: flex; justify-content: space-between; gap: 18px; padding: 13px 0; border-bottom: 1px solid var(--line-soft); font-size: 13px; }
-.hero-fact:last-child { border-bottom: 0; }
-.hero-fact .k { color: var(--mut); font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; padding-top: 2px; text-transform: uppercase; }
-.hero-fact .v { text-align: right; font-weight: 600; color: var(--ink); }
-.cta-row { margin-top: 40px; display: flex; gap: 26px; align-items: center; flex-wrap: wrap; }
-.btn {
-  display: inline-flex; align-items: center; gap: 12px;
-  font-size: 15px; font-weight: 600; border-radius: 999px; padding: 10px 12px 10px 26px;
-  cursor: pointer; border: 1px solid transparent;
-  transition: transform .5s var(--ease), background .5s var(--ease), box-shadow .5s var(--ease), border-color .5s var(--ease), color .5s var(--ease);
-}
-.btn:active { transform: scale(0.97); }
-.btn .ic { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 999px; transition: transform .5s var(--ease), background .5s var(--ease); }
-.btn:hover .ic { transform: translate(2px, -2px); }
-.btn-primary { background: var(--acc); color: #FFF7EC; box-shadow: 0 14px 34px rgba(194, 79, 41, 0.28); }
-.btn-primary .ic { background: rgba(255, 247, 236, 0.2); }
-.btn-primary:hover { background: var(--acc-deep); box-shadow: 0 18px 44px rgba(194, 79, 41, 0.36); }
-.btn-text { padding: 10px 0; border: 0; border-bottom: 1px solid var(--ink); border-radius: 0; color: var(--ink); background: transparent; }
-.btn-text:hover, .btn-text:active { color: var(--acc); background: transparent; border-bottom-color: var(--acc); box-shadow: none; }
-.btn-text span:last-child { display: inline-block; transition: transform .45s var(--ease); }
-.btn-text:hover span:last-child { transform: translate(3px, -3px); }
-.hero-prereq { margin-top: 24px; display: flex; gap: 12px; align-items: baseline; font-family: var(--mono); font-size: 11.5px; letter-spacing: .04em; line-height: 1.9; color: var(--mut); max-width: 54ch; }
-.hero-prereq::before { content: ""; flex: 0 0 auto; width: 22px; height: 1px; background: var(--acc); transform: translateY(-4px); }
-
-/* ---------- Hero screenshot stage ---------- */
-.stage { position: relative; margin: 84px auto 0; max-width: 1020px; }
-.stage .back-card {
-  position: absolute; inset: 4% -3% auto auto; width: 62%; height: 88%;
-  border-radius: 26px; background: var(--paper-2); border: 1px solid var(--line);
-  transform: rotate(2.2deg);
-}
-.stage .back-card span { position: absolute; left: 24px; bottom: 18px; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em; color: var(--mut); text-transform: uppercase; }
-.shot-shell {
-  position: relative; border-radius: 26px; padding: 9px;
-  background: var(--card); border: 1px solid var(--line);
-  box-shadow: 0 30px 70px rgba(34, 27, 18, 0.16), 0 2px 6px rgba(34, 27, 18, 0.06);
-  transform: rotate(-1.1deg);
-  transition: transform .8s var(--ease), box-shadow .8s var(--ease);
-}
-.shot-shell:hover { transform: rotate(0deg); box-shadow: 0 40px 90px rgba(34, 27, 18, 0.2), 0 2px 6px rgba(34, 27, 18, 0.06); }
-.shot-inner { border-radius: 18px; overflow: hidden; border: 1px solid var(--line-soft); }
-.shot-cap { margin-top: 26px; display: flex; justify-content: space-between; gap: 20px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: var(--mut); }
-@media (max-width: 760px) {
-  .hero-grid { grid-template-columns: 1fr; gap: 36px; align-items: start; }
-  .hero-side { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 22px; }
-  .stage .back-card { display: none; }
-  .shot-shell { transform: none; }
-}
-
-/* ---------- Marquee ---------- */
-.marquee { margin-top: 100px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); overflow: hidden; padding: 20px 0; }
-.mq-track { display: flex; gap: 48px; width: max-content; animation: mq 34s linear infinite; }
-.mq-track span { font-family: var(--serif); font-size: 19px; color: var(--ink-2); white-space: nowrap; display: flex; align-items: center; gap: 48px; }
-.mq-track span::after { content: "✳"; color: var(--acc); font-size: 13px; }
-@keyframes mq { to { transform: translateX(-50%); } }
-@media (prefers-reduced-motion: reduce) { .mq-track { animation: none; } .marquee { overflow-x: auto; } }
-
-/* ---------- Section skeleton ---------- */
-section { padding: 120px 0 20px; }
-.kicker { display: flex; align-items: baseline; gap: 18px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.26em; text-transform: uppercase; color: var(--acc); }
-.kicker .rule { flex: 1; height: 1px; background: var(--line); align-self: center; }
-h2 { font-family: var(--serif); font-size: clamp(34px, 4.6vw, 58px); line-height: 1.22; font-weight: 700; letter-spacing: -0.005em; margin-top: 26px; }
-.sec-sub { margin-top: 20px; color: var(--ink-2); font-size: 16px; line-height: 2.0; max-width: 54ch; }
-
-/* ---------- Features: editorial rows ---------- */
-.work-list { margin-top: 64px; border-top: 1px solid var(--line); }
-.work-row { position: relative; display: grid; grid-template-columns: 90px minmax(0, 1.1fr) minmax(0, 1.4fr) 60px; gap: 30px; align-items: center; padding: 42px 8px; border-bottom: 1px solid var(--line); transition: background .5s var(--ease), padding .5s var(--ease); }
-.work-row:hover { background: var(--card); padding-left: 22px; padding-right: 22px; }
-.work-row .no { font-family: var(--mono); font-size: 13px; color: var(--acc); }
-.work-row h3 { font-family: var(--serif); font-size: clamp(24px, 2.6vw, 34px); font-weight: 700; letter-spacing: -0.01em; transition: color .4s var(--ease); }
-.work-row:hover h3 { color: var(--acc); }
-.work-row p { font-size: 14.5px; line-height: 1.95; color: var(--mut); max-width: 52ch; }
-.work-row .arrow { font-family: var(--serif); font-size: 26px; color: var(--acc); opacity: 0; transform: translateX(-12px); transition: opacity .5s var(--ease), transform .5s var(--ease); text-align: right; }
-.work-row:hover .arrow { opacity: 1; transform: none; }
-@media (max-width: 860px) {
-  .work-row { grid-template-columns: 48px 1fr; gap: 8px 18px; padding: 30px 4px; }
-  .work-row p { grid-column: 2; }
-  .work-row .arrow { display: none; }
-  .work-row:hover { padding-left: 4px; padding-right: 4px; }
-}
-
-/* ---------- Pull quote ---------- */
-.quote { margin-top: 130px; padding: 90px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); text-align: center; position: relative; }
-.quote .mark { font-family: var(--serif); font-size: 90px; line-height: 0.5; color: var(--acc); display: block; margin-bottom: 30px; }
-.quote p { font-family: var(--serif); font-style: italic; font-size: clamp(26px, 3.6vw, 44px); line-height: 1.55; max-width: 28ch; margin: 0 auto; font-weight: 700; }
-.quote cite { display: block; margin-top: 30px; font-family: var(--mono); font-style: normal; font-size: 11px; letter-spacing: 0.2em; color: var(--mut); text-transform: uppercase; }
-
-/* ---------- Connection philosophy ---------- */
-.phil { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 80px; margin-top: 64px; align-items: start; }
-.phil-sticky { position: sticky; top: 110px; }
-.phil-item { padding: 30px 0; border-top: 1px solid var(--line); display: flex; gap: 24px; }
-.phil-item:last-child { border-bottom: 1px solid var(--line); }
-.phil-item .no { font-family: var(--serif); font-style: italic; font-size: 30px; color: var(--acc); line-height: 1.1; }
-.phil-item h3 { font-size: 17px; font-weight: 700; }
-.phil-item p { margin-top: 8px; font-size: 14px; color: var(--mut); line-height: 1.95; }
-.map-card { border-radius: 26px; padding: 10px; background: var(--card); border: 1px solid var(--line); box-shadow: 0 24px 60px rgba(34,27,18,0.10); }
-.map-inner { border-radius: 18px; border: 1px solid var(--line-soft); background:
-  repeating-linear-gradient(0deg, transparent, transparent 34px, rgba(34,27,18,0.03) 34px, rgba(34,27,18,0.03) 35px),
-  var(--paper); padding: 42px 30px 34px; }
-.topo { width: 100%; height: auto; }
-.topo .wire { fill: none; stroke: var(--acc); stroke-width: 1.4; stroke-dasharray: 3 6; opacity: .8; }
-@media (prefers-reduced-motion: no-preference) { .topo .wire { animation: dash 3s linear infinite; } @keyframes dash { to { stroke-dashoffset: -18; } } }
-.topo .solid { stroke-dasharray: none; opacity: .9; }
-.topo .box { fill: var(--card); stroke: var(--line); }
-.topo .hub { fill: #F3E3D4; stroke: var(--acc); }
-.topo text { fill: var(--ink); font-family: var(--sans); font-size: 12px; font-weight: 600; }
-.topo .t-sub { fill: var(--mut); font-size: 9.5px; font-weight: 400; font-family: var(--mono); }
-.map-note { margin-top: 22px; font-size: 12px; color: var(--mut); text-align: center; font-family: var(--mono); letter-spacing: .04em; }
-@media (max-width: 900px) { .phil { grid-template-columns: 1fr; gap: 44px; } .phil-sticky { position: static; } }
-
-/* ---------- Dark trust band ---------- */
-.band { margin-top: 130px; background: var(--dark); color: var(--dark-ink); border-radius: 34px; overflow: hidden; position: relative; }
-.band::before { content: ""; position: absolute; inset: 0; background: radial-gradient(720px circle at 82% -12%, rgba(194,79,41,0.24), transparent 62%); pointer-events: none; }
-.band-in { padding: 86px 72px 76px; position: relative; }
-.band .kicker { color: #E8946F; }
-.band .kicker .rule { background: rgba(239,230,212,0.16); }
-.band h2 { color: #F8F1E2; }
-.band .sec-sub { color: rgba(239,230,212,0.66); }
-.band-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 44px; margin-top: 56px; }
-.band-col { border-top: 1px solid rgba(232,148,111,0.5); padding-top: 22px; }
-.band-col .no { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; color: #E8946F; }
-.band-col h3 { margin-top: 15px; font-size: 18px; font-weight: 700; color: #F8F1E2; }
-.band-col p { margin-top: 10px; font-size: 14px; line-height: 1.95; color: rgba(239,230,212,0.66); }
-.band-col a { color: #E8946F; font-weight: 600; border-bottom: 1px solid transparent; transition: border-color .3s; }
-.band-col a:hover { border-color: currentColor; }
-@media (max-width: 900px) { .band-in { padding: 56px 30px; } .band-cols { grid-template-columns: 1fr; gap: 30px; } }
-
-/* ---------- Who it's for (interlude) ---------- */
-.fit-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 26px; margin-top: 58px; }
-.fit-col { border: 1px solid var(--line); border-radius: 24px; background: var(--card); padding: 36px 36px 32px; }
-.fit-col.alt { background: transparent; }
-.fit-col .tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase; color: var(--acc); }
-.fit-col.alt .tag { color: var(--mut); }
-.fit-col ul { list-style: none; margin-top: 22px; }
-.fit-col li { position: relative; padding: 13px 0 13px 32px; border-top: 1px solid var(--line-soft); font-size: 14.5px; line-height: 1.9; color: var(--ink-2); }
-.fit-col li:last-child { border-bottom: 1px solid var(--line-soft); }
-.fit-col li::before { content: "✓"; position: absolute; left: 2px; top: 13px; color: var(--acc); font-weight: 700; }
-.fit-col.alt li { color: var(--mut); }
-.fit-col.alt li::before { content: "—"; color: var(--mut); font-weight: 400; }
-.fit-note { margin-top: 36px; max-width: 60ch; font-family: var(--serif); font-size: clamp(19px, 2.3vw, 26px); line-height: 1.8; font-weight: 700; }
-@media (max-width: 860px) { .fit-grid { grid-template-columns: 1fr; gap: 20px; } .fit-col { padding: 28px 24px 26px; } }
-
-/* ---------- Deploy ---------- */
-.deploy-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 70px; margin-top: 60px; align-items: center; }
-.dstep { display: flex; gap: 26px; padding: 30px 0; border-top: 1px solid var(--line); }
-.dstep:last-child { border-bottom: 1px solid var(--line); }
-.dstep .no { font-family: var(--serif); font-size: 40px; line-height: 1; color: var(--acc); min-width: 62px; }
-.dstep h3 { font-size: 18.5px; font-weight: 700; }
-.dstep p { margin-top: 9px; font-size: 14.5px; color: var(--mut); line-height: 1.95; max-width: 46ch; }
-.dstep a { color: var(--acc); font-weight: 600; border-bottom: 1px solid rgba(194,79,41,.35); }
-.dstep a:hover { border-color: currentColor; }
-.code-shell { border-radius: 24px; padding: 9px; background: var(--card); border: 1px solid var(--line); box-shadow: 0 24px 60px rgba(34,27,18,0.12); transform: rotate(1.2deg); transition: transform .8s var(--ease); }
-.code-shell:hover { transform: rotate(0); }
-.code { border-radius: 16px; background: var(--dark); overflow: hidden; }
-.code-bar { display: flex; gap: 7px; align-items: center; padding: 13px 17px; border-bottom: 1px solid rgba(239,230,212,0.1); }
-.code-bar i { width: 9px; height: 9px; border-radius: 50%; }
-.code-bar i:nth-child(1) { background: #FF5F57; }
-.code-bar i:nth-child(2) { background: #FEBC2E; }
-.code-bar i:nth-child(3) { background: #28C840; }
-.code-bar span { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: rgba(239,230,212,0.4); letter-spacing: .06em; }
-.code pre { padding: 24px 24px 28px; font-family: var(--mono); font-size: 12.3px; line-height: 2.1; color: #E5DAC2; overflow-x: auto; }
-.code pre .code-line { display: block; min-height: 2.1em; }
-.code .c { color: rgba(239,230,212,0.42); } .code .k { color: #E8946F; } .code .ok { color: #A8C686; }
-.code-cursor { display: inline-block; width: 7px; height: 13px; background: #E8946F; vertical-align: -2px; margin-left: 2px; }
-@media (prefers-reduced-motion: no-preference) { .code-cursor { animation: codeblink 1s steps(1) infinite; } @keyframes codeblink { 50% { opacity: 0; } } }
-@media (max-width: 940px) { .deploy-grid { grid-template-columns: minmax(0, 1fr); gap: 40px; } .code-shell { transform: none; } }
-
-/* ---------- Download ---------- */
-.dl-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 28px; flex-wrap: wrap; }
-.dl-head .ver-link { font-family: var(--mono); font-size: 12px; color: var(--acc); letter-spacing: .06em; border-bottom: 1px solid rgba(194,79,41,.4); padding-bottom: 3px; }
-.dl-head .ver-link:hover { border-color: currentColor; }
-.dl-rows { margin-top: 52px; border-top: 1px solid var(--line); }
-.dl-row { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr) minmax(0, 1.6fr) 52px; gap: 28px; align-items: center; padding: 30px 10px; border-bottom: 1px solid var(--line); transition: background .5s var(--ease), padding .5s var(--ease); }
-.dl-row:hover { background: var(--card); padding-left: 24px; padding-right: 24px; }
-.dl-row .plat { font-family: var(--serif); font-size: 27px; font-weight: 700; }
-.dl-row .arch { font-family: var(--mono); font-size: 11.5px; color: var(--mut); letter-spacing: .05em; line-height: 1.8; }
-.dl-row .note { font-size: 13px; color: var(--mut); line-height: 1.85; }
-.dl-row .go { width: 46px; height: 46px; border-radius: 999px; border: 1px solid var(--line); display: grid; place-items: center; color: var(--ink); font-size: 17px; transition: background .45s var(--ease), color .45s var(--ease), border-color .45s var(--ease), transform .45s var(--ease); }
-.dl-row:hover .go { background: var(--acc); border-color: var(--acc); color: #FFF7EC; transform: translate(2px, -2px); }
-.dl-note { margin-top: 26px; font-size: 13px; color: var(--mut); }
-.dl-note a { color: var(--acc); font-weight: 600; }
-@media (max-width: 860px) { .dl-row { grid-template-columns: 1fr 52px; gap: 6px 18px; padding: 24px 6px; } .dl-row .arch, .dl-row .note { grid-column: 1; } .dl-row .go { grid-row: 1; grid-column: 2; } .dl-row:hover { padding-left: 6px; padding-right: 6px; } }
-
-/* ---------- FAQ ---------- */
-.faq-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 70px; align-items: start; }
-.faq-list { border-top: 1px solid var(--line); }
-.faq-item { border-bottom: 1px solid var(--line); }
-.faq-item summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 22px; padding: 26px 4px; font-family: var(--serif); font-size: 19px; font-weight: 700; transition: color .35s var(--ease); }
-.faq-item summary::-webkit-details-marker { display: none; }
-.faq-item summary:hover { color: var(--acc); }
-.faq-item .plus { font-family: var(--sans); flex: 0 0 auto; width: 30px; height: 30px; border-radius: 999px; border: 1px solid var(--line); display: grid; place-items: center; font-size: 15px; color: var(--mut); transition: transform .5s var(--ease), background .5s var(--ease), color .5s var(--ease); }
-.faq-item[open] .plus { transform: rotate(45deg); background: var(--acc); border-color: var(--acc); color: #FFF7EC; }
-.faq-item .a { padding: 0 40px 28px 4px; color: var(--mut); font-size: 14.5px; line-height: 2.0; }
-.faq-item .a a { color: var(--acc); font-weight: 600; border-bottom: 1px solid rgba(194,79,41,.35); }
-.faq-item .a a:hover { border-color: currentColor; }
-@media (max-width: 900px) { .faq-grid { grid-template-columns: 1fr; gap: 40px; } }
-
-/* ---------- Finale ---------- */
-.finale { margin-top: 140px; text-align: center; padding: 100px 0 110px; border-top: 1px solid var(--line); position: relative; }
-.finale .over { font-family: var(--mono); font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--mut); }
-.finale h2 { margin: 30px auto 0; max-width: 18ch; }
-.finale .cta-row { justify-content: center; margin-top: 48px; }
-
-/* ---------- Footer ---------- */
-footer { border-top: 1px solid var(--line); padding: 70px 0 46px; background: var(--paper-2); }
-.foot { display: flex; gap: 56px; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; }
-.foot-brand { display: flex; flex-direction: column; gap: 14px; }
-.foot-brand .name { font-family: var(--serif); font-size: 30px; font-weight: 700; display: flex; align-items: center; gap: 12px; }
-.foot-brand .name img { width: 34px; height: 34px; border-radius: 9px; }
-.foot-brand p { font-size: 13px; color: var(--mut); max-width: 32ch; line-height: 1.9; }
-.foot-col { display: flex; flex-direction: column; gap: 10px; font-size: 13.5px; color: var(--ink-2); }
-.foot-col b { font-family: var(--mono); font-size: 10.5px; letter-spacing: .18em; text-transform: uppercase; color: var(--mut); margin-bottom: 4px; }
-.foot-col a { width: max-content; border-bottom: 1px solid transparent; transition: border-color .3s, color .3s; }
-.foot-col a:hover { color: var(--acc); border-color: rgba(194,79,41,.4); }
-.legal { margin-top: 52px; padding-top: 26px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 22px; flex-wrap: wrap; font-size: 12px; color: var(--mut); line-height: 1.9; }
-.legal .mono { font-family: var(--mono); letter-spacing: .05em; }
-
-/* ---------- Reveal (progressive enhancement: page fully readable without JS) ---------- */
-.rv.pending { opacity: 0; transform: translateY(30px); filter: blur(5px); transition: opacity 1s var(--ease), transform 1s var(--ease), filter 1s var(--ease); transition-delay: var(--d, 0s); }
-.rv.pending.on { opacity: 1; transform: none; filter: blur(0); }
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
-  .rv.pending { opacity: 1; transform: none; filter: none; }
-  .shot-shell:hover, .code-shell:hover { transform: none; }
-}
-@media (max-width: 640px) {
-  .wrap { padding: 0 20px; }
-  .hero { padding-top: 64px; }
-  section { padding: 88px 0 12px; }
-  .band { border-radius: 24px; }
-}
-</style>
-<link rel="stylesheet" href="assets/demo.css?v=200">
+<link rel="icon" href="assets/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="assets/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>document.documentElement.classList.add('js')</script>
 </head>
 <body>
-<a class="skip-link" href="#content">Skip to content</a>
-<div class="grain" aria-hidden="true"></div>
-
-<!-- ============ Masthead ============ -->
-<header class="topbar">
-  <div class="wrap topbar-in">
-    <a class="masthead" href="#top">
-      <img src="assets/logo.png?v=5" alt="NikoDesk logo">
-      <span class="name">NikoDesk</span>
-      <span class="issue">VOL. 2.2.0</span>
-    </a>
-    <nav class="nav-links" aria-label="Main navigation">
-      <a href="#features">How it works</a>
-      <a href="#why">The connection</a>
-      <a href="#security">Trust</a>
-      <a href="#fit">Who it's for</a>
-      <a href="#deploy">Self-hosting</a>
-      <a href="#faq">FAQ</a>
+<a class="skip" href="#content">Skip to content</a>
+<header class="top">
+  <div class="container">
+    <a class="wordmark" href="./" aria-label="NikoDesk home"><img src="assets/logo.png" width="32" height="32" alt="">NikoDesk</a>
+    <nav class="top-links" aria-label="Main">
+      <a href="#tools">Features</a>
+      <a href="#start">Set up</a>
+      <a class="lang" href="zh/" hreflang="zh-CN" lang="zh-CN">中文</a>
+      <a class="btn btn-small" href="#download">Download</a>
     </nav>
-    <a class="nav-lang" href="./zh/" hreflang="zh">中文</a>
-    <a class="nav-cta" href="#download"><span>Download</span><span class="ic" aria-hidden="true">↗</span></a>
   </div>
 </header>
 
-<main id="content" tabindex="-1">
-
-<!-- ============ Hero ============ -->
-<section class="hero wrap" id="top" tabindex="-1">
-  <p class="hero-eyebrow rv"><a href="https://github.com/baogutang/nikodesk/releases/tag/v2.2.0">Self-hosted remote desktop</a><span class="ver">— v2.2.0 is out</span></p>
-  <h1 class="rv" style="--d:.08s">Your familiar desktop.<br><em>Wherever you work.</em></h1>
-  <div class="hero-grid">
-    <div class="rv" style="--d:.16s">
-      <p class="sub">Open NikoDesk, connect through <b>your own server</b>, and keep working on your computer from anywhere. No accounts — and no third party ever sees your screen or files.</p>
-      <div class="cta-row">
-        <a class="btn btn-primary" href="#download"><span>Get NikoDesk</span><span class="ic" aria-hidden="true">↗</span></a>
-        <a class="btn btn-text" href="#features"><span>See how it works</span><span aria-hidden="true">↓</span></a>
-      </div>
-      <p class="hero-prereq">Before you download · a server of your own (public address), two commands to set up; already running RustDesk Server? You're ready.</p>
-    </div>
-    <aside class="hero-side rv" style="--d:.24s" aria-label="Project facts">
-      <div class="hero-fact"><span class="k">Core</span><span class="v">Native RustDesk</span></div>
-      <div class="hero-fact"><span class="k">Encryption</span><span class="v">End-to-end · keys stay on devices</span></div>
-      <div class="hero-fact"><span class="k">Infrastructure</span><span class="v">100% your own servers</span></div>
-      <div class="hero-fact"><span class="k">License</span><span class="v">AGPL-3.0, fully open</span></div>
-    </aside>
-  </div>
-
-  <div class="stage rv" style="--d:.3s">
-    <div class="back-card" aria-hidden="true"><span>Fig. 01 — Workspace</span></div>
-    <div class="shot-shell">
-      <div class="shot-inner">
-        <div id="nikodesk-demo" class="nd-shot" data-lang="en" data-theme="dark">
-          <img class="nd-dark" src="assets/app-home-dark-en.webp?v=210" width="1440" height="900" alt="NikoDesk 2.1, dark: sidebar, device grid, quick connect, this computer's ID and health, invented data">
-          <img class="nd-light" src="assets/app-home-light-en.webp?v=210" width="1440" height="900" loading="lazy" alt="NikoDesk 2.1, light: sidebar, device grid, quick connect, this computer's ID and health, invented data">
-        </div>
-      </div>
-    </div>
-    <div class="shot-cap"><span>FIG. 01 — NIKODESK 2.1 / ORBIT</span><span>Real interface · Invented data</span></div>
-  </div>
-
-  <div class="marquee rv" aria-hidden="true">
-    <div class="mq-track" id="mq">
-      <span>Orbit and Clay</span><span>Remote control</span><span>File transfer</span><span>Clipboard sync</span><span>Multi-monitor</span><span>Keyboard mapping</span><span>Privacy screen</span><span>Adaptive quality</span><span>End-to-end encryption</span><span>Verified updates</span>
-    </div>
-  </div>
-</section>
-
-<!-- ============ Features ============ -->
-<section id="features" class="wrap" tabindex="-1">
-  <div class="kicker rv"><span>How it works</span><span class="rule"></span></div>
-  <h2 class="rv">A different place.<br>The same familiar flow.</h2>
-  <div class="work-list">
-    <div class="work-row rv"><span class="no">01</span><h3>Back to your desktop</h3><p>Find a computer in your device list and keep working with your keyboard and mouse. Switch displays, go full screen and keep familiar shortcuts close.</p><span class="arrow" aria-hidden="true">→</span></div>
-    <div class="work-row rv" style="--d:.05s"><span class="no">02</span><h3>Bring your files along</h3><p>Move files and copy text between computers without breaking your flow. You stay in control of transfer and access permissions.</p><span class="arrow" aria-hidden="true">→</span></div>
-    <div class="work-row rv" style="--d:.1s"><span class="no">03</span><h3>A view that fits the task</h3><p>Choose clarity for reading or responsiveness for interaction. See connection details and adjust the picture while you work.</p><span class="arrow" aria-hidden="true">→</span></div>
-    <div class="work-row rv" style="--d:.15s"><span class="no">04</span><h3>Give the screen a different view</h3><p>Choose Nightline, Deep field, Aurora, Graphite or your own picture, with adjustable animation and glow. Use a connection reminder or automatic activation. The controlled screen shows its privacy status; local exit requires the system login password.</p><span class="arrow" aria-hidden="true">→</span></div>
-    <div class="work-row rv" style="--d:.2s"><span class="no">05</span><h3>Ready on first launch, easy to keep current</h3><p>A guide takes you through the two system permissions on first launch, and the menu bar shows whether this Mac can be reached. New versions are checked against the publisher signature and can install themselves while nobody is connected.</p><span class="arrow" aria-hidden="true">→</span></div>
-  </div>
-
-  <blockquote class="quote rv">
-    <span class="mark" aria-hidden="true">“</span>
-    <p>A remote desktop shouldn't ask you to sign up or hand over your device list. If a service can be self-hosted, it should be.</p>
-    <cite>Why NikoDesk exists</cite>
-  </blockquote>
-</section>
-
-<!-- ============ The connection ============ -->
-<section id="why" class="wrap" tabindex="-1">
-  <div class="phil">
-    <div class="phil-sticky">
-      <div class="kicker rv"><span>The connection</span><span class="rule"></span></div>
-      <h2 class="rv">A connection that<br>only concerns you.</h2>
-      <p class="sec-sub rv">Most services keep your device list and connection history, and relay your screen through their servers. NikoDesk works the other way: registration, discovery and relay all run on hardware you own.</p>
-      <div class="map-card rv" style="--d:.1s; margin-top: 42px;">
-        <div class="map-inner">
-          <svg class="topo" viewBox="0 0 460 240" role="img" aria-label="Your server helps discover the remote computer, then a direct connection is attempted with relay as needed">
-            <path class="wire" d="M92 84 C 150 30, 310 30, 368 84" />
-            <path class="wire solid" d="M104 112 C 180 190, 280 190, 356 112" />
-            <rect class="hub" x="180" y="42" width="100" height="50" rx="10" />
-            <text x="230" y="63" text-anchor="middle">Your server</text>
-            <text class="t-sub" x="230" y="79" text-anchor="middle">hbbs · hbbr</text>
-            <rect class="box" x="42" y="82" width="76" height="52" rx="10" />
-            <text x="80" y="103" text-anchor="middle">Where you are</text>
-            <text class="t-sub" x="80" y="119" text-anchor="middle">Controller</text>
-            <rect class="box" x="342" y="82" width="76" height="52" rx="10" />
-            <text x="380" y="103" text-anchor="middle">Your computer</text>
-            <text class="t-sub" x="380" y="119" text-anchor="middle">Controlled</text>
-          </svg>
-          <p class="map-note">Solid: P2P direct (preferred) · Dashed: your relay (fallback)</p>
-        </div>
-      </div>
-    </div>
+<main id="content">
+<section class="hero" aria-labelledby="hero-title" style="padding-block: 0">
+  <div class="container">
     <div>
-      <div class="phil-item rv"><span class="no">I.</span><div><h3>Registration you own</h3><p>Your device list, online status and keys live only on your server. No accounts, no cloud sync.</p></div></div>
-      <div class="phil-item rv" style="--d:.06s"><span class="no">II.</span><div><h3>Direct first</h3><p>If a direct connection can be punched through, it is. Only when the network says no does traffic fall back to your own relay.</p></div></div>
-      <div class="phil-item rv" style="--d:.12s"><span class="no">III.</span><div><h3>Never calls out</h3><p>Without private-server settings, the client contacts no public rendezvous server. Hard-coded, not promised.</p></div></div>
-      <div class="phil-item rv" style="--d:.18s"><span class="no">IV.</span><div><h3>Leave anytime</h3><p>The server side is the open-source RustDesk Server OSS — no proprietary formats. When you're done with it, replace it.</p></div></div>
-    </div>
-  </div>
-</section>
-
-<!-- ============ Trust ============ -->
-<section id="security" class="wrap" tabindex="-1">
-  <div class="band rv">
-    <div class="band-in">
-      <div class="kicker"><span>Trust</span><span class="rule"></span></div>
-      <h2>Trust, where you can see it.</h2>
-      <p class="sec-sub">"Secure" is a claim, not an argument. These three things you can check yourself.</p>
-      <div class="band-cols">
-        <div class="band-col"><span class="no">/ 01</span><h3>Choose who connects</h3><p>Manage passwords and access rules on the remote computer. Grant viewing, input and file permissions separately, and end a session at any time.</p></div>
-        <div class="band-col"><span class="no">/ 02</span><h3>Permissions stay visible</h3><p>Screen capture, input, camera and microphone follow system permissions. A missing permission is pointed out at launch, and the controller says what will not work; revoke access when you are done.</p></div>
-        <div class="band-col"><span class="no">/ 03</span><h3>Open for inspection</h3><p>Built on the native RustDesk core under AGPL-3.0. Source code, build instructions and release notes are available on <a href="https://github.com/baogutang/nikodesk" target="_blank" rel="noopener">GitHub</a>.</p></div>
+      <h1 id="hero-title">Remote desktop through your own server</h1>
+      <p class="lead">Mac, Windows, iPad and Android, connected through a server you run.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://github.com/baogutang/nikodesk/releases/latest/download/NikoDesk-macos-arm64.dmg" data-platform="mac"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>Download for macOS</a>
+        <a class="btn" href="https://github.com/baogutang/nikodesk/releases/latest/download/NikoDesk-windows-x64-setup.exe" data-platform="windows">Windows</a>
+        <a class="btn" href="https://github.com/baogutang/nikodesk/releases/latest/download/NikoDesk-android-arm64.apk" data-platform="android">Android</a>
       </div>
+      <p class="terms">Free and open source, AGPL-3.0. Needs a server of your own.</p>
+    </div>
+    <figure class="shot" data-slot="hero" data-kind="product" data-alt="The NikoDesk 3.0 home screen">
+      <picture>
+        <source srcset="assets/screens/home-dark-en.webp" media="(prefers-color-scheme: dark)">
+        <img src="assets/screens/home-light-en.webp" width="2880" height="1800" fetchpriority="high" alt="The NikoDesk home screen: navigation on the left, the blue connect panel, this computer's device code, and five devices below, the three you have connected to showing their last screens">
+      </picture>
+    </figure>
+  </div>
+</section>
+
+<section class="screens" id="screens" aria-labelledby="screens-title">
+  <div class="container">
+    <div class="head">
+      <h2 id="screens-title">The same NikoDesk on every device</h2>
+      <p class="lead">Type the other device’s code into the blue panel; the devices you use show their last screen.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Devices">
+      <button type="button" role="tab" id="tab-desktop" aria-controls="panel-desktop" aria-selected="true">Computer</button>
+      <button type="button" role="tab" id="tab-ipad" aria-controls="panel-ipad" aria-selected="false" tabindex="-1">iPad</button>
+      <button type="button" role="tab" id="tab-phone" aria-controls="panel-phone" aria-selected="false" tabindex="-1">Phone</button>
+    </div>
+    <figure class="panel on" role="tabpanel" id="panel-desktop" aria-labelledby="tab-desktop">
+      <div class="frame" data-slot="desktop" data-kind="product" data-alt="The devices screen"><img src="assets/screens/devices-light-en.webp" width="2880" height="1800" loading="lazy" alt="The devices screen: the list on the left, the selected device's last screen and connect buttons on the right"></div>
+      <figcaption><strong>Every device at a glance</strong><span>The list beside the selected device’s screen and details.</span></figcaption>
+    </figure>
+    <figure class="panel" role="tabpanel" id="panel-ipad" aria-labelledby="tab-ipad">
+      <div class="frame" data-slot="ipad" data-kind="product" data-alt="The iPad home screen in landscape"><img src="assets/screens/ipad-light-en.webp" width="2752" height="2064" loading="lazy" alt="The iPad home screen in landscape: the connect panel and devices four across"></div>
+      <figcaption><strong>The iPad as a controller</strong><span>Trackpad and keyboard work; devices sit four across.</span></figcaption>
+    </figure>
+    <figure class="panel" role="tabpanel" id="panel-phone" aria-labelledby="tab-phone">
+      <div class="frame phone" data-slot="phone" data-kind="product" data-alt="The phone home screen"><img src="assets/screens/phone-light-en.webp" width="780" height="1688" loading="lazy" alt="The phone home screen: the connect panel above the devices"></div>
+      <figcaption><strong>Reach your computers from a phone</strong><span>Android phones connect as controllers.</span></figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="tools" id="tools" aria-labelledby="tools-title">
+  <div class="container">
+    <div class="head">
+      <h2 id="tools-title">Everything you need, once connected</h2>
+      <p class="lead">Files, a terminal and port forwarding, while the other computer shows who is connected.</p>
+    </div>
+    <div class="grid">
+      <figure class="tile lead">
+        <div class="pic" data-slot="files" data-kind="product" data-alt="The file transfer window"><img src="assets/screens/files-light-en.webp" width="2560" height="1440" loading="lazy" alt="The file transfer window with both computers side by side"></div>
+        <figcaption><h3>File transfer</h3><span>Both sides at once; a name clash asks first.</span></figcaption>
+      </figure>
+      <figure class="tile side">
+        <div class="pic" data-slot="terminal" data-kind="product" data-alt="The terminal window"><img src="assets/screens/terminal-dark.webp" width="1920" height="1120" loading="lazy" alt="A remote terminal window"></div>
+        <figcaption><h3>Terminal</h3><span>A command line on the other computer.</span></figcaption>
+      </figure>
+      <figure class="tile side narrow">
+        <div class="pic" data-slot="host" data-kind="product" data-alt="The host's connection window"><img src="assets/screens/host-light-en.webp" width="800" height="1360" loading="lazy" alt="The host's connection window: who is connected, for how long and with which permissions"></div>
+        <figcaption><h3>The host’s connection window</h3><span>Who is connected, with which permissions; end it any time.</span></figcaption>
+      </figure>
+      <figure class="tile lead">
+        <div class="pic" data-slot="tunnel" data-kind="product" data-alt="The TCP tunnel window"><img src="assets/screens/tunnel-light-en.webp" width="2200" height="1520" loading="lazy" alt="The TCP tunnel window bringing a port from the other network to this computer"></div>
+        <figcaption><h3>TCP tunnel</h3><span>Reach a port on the other network, such as a NAS admin page.</span></figcaption>
+      </figure>
     </div>
   </div>
 </section>
 
-<!-- ============ Interlude: who it's for ============ -->
-<section id="fit" class="wrap" tabindex="-1">
-  <div class="kicker rv"><span>Who it's for</span><span class="rule"></span></div>
-  <h2 class="rv">Who it's for —<br>and who it isn't.</h2>
-  <p class="sec-sub rv">One thing first: NikoDesk needs a server that belongs to you. Not a flaw — the premise.</p>
-  <div class="fit-grid">
-    <div class="fit-col rv">
-      <span class="tag">It suits you if</span>
-      <ul>
-        <li>You have a machine with a public address — a VPS, a NAS or an always-on computer — or you'd gladly add one</li>
-        <li>You already run RustDesk Server and want a more considered client</li>
-        <li>You care where your device list and connection history live</li>
-        <li>You'd trade one setup session for lasting independence</li>
+<section class="windows" id="windows" aria-labelledby="windows-title">
+  <div class="container">
+    <div>
+      <h2 id="windows-title">Windows, even when it is locked</h2>
+      <p class="lead">From 3.0 Windows ships as an installer, and NikoDesk runs as a background service.</p>
+      <ul class="facts">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>The lock screen, sign-in and administrator prompts work remotely</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Starts with Windows</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>In the Start menu; uninstall in Settings &gt; Apps</li>
       </ul>
+      <p class="note">It gets a new device code and password; use them on your Mac or iPad.</p>
     </div>
-    <div class="fit-col alt rv" style="--d:.08s">
-      <span class="tag">Not yet, if</span>
-      <ul>
-        <li>You want to create an account and reach any computer right away</li>
-        <li>You'd rather not touch servers, Docker or the command line</li>
-        <li>You need things not yet offered, like controlling a phone or a web client</li>
-      </ul>
-    </div>
-  </div>
-  <p class="fit-note rv" style="--d:.12s">If the right column sounds like you, skip the install for now. Connections that never touch a third party need a server you run — a trade-off made on purpose, not a gap to close later.</p>
-</section>
-
-<!-- ============ Self-hosting ============ -->
-<section id="deploy" class="wrap" tabindex="-1">
-  <div class="kicker rv"><span>Get started</span><span class="rule"></span></div>
-  <h2 class="rv">Two processes are all<br>the server you need.</h2>
-  <div class="deploy-grid">
-    <div>
-      <div class="dstep rv"><span class="no">1</span><div><h3>Start rendezvous and relay</h3><p>hbbs handles device registration and discovery, hbbr handles relaying. Two Docker commands are enough, or reuse an existing RustDesk Server OSS setup. See the <a href="https://rustdesk.com/docs/en/self-host/rustdesk-server-oss/" target="_blank" rel="noopener">self-hosting guide</a>.</p></div></div>
-      <div class="dstep rv" style="--d:.06s"><span class="no">2</span><div><h3>Set up both devices</h3><p>Enter the same server address and public key on both devices. Allow screen capture and input access as needed.</p></div></div>
-      <div class="dstep rv" style="--d:.12s"><span class="no">3</span><div><h3>Make your connection</h3><p>Enter the remote device ID and access password. Save frequently used computers locally for next time.</p></div></div>
-    </div>
-    <div class="code-shell rv" style="--d:.1s">
-      <div class="code">
-        <div class="code-bar"><i></i><i></i><i></i><span>your-server — sh</span></div>
-        <pre id="nd-code"><span class="c"># A machine with a public address, two commands</span>
-<span class="k">$</span> docker run -d --name hbbs --net=host \
-    rustdesk/rustdesk-server-oss hbbs -r relay.yourdomain.com
-<span class="k">$</span> docker run -d --name hbbr --net=host \
-    rustdesk/rustdesk-server-oss hbbr
-
-<span class="c"># Fill the server public key into both clients</span>
-<span class="k">$</span> cat ./id_ed25519.pub
-OeVuKk5nlHiXp+AppNnWyYwf1yNnKy=
-<span class="ok">✓ Rendezvous ready · relay listening</span></pre>
-      </div>
-    </div>
+    <figure class="shot" data-slot="windows" data-kind="product" data-alt="Windows installation complete"><img src="assets/screens/install-light-en.webp" width="2200" height="1720" loading="lazy" alt="Windows installation complete, showing this computer's new device code"></figure>
   </div>
 </section>
 
-<!-- ============ Download ============ -->
-<section id="download" class="wrap" tabindex="-1">
-  <div class="dl-head">
-    <div>
-      <div class="kicker rv"><span>Download</span><span class="rule"></span></div>
-      <h2 class="rv">Choose your system.</h2>
-    </div>
-    <a class="ver-link rv" href="https://github.com/baogutang/nikodesk/releases/tag/v2.2.0">v2.2.0 · Full release notes ↗</a>
+<section class="data" id="data" aria-labelledby="data-title">
+  <div class="container">
+    <h2 id="data-title">Your data stays on your machines</h2>
+    <dl class="rows">
+      <div><dt>Registration and relay</dt><dd>hbbs and hbbr run on your server; NikoDesk uses no public server.</dd></div>
+      <div><dt>Device list</dt><dd>Kept on this device. No account.</dd></div>
+      <div><dt>Passwords</dt><dd>Not saved unless you choose to keep one.</dd></div>
+      <div><dt>Each device’s last screen</dt><dd>Kept on this device; turning it off deletes them.</dd></div>
+    </dl>
   </div>
-  <div class="dl-rows">
-    <a class="dl-row rv" href="https://github.com/baogutang/nikodesk/releases/download/v2.2.0/NikoDesk-macos-arm64.dmg">
-      <span class="plat">macOS</span>
-      <span class="arch">Apple Silicon<br>macOS 12.3+ · DMG</span>
-      <span class="note">DMG package. Signed with the fixed NikoDesk certificate, not notarized by Apple. Upgrading from 1.0.x needs permissions granted once more, at the Mac.</span>
-      <span class="go" aria-hidden="true">↗</span>
-    </a>
-    <a class="dl-row rv" style="--d:.05s" href="https://github.com/baogutang/nikodesk/releases/download/v2.2.0/NikoDesk-windows-x64.exe">
-      <span class="plat">Windows</span>
-      <span class="arch">x64 · Portable<br>Standalone EXE</span>
-      <span class="note">Currently unsigned; Windows may show a security notice. Installation notes are on the release page.</span>
-      <span class="go" aria-hidden="true">↗</span>
-    </a>
-    <a class="dl-row rv" style="--d:.1s" href="https://github.com/baogutang/nikodesk/releases/download/v2.2.0/NikoDesk-android-arm64.apk">
-      <span class="plat">Android</span>
-      <span class="arch">ARM64 · Controller<br>Release-key signed APK</span>
-      <span class="note">Connect to your computer from your phone. Remote control of the phone is not supported.</span>
-      <span class="go" aria-hidden="true">↗</span>
-    </a>
-  </div>
-  <p class="dl-note rv">Changes, compatibility and known limitations: <a href="https://github.com/baogutang/nikodesk/releases/tag/v2.2.0">release notes</a> · Try the <a href="https://github.com/baogutang/nikodesk/releases/tag/nightly">nightly preview</a> · <a href="https://github.com/baogutang/nikodesk#current-status">Platform support</a></p>
 </section>
 
-<!-- ============ FAQ ============ -->
-<section id="faq" class="wrap" tabindex="-1">
-  <div class="faq-grid">
-    <div>
-      <div class="kicker rv"><span>FAQ</span><span class="rule"></span></div>
-      <h2 class="rv">Before you begin,<br>let's be clear.</h2>
-      <p class="sec-sub rv">A few limitations, stated up front. Also the questions we hear most.</p>
+<section class="start" id="start" aria-labelledby="start-title">
+  <div class="container">
+    <div class="head">
+      <h2 id="start-title">Up and running in three steps</h2>
     </div>
-    <div class="faq-list">
-      <details class="faq-item rv"><summary>Do I need my own server?<span class="plus">+</span></summary><div class="a">Yes — it is the one prerequisite. NikoDesk neither offers nor contacts any public rendezvous server: before your first connection you need a server of your own (reuse an existing RustDesk Server OSS, or set one up with two commands in <a href="#deploy">Get started</a>). Without one, the client connects to nothing and no one.</div></details>
-      <details class="faq-item rv" style="--d:.05s"><summary>Do downloaded updates install automatically?<span class="plus">+</span></summary><div class="a">On a Mac, from 2.0.0 they can. Install the system background service under Settings → Unattended access: new versions are downloaded, checked against the publisher signature, installed while no remote session is active, and NikoDesk reopens. The previous version can be restored. Without the service you are told when to replace the app yourself. Moving from 1.0.x to 2.x is a manual download, and Windows and Android still install manually.</div></details>
-      <details class="faq-item rv" style="--d:.1s"><summary>Can I control an Android phone remotely?<span class="plus">+</span></summary><div class="a">The Android app is a controller for your Windows or Mac computer. It does not expose the phone for remote control.</div></details>
-      <details class="faq-item rv" style="--d:.15s"><summary>Is there an iPad app?<span class="plus">+</span></summary><div class="a">Not as a download. From 2.1 the interface has iPad layouts, trackpad and keyboard support and two-pane file transfer, but publishing an iPad app needs an Apple developer account. You can build it from source and sign it with your own Apple ID; see <a href="https://github.com/baogutang/nikodesk/blob/main/docs/BUILDING.md#ipad-controller">the build guide</a>. Like the Android app, it is a controller only.</div></details>
-      <details class="faq-item rv" style="--d:.2s"><summary>How is NikoDesk related to RustDesk?<span class="plus">+</span></summary><div class="a">NikoDesk is an independent open-source project built on the native RustDesk core under AGPL-3.0. It is not affiliated with or endorsed by RustDesk.</div></details>
-    </div>
+    <ol>
+      <li>
+        <h3>Start hbbs and hbbr on your server</h3>
+        <span>Any machine with a public address, or an existing <a class="link" href="https://rustdesk.com/docs/en/self-host/rustdesk-server-oss/">RustDesk Server OSS</a>.</span>
+<pre class="code">docker run -d --name hbbs --net=host \
+  rustdesk/rustdesk-server-oss hbbs -r relay.example.com
+docker run -d --name hbbr --net=host \
+  rustdesk/rustdesk-server-oss hbbr
+<span class="c"># the key for both ends</span>
+cat ./id_ed25519.pub</pre>
+      </li>
+      <li>
+        <h3>Enter the server and key on both ends</h3>
+        <span>In NikoDesk’s settings.</span>
+      </li>
+      <li>
+        <h3>Type a device code and connect</h3>
+        <span>Both are on the other device’s home screen.</span>
+      </li>
+    </ol>
   </div>
+</section>
 
-  <div class="finale rv">
-    <p class="over">NikoDesk · Remote desktop on your own server</p>
-    <h2>Your familiar desktop,<br>wherever you work.</h2>
-    <div class="cta-row">
-      <a class="btn btn-primary" href="#download"><span>Get NikoDesk</span><span class="ic" aria-hidden="true">↗</span></a>
-      <a class="btn btn-text" href="https://github.com/baogutang/nikodesk" target="_blank" rel="noopener"><span>View the source on GitHub</span><span aria-hidden="true">↗</span></a>
+<section class="download" id="download" aria-labelledby="download-title">
+  <div class="container">
+    <div class="head">
+      <h2 id="download-title">Pick your system</h2>
     </div>
+    <table>
+      <thead><tr><th scope="col">System</th><th scope="col">Requires</th><th scope="col">File</th><th scope="col"><span class="visually-hidden">Download</span></th></tr></thead>
+      <tbody>
+        <tr><td>macOS</td><td>Apple silicon, macOS 12.3+</td><td>DMG</td><td><a class="btn btn-small btn-primary" href="https://github.com/baogutang/nikodesk/releases/latest/download/NikoDesk-macos-arm64.dmg">Download</a></td></tr>
+        <tr><td>Windows</td><td>Windows 10 and 11, x64</td><td>Installer</td><td><a class="btn btn-small" href="https://github.com/baogutang/nikodesk/releases/latest/download/NikoDesk-windows-x64-setup.exe">Download</a></td></tr>
+        <tr><td>Android</td><td>Android 7+, as a controller</td><td>APK</td><td><a class="btn btn-small" href="https://github.com/baogutang/nikodesk/releases/latest/download/NikoDesk-android-arm64.apk">Download</a></td></tr>
+        <tr><td>iPad and iPhone</td><td>Build it from source</td><td>Source</td><td><a class="btn btn-small" href="https://github.com/baogutang/nikodesk/blob/main/docs/BUILDING.md#ipad-controller">Build guide</a></td></tr>
+      </tbody>
+    </table>
+    <p class="sums">The Mac app is not notarized: right-click it and choose Open. At Windows SmartScreen, choose More info, then Run anyway. Checksums are on the <a class="link" href="https://github.com/baogutang/nikodesk/releases/latest">release page</a>.</p>
   </div>
 </section>
 
 </main>
 
 <footer>
-  <div class="wrap">
-    <div class="foot">
-      <div class="foot-brand">
-        <span class="name"><img src="assets/logo.png?v=5" alt="NikoDesk logo">NikoDesk</span>
-        <p>Remote desktop on your own server. Built on the native RustDesk core, open source under AGPL-3.0.</p>
-      </div>
-      <div class="foot-col"><b>Product</b><a href="#download">Download</a><a href="https://github.com/baogutang/nikodesk/releases" target="_blank" rel="noopener">Releases</a><a href="#features">Features</a></div>
-      <div class="foot-col"><b>Project</b><a href="https://github.com/baogutang/nikodesk" target="_blank" rel="noopener">Source</a><a href="https://github.com/baogutang/nikodesk/issues" target="_blank" rel="noopener">Issues</a><a href="#security">Security</a><a href="https://github.com/baogutang/nikodesk/blob/main/LICENCE">License</a></div>
-      <div class="foot-col"><b>Language</b><a href="./zh/">中文站点</a><a href="#top">English</a></div>
+  <div class="container">
+    <div class="mast">
+      <a class="wordmark" href="./" aria-label="NikoDesk home"><img src="assets/logo.png" width="32" height="32" alt="">NikoDesk</a>
+      <p>Remote desktop that runs on your own server.</p>
     </div>
-    <div class="legal">
-      <p style="max-width: 66ch">NikoDesk is an independent project built on RustDesk, which is licensed under AGPL-3.0. RustDesk is a trademark of its respective owners; this project is not affiliated with or endorsed by them.</p>
-      <p class="mono">© 2025 NikoDesk</p>
-    </div>
+    <nav aria-label="Footer">
+      <ul>
+        <li><a href="https://github.com/baogutang/nikodesk/releases">Releases</a></li>
+        <li><a href="https://github.com/baogutang/nikodesk">Source</a></li>
+        <li><a href="https://github.com/baogutang/nikodesk/issues">Issues</a></li>
+        <li><a href="https://github.com/baogutang/nikodesk/blob/main/LICENCE">Licence</a></li>
+        <li><a href="zh/" hreflang="zh-CN" lang="zh-CN">中文</a></li>
+      </ul>
+    </nav>
+    <p class="legal">An independent project based on RustDesk, under AGPL-3.0; not affiliated with or endorsed by RustDesk.</p>
   </div>
 </footer>
-
-<script>
-(function () {
-  'use strict';
-  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  /* Scroll reveals (progressive enhancement: page fully readable without JS) */
-  var rv = document.querySelectorAll('.rv');
-  if (!reduced && 'IntersectionObserver' in window) {
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) {
-        if (e.isIntersecting) { e.target.classList.add('on'); io.unobserve(e.target); }
-      });
-    }, { threshold: 0.07, rootMargin: '0px 0px -5% 0px' });
-    rv.forEach(function (el) { el.classList.add('pending'); io.observe(el); });
-  }
-
-  /* Marquee content doubling */
-  var mq = document.getElementById('mq');
-  if (mq) mq.innerHTML += mq.innerHTML;
-
-  /* Gentle parallax on the example stage (transform only) */
-  var stage = document.querySelector('.stage');
-  if (stage && !reduced && window.matchMedia('(pointer: fine)').matches) {
-    var ticking = false;
-    function parallax() {
-      ticking = false;
-      var r = stage.getBoundingClientRect();
-      var vh = window.innerHeight || 1;
-      var p = (r.top + r.height / 2 - vh / 2) / vh;
-      var clamped = Math.max(-0.6, Math.min(0.6, p));
-      stage.style.transform = 'translateY(' + (clamped * -26) + 'px)';
-    }
-    window.addEventListener('scroll', function () {
-      if (!ticking) { ticking = true; requestAnimationFrame(parallax); }
-    }, { passive: true });
-    parallax();
-  }
-})();
-
-/* ---------- Deploy code block: typewriter effect ---------- */
-(function () {
-  'use strict';
-  var pre = document.getElementById('nd-code');
-  if (!pre) return;
-  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (reduced || !('IntersectionObserver' in window)) return; /* keep static content */
-
-  var LINES = [
-    [{ t: '# A machine with a public address, two commands', c: 'c' }],
-    [{ t: '$ ', c: 'k' }, { t: 'docker run -d --name hbbs --net=host \\' }],
-    [{ t: '    rustdesk/rustdesk-server-oss hbbs -r relay.yourdomain.com' }],
-    [{ t: '$ ', c: 'k' }, { t: 'docker run -d --name hbbr --net=host \\' }],
-    [{ t: '    rustdesk/rustdesk-server-oss hbbr' }],
-    [{ t: ' ' }],
-    [{ t: '# Fill the server public key into both clients', c: 'c' }],
-    [{ t: '$ ', c: 'k' }, { t: 'cat ./id_ed25519.pub' }],
-    [{ t: 'OeVuKk5nlHiXp+AppNnWyYwf1yNnKy=' }],
-    [{ t: '✓ Rendezvous ready · relay listening', c: 'ok' }]
-  ];
-
-  /* Pre-build every line (reserves height, so typing never shifts layout) */
-  var queue = [], segRefs = [];
-  pre.textContent = '';
-  LINES.forEach(function (segs) {
-    var line = document.createElement('span');
-    line.className = 'code-line';
-    segs.forEach(function (seg) {
-      var s = document.createElement('span');
-      if (seg.c) s.className = seg.c;
-      line.appendChild(s);
-      segRefs.push({ span: s, text: seg.t });
-      for (var i = 0; i < seg.t.length; i++) queue.push({ span: s, ch: seg.t.charAt(i), line: line });
-    });
-    pre.appendChild(line);
-  });
-
-  var cursor = document.createElement('span');
-  cursor.className = 'code-cursor';
-  pre.firstElementChild.appendChild(cursor);
-
-  var timer = null, idx = 0;
-  function step() {
-    if (idx >= queue.length) return;
-    var item = queue[idx++];
-    item.span.textContent += item.ch;
-    item.line.appendChild(cursor);
-    var next = queue[idx];
-    var delay = 13;
-    if (next && next.line !== item.line) delay = item.span.className === 'c' ? 520 : 340;
-    timer = setTimeout(step, delay);
-  }
-  function finish() {
-    if (timer) { clearTimeout(timer); timer = null; }
-    idx = queue.length;
-    segRefs.forEach(function (r) { r.span.textContent = r.text; });
-    pre.lastElementChild.appendChild(cursor);
-  }
-  pre.addEventListener('click', finish);
-
-  var io = new IntersectionObserver(function (entries) {
-    if (entries[0].isIntersecting) { io.disconnect(); step(); }
-  }, { threshold: 0.35 });
-  io.observe(pre);
-})();
-</script>
-<script defer src="assets/demo.js?v=200"></script>
+<script src="assets/site.js"></script>
 </body>
 </html>

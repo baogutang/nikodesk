@@ -63,8 +63,8 @@ Future<void> _choose(WidgetTester tester) async {
     await tester.pumpAndSettle();
     await tester.tap(find
         .text(direction == 'capture'
-            ? '48 kHz · f32 · 单声道'
-            : '48 kHz · f32 · 双声道')
+            ? '48 kHz，f32，单声道'
+            : '48 kHz，f32，双声道')
         .last);
     await tester.pumpAndSettle();
   }

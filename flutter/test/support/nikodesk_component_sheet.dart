@@ -357,12 +357,12 @@ class _NikoComponentSheetState extends State<NikoComponentSheet> {
                     subtitle: 'desk.example.net · 18 ms',
                     trailing: const NlBadge('Connected', tone: NlTone.ok)),
                 NlListRow(
-                    leading: NlIconTile(icon: NlIcons.mic, color: nl.tiles[3]),
+                    leading: NlIconTile(icon: NlIcons.mic, color: nl.tiles.first),
                     title: 'Voice chat',
                     subtitle: 'Ask before turning the microphone on',
                     trailing: NlSwitch(value: true, onChanged: (_) {})),
                 NlListRow(
-                    leading: NlIconTile(icon: NlIcons.palette, color: nl.tiles[2]),
+                    leading: NlIconTile(icon: NlIcons.palette, color: nl.tiles.first),
                     title: 'Appearance',
                     trailing: Text('Orbit',
                         style: NlType.text(NlType.s3, color: nl.fg3)),
@@ -457,7 +457,7 @@ class _NikoComponentSheetState extends State<NikoComponentSheet> {
                                       width: 8,
                                       height: 8,
                                       decoration: BoxDecoration(
-                                          color: nl.tiles[0],
+                                          color: nl.tiles.first,
                                           shape: BoxShape.circle)),
                                   label: 'Home',
                                   count: '3',
@@ -467,7 +467,7 @@ class _NikoComponentSheetState extends State<NikoComponentSheet> {
                                       width: 8,
                                       height: 8,
                                       decoration: BoxDecoration(
-                                          color: nl.tiles[4],
+                                          color: nl.tiles.first,
                                           shape: BoxShape.circle)),
                                   label: 'Work',
                                   count: '1',

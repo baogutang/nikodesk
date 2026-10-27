@@ -8,56 +8,60 @@
 
 基于 RustDesk 原生内核、使用自建服务的远程桌面。
 
-[![Release](https://img.shields.io/github/v/release/baogutang/nikodesk?style=flat-square&color=CC6D45)](https://github.com/baogutang/nikodesk/releases)
+[![Release](https://img.shields.io/github/v/release/baogutang/nikodesk?style=flat-square&color=0760D9)](https://github.com/baogutang/nikodesk/releases)
 [![License](https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF%E8%AF%81-AGPL--3.0-8A7665?style=flat-square)](LICENCE)
 
 [English](README.md) · **简体中文** · [官网](https://baogutang.github.io/nikodesk/zh/)
 
-<img src="docs/images/readme-home-light-zh.png" width="48%" alt="NikoDesk 2.1 主页（Orbit 配色，亮色）：侧边栏、设备网格、快速连接、本机 ID 与自检，虚构数据" /> <img src="docs/images/readme-home-dark-zh.png" width="48%" alt="NikoDesk 2.1 主页（Orbit 配色，暗色）：侧边栏、设备网格、快速连接、本机 ID 与自检，虚构数据" />
+<img src="docs/images/readme-home-light-zh.png" width="48%" alt="NikoDesk 3.0 主页（浅色）：蓝色连接面板、本机设备代码，下面是带着上次画面的设备，示例数据" /> <img src="docs/images/readme-home-dark-zh.png" width="48%" alt="NikoDesk 3.0 主页（深色）：蓝色连接面板、本机设备代码，下面是带着上次画面的设备，示例数据" />
 
-*2.1 主页（Orbit 配色），由生产 Flutter 组件渲染，设备和服务器均为虚构数据，不建立远程连接。*
+*3.0 主页，由生产 Flutter 组件渲染，设备、画面和服务器都是示例数据，不建立远程连接。*
 
 </div>
 
 ## 当前状态
 
-当前正式版为 **[NikoDesk v2.2.0](https://github.com/baogutang/nikodesk/releases/tag/v2.2.0)**（产品版本 `2.2.0`、构建号 `27`）。主要变化：
+当前正式版为 **[NikoDesk v3.0.0](https://github.com/baogutang/nikodesk/releases/tag/v3.0.0)**（产品版本 `3.0.0`、构建号 `28`）。主要变化：
 
-- 被控 Mac 改为通过登录窗口锁屏，并确认确实锁上了，适用于会话结束后锁屏（开启该选项时）和“锁定远程屏幕”；快捷键只作为后备，所以改了触发角或快捷键也不会让 Mac 停在未锁状态；
-- 控制端在会话开始时不再把远程指针移到左上角，以前这可能触发 Mac 的“锁定屏幕”触发角；
-- 被控 Mac 在点击后立刻抓取新画面：从点击到采集到画面约少 14 ms；
-- iPad 上（从源码构建，不提供 iPad 安装包）：H.264 和 HEVC 改用 VideoToolbox 解码（每帧约 6 ms，原来约 20 ms）；没选过画面模式的设备默认用“流畅”，按 iPad 的刷新率请求帧率，不再是每秒 30 帧。
+- 全端新界面：首页由连接面板领头，常用的设备带着上次的画面；设备、会话记录和设置统一成一套样式；
+- Windows 只提供安装版：NikoDesk 作为后台服务运行，锁屏、登录界面和管理员确认窗口都能远程操作；开始菜单有入口，在“设置 → 应用”里卸载；
+- 控制 Windows 便携版时，不再出现永远不会成功的“请求提升权限”，会话结束锁屏前也会提醒；
+- iPad 和 iPhone 版在免费 Apple ID 签名过期前 2 天提醒。
 
-详见 [2.2.0 版本说明](docs/RELEASE-2.2.0.md)，之前的版本见 [2.1.1](docs/RELEASE-2.1.1.md) 和 [2.1.0 版本说明](docs/RELEASE-2.1.0.md)。
+详见 [3.0.0 版本说明](docs/RELEASE-3.0.0.md)，上一版见 [2.2.0 版本说明](docs/RELEASE-2.2.0.md)。
+
+**Windows：安装版会有新的设备代码和密码。**它的后台服务生成自己的机器身份；在其他设备上改用安装向导最后显示的代码。便携版的设备列表和设置会保留。
 
 **从 1.0.x 升级被控 Mac，请在电脑前操作。** 签名换成固定证书后，屏幕录制和辅助功能需要重新授权一次，启动时的权限引导会带你完成。授权完成前，远程连接看不到画面，也不能操作。之后的版本保持同一签名，不需要再授权。
 
-**从 2.0.0 或 2.1.x 升级**：2.2.0 用同一个证书签名，授权应当保留。同证书升级还没有在真机上演练过；如果升级后显示未授权，在系统设置里把 NikoDesk 的开关关掉再打开。
+**从 2.x 升级**：3.0.0 用同一个证书签名，授权应当保留。同证书升级还没有在真机上演练过；如果升级后显示未授权，在系统设置里把 NikoDesk 的开关关掉再打开。
 
 安装包由打标签源码的三端 CI 构建生成，附带 `SHA256SUMS` 和它的发布签名 `SHA256SUMS.sig`。滚动更新的 **[nightly 预览](https://github.com/baogutang/nikodesk/releases/tag/nightly)** 跟随 `main`，[历史版本](https://github.com/baogutang/nikodesk/releases)保留各自的改动记录。
 
 | 渠道 | macOS ARM64 | Windows x64 | Android ARM64 |
 |---|---|---|---|
-| [v2.2.0](https://github.com/baogutang/nikodesk/releases/tag/v2.2.0) / [nightly 预览](https://github.com/baogutang/nikodesk/releases/tag/nightly) | DMG + 更新 ZIP，固定 NikoDesk 证书签名（自签名，无 Apple 公证；首次打开见“快速开始”） | 便携 EXE/ZIP（免安装，可与 RustDesk 并存运行）＋用于验证安装流程的无人值守安装器。未签名：Windows 可能显示安全提示。安装器会改动系统，请先在测试机上使用。 | 控制端 APK（`io.nikodesk.android`），使用专用 NikoDesk 发行密钥签名，并对照固定证书指纹校验 |
+| [v3.0.0](https://github.com/baogutang/nikodesk/releases/tag/v3.0.0) / [nightly 预览](https://github.com/baogutang/nikodesk/releases/tag/nightly) | DMG + 更新 ZIP，固定 NikoDesk 证书签名（自签名，无 Apple 公证；首次打开见“快速开始”） | 安装包（`NikoDesk-windows-x64-setup.exe`），带后台服务。未签名：SmartScreen 提示时点“更多信息 → 仍要运行”。还没有在真机上安装过，见下文。 | 控制端 APK（`io.nikodesk.android`），使用专用 NikoDesk 发行密钥签名，并对照固定证书指纹校验 |
 | [v1.0.0](https://github.com/baogutang/nikodesk/releases/tag/v1.0.0) | 仅保留归档 ZIP | 已移除（拒绝启动） | 已移除（拒绝启动） |
 
 **实际验证过的内容：** 在开发者的 Mac 上，两个相互隔离的 NikoDesk 身份经由自建 RustDesk 服务器中继运行过真实会话——带视频的密码认证、双向文件传输（经 SHA-256 校验）、含重放拒绝的 TOTP 双重验证、两端的会话审计记录、远程终端（请求 → 本机批准 → 命令输出）、端口隧道（数据经隧道验证）、画质模式（可测量的码率/帧率变化）。这些都是同机、同用户会话。Android 16 上已用本地构建、测试签名的 1.0.8 源码包完成**真实跨设备会话**：手机经私服控制开发者的 Mac——密码登录、HEVC 画面与触控（拖动/双指缩放）全部工作，这是项目首次验证的真实 Android 跨设备会话（此前依次修复了必现秒退、空命名空间派发与符号链接存储拒绝三个阻断）。这项会话证据来自 1.0.8 源码的测试包；正式 APK 由对应版本源码经 CI 构建；Android 文件传输、隧道、扩展能力与旧版本升级仍属单独验收项，未测试的组合保持不作宣称。
 
-2.0 和 2.1 的新功能同样在这台 Mac 上验证过：
+2.x 和 3.0 的新功能同样在这台 Mac 上验证过：
 - 2.0 的采集与编码、显示器变化事件、菜单栏的会话圆点，都在两端同机的真实会话中跑过；权限引导和菜单栏在真实 App 里检查过；
 - 2.1 新界面通过了界面单元测试；它的 macOS 构建在真实窗口里打开过（权限页、两套配色的主页），并作为被控端跑过两端同机的真实会话：连接、文件传输、终端和隧道；
 - Mac 控制端的解码直通在解码测试中测过（4K HEVC 每帧约 2.0 ms，原来约 10.3 ms）；
+- 3.0 新界面在开、关 NikoDesk 构建两种情况下都通过了界面测试；它的 macOS 构建在真实窗口里打开过，并作为被控端跑过两端同机的真实会话（首帧 733 ms），控制端存下了对方屏幕的 480 像素缩略图；
 - 2.2.0 的改动在 iPad Pro 经私服中继连接开发者 Mac 的真实会话中跑过，由 iPad 测量版自动操作：会话结束后的登录窗口锁屏（107 ms 锁上）、会话开始时不再锁屏、点击到画面的计时（从注入点击到采集到画面中位约 33 ms，原来约 47 ms），以及 iPad 的解码和帧率（实测 60 和 75 帧/秒）。
 
 还没有验证的：
-- 2.1 新界面在 iPad、Windows、Android 真机上的运行；
+- Windows 安装版和后台服务还没有在真机上装过，包括远程解锁：目前只在 CI 里构建并做了静态检查；
+- 3.0 新界面在 Windows、Android 真机上的运行；
+- Mac 控制端硬件解码画面的设备缩略图，还没有在真实远控窗口里看过（软件解码的路径已验证）；
 - Mac 控制端的解码直通还没有在真实的远控窗口里看过画面；如果画面显示异常，在“高级设置 → 常规”里关闭“使用纹理渲染”；
 - 隐私屏全屏空间的修复，还没有在真实的空间切换中检查；
 - 系统后台服务的安装和自动更新没有在真机上演练过，第一次真实的自动更新还没有发生；
-- 2.1.1 的设备列表和 Windows 提示只在单元测试里验证过；
 - 从控制端按“锁定远程屏幕”（会话结束后锁屏走的是同一段代码，已验证）；
 - 正式 iPad App 里的默认画面模式（只有单元测试），以及 iOS 15、16 上的 VideoToolbox 解码；
-- Windows 与 Android 只做了构建和安装包检查。
+- Android 只做了构建和安装包检查。
 
 **实现范围：** 现有源码包含无人值守、网络唤醒、隐私屏、虚拟屏、终端、摄像头、隧道、语音、双重验证、会话记录与诊断等路径，具体能力受平台限制。Windows 有无人值守服务和虚拟屏驱动路径；macOS 和 Windows 支持样式隐私屏，旧黑屏路径保留；macOS 被控端可以创建虚拟屏（2.0.0 起按控制端屏幕的像素、缩放和刷新率生成），并有可选的系统后台服务用于安装更新；Android 仅做控制端，不提供手机被控能力。这里列的是已有能力，不表示全部规划已完成；源码实现与包检查不能替代逐设备验收。
 
@@ -141,10 +145,10 @@
 
 ## 快速开始
 
-1. 从 **[v2.2.0](https://github.com/baogutang/nikodesk/releases/tag/v2.2.0)** 下载，并对照其 `SHA256SUMS` 校验。
+1. 从 **[v3.0.0](https://github.com/baogutang/nikodesk/releases/tag/v3.0.0)** 下载，并对照其 `SHA256SUMS` 校验。
    - macOS：把 DMG 里完整的 `NikoDesk.app` 拖进“应用程序”。它用固定的 NikoDesk 证书签名（自签名），没有 Apple 公证，第一次打开会被系统拦下：到“系统设置 → 隐私与安全性”点“仍要打开”（macOS 14 及更早也可以右键 → 打开）。
-   - Windows 便携 EXE 可与现有 RustDesk 并存运行。
-   - Android 沿用相同发行包名和证书，构建号为 27。Android 16 上用 1.0.8 源码的测试签名构建验证过密码登录、画面和触控，记录保留在该版本说明中。
+   - Windows：以普通用户运行 `NikoDesk-windows-x64-setup.exe`（SmartScreen 提示时点“更多信息 → 仍要运行”），确认私服、设置服务密码，在 Windows 的管理员确认窗口点“是”。之后 NikoDesk 作为后台服务运行，开始菜单里有入口，在“设置 → 应用”里卸载。
+   - Android 沿用相同发行包名和证书，构建号为 28。Android 16 上用 1.0.8 源码的测试签名构建验证过密码登录、画面和触控，记录保留在该版本说明中。
 2. 在 **设置 → 私有服务器** 中配置自己的 [RustDesk Server OSS](https://github.com/rustdesk/rustdesk-server)：ID 服务器、中继与**服务器公钥**。服务器私钥只保留在服务端。
 3. 另一端使用相同服务器与公钥。分别确认服务可达、本机注册，再通过真实会话验证密码认证；三者证明的是不同事情。
 4. Mac 作为被控端时，需要屏幕录制（采集画面）和辅助功能（远端键鼠）两项权限，按启动时的权限引导授予即可。从 1.0.5 起，有效密码即可连接，不需要在被控端点击确认：应用里显示的一次性密码，或已设置并允许使用的永久密码。这样的会话默认获得画面、键鼠、剪贴板和文件传输。密码错误或没有密码时，被控端仍会弹出确认。1.0.4 及更早版本默认即使密码正确也要等点击，从这些版本更新后会改用新规则；想让每次会话都必须点击，请在更新后到高级设置的安全页里选择“只允许点击访问”。各扩展能力仍会单独请求批准。
@@ -157,8 +161,8 @@
 
 - **没有安装系统后台服务**：下载并校验后提醒你手动安装。退出 NikoDesk，替换“应用程序”中的应用，再打开。
 - **安装了系统后台服务**：在 **设置 → 无人值守** 安装，需要输入一次管理员密码。之后可以选择“空闲时自动安装”：没有远控会话时安装并重新打开 NikoDesk。替换后复查不通过会自动放回旧版本，也可以手动“恢复上一个版本”。这个服务只接受用 NikoDesk 证书签名的安装包，只运行自己在 root 私有目录中的副本。
-- **从旧版本升级**：1.0.11 及更早版本不会自动安装 2.x，请从发布页手动下载。2.0.0 和 2.1.x 只有装了系统后台服务并选择“空闲时自动安装”时，才会自动安装 2.2.0；否则提醒你手动安装。
-- **Windows 与 Android**：仍需手动安装；Android 按递增构建号升级。
+- **从旧版本升级**：1.0.11 及更早版本不会自动安装 2.x 或 3.0，请从发布页手动下载。2.x 只有装了系统后台服务并选择“空闲时自动安装”时，才会自动安装 3.0.0；否则提醒你手动安装。
+- **Windows 与 Android**：手动安装。Windows 上运行新版安装包并选“升级已安装的服务”，设备代码和密码保持不变；Android 按递增构建号升级。
 
 SHA256 用来核对文件是否一致；发布签名证明清单出自持有发布私钥的维护者。两者都不等于 Apple 公证。
 

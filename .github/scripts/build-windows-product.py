@@ -426,12 +426,11 @@ def build(version_name, build_number, output=None, trust_mode=None, reuse_client
               'note': 'Complete single-EXE installation assistant and inspection ZIP. The assistant opens the ordinary GUI; service installation requires its visible consent. Byte pins and static PE checks are not Windows runtime acceptance.'}
     output.with_suffix('.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
     output.with_suffix('.txt').write_text(
-        'NikoDesk Windows unattended validation bundle\n'
-        'Run the setup-validation EXE as an ordinary user. It extracts the complete application and opens the visible installation assistant.\n'
-        'Confirm your private server in the assistant, then explicitly choose unattended installation.\n'
-        'The ZIP contains the same complete application for inspection or manual extraction; run NikoDesk.exe and use Settings > Service.\n'
-        'Set the unattended password and review the native local confirmation and UAC prompts.\n'
-        'Starting the service after installation is optional and off by default.\n'
+        'NikoDesk Windows installer\n'
+        'Run NikoDesk-windows-x64-setup.exe as an ordinary user. It extracts the application to %LOCALAPPDATA%\\Programs\\NikoDesk and opens the installation assistant.\n'
+        'Confirm your private server, set the service password and install; review the native local confirmation and UAC prompts.\n'
+        'Once the service is confirmed, the assistant adds a Start menu shortcut and an entry in Settings > Apps.\n'
+        'The ZIP contains the same complete application for inspection only.\n'
         'Do not directly run nikodesk-host.exe or nikodesk-setup.exe; their original GUI authorization is required.\n'
         'This unsigned test bundle has not passed actual Windows installation or unattended remote-session acceptance.\n', encoding='utf-8')
     return report

@@ -271,7 +271,7 @@ class _VoicePanelState extends State<NikoCmVoicePanel> {
     String deviceName(NikoVoiceDevice d) =>
         d.label.isEmpty ? nikoText('未命名音频设备', 'Unnamed audio device') : d.label;
     String formatText(NikoVoiceFormat f) =>
-        '48 kHz · f32 · ${f.channels == 1 ? nikoText('单声道', 'mono') : nikoText('双声道', 'stereo')}';
+        '48 kHz${nikoSep}f32$nikoSep${f.channels == 1 ? nikoText('单声道', 'mono') : nikoText('双声道', 'stereo')}';
     final chooseDevice = enabled
         ? (String? value) => setState(() {
               if (input) {

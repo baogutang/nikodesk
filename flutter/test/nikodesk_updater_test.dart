@@ -196,6 +196,21 @@ void main() {
         same(zip));
   });
 
+  test('release selection prefers the Windows installer', () {
+    final setup = NikoReleaseAsset('NikoDesk-windows-x64-setup.exe',
+        Uri.parse('https://github.com/setup.exe'));
+    final exe = NikoReleaseAsset('NikoDesk-windows-x64.exe',
+        Uri.parse('https://github.com/portable.exe'));
+    expect(
+        NikoReleaseInfo(tag: 'v3.0.0', notes: '', assets: [exe, setup])
+            .assetFor('windows-x64'),
+        same(setup));
+    expect(
+        NikoReleaseInfo(tag: 'v3.0.0', notes: '', assets: [setup])
+            .assetFor('windows-x64'),
+        same(setup));
+  });
+
   test('release selection excludes setup-validation and similarly named assets',
       () {
     final validation = NikoReleaseAsset(

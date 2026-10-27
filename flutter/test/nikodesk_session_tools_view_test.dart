@@ -69,7 +69,7 @@ void main() {
         isTrue);
     expect(find.textContaining('120 here'), findsOneWidget);
     expect(find.byKey(const Key('nikodesk-picture-quality')), findsNothing);
-    expect(find.text('custom · 120 FPS'), findsOneWidget);
+    expect(find.text('Custom, 120 FPS'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('nikodesk-picture-office')));
     await tester.tap(find.byKey(const Key('nikodesk-picture-apply')));
@@ -155,15 +155,15 @@ void main() {
       }));
     await tester.pumpWidget(host(diagnostics(metrics)));
     await tester.pumpAndSettle();
-    expect(find.text('Relay · TCP'), findsOneWidget);
+    expect(find.text('Relay, TCP'), findsOneWidget);
     expect(find.text('Encrypted per core event'), findsOneWidget);
     expect(find.text('24 ms'), findsOneWidget);
     expect(find.text('Display 1: 59 fps'), findsOneWidget);
     expect(find.text('H265'), findsOneWidget);
     // Never "Instance of", nor a unit after an unknown value.
     expect(
-        find.text('Display 1: 2560×1440 · H265 hardware · 60/s · '
-            'capture 4.1 · convert 1.2 · encode 3.4 ms'),
+        find.text('Display 1: 2560×1440, H265 hardware, 60/s, '
+            'capture 4.1, convert 1.2, encode 3.4 ms'),
         findsOneWidget);
     expect(find.textContaining('Instance of'), findsNothing);
     expect(find.text('Unknown KiB/s'), findsNothing);

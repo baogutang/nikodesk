@@ -254,7 +254,7 @@ class NlIconTile extends StatelessWidget {
   final Color color;
   final double size;
 
-  /// Solid tile with a white glyph instead of a soft tint.
+  /// A flat filled tile with a white glyph instead of a soft tint.
   final bool solid;
   const NlIconTile(
       {super.key,
@@ -270,13 +270,7 @@ class NlIconTile extends StatelessWidget {
         width: size,
         height: size,
         decoration: BoxDecoration(
-            color: solid ? null : color.withOpacity(nl.isDark ? .2 : .12),
-            gradient: solid
-                ? LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Color.lerp(color, Colors.white, .14)!, color])
-                : null,
+            color: solid ? color : color.withOpacity(nl.isDark ? .2 : .12),
             borderRadius: BorderRadius.circular(size * .28)),
         child: Icon(icon,
             size: size * .5,

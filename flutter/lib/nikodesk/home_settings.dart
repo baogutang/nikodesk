@@ -8,6 +8,7 @@ import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'autostart.dart';
+import 'device_screens.dart';
 import 'diagnostics_bundle.dart';
 import 'home_chrome.dart';
 import 'auto_lock_settings.dart';
@@ -242,19 +243,6 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
   Future<void> _changeMode(ThemeMode mode) async {
     setState(() => _mode = mode);
     if (_native) await MyTheme.changeDarkMode(mode);
-  }
-
-  Future<void> _changePreset(NlPreset preset) async {
-    if (preset == NlColors.active) return;
-    setState(() => NlColors.active = preset);
-    widget.onAppearanceChanged?.call();
-    if (!_native) return;
-    await bind.mainSetLocalOption(
-        key: NikoAppearance.option,
-        value: preset == NlPreset.clay ? 'clay' : 'orbit');
-    // Other windows read the preset again when the language is announced.
-    await bind.mainChangeLanguage(lang: bind.mainGetLocalOption(key: 'lang'));
-    await reloadAllWindows();
   }
 
   Future<void> _changeLanguage(bool english) async {
@@ -645,7 +633,8 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
         child: LayoutBuilder(builder: (context, box) {
       final wide = box.maxWidth >= 760;
       final side = box.maxWidth < NlLayout.compactMax ? NlSpace.s4 : NlSpace.s6;
-      return NlScrollWatcher(
+      return NikoSettingsCards(
+          child: NlScrollWatcher(
           header: (context, scrolled) => NikoPageBar(
               title: nikoText('设置', 'Settings'),
               subtitle: wide
@@ -662,7 +651,7 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
                   children: [
                       for (final section in sections)
                         _page(context, section, wide: false),
-                    ]));
+                    ])));
     }));
   }
 
@@ -822,17 +811,7 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
                   ],
                   selected: _mode,
                   onChanged: _changeMode)),
-          NikoSettingRow(
-              title: nikoText('主题色', 'Accent'),
-              description: nikoText('Orbit 是默认的蓝色；Clay 是更温暖的陶土色',
-                  'Orbit is the default blue; Clay is a warmer terracotta'),
-              trailing: Wrap(spacing: NlSpace.s2, children: [
-                for (final preset in NlPreset.values)
-                  _PresetSwatch(
-                      preset: preset,
-                      selected: NlColors.active == preset,
-                      onTap: () => _changePreset(preset)),
-              ])),
+          if (_native) const NikoDeviceScreensSetting(),
         ]),
       ];
 
@@ -1080,7 +1059,7 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
         NikoSettingRow(
             title: nikoText('边界', 'Boundaries'),
             trailing: NikoSettingValue(nikoText(
-                '仅私服 · 本地签名', 'Private-server only · locally signed'))),
+                '仅私服，本地签名', 'Private-server only, locally signed'))),
       ]),
       if (_native && (Platform.isMacOS || Platform.isWindows))
         NikoSettingsGroup(children: [
@@ -1122,62 +1101,5 @@ class _NikoSettingsViewState extends State<NikoSettingsView> {
       default:
         return nikoText('未知', 'Unknown');
     }
-  }
-}
-
-/// One colour preset, shown as its accent dot and name.
-class _PresetSwatch extends StatelessWidget {
-  final NlPreset preset;
-  final bool selected;
-  final VoidCallback onTap;
-  const _PresetSwatch(
-      {required this.preset, required this.selected, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final nl = NlColors.of(context);
-    final swatch = NlColors.palette(preset, nl.brightness);
-    final name = switch (preset) {
-      NlPreset.orbit => 'Orbit',
-      NlPreset.clay => 'Clay',
-    };
-    return Semantics(
-        button: true,
-        selected: selected,
-        label: name,
-        excludeSemantics: true,
-        child: NlPressable(
-            key: Key('nikodesk-preset-${preset.name}'),
-            onTap: onTap,
-            builder: (context, states) => AnimatedContainer(
-                duration: NlMotion.of(context, NlMotion.fast),
-                height: NlLayout.touch(context) ? 40 : 30,
-                padding: const EdgeInsets.symmetric(horizontal: NlSpace.s3),
-                decoration: BoxDecoration(
-                    color: selected
-                        ? nl.accentSoft
-                        : states.contains(WidgetState.hovered)
-                            ? nl.hover
-                            : Colors.transparent,
-                    borderRadius: BorderRadius.circular(NlRadius.r2),
-                    border: Border.all(
-                        color: selected ? nl.accent : nl.line2,
-                        width: selected ? 1.5 : 1),
-                    boxShadow: states.contains(WidgetState.focused)
-                        ? nl.focusRing
-                        : null),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: swatch.accent,
-                          border: Border.all(color: swatch.accentFill))),
-                  const SizedBox(width: NlSpace.s2),
-                  Text(name,
-                      style: NlType.text(NlType.s3,
-                          weight: FontWeight.w500, color: nl.fg)),
-                ]))));
   }
 }

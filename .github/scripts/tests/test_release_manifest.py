@@ -100,8 +100,7 @@ class ReleaseManifestTests(unittest.TestCase):
             self.verify()
 
     def test_resigned_setup_packages_still_require_fresh_acceptance(self):
-        for name in ('NikoDesk-windows-x64-setup-validation.exe',
-                     'NikoDesk-windows-x64-setup-validation.zip'):
+        for name in ('NikoDesk-windows-x64-setup.exe',):
             with self.subTest(package=name):
                 package = self.directory / name
                 package.write_bytes(b'changed installer after acceptance')

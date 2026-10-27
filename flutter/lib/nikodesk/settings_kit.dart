@@ -5,6 +5,19 @@ import 'nightline.dart';
 /// A run of settings rows under an optional title. Rows sit flat on the
 /// page with hairlines between them, so a settings page reads like a
 /// document rather than a stack of cards.
+/// Marks a settings page, where each group's rows sit on a raised card.
+/// Session panels reuse the groups without it, since the panel is already
+/// the card.
+class NikoSettingsCards extends InheritedWidget {
+  const NikoSettingsCards({super.key, required super.child});
+
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<NikoSettingsCards>() != null;
+
+  @override
+  bool updateShouldNotify(NikoSettingsCards oldWidget) => false;
+}
+
 class NikoSettingsGroup extends StatelessWidget {
   final String? title;
   final String? description;
@@ -25,6 +38,13 @@ class NikoSettingsGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final nl = NlColors.of(context);
+    final cards = NikoSettingsCards.of(context);
+    final rows = [
+      for (var i = 0; i < children.length; i++) ...[
+        if (i > 0) Container(height: 1, color: nl.line),
+        children[i],
+      ],
+    ];
     return Padding(
         padding: EdgeInsets.only(bottom: bottom),
         child: Column(
@@ -46,11 +66,15 @@ class NikoSettingsGroup extends StatelessWidget {
                     child: Text(description!,
                         style: NlType.text(NlType.s2, color: nl.fg2))),
               if (title != null || description != null || trailing != null)
-                const SizedBox(height: NlSpace.s1),
-              for (var i = 0; i < children.length; i++) ...[
-                if (i > 0) Container(height: 1, color: nl.line),
-                children[i],
-              ],
+                SizedBox(height: cards ? NlSpace.s2 : NlSpace.s1),
+              if (cards && children.isNotEmpty)
+                NlPanel(
+                    padding: const EdgeInsets.symmetric(horizontal: NlSpace.s4),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: rows))
+              else
+                ...rows,
             ]));
   }
 }

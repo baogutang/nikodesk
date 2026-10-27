@@ -302,7 +302,7 @@ class _NikoHomeChromeState extends State<NikoHomeChrome> {
                       if (widget.onSearch != null)
                         NlSidebarItem(
                             icon: NlIcons.search,
-                            label: nikoText('搜索与命令', 'Search and commands'),
+                            label: nikoText('搜索与命令', 'Search'),
                             trailing: widget.searchShortcut.isEmpty
                                 ? null
                                 : NlKbd(widget.searchShortcut),
@@ -485,77 +485,4 @@ List<NlCommand> nikoDeviceCommands(NikoDeviceBoard board,
           keywords: [device.id, device.group],
           run: () => onDevices(() => board.requestConnect(device.id))),
   ];
-}
-
-/// Favourites and groups from [board] as sidebar sections. [onDevices]
-/// shows the device page before handing it the request.
-List<Widget> nikoBoardSections(BuildContext context, NikoDeviceBoard board,
-    {required bool devicesShown,
-    required void Function(bool Function() request) onDevices}) {
-  final favorites = board.favorites;
-  final groups = board.groups;
-  final online = board.online;
-  return [
-    if (favorites.isNotEmpty)
-      NlSidebarSection(title: nikoText('收藏', 'Favorites'), children: [
-        for (final device in favorites.take(8))
-          NlSidebarItem(
-              leading: _NikoPresenceDot(online: online[device.id]),
-              label: device.title,
-              tooltip: '${device.title} · ${nikoGroupedId(device.id)}',
-              onTap: () => onDevices(() {
-                    board.select(device.id);
-                    return true;
-                  }),
-              onContextMenu: (at) => showNlMenu(context, position: at, entries: [
-                    NlMenuItem(
-                        label: nikoText('远程控制', 'Remote control'),
-                        icon: NlIcons.monitor,
-                        enabled: board.canConnect,
-                        onSelected: () =>
-                            onDevices(() => board.requestConnect(device.id))),
-                    NlMenuItem(
-                        label: nikoText('文件传输', 'File transfer'),
-                        icon: NlIcons.folder,
-                        enabled: board.canConnect,
-                        onSelected: () => onDevices(() =>
-                            board.requestConnect(device.id, fileTransfer: true))),
-                  ])),
-      ]),
-    if (groups.isNotEmpty)
-      NlSidebarSection(title: nikoText('分组', 'Groups'), children: [
-        for (final entry in groups.entries)
-          NlSidebarItem(
-              icon: NlIcons.tag,
-              label: entry.key,
-              count: '${entry.value}',
-              selected: devicesShown && board.filter == 'group:${entry.key}',
-              onTap: () {
-                final filter = 'group:${entry.key}';
-                board.filter =
-                    board.filter == filter && devicesShown ? 'all' : filter;
-                onDevices(() => true);
-              }),
-      ]),
-  ];
-}
-
-class _NikoPresenceDot extends StatelessWidget {
-  final bool? online;
-  const _NikoPresenceDot({required this.online});
-
-  @override
-  Widget build(BuildContext context) {
-    final nl = NlColors.of(context);
-    return Container(
-        width: 7,
-        height: 7,
-        decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: online == true ? nl.ok : Colors.transparent,
-            border: online == true
-                ? null
-                : Border.all(
-                    color: online == false ? nl.fg3 : nl.line2, width: 1.2)));
-  }
 }

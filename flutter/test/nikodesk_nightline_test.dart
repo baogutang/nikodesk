@@ -50,70 +50,56 @@ Future<BuildContext> _context(WidgetTester tester,
 const _palettes = [
   NlColors.orbitLight,
   NlColors.orbitDark,
-  NlColors.clayLight,
-  NlColors.clayDark,
 ];
 
 void main() {
   group('tokens', () {
-    test('presets carry the Orbit and Clay values', () {
+    test('the 3.0 look carries the DESIGN.md values', () {
       expect(NlColors.active, NlPreset.orbit);
       expect(NlColors.dark, same(NlColors.orbitDark));
       expect(NlColors.light, same(NlColors.orbitLight));
-      const orbitLight = NlColors.orbitLight;
-      expect(orbitLight.bg, const Color(0xFFFFFFFF));
-      expect(orbitLight.bg2, const Color(0xFFF2F2F5));
-      expect(orbitLight.fg, const Color(0xFF1D1D1F));
-      expect(orbitLight.accent, const Color(0xFF0071E3));
-      expect(orbitLight.accentText, const Color(0xFF0066CC));
-      expect(orbitLight.dangerFill, const Color(0xFFD70015));
-      const orbitDark = NlColors.orbitDark;
-      expect(orbitDark.bg, const Color(0xFF1C1C1E));
-      expect(orbitDark.fg, const Color(0xFFF5F5F7));
-      expect(orbitDark.accent, const Color(0xFF0A84FF));
-      expect(orbitDark.accentFill, const Color(0xFF0A6CDC));
-      expect(orbitDark.accentText, const Color(0xFF4DA3FF));
-      const clayLight = NlColors.clayLight;
-      expect(clayLight.bg, const Color(0xFFFAF9F5));
-      expect(clayLight.fg, const Color(0xFF1F1E1D));
-      expect(clayLight.accent, const Color(0xFFC96442));
-      expect(clayLight.accentFill, const Color(0xFFB65234));
-      const clayDark = NlColors.clayDark;
-      expect(clayDark.bg, const Color(0xFF262624));
-      expect(clayDark.accent, const Color(0xFFD97757));
-      expect(clayDark.accentFill, const Color(0xFFB5532F));
-      for (final (nl, preset, brightness) in [
-        (orbitLight, NlPreset.orbit, Brightness.light),
-        (orbitDark, NlPreset.orbit, Brightness.dark),
-        (clayLight, NlPreset.clay, Brightness.light),
-        (clayDark, NlPreset.clay, Brightness.dark),
-      ]) {
-        expect(nl.preset, preset);
-        expect(nl.brightness, brightness);
-        expect(NlColors.palette(preset, brightness), same(nl));
-        expect(nl.tiles, hasLength(8));
+      const light = NlColors.orbitLight;
+      expect(light.bg, const Color(0xFFF0F3F7));
+      expect(light.surface, const Color(0xFFFDFEFF));
+      expect(light.fg, const Color(0xFF191D24));
+      expect(light.accentFill, const Color(0xFF076DF1));
+      expect(light.accentText, const Color(0xFF0260D9));
+      expect(light.dangerFill, const Color(0xFFBE2323));
+      expect(light.brand, const Color(0xFF005BD4));
+      const dark = NlColors.orbitDark;
+      expect(dark.bg, const Color(0xFF0A0C11));
+      expect(dark.surface, const Color(0xFF13161B));
+      expect(dark.fg, const Color(0xFFEAEDF2));
+      expect(dark.accentFill, const Color(0xFF146AE3));
+      expect(dark.accentText, const Color(0xFF73ABFF));
+      expect(dark.brand, const Color(0xFF00398D));
+      for (final nl in _palettes) {
+        expect(nl.preset, NlPreset.orbit);
+        expect(NlColors.palette(NlPreset.orbit, nl.brightness), same(nl));
+        // Devices are told apart by name and picture, never by colour.
+        expect(nl.tiles, hasLength(1));
+        expect(nl.glow, isEmpty);
       }
     });
 
-    test('the loaded preset drives every window theme', () {
+    test('a 2.x clay preference loads the one look', () {
       addTearDown(() => NlColors.active = NlPreset.orbit);
       NikoAppearance.usePreference('clay');
-      expect(NlColors.active, NlPreset.clay);
-      expect(NlColors.dark, same(NlColors.clayDark));
-      expect(NlColors.forBrightness(Brightness.light), same(NlColors.clayLight));
-      expect(nightlineTheme(Brightness.light).extension<NlColors>(),
-          same(NlColors.clayLight));
-      expect(nikoAppTheme(Brightness.dark).extension<NlColors>(),
-          same(NlColors.clayDark));
-      expect(
-          nightlineTheme(Brightness.dark, preset: NlPreset.orbit)
-              .extension<NlColors>(),
-          same(NlColors.orbitDark));
-      NikoAppearance.usePreference('');
       expect(NlColors.active, NlPreset.orbit);
-      NikoAppearance.usePreference('clay');
+      expect(nightlineTheme(Brightness.light).extension<NlColors>(),
+          same(NlColors.orbitLight));
+      expect(nikoAppTheme(Brightness.dark).extension<NlColors>(),
+          same(NlColors.orbitDark));
       NikoAppearance.usePreference('unknown');
       expect(NlColors.active, NlPreset.orbit);
+    });
+
+    test('white type on the brand panel reads in both modes', () {
+      for (final nl in _palettes) {
+        expect(_contrast(nl.brandInk, nl.brand), greaterThanOrEqualTo(4.5));
+        expect(_contrast(nl.brandInk2, nl.brand), greaterThanOrEqualTo(4.5));
+        expect(_contrast(nl.brand, nl.brandInk), greaterThanOrEqualTo(4.5));
+      }
     });
 
     // Text 4.5:1 (WCAG AA); accent and danger marks 3:1 (WCAG 1.4.11).
@@ -162,7 +148,7 @@ void main() {
       for (var i = 1; i < NlType.scale.length; i++) {
         expect(NlType.scale[i], greaterThan(NlType.scale[i - 1]));
       }
-      expect(NlRadius.all, [4, 8, 12, 16, 999]);
+      expect(NlRadius.all, [4, 6, 10, 12, 999]);
       expect(NlMotion.durations, [
         const Duration(milliseconds: 80),
         const Duration(milliseconds: 120),
@@ -229,12 +215,11 @@ void main() {
       expect(NlIcons.search.codePoint, isNot(NlIcons.monitor.codePoint));
     });
 
-    test('device tiles keep their colour per id', () {
+    test('device marks share one neutral colour', () {
       final nl = NlColors.orbitLight;
-      expect(nl.tile('123 456 789'), nl.tile('123 456 789'));
-      expect(nl.tiles, contains(nl.tile('987 654 321')));
+      expect(nl.tile('123 456 789'), nl.tile('987 654 321'));
       final seen = {for (var i = 0; i < 64; i++) nl.tile('device-$i')};
-      expect(seen.length, greaterThan(4));
+      expect(seen, {nl.tiles.single});
     });
 
     test('colours interpolate and copy', () {
@@ -727,7 +712,7 @@ void main() {
       expect(taps, 1);
     });
 
-    testWidgets('kbd uses the UI face; mono labels stay uppercase mono',
+    testWidgets('kbd uses the UI face; state labels stay in sentence case',
         (tester) async {
       await tester.pumpWidget(_host(const Column(mainAxisSize: MainAxisSize.min, children: [
         NlKbd('⌘K'),
@@ -736,11 +721,11 @@ void main() {
         NlSectionLabel('Recent sessions'),
       ])));
       expect(tester.widget<Text>(find.text('⌘K')).style!.fontFamily, NlType.ui);
-      final label = tester.widget<Text>(find.text('THIS COMPUTER'));
-      expect(label.style!.fontFamily, NlType.mono);
-      expect(label.style!.letterSpacing, closeTo(1.32, .001));
+      // Tracked capitals read as generated; labels keep their own case.
+      final label = tester.widget<Text>(find.text('This computer'));
+      expect(label.style!.fontFamily, NlType.ui);
       expect(label.style!.color, NlColors.dark.fg3);
-      expect(tester.widget<Text>(find.text('READY')).style!.color,
+      expect(tester.widget<Text>(find.text('ready')).style!.color,
           NlColors.dark.okText);
       final section = tester.widget<Text>(find.text('Recent sessions'));
       expect(section.style!.color, NlColors.dark.fg3);
@@ -1060,10 +1045,10 @@ void main() {
       final devices = tester.getSemantics(find.text('Devices'));
       expect(devices.hasFlag(SemanticsFlag.isSelected), isTrue);
       expect(tester.widget<Text>(find.text('Devices')).style!.fontWeight,
-          FontWeight.w500);
+          FontWeight.w600);
       expect(tester.widget<Text>(find.text('History')).style!.fontWeight,
           FontWeight.w400);
-      expect(tester.getSize(find.byType(NlSidebarItem).first).height, 31);
+      expect(tester.getSize(find.byType(NlSidebarItem).first).height, 38);
       await tester.tap(find.text('Devices'));
       expect(taps, 1);
       semantics.dispose();

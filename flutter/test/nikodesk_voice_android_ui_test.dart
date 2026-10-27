@@ -79,10 +79,10 @@ void main() {
         expect(tester.takeException(), isNull);
         await _select(tester, 'niko-voice-capture-device', 'Test microphone');
         await _select(tester, 'niko-voice-capture-format',
-            english ? '48 kHz · f32 · mono' : '48 kHz · f32 · 单声道');
+            english ? '48 kHz, f32, mono' : '48 kHz，f32，单声道');
         await _select(tester, 'niko-voice-playback-device', 'Test speaker');
         await _select(tester, 'niko-voice-playback-format',
-            english ? '48 kHz · f32 · mono' : '48 kHz · f32 · 单声道');
+            english ? '48 kHz, f32, mono' : '48 kHz，f32，单声道');
         final approve = find.byKey(const ValueKey('niko-voice-approve'));
         await tester.ensureVisible(approve);
         await tester.tap(approve);

@@ -37,6 +37,7 @@ import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/nikodesk/session_success.dart';
 import 'package:flutter_hbb/nikodesk/metrics.dart';
 import 'package:flutter_hbb/nikodesk/pointer_start.dart';
+import 'package:flutter_hbb/nikodesk/secure_desktop.dart';
 import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/terminal_model.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
@@ -1036,6 +1037,12 @@ class FfiModel with ChangeNotifier {
       } else {
         showWaitAcceptDialog(sessionId, type, title, text, dialogManager);
       }
+    } else if (const bool.fromEnvironment('NIKODESK') &&
+        (type == 'on-uac' ||
+            type == 'on-foreground-elevated' ||
+            type == 'elevation-error')) {
+      showNikoSecureDesktopNotice(sessionId, type, dialogManager,
+          portable: nikoPortableWindows(_pi));
     } else if (type == 'on-uac' || type == 'on-foreground-elevated') {
       showOnBlockDialog(sessionId, type, title, text, dialogManager);
     } else if (type == 'wait-uac') {
@@ -1598,6 +1605,12 @@ class FfiModel with ChangeNotifier {
     }
 
     _pi.isSet.value = true;
+    if (const bool.fromEnvironment('NIKODESK') &&
+        !isCache &&
+        connType == ConnType.defaultConn &&
+        parent.target != null) {
+      nikoWarnPortableLock(parent.target!);
+    }
     final sessionOwner = parent.target;
     if (_nikoMetricsActive && sessionOwner != null) {
       unawaited(nikoRecordAuthenticatedDevice(
@@ -4172,7 +4185,11 @@ class ElevationModel with ChangeNotifier {
   bool _canElevate = false;
   bool get showRequestMenu => _canElevate && !_running;
   onPeerInfo(PeerInfo pi) {
-    _canElevate = pi.platform == kPeerPlatformWindows && pi.sasEnabled == false;
+    // A NikoDesk host never elevates a portable process; the installed
+    // service sees the secure desktop instead (nikodesk/secure_desktop.dart).
+    _canElevate = !const bool.fromEnvironment('NIKODESK') &&
+        pi.platform == kPeerPlatformWindows &&
+        pi.sasEnabled == false;
     _running = false;
   }
 

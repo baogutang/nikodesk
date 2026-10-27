@@ -1,0 +1,85 @@
+:root {
+  color-scheme: light dark;
+  --space-3xs: 2px; --space-2xs: 4px; --space-xs: 8px; --space-sm: 12px; --space-md: 16px; --space-lg: 24px; --space-xl: 40px; --space-2xl: 64px; --space-3xl: 96px; --space-4xl: 144px;
+  /* App scale, ratio about 1.2 from a 14px desktop body; touch layouts step it up below. */
+  --text-xs: 12px; --text-sm: 13px; --text-md: 14px; --text-lg: 16px; --text-xl: 20px; --text-2xl: 24px; --text-3xl: 30px;
+  --text-display-s: 20px; --text-display: 24px; --text-section: 17px; --text-title: 15px; --text-lead: 14px;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); --ease-in: cubic-bezier(0.7, 0, 0.84, 0); --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-micro: 120ms; --dur-short: 220ms; --dur-long: 420ms;
+  --container: 1440px; --gutter: 64px; --gap-columns: 32px; --section-gap-s: 120px; --section-gap: 144px; --section-gap-l: 176px;
+  --z-base: 1; --z-raised: 10; --z-dropdown: 100; --z-sticky: 200; --z-sticky-nav: 300; --z-modal: 400; --z-toast: 500; --z-tooltip: 600;
+
+  /* Paper and ink tinted toward the logo blue, hue 259. */
+  --color-paper: oklch(99.3% 0.002 259); --color-paper-2: oklch(97.2% 0.004 259); --color-paper-3: oklch(94.6% 0.006 259);
+  --color-ink: oklch(23% 0.014 259); --color-ink-2: oklch(45% 0.014 259); --color-muted: oklch(57% 0.012 259);
+  --color-rule: oklch(91.5% 0.006 259);
+  /* The logo blue, a signal only: the primary action, the current selection, focus. */
+  --color-accent: oklch(56.5% 0.215 259); --color-accent-ink: oklch(99.3% 0.002 259); --color-focus: oklch(58% 0.2 259);
+  --color-accent-soft: oklch(95.2% 0.03 259); --color-accent-text: oklch(52% 0.2 259);
+  --color-error: oklch(52% 0.19 27); --color-success: oklch(50% 0.12 150); --color-warning: oklch(52% 0.11 70);
+  --color-scrim: oklch(23% 0.014 259 / 0.32);
+  --color-remote: oklch(30% 0.012 259); --color-remote-ink: oklch(82% 0.01 259);
+
+  --font-display: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Microsoft YaHei UI", "Noto Sans SC", system-ui, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Microsoft YaHei UI", "Noto Sans SC", system-ui, sans-serif;
+  --font-outlier: var(--font-body);
+  --display-weight: 600;
+
+  --radius-card: 10px; --radius-control: 6px; --radius-tag: 4px; --radius-pill: 999px; --rule-hair: 1px;
+  --shadow-card: none;
+  --shadow-pop: 0 8px 24px -6px oklch(23% 0.014 259 / 0.16), 0 0 0 1px oklch(23% 0.014 259 / 0.06);
+  --tracking-display: -0.01em;
+
+  --color-edge: oklch(84% 0.008 259); --color-accent-hover: oklch(50.5% 0.2 259);
+  /* The window is a tinted canvas; content sits on raised surfaces. */
+  --color-canvas: oklch(96.2% 0.007 259); --color-surface: oklch(99.6% 0.0015 259); --color-chip: oklch(99.6% 0.0015 259 / 0.92);
+  --shadow-card: 0 1px 2px oklch(23% 0.014 259 / 0.06), 0 0 0 1px oklch(23% 0.014 259 / 0.06);
+  /* The one committed surface: the connect panel in the logo blue. */
+  --color-brand: oklch(50.5% 0.2 259); --color-brand-ink: oklch(99.3% 0.002 259); --color-brand-ink-2: oklch(91% 0.04 259); --color-brand-track: oklch(44% 0.18 259);
+  /* The session toolbar sits on arbitrary remote pictures, so it is dark in both modes. */
+  --color-hud: oklch(22% 0.014 259); --color-hud-2: oklch(29% 0.014 259); --color-hud-ink: oklch(94% 0.008 259); --color-hud-ink-2: oklch(76% 0.012 259); --color-hud-rule: oklch(34% 0.012 259); --color-hud-error: oklch(72% 0.15 27);
+  --color-chip-dark: oklch(18% 0.012 259 / 0.78); --color-chip-dark-ink: oklch(99.3% 0.002 259);
+  --color-success-soft: oklch(95% 0.04 150); --color-warning-soft: oklch(95.5% 0.045 80);
+  --text-page: 22px;
+  --control: 32px; --control-l: 40px; --control-xl: 48px; --row: 48px;
+  --side-width: 208px;
+}
+
+[data-mode="dark"] {
+  --color-paper: oklch(17.5% 0.01 259); --color-paper-2: oklch(20.5% 0.011 259); --color-paper-3: oklch(24% 0.012 259);
+  --color-ink: oklch(94.5% 0.008 259); --color-ink-2: oklch(76% 0.012 259); --color-muted: oklch(60% 0.012 259);
+  --color-rule: oklch(30% 0.012 259);
+  --color-accent: oklch(55% 0.2 259); --color-accent-ink: oklch(99.3% 0.002 259); --color-focus: oklch(68% 0.17 259);
+  --color-accent-soft: oklch(27% 0.05 259); --color-accent-text: oklch(74% 0.14 259);
+  --color-error: oklch(70% 0.15 27); --color-success: oklch(72% 0.12 150); --color-warning: oklch(76% 0.11 75);
+  --color-scrim: oklch(8% 0.01 259 / 0.56);
+  --shadow-pop: inset 0 0 0 1px oklch(30% 0.012 259);
+  --color-edge: oklch(38% 0.012 259); --color-accent-hover: oklch(50% 0.19 259);
+  --color-canvas: oklch(15.5% 0.01 259); --color-surface: oklch(20% 0.011 259); --color-chip: oklch(20% 0.011 259 / 0.92);
+  --shadow-card: inset 0 0 0 1px oklch(27% 0.012 259);
+  --color-brand: oklch(37% 0.15 259); --color-brand-ink-2: oklch(86% 0.05 259); --color-brand-track: oklch(31% 0.13 259);
+  --color-success-soft: oklch(27% 0.05 150); --color-warning-soft: oklch(29% 0.05 80);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-mode]) {
+    --color-paper: oklch(17.5% 0.01 259); --color-paper-2: oklch(20.5% 0.011 259); --color-paper-3: oklch(24% 0.012 259);
+    --color-ink: oklch(94.5% 0.008 259); --color-ink-2: oklch(76% 0.012 259); --color-muted: oklch(60% 0.012 259);
+    --color-rule: oklch(30% 0.012 259);
+    --color-accent: oklch(55% 0.2 259); --color-accent-ink: oklch(99.3% 0.002 259); --color-focus: oklch(68% 0.17 259);
+    --color-accent-soft: oklch(27% 0.05 259); --color-accent-text: oklch(74% 0.14 259);
+    --color-error: oklch(70% 0.15 27); --color-success: oklch(72% 0.12 150); --color-warning: oklch(76% 0.11 75);
+    --color-scrim: oklch(8% 0.01 259 / 0.56);
+    --shadow-pop: inset 0 0 0 1px oklch(30% 0.012 259);
+    --color-edge: oklch(38% 0.012 259); --color-accent-hover: oklch(50% 0.19 259);
+    --color-canvas: oklch(15.5% 0.01 259); --color-surface: oklch(20% 0.011 259); --color-chip: oklch(20% 0.011 259 / 0.92);
+    --shadow-card: inset 0 0 0 1px oklch(27% 0.012 259);
+    --color-brand: oklch(37% 0.15 259); --color-brand-ink-2: oklch(86% 0.05 259); --color-brand-track: oklch(31% 0.13 259);
+    --color-success-soft: oklch(27% 0.05 150); --color-warning-soft: oklch(29% 0.05 80);
+  }
+}
+
+/* Touch layouts (iPad, phones) and narrow windows: one step up, 40px controls. */
+@media (max-width: 60rem), (pointer: coarse) {
+  :root { --text-xs: 13px; --text-sm: 14px; --text-md: 16px; --text-lg: 17px; --text-xl: 22px; --text-3xl: 30px; --control: 40px; --control-l: 48px; --control-xl: 52px; --row: 56px; }
+}

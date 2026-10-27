@@ -148,7 +148,7 @@ class NikoProductInfoRows extends StatelessWidget {
       if (buildDate?.isNotEmpty == true)
         row(nikoText('原生构建日期', 'Native build date'), buildDate!),
       row(nikoText('许可', 'License'),
-          'AGPL-3.0 · RustDesk · Copyright Purslane Tech Pte. Ltd.'),
+          'AGPL-3.0, RustDesk, Copyright Purslane Tech Pte. Ltd.'),
       const SizedBox(height: 8),
       Text(
           nikoText('本机包版本不代表已公开发布或完成真实会话验收。',
@@ -174,7 +174,7 @@ class NikoProductInfoRows extends StatelessWidget {
             trailing: NikoSettingValue(buildDate!, mono: true)),
       NikoSettingRow(
           title: nikoText('许可', 'License'),
-          description: 'RustDesk · Copyright Purslane Tech Pte. Ltd.',
+          description: 'RustDesk, Copyright Purslane Tech Pte. Ltd.',
           trailing: const NikoSettingValue('AGPL-3.0', mono: true)),
     ];
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [

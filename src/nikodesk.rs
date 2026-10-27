@@ -130,6 +130,8 @@ pub(crate) mod tunnel_wire;
 pub(crate) mod tunnel_actor;
 #[path = "nikodesk/video_metrics.rs"]
 pub(crate) mod video_metrics;
+#[path = "nikodesk/peer_thumbnail.rs"]
+pub(crate) mod peer_thumbnail;
 #[cfg(feature = "nikodesk-probe")]
 #[path = "nikodesk/probe.rs"]
 pub(crate) mod probe;
@@ -1072,6 +1074,8 @@ pub fn validate_cli_args(args: impl IntoIterator<Item = String>) -> ResultType<(
                 "--texture-render",
                 "--cm-no-ui",
                 "--nikodesk-background-agent",
+                // Windows' Apps settings open the GUI's own removal page.
+                "--nikodesk-uninstall",
             ]
             .contains(&arg.as_str())
         {

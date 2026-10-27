@@ -938,7 +938,7 @@ class _NlLedState extends State<NlLed> with SingleTickerProviderStateMixin {
 
 enum NlTone { neutral, accent, ok, warn, danger }
 
-/// Uppercase mono label for units and metric captions.
+/// A short state or unit label, e.g. "已就绪" or "fps", in the body face.
 class NlMonoLabel extends StatelessWidget {
   final String text;
   final NlTone tone;
@@ -955,11 +955,11 @@ class NlMonoLabel extends StatelessWidget {
       NlTone.warn => nl.warnText,
       NlTone.danger => nl.dangerText,
     };
-    final label = Text(text.toUpperCase(),
+    // Sentence case in the body face: tracked capitals read as generated.
+    final label = Text(text,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: NlType.monoText(NlType.s1, weight: FontWeight.w500, color: color)
-            .copyWith(letterSpacing: NlType.s1 * NlType.labelTracking));
+        style: NlType.text(NlType.s2, weight: FontWeight.w500, color: color));
     if (leading == null) return label;
     return Row(mainAxisSize: MainAxisSize.min, children: [
       leading!,

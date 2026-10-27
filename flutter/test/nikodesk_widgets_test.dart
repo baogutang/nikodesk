@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_hbb/nikodesk/device_page.dart';
 import 'package:flutter_hbb/nikodesk/device_store.dart';
+import 'package:flutter_hbb/nikodesk/home_board.dart';
+import 'package:flutter_hbb/nikodesk/nightline.dart';
 import 'package:flutter_hbb/nikodesk/policy.dart';
 import 'package:flutter_hbb/nikodesk/server_gateway.dart';
 import 'package:flutter_hbb/nikodesk/server_settings.dart';
@@ -48,9 +50,12 @@ void main() {
         await tester.pump();
         await Future<void>.delayed(const Duration(milliseconds: 20));
         if (find
-            .byType(CircularProgressIndicator, skipOffstage: false)
-            .evaluate()
-            .isEmpty) break;
+                .byType(CircularProgressIndicator, skipOffstage: false)
+                .evaluate()
+                .isEmpty &&
+            find.byType(NlSkeleton, skipOffstage: false).evaluate().isEmpty) {
+          break;
+        }
       }
     });
     await tester.pumpAndSettle();
@@ -71,15 +76,20 @@ void main() {
             onConnect: (_, __, ___, {isFileTransfer = false, password}) async {
               calls++;
             }));
-    expect(find.text('先连接自己的服务器'), findsOneWidget);
-    // Both connect entries must stay inert without a valid private server.
-    await tester.tap(find.byKey(const Key('nikodesk-hero-connect')),
-        warnIfMissed: false);
+    expect(find.text('先连上自己的服务器'), findsOneWidget);
+    // The panel offers setup instead of a connect button, and the saved
+    // device stays inert without a valid private server.
+    expect(find.byKey(const Key('nikodesk-hero-connect')), findsNothing);
+    await tester.ensureVisible(
+        find.byKey(const Key('nikodesk-device-connect-123456')));
     await tester.tap(find.byKey(const Key('nikodesk-device-connect-123456')),
         warnIfMissed: false);
     await tester.pumpAndSettle();
     expect(calls, 0);
-    expect(find.textContaining('在线未知'), findsOneWidget);
+    // Presence is unknown, so the tile claims neither state.
+    final tile = find.byKey(const Key('nikodesk-device-connect-123456'));
+    expect(find.descendant(of: tile, matching: find.text('在线')), findsNothing);
+    expect(find.descendant(of: tile, matching: find.text('离线')), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -109,7 +119,6 @@ void main() {
       'nikodesk-device-connect-555555',
     ]);
     expect(find.text('自己的服务器，熟悉的工作空间。'), findsNothing);
-    expect(find.byKey(const Key('nikodesk-hero-password')), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -135,10 +144,10 @@ void main() {
               requested = id;
               usedPassword = password;
             }));
-    expect(find.text('已注册'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('nikodesk-quick-connect')));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('设备在线状态：未知'), findsOneWidget);
+    // A registered server says nothing about whether the device is online.
+    final tile = find.byKey(const Key('nikodesk-device-connect-123456'));
+    expect(find.descendant(of: tile, matching: find.text('在线')), findsNothing);
+    expect(find.descendant(of: tile, matching: find.text('离线')), findsNothing);
     await tester
         .ensureVisible(find.byKey(const Key('nikodesk-device-connect-123456')));
     await tester.tap(find.byKey(const Key('nikodesk-device-connect-123456')));
@@ -177,8 +186,10 @@ void main() {
               requested = id;
               file = isFileTransfer;
             }));
-    await tester.ensureVisible(find.byTooltip('文件传输'));
-    await tester.tap(find.byTooltip('文件传输'));
+    await tester.ensureVisible(find.byTooltip('Office 的更多操作'));
+    await tester.tap(find.byTooltip('Office 的更多操作'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('文件传输').last);
     await tester.pumpAndSettle();
     await tester.enterText(
         find.byKey(const Key('nikodesk-connect-password')), 'secret123');
@@ -267,13 +278,16 @@ void main() {
         id: '123456', alias: 'Design machine', group: 'Studio')));
     final gateway = _ServerDouble(
         const ServerSnapshot(PrivateServerConfig('', '', ''), null, false));
-    await loadPage(tester, NikoDevicePage(store: store, gateway: gateway));
+    await loadPage(
+        tester,
+        NikoDevicePage(
+            store: store, gateway: gateway, layout: NikoDeviceLayout.manage));
     await tester.enterText(find.byKey(const Key('nikodesk-search')), 'studio');
     await tester.pumpAndSettle();
     expect(find.text('Design machine'), findsOneWidget);
     await tester.enterText(find.byKey(const Key('nikodesk-search')), 'missing');
     await tester.pumpAndSettle();
-    expect(find.text('没有匹配的设备'), findsOneWidget);
+    expect(find.text('没有符合的设备'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -326,7 +340,7 @@ void main() {
     NikoLanguage.english = true;
     await loadPage(tester, NikoDevicePage(store: store, gateway: gateway));
     expect(find.text('My devices'), findsOneWidget);
-    expect(find.text('Set up your private server'), findsOneWidget);
+    expect(find.text('Set up your private server first'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
   testWidgets('device card rechecks pause after password dialog',

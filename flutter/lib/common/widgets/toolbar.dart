@@ -16,6 +16,7 @@ import 'package:flutter_hbb/nikodesk/session_capability_connect.dart';
 import 'package:flutter_hbb/nikodesk/ui.dart';
 import 'package:flutter_hbb/nikodesk/privacy_style_model.dart';
 import 'package:flutter_hbb/nikodesk/privacy_style.dart';
+import 'package:flutter_hbb/nikodesk/secure_desktop.dart';
 import 'package:flutter_hbb/nikodesk/virtual_display.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
@@ -984,7 +985,11 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
                 bind.sessionToggleOption(sessionId: sessionId, value: option);
               }
             : null,
-        child: Text(translate('Lock after session end'))));
+        child: const bool.fromEnvironment('NIKODESK') && nikoPortableWindows(pi)
+            ? Builder(
+                builder: (context) => nikoPortableLockLabel(
+                    context, translate('Lock after session end')))
+            : Text(translate('Lock after session end'))));
   }
 
   final privacyModeState = PrivacyModeState.find(id);

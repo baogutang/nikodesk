@@ -136,8 +136,8 @@ class NikoVoiceCleanupPanel extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Text(nikoText(
-                                '此前会话 · ${entry.status.identity.peerId}',
-                                'Previous session · ${entry.status.identity.peerId}')),
+                                '此前会话：${entry.status.identity.peerId}',
+                                'Previous session: ${entry.status.identity.peerId}')),
                             const SizedBox(height: 6),
                             Semantics(
                                 liveRegion: true,

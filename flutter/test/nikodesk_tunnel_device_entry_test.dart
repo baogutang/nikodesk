@@ -92,12 +92,7 @@ void main() {
     await tester.pump();
     await tester.tap(mode);
     await tester.pump();
-    expect(
-        tester
-            .widget<NlPressable>(
-                find.descendant(of: mode, matching: find.byType(NlPressable)))
-            .selected,
-        true);
+    expect(tester.widget<NlPressable>(mode).selected, true);
     await tester.enterText(
         find.byKey(const Key('nikodesk-hero-id')), '123456789');
     await tester.enterText(find.byKey(const Key('nikodesk-hero-password')), '');

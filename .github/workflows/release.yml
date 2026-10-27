@@ -17,7 +17,7 @@ on:
         type: boolean
         default: true
       windows_setup_validation:
-        description: Build and upload the unsigned Windows unattended validation bundle (does not install)
+        description: Build and upload the unsigned Windows installer (does not install)
         type: boolean
         default: false
 
@@ -305,12 +305,12 @@ jobs:
           Set-Content "$bundle\EXPERIMENTAL.txt" 'Preview user-mode client: target-device acceptance is still in progress. It runs beside RustDesk without replacing it and installs no service.'
           Compress-Archive -Path "$bundle\*" -DestinationPath NikoDesk-windows-x64.zip
 
-      # Uploaded before the checks below, none of which had run on a real
-      # Windows build before: the client stays available for target-device
-      # testing while a failing check is being worked on.
+      # The portable client and its folder are inspection inputs only; the
+      # release offers the installer. Uploaded before the checks below so a
+      # failing check can still be investigated on a real Windows machine.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: NikoDesk-windows-x64
+          name: inspection-windows-x64-client
           path: |
             NikoDesk-windows-x64.exe
             NikoDesk-windows-x64.zip
@@ -332,7 +332,7 @@ jobs:
           path: NikoDesk-windows-x64-verification.json
           if-no-files-found: error
 
-      - name: Build the unattended setup validation bundle
+      - name: Build the Windows installer
         id: setup
         if: ${{ !cancelled() && steps.package.outcome == 'success' && env.NIKODESK_WINDOWS_SETUP_VALIDATION == 'true' }}
         shell: pwsh
@@ -346,21 +346,28 @@ jobs:
           # The notice describes the portable client and is not part of the setup tree.
           Remove-Item "flutter\build\windows\x64\runner\Release\EXPERIMENTAL.txt"
           New-Item -ItemType Directory -Force dist | Out-Null
-          python3 .github/scripts/build-windows-product.py --build-name "$env:PRODUCT_VERSION" --build-number "$env:PRODUCT_BUILD_NUMBER" --setup-output dist/NikoDesk-windows-x64-setup-validation --setup-trust-mode reviewed-local-unsigned-validation --reuse-client-build
+          python3 .github/scripts/build-windows-product.py --build-name "$env:PRODUCT_VERSION" --build-number "$env:PRODUCT_BUILD_NUMBER" --setup-output dist/NikoDesk-windows-x64-setup --setup-trust-mode reviewed-local-unsigned-validation --reuse-client-build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python3 .github/scripts/sync-brand-icons.py --check --windows-exe dist/NikoDesk-windows-x64-setup-validation.exe --windows-exe dist/NikoDesk-windows-x64-setup-validation/NikoDesk.exe --windows-exe dist/NikoDesk-windows-x64-setup-validation/nikodesk-host.exe --windows-exe dist/NikoDesk-windows-x64-setup-validation/nikodesk-setup.exe
+          python3 .github/scripts/sync-brand-icons.py --check --windows-exe dist/NikoDesk-windows-x64-setup.exe --windows-exe dist/NikoDesk-windows-x64-setup/NikoDesk.exe --windows-exe dist/NikoDesk-windows-x64-setup/nikodesk-host.exe --windows-exe dist/NikoDesk-windows-x64-setup/nikodesk-setup.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Upload setup validation artifacts
+      - name: Upload the Windows installer
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: NikoDesk-windows-x64-setup-validation
+          name: NikoDesk-windows-x64-setup
+          path: dist/NikoDesk-windows-x64-setup.exe
+          if-no-files-found: error
+
+      - name: Upload the installer inspection files
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: inspection-windows-x64-setup
           path: |
-            dist/NikoDesk-windows-x64-setup-validation.exe
-            dist/NikoDesk-windows-x64-setup-validation.zip
-            dist/NikoDesk-windows-x64-setup-validation.json
-            dist/NikoDesk-windows-x64-setup-validation.txt
+            dist/NikoDesk-windows-x64-setup.zip
+            dist/NikoDesk-windows-x64-setup.json
+            dist/NikoDesk-windows-x64-setup.txt
           if-no-files-found: error
 
       - name: Test Windows identity and portable boundaries
@@ -647,10 +654,7 @@ jobs:
           ls -la
           test -f NikoDesk-macos-arm64.dmg
           test -f NikoDesk-macos-arm64.zip
-          test -f NikoDesk-windows-x64.exe
-          test -f NikoDesk-windows-x64.zip
-          test -f NikoDesk-windows-x64-setup-validation.exe
-          test -f NikoDesk-windows-x64-setup-validation.zip
+          test -f NikoDesk-windows-x64-setup.exe
           test -f NikoDesk-android-arm64.apk
           sha256sum * | tee SHA256SUMS
 
@@ -666,9 +670,7 @@ jobs:
           | File | Platform |
           |---|---|
           | \`NikoDesk-macos-arm64.dmg\` | macOS 12.3+, Apple silicon. Signed with the fixed NikoDesk certificate (SHA-1 7C5F3E1E…92A9), so privacy permissions survive updates; no Apple Developer ID or notarization: right-click → Open on first launch. |
-          | \`NikoDesk-windows-x64.exe\` | Windows 10/11 x64 portable client, runs beside RustDesk, no installation. Unsigned: SmartScreen asks once. |
-          | \`NikoDesk-windows-x64.zip\` | The same client as a folder. |
-          | \`NikoDesk-windows-x64-setup-validation.exe\` | Windows installer for unattended access (service, sign-in screen, UAC). Unsigned preview; changes the system, use on a test machine first. |
+          | \`NikoDesk-windows-x64-setup.exe\` | Windows 10/11 x64 installer: NikoDesk with its background service, so the lock screen, sign-in screen and UAC prompts can be operated remotely. Unsigned: SmartScreen asks once (More info → Run anyway). |
           | \`NikoDesk-android-arm64.apk\` | Android 7+ arm64 controller (\`io.nikodesk.android\`), signed with the NikoDesk release key. |
 
           Windows and Android packages are still in target-device acceptance. Verify downloads with \`SHA256SUMS\`.
@@ -704,10 +706,7 @@ jobs:
           find . -type f ! -name '*.dmg' ! -name '*.zip' ! -name '*.exe' ! -name '*.apk' -delete
           test -f NikoDesk-macos-arm64.dmg
           test -f NikoDesk-macos-arm64.zip
-          test -f NikoDesk-windows-x64.exe
-          test -f NikoDesk-windows-x64.zip
-          test -f NikoDesk-windows-x64-setup-validation.exe
-          test -f NikoDesk-windows-x64-setup-validation.zip
+          test -f NikoDesk-windows-x64-setup.exe
           test -f NikoDesk-android-arm64.apk
           python3 - <<'PYCODE'
           import hashlib, json, os
@@ -731,7 +730,7 @@ jobs:
           body: |
             Draft candidate: not a formal release. Promotion requires signed acceptance bound to these exact package hashes and source commit.
             macOS (Apple silicon): DMG for installation; the ZIP keeps the updater bundle format. Signed with the fixed NikoDesk certificate, no Apple Developer ID or notarization.
-            Windows x64: portable EXE (no installation) or ZIP; the setup-validation installer adds unattended access. Unsigned.
+            Windows x64: installer with the background service for the lock screen, sign-in screen and UAC. Unsigned.
             Android arm64: controller APK signed with the NikoDesk release key.
             Builds use the tag-matching product version in flutter/pubspec.yaml. Keep your existing remote-control entry while accepting a new device. Cross-device, unattended-system and real-network performance acceptance remain separate from compilation and package checks; no unmeasured speed improvement is claimed.
           files: dist/*

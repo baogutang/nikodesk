@@ -46,7 +46,7 @@ TerminalTheme nikoTerminalTheme(NlColors nl) {
     brightBlue: dark ? nl.accentText : nl.accent,
     brightMagenta: dark ? const Color(0xFFDA8FFF) : const Color(0xFFA550A7),
     brightCyan: dark ? const Color(0xFF70D7FF) : const Color(0xFF1A8FA0),
-    brightWhite: dark ? nl.fg : const Color(0xFF8E8E93),
+    brightWhite: dark ? nl.fg : const Color(0xFF767B83),
     searchHitBackground: nl.warn.withOpacity(.35),
     searchHitBackgroundCurrent: nl.warn.withOpacity(.6),
     searchHitForeground: nl.fg,

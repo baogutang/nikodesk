@@ -87,8 +87,11 @@ void main() {
     await tester.pump();
   }
 
-  NlButton connectButton(WidgetTester tester) =>
+  NlPressable connectTile(WidgetTester tester) =>
       tester.widget(find.byKey(const Key('nikodesk-device-connect-123456')));
+
+  NlPressable heroConnect(WidgetTester tester) =>
+      tester.widget(find.byKey(const Key('nikodesk-hero-connect')));
 
   Future<void> completeStatus(WidgetTester tester) async {
     await tester.runAsync(() async {
@@ -105,15 +108,17 @@ void main() {
     expect(bridge.optionReads, 0);
     expect(bridge.status.isCompleted, false);
     expect(find.text('Office fixture'), findsOneWidget);
-    expect(find.textContaining('在线未知'), findsOneWidget);
-    expect(find.text('私服配置状态未知'), findsOneWidget);
-    expect(find.text('已注册'), findsNothing);
-    expect(connectButton(tester).onPressed, isNull);
+    // Pending is its own state: no setup prompt, nothing connectable yet.
+    expect(find.text('正在读取私服设置…'), findsOneWidget);
+    expect(find.text('先连上自己的服务器'), findsNothing);
+    expect(connectTile(tester).onTap, isNull);
+    expect(heroConnect(tester).onTap, isNull);
 
     await completeStatus(tester);
     expect(bridge.optionReads, 1);
-    expect(find.text('已注册'), findsOneWidget);
-    expect(connectButton(tester).onPressed, isNotNull);
+    expect(find.text('正在读取私服设置…'), findsNothing);
+    expect(connectTile(tester).onTap, isNotNull);
+    expect(heroConnect(tester).onTap, isNotNull);
     await tester.pumpWidget(const SizedBox());
     expect(tester.takeException(), isNull);
   });
@@ -128,7 +133,8 @@ void main() {
     await completeStatus(tester);
     expect(find.text('Office fixture'), findsOneWidget);
     expect(find.textContaining('无法读取私服配置或设备目录'), findsOneWidget);
-    expect(connectButton(tester).onPressed, isNull);
+    expect(find.text('先连上自己的服务器'), findsNothing);
+    expect(connectTile(tester).onTap, isNull);
     await tester.pumpWidget(const SizedBox());
     expect(tester.takeException(), isNull);
   });
@@ -141,7 +147,7 @@ void main() {
     bridge.enabled = 'Y';
     await completeStatus(tester);
     expect(find.text('注册服务已停止'), findsOneWidget);
-    expect(connectButton(tester).onPressed, isNull);
+    expect(connectTile(tester).onTap, isNull);
     await tester.pumpWidget(const SizedBox());
     expect(tester.takeException(), isNull);
   });
@@ -154,12 +160,7 @@ void main() {
     await drainFileRead(tester);
     await completeStatus(tester);
     expect(find.textContaining('设备目录由更高版本创建'), findsOneWidget);
-    expect(
-        tester
-            .widget<NlButton>(
-                find.byKey(const Key('nikodesk-hero-connect')))
-            .onPressed,
-        isNull);
+    expect(heroConnect(tester).onTap, isNull);
     await tester.pumpWidget(const SizedBox());
     expect(tester.takeException(), isNull);
   });

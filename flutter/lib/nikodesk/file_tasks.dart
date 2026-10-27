@@ -245,7 +245,7 @@ class NikoFileTaskCard extends StatelessWidget {
             LinearProgressIndicator(value: progress),
             const SizedBox(height: 6),
             Text(job.recvJobRes
-                ? '$bytes · ${job.speed.toStringAsFixed(0)} B/s'
+                ? '$bytes$nikoSep${job.speed.toStringAsFixed(0)} B/s'
                 : nikoText('尚未收到传输进度', 'No transfer progress received yet')),
           ],
           if (job.state == JobState.error && job.err.isNotEmpty) ...[
@@ -394,10 +394,10 @@ class NikoFileTaskCard extends StatelessWidget {
                 job.recvJobRes
                     ? Tooltip(
                         message:
-                            '${job.finishedSize}/${job.totalSize} B · ${job.speed.toStringAsFixed(0)} B/s',
+                            '${job.finishedSize}/${job.totalSize} B$nikoSep${job.speed.toStringAsFixed(0)} B/s',
                         child: Text(
                             '${readableFileSize(job.finishedSize.toDouble())} / '
-                            '${readableFileSize(job.totalSize.toDouble())} · '
+                            '${readableFileSize(job.totalSize.toDouble())}$nikoSep'
                             '${readableFileSize(job.speed)}/s',
                             style: NlType.monoText(NlType.s1, color: nl.fg2)))
                     : Text(
@@ -525,8 +525,8 @@ class NikoFileTasks extends StatelessWidget {
             if (jobs.isNotEmpty)
               Text(
                   running > 0
-                      ? nikoText('$running 进行中 · 共 ${jobs.length}',
-                          '$running active · ${jobs.length}')
+                      ? nikoText('$running 个进行中，共 ${jobs.length} 个',
+                          '$running active of ${jobs.length}')
                       : '${jobs.length}',
                   style: NlType.text(NlType.s2, color: nl.fg3).copyWith(
                       fontFeatures: const [FontFeature.tabularFigures()])),

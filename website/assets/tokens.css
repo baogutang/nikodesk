@@ -1,0 +1,46 @@
+/* The website's half of the locked system (rustdesk/DESIGN.md): the app's
+   colours from design/app-3.0/tokens.css on Hallmark's page scale. */
+:root {
+  color-scheme: light dark;
+  --space-3xs: 2px; --space-2xs: 4px; --space-xs: 8px; --space-sm: 12px; --space-md: 16px; --space-lg: 24px; --space-xl: 40px; --space-2xl: 64px; --space-3xl: 96px; --space-4xl: 144px;
+  --text-xs: 0.8125rem; --text-sm: 0.875rem; --text-md: 1rem; --text-lg: 1.25rem; --text-xl: 1.5625rem; --text-2xl: 1.953rem; --text-3xl: 2.441rem;
+  --text-display-s: clamp(2.25rem, 4vw + 0.5rem, 3.75rem); --text-display: clamp(2.5rem, 4vw + 1rem, 4.5rem);
+  --text-section: clamp(2rem, 2.5vw + 1rem, 3.25rem); --text-title: clamp(1.25rem, 0.75vw + 0.875rem, 1.5rem); --text-lead: clamp(1.125rem, 0.35vw + 1rem, 1.3125rem);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); --ease-in: cubic-bezier(0.7, 0, 0.84, 0); --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-micro: 120ms; --dur-short: 220ms; --dur-long: 420ms;
+  --container: 1440px; --gutter: 64px; --gap-columns: 32px; --section-gap-s: 120px; --section-gap: 144px; --section-gap-l: 176px;
+  --z-base: 1; --z-raised: 10; --z-dropdown: 100; --z-sticky: 200; --z-sticky-nav: 300; --z-modal: 400; --z-toast: 500; --z-tooltip: 600;
+
+  /* Paper and ink tinted toward the logo blue, hue 259. */
+  --color-paper: oklch(99.3% 0.002 259); --color-paper-2: oklch(97.2% 0.004 259); --color-paper-3: oklch(94.6% 0.006 259);
+  --color-ink: oklch(23% 0.014 259); --color-ink-2: oklch(45% 0.014 259); --color-muted: oklch(52% 0.012 259);
+  --color-rule: oklch(91.5% 0.006 259); --color-edge: oklch(84% 0.008 259); --color-frame: oklch(23% 0.014 259 / 0.08);
+  --color-accent: oklch(56.5% 0.215 259); --color-accent-hover: oklch(50.5% 0.2 259); --color-accent-ink: oklch(99.3% 0.002 259); --color-focus: oklch(58% 0.2 259);
+  --color-accent-text: oklch(52% 0.2 259);
+  --color-canvas: oklch(96.2% 0.007 259); --color-surface: oklch(99.6% 0.0015 259);
+  --color-code: oklch(22% 0.014 259); --color-code-ink: oklch(94% 0.008 259); --color-code-muted: oklch(72% 0.012 259);
+  --color-error: oklch(52% 0.19 27); --color-success: oklch(50% 0.12 150);
+
+  --font-display: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Microsoft YaHei UI", "Noto Sans SC", system-ui, sans-serif;
+  --font-body: var(--font-display);
+  --font-outlier: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --display-weight: 600;
+
+  --radius-card: 10px; --radius-control: 6px; --radius-tag: 4px; --radius-pill: 999px; --rule-hair: 1px;
+  --shadow-card: 0 1px 2px oklch(23% 0.014 259 / 0.06), 0 0 0 1px oklch(23% 0.014 259 / 0.06);
+  --tracking-display: -0.02em;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-paper: oklch(17.5% 0.01 259); --color-paper-2: oklch(20.5% 0.011 259); --color-paper-3: oklch(24% 0.012 259);
+    --color-ink: oklch(94.5% 0.008 259); --color-ink-2: oklch(78% 0.012 259); --color-muted: oklch(66% 0.012 259);
+    --color-rule: oklch(30% 0.012 259); --color-edge: oklch(38% 0.012 259);
+    --color-accent: oklch(55% 0.2 259); --color-accent-hover: oklch(50% 0.19 259); --color-accent-ink: oklch(99.3% 0.002 259); --color-focus: oklch(68% 0.17 259);
+    --color-accent-text: oklch(76% 0.13 259);
+    --color-canvas: oklch(15.5% 0.01 259); --color-surface: oklch(20% 0.011 259);
+    --color-code: oklch(12.5% 0.01 259);
+    --color-error: oklch(70% 0.15 27); --color-success: oklch(72% 0.12 150);
+    --shadow-card: inset 0 0 0 1px oklch(27% 0.012 259);
+  }
+}

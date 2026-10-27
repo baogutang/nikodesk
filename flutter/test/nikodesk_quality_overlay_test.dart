@@ -59,7 +59,7 @@ void main() {
           firstFrame: Duration(milliseconds: 240));
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(body: NikoQualityOverlay(metrics: metrics))));
-    expect(find.text('Relay · TCP'), findsOneWidget);
+    expect(find.text('Relay, TCP'), findsOneWidget);
     expect(find.text('180 ms'), findsOneWidget);
     expect(find.text('95 ms (+4000 ms waiting for input/approval)'),
         findsOneWidget);
@@ -87,11 +87,11 @@ void main() {
     await tester.pumpWidget(MaterialApp(
         home:
             Scaffold(body: NikoQualityOverlay(metrics: metrics, display: 0))));
-    expect(find.text('3200×1800 · H265 hardware'), findsOneWidget);
+    expect(find.text('3200×1800, H265 hardware'), findsOneWidget);
     expect(find.text('54.2/s'), findsOneWidget);
     expect(find.text('75 Hz'), findsOneWidget);
     expect(
-        find.text('capture 3.1 · convert 2.6 · encode 0.8 ms'), findsOneWidget);
+        find.text('capture 3.1, convert 2.6, encode 0.8 ms'), findsOneWidget);
     expect(find.text('75/s (controlled display refresh rate)'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
@@ -156,7 +156,7 @@ void main() {
     expect(find.text('59 fps'), findsOneWidget);
     expect(find.text('24 ms'), findsOneWidget);
     expect(find.text('845.20 KiB/s'), findsOneWidget);
-    expect(find.text('Direct · UDP'), findsNWidgets(2));
+    expect(find.text('Direct, UDP'), findsNWidgets(2));
     final hud = tester.widget<Container>(find.byKey(const Key('nikodesk-telemetry-hud')));
     expect((hud.decoration! as BoxDecoration).color, NlDock.background);
 

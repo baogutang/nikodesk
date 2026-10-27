@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>正在被控制：NikoDesk</title>
+<meta name="description" content="NikoDesk 3.0 样稿：被控电脑上的小窗口，谁连进来了，允许对方做什么，随时断开。">
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="app.css">
+<script src="comp.js" defer></script>
+</head>
+<body>
+<!-- icons -->
+<main class="host" data-region="host" aria-label="连接管理">
+  <section data-show="request" class="card host-body" aria-labelledby="req-h">
+    <div class="host-who">
+      <div class="shot"><span class="none"><svg class="icon icon-xl" aria-hidden="true"><use href="#i-laptop"/></svg></span></div>
+      <div><h1 id="req-h">办公室 Mac mini 想控制本机</h1><p>设备代码 731 004 562，临时密码已验证</p></div>
+    </div>
+    <div>
+      <h2 class="label">连进来后允许对方</h2>
+      <div class="perms">
+        <button class="perm" type="button" aria-pressed="true"><svg class="icon icon-l" aria-hidden="true"><use href="#i-pointer"/></svg>键盘鼠标</button>
+        <button class="perm" type="button" aria-pressed="true"><svg class="icon icon-l" aria-hidden="true"><use href="#i-clipboard"/></svg>剪贴板</button>
+        <button class="perm" type="button" aria-pressed="true"><svg class="icon icon-l" aria-hidden="true"><use href="#i-folder"/></svg>传输文件</button>
+        <button class="perm" type="button" aria-pressed="false"><svg class="icon icon-l" aria-hidden="true"><use href="#i-sound"/></svg>听声音</button>
+        <button class="perm" type="button" aria-pressed="false"><svg class="icon icon-l" aria-hidden="true"><use href="#i-lock"/></svg>锁屏重启</button>
+        <button class="perm" type="button" aria-pressed="false"><svg class="icon icon-l" aria-hidden="true"><use href="#i-terminal"/></svg>终端</button>
+      </div>
+    </div>
+    <p class="quiet">30 秒内不处理就自动拒绝。</p>
+    <div class="host-actions"><button class="btn" type="button">拒绝</button><button class="btn btn-primary" type="button">允许</button></div>
+  </section>
+
+  <section data-show="active" class="card host-body" aria-labelledby="who-h">
+    <div class="host-who">
+      <div class="shot"><span class="none"><svg class="icon icon-xl" aria-hidden="true"><use href="#i-laptop"/></svg></span></div>
+      <div><h1 id="who-h">办公室 Mac mini 正在控制本机</h1><p>已连接 12:04，经私有服务器中转</p></div>
+    </div>
+    <div>
+      <h2 class="label">允许对方</h2>
+      <div class="perms">
+        <button class="perm" type="button" aria-pressed="true"><svg class="icon icon-l" aria-hidden="true"><use href="#i-pointer"/></svg>键盘鼠标</button>
+        <button class="perm" type="button" aria-pressed="true"><svg class="icon icon-l" aria-hidden="true"><use href="#i-clipboard"/></svg>剪贴板</button>
+        <button class="perm" type="button" aria-pressed="true"><svg class="icon icon-l" aria-hidden="true"><use href="#i-folder"/></svg>传输文件</button>
+        <button class="perm" type="button" aria-pressed="false"><svg class="icon icon-l" aria-hidden="true"><use href="#i-sound"/></svg>听声音</button>
+        <button class="perm" type="button" aria-pressed="false"><svg class="icon icon-l" aria-hidden="true"><use href="#i-lock"/></svg>锁屏重启</button>
+        <button class="perm" type="button" aria-pressed="false"><svg class="icon icon-l" aria-hidden="true"><use href="#i-terminal"/></svg>终端</button>
+      </div>
+    </div>
+    <div class="host-actions"><button class="btn btn-quiet" type="button"><svg class="icon" aria-hidden="true"><use href="#i-chat"/></svg>聊天</button><button class="btn btn-danger" type="button"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg>断开</button></div>
+  </section>
+</main>
+</body>
+</html>

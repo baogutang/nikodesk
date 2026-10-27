@@ -14,8 +14,8 @@ String _modeLabel(PictureMode mode) => switch (mode) {
     };
 
 String _modeDetail(PictureMode mode, int smoothFps) => switch (mode) {
-      PictureMode.office => nikoText('上游 best 画质 + 原始 1:1 缩放；编码器自动协商。',
-          'Upstream best quality + original 1:1 view; automatic codec negotiation.'),
+      PictureMode.office => nikoText('最佳画质，原始 1:1 缩放；编码器自动协商。',
+          'Best quality at the original 1:1 view; automatic codec negotiation.'),
       PictureMode.smooth => nikoText(
           '帧率上限跟随本机屏幕刷新率（此处为 $smoothFps，范围 60–$nikoMaxFps）、50% 码率比例（需要对端支持）；实际帧率不超过对端屏幕的刷新率，对端仍按网络延迟自行下调。保留当前缩放。',
           'Frame limit follows this screen\'s refresh rate ($smoothFps here, 60–$nikoMaxFps) at a 50% bitrate ratio when supported. The peer sends no more than its own screen refreshes and still lowers both when the network is slow. Keeps the current view scale.'),
@@ -24,6 +24,16 @@ String _modeDetail(PictureMode mode, int smoothFps) => switch (mode) {
           'Conservative request: 30% bitrate ratio and 15 FPS when supported. Uses upstream QoS; weak-network improvement is unmeasured.'),
       PictureMode.custom => nikoText('设置码率比例与目标 FPS；这些值不代表实测码率或呈现帧率。',
           'Set bitrate ratio and target FPS; these are not measured bitrate or presentation FPS.'),
+    };
+
+/// The core image quality setting in words.
+String _qualityLabel(String? value) => switch (value) {
+      'best' => nikoText('最佳画质', 'Best'),
+      'balanced' => nikoText('均衡', 'Balanced'),
+      'low' => nikoText('低画质', 'Low'),
+      'custom' => nikoText('自定义', 'Custom'),
+      null => nikoText('未知', 'Unknown'),
+      _ => value,
     };
 
 /// Local wall-clock time of a sample, with the date when it may be from
@@ -275,8 +285,8 @@ class NikoPictureModePanel extends StatelessWidget {
     final nl = NlColors.of(context);
     final unknown = nikoText('未知', 'Unknown');
     final current = currentQuality == 'custom'
-        ? '${currentQuality ?? unknown} · ${currentFps ?? unknown} FPS'
-        : currentQuality ?? unknown;
+        ? '${_qualityLabel(currentQuality)}$nikoSep${currentFps ?? unknown} FPS'
+        : _qualityLabel(currentQuality);
     return NikoToolFrame(
         title: nikoText('画面模式', 'Picture mode'),
         detail: nikoText('编码器自动协商；不强制硬编、H.264 或 4:4:4。',
@@ -318,7 +328,7 @@ class NikoPictureModePanel extends StatelessWidget {
                       style: NlType.text(NlType.s2, color: nl.fg3)),
                   Text(current,
                       key: const Key('nikodesk-picture-current'),
-                      style: NlType.monoText(NlType.s2, color: nl.fg2)),
+                      style: NlType.text(NlType.s2, color: nl.fg2)),
                 ]),
               ]),
         footer: [
@@ -555,10 +565,10 @@ String _formatValue(Object? value) {
       '${value.width}×${value.height}',
       if (value.encoder.isNotEmpty) '${value.encoder} $kind',
       if (value.fps != null) '${value.fps!.round()}/s',
-      '$capture ${ms(value.captureMs)} · ${nikoText('转换', 'convert')} '
-          '${ms(value.convertMs)} · ${nikoText('编码', 'encode')} '
+      '$capture ${ms(value.captureMs)}$nikoSep${nikoText('转换', 'convert')} '
+          '${ms(value.convertMs)}$nikoSep${nikoText('编码', 'encode')} '
           '${ms(value.encodeMs)} ms',
-    ].join(' · ');
+    ].join(nikoSep);
   }
   return value.toString();
 }
@@ -574,7 +584,7 @@ String _metricValue(SessionMetrics metrics, String name) {
     return value.entries
         .map((e) =>
             '${nikoText('显示器', 'Display')} ${(int.tryParse(e.key) ?? -1) + 1}: ${_formatValue(e.value)}')
-        .join(' · ');
+        .join(nikoText('；', '; '));
   }
   return _formatValue(value);
 }
@@ -627,8 +637,8 @@ class NikoDiagnosticsPanel extends StatelessWidget {
         value == null ? unknown : (value ? yes : no);
     return NikoToolFrame(
         title: nikoText('会话诊断', 'Session diagnostics'),
-        detail: nikoText('每秒刷新 · 10 秒无新样本后标记失效 · 脱敏报告仅在导出时保存',
-            'Updates once per second · Samples expire after 10 seconds · Redacted reports are saved only on export'),
+        detail: nikoText('每秒刷新，10 秒无新样本后标记失效，脱敏报告仅在导出时保存',
+            'Updates once per second. Samples expire after 10 seconds. Redacted reports are saved only on export.'),
         onClose: onClose,
         closeKey: const Key('nikodesk-diagnostics-close'),
         body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -662,7 +672,7 @@ class NikoDiagnosticsPanel extends StatelessWidget {
                 _fact(
                     nikoText('连接路径', 'Connection path'),
                     known
-                        ? '${metrics.direct == true ? nikoText('直连', 'Direct') : nikoText('中继', 'Relay')} · ${metrics.transport ?? unknown}'
+                        ? '${metrics.direct == true ? nikoText('直连', 'Direct') : nikoText('中继', 'Relay')}$nikoSep${metrics.transport ?? unknown}'
                         : unknown),
                 _fact(
                     nikoText('会话加密', 'Session encryption'),
@@ -708,7 +718,7 @@ class NikoDiagnosticsPanel extends StatelessWidget {
                         ? unknown
                         : resolutions
                             .map((r) => '${r.$1} × ${r.$2}')
-                            .join(' · '),
+                            .join(nikoSep),
                     mono: true),
                 _fact(nikoText('当前画布缩放', 'Current canvas scale'),
                     '${scale.toStringAsFixed(2)}×',
@@ -787,7 +797,7 @@ class _MetricRow extends StatelessWidget {
               style: NlType.text(NlType.s2, color: nl.fg2)),
           const SizedBox(height: 2),
           Text(
-              '${nikoText('采样', 'Sampled')} ${sampled == null ? nikoText('未知', 'Unknown') : _clock(sampled)} · ${SessionMetrics.specs[name]?.source ?? ''}',
+              '${nikoText('采样', 'Sampled')} ${sampled == null ? nikoText('未知', 'Unknown') : _clock(sampled)}$nikoSep${SessionMetrics.specs[name]?.source ?? ''}',
               style: NlType.monoText(NlType.s1, color: nl.fg3)),
         ]));
   }

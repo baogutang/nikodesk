@@ -121,7 +121,9 @@ void main() {
 
   testWidgets('the page header is in the interface language', (tester) async {
     await load(tester, SettingsTabKey.general);
-    expect(find.text('SETTINGS'), findsOneWidget);
+    // Labels are sentence case, never tracked capitals.
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('SETTINGS'), findsNothing);
     expect(find.text('ADVANCED'), findsNothing);
     await unload(tester);
     NikoLanguage.english = false;

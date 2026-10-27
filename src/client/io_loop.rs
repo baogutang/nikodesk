@@ -2865,6 +2865,16 @@ impl<T: InvokeUiSession> Remote<T> {
         }
     }
 
+    /// Desktop sessions keep the device's last screen for its tile.
+    #[cfg(feature = "nikodesk")]
+    fn niko_thumbnail_target(&self) -> Option<crate::nikodesk::peer_thumbnail::Target> {
+        if !self.handler.is_default() {
+            return None;
+        }
+        let snapshot = self.handler.connection_snapshot().ok()?;
+        crate::nikodesk::peer_thumbnail::Target::new(snapshot.namespace(), &self.handler.get_id())
+    }
+
     fn new_video_thread(&mut self, display: usize) {
         let video_queue = Arc::new(RwLock::new(ArrayQueue::new(client::VIDEO_QUEUE_SIZE)));
         let (video_sender, video_receiver) = std::sync::mpsc::channel::<MediaData>();
@@ -2888,6 +2898,8 @@ impl<T: InvokeUiSession> Remote<T> {
             discard_queue: discard_queue.clone(),
         };
         let handler = self.handler.ui_handler.clone();
+        #[cfg(feature = "nikodesk")]
+        let thumbnail = self.niko_thumbnail_target();
         crate::client::start_video_thread(
             self.handler.clone(),
             display,
@@ -2906,8 +2918,17 @@ impl<T: InvokeUiSession> Remote<T> {
                   pixelbuffer: bool| {
                 *frame_count.write().unwrap() += 1;
                 if pixelbuffer {
+                    // Before on_rgba, which may take the buffer.
+                    #[cfg(feature = "nikodesk")]
+                    if let Some(thumbnail) = &thumbnail {
+                        thumbnail.offer_rgba(display, data);
+                    }
                     handler.on_rgba(display, data);
                 } else {
+                    #[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+                    if let Some(thumbnail) = &thumbnail {
+                        thumbnail.offer_picture(display, _texture);
+                    }
                     #[cfg(all(feature = "vram", feature = "flutter"))]
                     handler.on_texture(display, _texture);
                     #[cfg(all(feature = "nikodesk", feature = "hwcodec", feature = "flutter", target_os = "macos"))]

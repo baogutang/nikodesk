@@ -59,7 +59,7 @@ void main() {
     await tester.tap(tasks);
     await tester.pumpAndSettle();
     expect(find.text('Transfers').hitTestable(), findsOneWidget);
-    expect(find.text('1 active · 3'), findsOneWidget);
+    expect(find.text('1 active of 3'), findsOneWidget);
   });
 
   testWidgets('task cards keep their actions and show readable sizes',
@@ -70,8 +70,8 @@ void main() {
     expect(find.byKey(const Key('niko-file-remove-2')), findsOneWidget);
     expect(find.byKey(const Key('niko-file-remove-1')), findsNothing);
     expect(find.byTooltip('Remove record'), findsNWidgets(2));
-    expect(find.text('1.50 MB / 2.40 MB · 825.39 KB/s'), findsOneWidget);
-    expect(find.byTooltip('1572864/2516582 B · 845200 B/s'), findsOneWidget);
+    expect(find.text('1.50 MB / 2.40 MB, 825.39 KB/s'), findsOneWidget);
+    expect(find.byTooltip('1572864/2516582 B, 845200 B/s'), findsOneWidget);
     expect(find.text('Error: Not enough space on the destination disk'),
         findsOneWidget);
   });

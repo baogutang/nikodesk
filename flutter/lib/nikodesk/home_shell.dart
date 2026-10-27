@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/main.dart' show kBootArgs;
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
@@ -25,6 +26,7 @@ import 'install_assistant.dart';
 import 'first_server_setup.dart';
 import 'permission_guide.dart';
 import 'diagnostics_bundle.dart';
+import 'product_build_info.dart';
 
 /// Product shell for the NikoDesk home window: navigation plus the device
 /// workspace. Replaces the stock RustDesk two-pane home while keeping every
@@ -35,6 +37,9 @@ class NikoHomeShell extends StatefulWidget {
   final Future<void> Function(BuildContext, String, bool,
       {bool isFileTransfer, String? password})? onConnect;
   final String Function()? deviceIdProvider;
+
+  /// This computer's name on the card; tests and screenshots set a sample.
+  final String Function()? hostNameProvider;
   final Future<String> Function()? temporaryPasswordProvider;
   final SessionLogStore? sessionLog;
 
@@ -48,37 +53,52 @@ class NikoHomeShell extends StatefulWidget {
   /// macOS app; screenshots set it explicitly.
   final bool? macTitleBar;
 
+  /// Devices' last screens; null reads the ones the core keeps.
+  final ImageProvider? Function(String id)? screenOf;
+
   const NikoHomeShell(
       {super.key,
       this.store,
       this.gateway,
       this.onConnect,
       this.deviceIdProvider,
+      this.hostNameProvider,
       this.temporaryPasswordProvider,
       this.sessionLog,
       this.screenRecordingProbe,
       this.accessibilityProbe,
       this.screenRecordingRequest,
       this.accessibilityRequest,
-      this.macTitleBar});
+      this.macTitleBar,
+      this.screenOf});
 
   @override
   State<NikoHomeShell> createState() => _NikoHomeShellState();
 }
 
-enum _HomeDestination { devices, sessions, settings, advanced }
+/// Advanced settings stay a destination (settings and the palette open it)
+/// but have no row of their own in the navigation.
+enum _HomeDestination { home, devices, sessions, settings, advanced }
+
+const _navigation = [
+  _HomeDestination.home,
+  _HomeDestination.devices,
+  _HomeDestination.sessions,
+  _HomeDestination.settings,
+];
 
 class _NikoHomeShellState extends State<NikoHomeShell>
     with SingleTickerProviderStateMixin {
   DeviceStore get _store => widget.store ?? DeviceStore.instance;
   late final _gateway = widget.gateway ?? NativeServerGateway();
-  _HomeDestination _destination = _HomeDestination.devices;
+  _HomeDestination _destination = _HomeDestination.home;
   final _board = NikoDeviceBoard();
   ServerSnapshot? _server;
   String? _temporaryPassword;
   bool _showPassword = false;
   bool _canScreen = true;
   bool _canAccessibility = true;
+  String? _version;
 
   /// Decided at the first status read; the health rows open it again.
   bool? _guide;
@@ -100,10 +120,19 @@ class _NikoHomeShellState extends State<NikoHomeShell>
     NikoServerScope.changes.addListener(_scopeChanged);
     _refreshStatus();
     if (_native) {
+      ProductBuildInfo.read().then((info) {
+        if (mounted && info.version != null) {
+          setState(() => _version = info.version);
+        }
+      });
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           NikoLinkInbox.attach(this, _handleLink);
-          if (nikoInstallAssistantRequested()) showNikoInstallAssistant(context);
+          if (nikoInstallAssistantRequested()) {
+            showNikoInstallAssistant(context);
+          } else if (Platform.isWindows && nikoUninstallRequested(kBootArgs)) {
+            showNikoUninstallAssistant(context);
+          }
           nikoShowCrashNotice(context);
         }
       });
@@ -254,10 +283,10 @@ class _NikoHomeShellState extends State<NikoHomeShell>
         context: context,
         builder: (dialog) => StatefulBuilder(
             builder: (dialog, update) => AlertDialog(
-                  title: Text(nikoText('设置永久密码', 'Set permanent password')),
+                  title: Text(nikoText('设置固定密码', 'Set a fixed password')),
                   content: Column(mainAxisSize: MainAxisSize.min, children: [
-                    Text(nikoText('知道本机 ID 和有效密码的人可以直接连入，不需要在本机确认。请使用本产品专用密码；要求每次点击确认可在高级设置的安全页里选择。',
-                        'Anyone with this ID and a valid password connects without confirmation here. Use a unique password; to require a click every time, choose it under Security in advanced settings.')),
+                    Text(nikoText('知道本机设备代码和固定密码的人可以直接连进来，不需要在本机点允许。请用一个只给 NikoDesk 的密码；如果想每次都在本机点允许，到高级设置的安全页里改。',
+                        'Anyone with this device code and the fixed password connects without a click here. Use a password only for NikoDesk; to require a click every time, change it under Security in advanced settings.')),
                     const SizedBox(height: 12),
                     TextField(
                         controller: controller,
@@ -273,7 +302,7 @@ class _NikoHomeShellState extends State<NikoHomeShell>
                         value: enableAuthentication,
                         onChanged: (value) =>
                             update(() => enableAuthentication = value == true),
-                        title: Text(nikoText('同时允许使用永久密码连接',
+                        title: Text(nikoText('同时允许用固定密码连接',
                             'Also allow connecting with this password'))),
                   ]),
                   actions: [
@@ -305,7 +334,7 @@ class _NikoHomeShellState extends State<NikoHomeShell>
                     ? nikoText(
                         '密码已保存并加入可用密码；本机仍采用点击授权，密码认证尚未生效。请在高级安全设置中核对接受规则。',
                         'Password saved and selected. This computer still uses click approval, so password authentication is inactive. Check acceptance rules in advanced security settings.')
-                    : nikoText('密码已保存；永久密码验证未启用。请在高级安全设置中核对验证方式和接受规则。',
+                    : nikoText('密码已保存，但固定密码验证没有开启。请在高级设置的安全页里核对验证方式和接受规则。',
                         'Password saved; permanent-password authentication is disabled. Check verification and acceptance rules in advanced security settings.'));
       }
     } catch (_) {
@@ -333,7 +362,7 @@ class _NikoHomeShellState extends State<NikoHomeShell>
                 macTitleBar: _macTitleBar,
                 onLanguageChanged: _setLanguage,
                 onSaved: () {
-                  _go(_HomeDestination.devices);
+                  _go(_HomeDestination.home);
                   _refreshStatus();
                 },
                 child: _guide == true
@@ -344,28 +373,36 @@ class _NikoHomeShellState extends State<NikoHomeShell>
 
   Widget _home(BuildContext context, ThemeData shell) {
     final nl = NlColors.of(context);
-    final local = _localPanel(nl, heading: false);
-    final pages = <_HomeDestination, Widget>{
-      _HomeDestination.devices: NikoDevicePage(
+    final onDevices = _destination == _HomeDestination.home ||
+        _destination == _HomeDestination.devices;
+    // Home and Devices are one page in two layouts, so a connection started
+    // from either has one owner.
+    final slots = <Widget>[
+      NikoDevicePage(
           key: ValueKey('devices-${_store.directory.path}'),
           store: _store,
           gateway: _gateway,
           native: _native,
-          active: _destination == _HomeDestination.devices,
+          active: onDevices,
           sessionLog: widget.sessionLog,
           board: _board,
-          localPanel: local,
+          layout: _destination == _HomeDestination.devices
+              ? NikoDeviceLayout.manage
+              : NikoDeviceLayout.home,
+          localPanel: _credentials(nl),
+          screenOf: widget.screenOf,
+          onManage: () => _go(_HomeDestination.devices),
           onLanguageChanged: () => setState(() {}),
           onConnect: widget.onConnect,
           onOpenSettings: () => _openSettings(NikoSettingsSection.server)),
-      _HomeDestination.sessions: NikoSessionHistoryPage(
+      NikoSessionHistoryPage(
           key: ValueKey(
               'history-${widget.sessionLog?.directory.path ?? SessionLogStore.instance.directory.path}'),
           store: widget.sessionLog,
           gateway: _gateway,
           active: _destination == _HomeDestination.sessions,
           onConnect: widget.onConnect),
-      _HomeDestination.settings: NikoSettingsView(
+      NikoSettingsView(
           gateway: _gateway,
           initialSection: _settingsSection,
           sectionRequest: _settingsRequest,
@@ -375,16 +412,22 @@ class _NikoHomeShellState extends State<NikoHomeShell>
           onLanguageChanged: () => setState(() {}),
           onAppearanceChanged: () => setState(() {}),
           onOpenAdvanced: () => _go(_HomeDestination.advanced)),
-      _HomeDestination.advanced: _advancedPage(shell),
+      _advancedPage(shell),
+    ];
+    final slot = switch (_destination) {
+      _HomeDestination.home || _HomeDestination.devices => 0,
+      _HomeDestination.sessions => 1,
+      _HomeDestination.settings => 2,
+      _HomeDestination.advanced => 3,
     };
     final content = AnimatedBuilder(
         animation: _enter,
         child: IndexedStack(
-            index: pages.keys.toList().indexOf(_destination),
-            children: pages.entries
-                .map((entry) => ExcludeFocus(
-                    excluding: _destination != entry.key, child: entry.value))
-                .toList()),
+            index: slot,
+            children: [
+              for (var i = 0; i < slots.length; i++)
+                ExcludeFocus(excluding: i != slot, child: slots[i]),
+            ]),
         builder: (context, child) {
           final t = NlMotion.ease.transform(_enter.value);
           return Opacity(
@@ -399,44 +442,27 @@ class _NikoHomeShellState extends State<NikoHomeShell>
             autofocus: true,
             child: ListenableBuilder(
                 listenable: _board,
-                builder: (context, _) {
-                  final grouped = _destination == _HomeDestination.devices &&
-                      _board.filter.startsWith('group:');
-                  return NikoHomeChrome(
-                      destinations: [
-                        for (final destination in _HomeDestination.values)
-                          NikoHomeDestination(
-                              icon: _icon(destination),
-                              label: _label(destination),
-                              count: destination == _HomeDestination.devices &&
-                                      _board.devices.isNotEmpty
-                                  ? '${_board.devices.length}'
-                                  : null),
-                      ],
-                      selected: grouped
-                          ? -1
-                          : _HomeDestination.values.indexOf(_destination),
-                      onSelect: (index) {
-                        final destination = _HomeDestination.values[index];
-                        if (destination == _HomeDestination.devices &&
-                            _board.filter.startsWith('group:')) {
-                          _board.filter = 'all';
-                        }
-                        _go(destination);
-                      },
-                      body: content,
-                      sections: nikoBoardSections(context, _board,
-                          devicesShown:
-                              _destination == _HomeDestination.devices,
-                          onDevices: _onDevices),
-                      footer: _footer(nl),
-                      drawerExtra: _localPanel(nl),
-                      onQuickConnect: _quickConnect,
-                      onSearch: _openPalette,
-                      quickConnectShortcut: nikoShortcut('N'),
-                      searchShortcut: nikoShortcut('K'),
-                      macTitleBar: _macTitleBar);
-                })));
+                builder: (context, _) => NikoHomeChrome(
+                    destinations: [
+                      for (final destination in _navigation)
+                        NikoHomeDestination(
+                            icon: _icon(destination),
+                            label: _label(destination),
+                            count: destination == _HomeDestination.devices &&
+                                    _board.devices.isNotEmpty
+                                ? '${_board.devices.length}'
+                                : null),
+                    ],
+                    selected: _navigation.indexOf(
+                        _destination == _HomeDestination.advanced
+                            ? _HomeDestination.settings
+                            : _destination),
+                    onSelect: (index) => _go(_navigation[index]),
+                    body: content,
+                    footer: _footer(nl),
+                    onSearch: _openPalette,
+                    searchShortcut: nikoShortcut('K'),
+                    macTitleBar: _macTitleBar))));
   }
 
   /// Every destination change goes through here so pages enter with the same
@@ -472,7 +498,13 @@ class _NikoHomeShellState extends State<NikoHomeShell>
     });
   }
 
-  void _quickConnect() => _onDevices(_board.requestQuickConnect);
+  /// Shows the home panel and puts the cursor in its device-code field.
+  void _quickConnect() {
+    _go(_HomeDestination.home);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _board.requestQuickConnect();
+    });
+  }
 
   Map<ShortcutActivator, VoidCallback> get _shortcuts {
     final apple = Platform.isMacOS || Platform.isIOS;
@@ -484,9 +516,10 @@ class _NikoHomeShellState extends State<NikoHomeShell>
       key(LogicalKeyboardKey.keyF): () =>
           _onDevices(_board.requestFocusSearch),
       key(LogicalKeyboardKey.comma): () => _go(_HomeDestination.settings),
-      key(LogicalKeyboardKey.digit1): () => _go(_HomeDestination.devices),
-      key(LogicalKeyboardKey.digit2): () => _go(_HomeDestination.sessions),
-      key(LogicalKeyboardKey.digit3): () => _go(_HomeDestination.settings),
+      key(LogicalKeyboardKey.digit1): () => _go(_HomeDestination.home),
+      key(LogicalKeyboardKey.digit2): () => _go(_HomeDestination.devices),
+      key(LogicalKeyboardKey.digit3): () => _go(_HomeDestination.sessions),
+      key(LogicalKeyboardKey.digit4): () => _go(_HomeDestination.settings),
     };
   }
 
@@ -507,7 +540,7 @@ class _NikoHomeShellState extends State<NikoHomeShell>
                 group: actions,
                 run: () => _copy(id, nikoText('设备 ID', 'device ID'))),
           NlCommand(
-              title: nikoText('设置永久密码', 'Set permanent password'),
+              title: nikoText('设置固定密码', 'Set a fixed password'),
               icon: NlIcons.keyRound,
               group: actions,
               run: _setPermanentPassword),
@@ -517,8 +550,9 @@ class _NikoHomeShellState extends State<NikoHomeShell>
                 icon: _icon(destination),
                 group: nikoText('前往', 'Go to'),
                 shortcut: switch (destination) {
-                  _HomeDestination.devices => nikoShortcut('1'),
-                  _HomeDestination.sessions => nikoShortcut('2'),
+                  _HomeDestination.home => nikoShortcut('1'),
+                  _HomeDestination.devices => nikoShortcut('2'),
+                  _HomeDestination.sessions => nikoShortcut('3'),
                   _HomeDestination.settings => nikoShortcut(','),
                   _HomeDestination.advanced => null,
                 },
@@ -528,6 +562,7 @@ class _NikoHomeShellState extends State<NikoHomeShell>
   }
 
   IconData _icon(_HomeDestination destination) => switch (destination) {
+        _HomeDestination.home => NlIcons.screenShare,
         _HomeDestination.devices => NlIcons.monitorSmartphone,
         _HomeDestination.sessions => NlIcons.history,
         _HomeDestination.settings => NlIcons.settings,
@@ -535,66 +570,67 @@ class _NikoHomeShellState extends State<NikoHomeShell>
       };
 
   String _label(_HomeDestination destination) => switch (destination) {
+        _HomeDestination.home => nikoText('远程控制', 'Remote control'),
         _HomeDestination.devices => nikoText('设备', 'Devices'),
-        _HomeDestination.sessions => nikoText('会话', 'Sessions'),
+        _HomeDestination.sessions => nikoText('会话记录', 'Sessions'),
         _HomeDestination.settings => nikoText('设置', 'Settings'),
         _HomeDestination.advanced => nikoText('高级设置', 'Advanced'),
       };
 
-  /// The private server at the foot of the sidebar; it opens settings.
+  /// The private server at the foot of the sidebar, in words, and the
+  /// version; the server line opens its settings.
   Widget _footer(NlColors nl) {
     final state = _serverState;
-    final code = switch (state) {
-      _ServerState.unknown => '—',
-      _ServerState.unconfigured => 'SETUP',
-      _ServerState.paused => 'PAUSED',
-      _ServerState.ready => 'READY',
-      _ServerState.registering => 'REG',
-      _ServerState.notReady => 'WAIT',
+    final ready = state == _ServerState.ready;
+    final host = _server?.config.idServer ?? '';
+    final line = switch (state) {
+      _ServerState.unknown => nikoText('配置状态未知', 'Configuration status unknown'),
+      _ServerState.unconfigured =>
+        nikoText('未配置私有服务器', 'No private server yet'),
+      _ServerState.ready => host,
+      _ => '${_serverStatusText(state)}，$host',
     };
     return Padding(
         padding: const EdgeInsets.fromLTRB(
             NlSpace.s2, NlSpace.s1, NlSpace.s2, NlSpace.s3),
-        child: Semantics(
-            button: true,
-            label:
-                '${nikoText('私有服务器', 'Private server')} · ${_serverStatusText(state)}',
-            excludeSemantics: true,
-            child: NlPressable(
-                onTap: () => _openSettings(NikoSettingsSection.server),
-                pressScale: .99,
-                builder: (context, states) => AnimatedContainer(
-                    duration: NlMotion.of(context, NlMotion.instant),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: NlSpace.s3, vertical: NlSpace.s2),
-                    decoration: BoxDecoration(
-                        color: states.contains(WidgetState.hovered)
-                            ? nl.hover
-                            : nl.surface.withOpacity(nl.isDark ? .5 : .7),
-                        borderRadius: BorderRadius.circular(NlRadius.r2),
-                        border: Border.all(color: nl.line),
-                        boxShadow: states.contains(WidgetState.focused)
-                            ? nl.focusRing
-                            : null),
-                    child: Row(children: [
-                      NlLed(_serverLed(state)),
-                      const SizedBox(width: NlSpace.s2),
-                      Expanded(
-                          child: Text(_serverHostText,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: NlType.monoText(NlType.s1,
-                                  color: state == _ServerState.ready
-                                      ? nl.fg2
-                                      : nl.warnText))),
-                      const SizedBox(width: NlSpace.s2),
-                      NlMonoLabel(code,
-                          tone: switch (state) {
-                            _ServerState.ready => NlTone.ok,
-                            _ServerState.unknown => NlTone.neutral,
-                            _ => NlTone.warn,
-                          }),
-                    ])))));
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Semantics(
+              button: true,
+              label:
+                  '${nikoText('私有服务器', 'Private server')}，${_serverStatusText(state)}',
+              excludeSemantics: true,
+              child: NlPressable(
+                  onTap: () => _openSettings(NikoSettingsSection.server),
+                  pressScale: .99,
+                  builder: (context, states) => AnimatedContainer(
+                      duration: NlMotion.of(context, NlMotion.instant),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: NlSpace.s2, vertical: NlSpace.s2),
+                      decoration: BoxDecoration(
+                          color: states.contains(WidgetState.hovered)
+                              ? nl.hover
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(NlRadius.r2),
+                          boxShadow: states.contains(WidgetState.focused)
+                              ? nl.focusRing
+                              : null),
+                      child: Row(children: [
+                        NlLed(_serverLed(state)),
+                        const SizedBox(width: NlSpace.s2),
+                        Expanded(
+                            child: Text(line,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: NlType.text(NlType.s2,
+                                    color: ready ? nl.fg2 : nl.warnText))),
+                      ])))),
+          if (_version != null)
+            Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    NlSpace.s2, NlSpace.s1, NlSpace.s2, 0),
+                child: Text('NikoDesk $_version',
+                    style: NlType.text(NlType.s1, color: nl.fg3))),
+        ]));
   }
 
   /// The full upstream settings page, hosted inside the shell instead of a
@@ -648,187 +684,198 @@ class _NikoHomeShellState extends State<NikoHomeShell>
         _ => NlLedState.warn,
       };
 
-  String get _serverHostText {
-    final host = _server?.config.idServer ?? '';
-    return _server == null
-        ? nikoText('配置状态未知', 'Configuration status unknown')
-        : host.isEmpty
-            ? nikoText('未配置', 'Not configured')
-            : host;
-  }
-
-  /// This computer: the ID and one-time password a controller needs, and
-  /// the checks that decide whether it can be controlled at all. Shown in
-  /// the device page's inspector, or in the drawer on narrow windows.
-  Widget _localPanel(NlColors nl, {bool heading = true}) =>
-      Builder(builder: (context) {
-        void closeDrawer() => Scaffold.maybeOf(context)?.closeDrawer();
+  /// This computer, as the card beside the connect panel: the code and
+  /// one-time password a controller needs, whether it can be controlled at
+  /// all, and only when it cannot, what is missing.
+  Widget _credentials(NlColors nl) => Builder(builder: (context) {
         final id = _deviceId;
         final raw = _temporaryPassword ?? '';
         final password = raw.isEmpty
             ? null
             : (_showPassword ? raw : '•' * raw.length.clamp(4, 10));
         final state = _serverState;
-        return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (heading) NlSectionLabel(nikoText('本机', 'This computer')),
-              NlPanel(
-                  padding: const EdgeInsets.fromLTRB(
-                      NlSpace.s4, NlSpace.s3, NlSpace.s2, NlSpace.s3),
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(nikoText('设备 ID', 'Device ID'),
+        final missing = <(String, String, VoidCallback)>[
+          if (state != _ServerState.ready && state != _ServerState.unknown)
+            (
+              nikoText('私有服务器${_serverStatusText(state)}',
+                  'Private server: ${_serverStatusText(state)}'),
+              nikoText('去设置', 'Settings'),
+              () => _openSettings(NikoSettingsSection.server)
+            ),
+          if (Platform.isMacOS && !_canScreen)
+            (
+              nikoText('没有授权“屏幕录制”，别人连进来只能看到黑屏',
+                  'Screen Recording is off, so others would see black'),
+              nikoText('去授权', 'Grant'),
+              _openGuide
+            ),
+          if (Platform.isMacOS && !_canAccessibility)
+            (
+              nikoText('没有授权“辅助功能”，别人连进来不能操作',
+                  'Accessibility is off, so others could not operate'),
+              nikoText('去授权', 'Grant'),
+              _openGuide
+            ),
+        ];
+        final ready = missing.isEmpty && state == _ServerState.ready;
+        final host = (widget.hostNameProvider?.call() ?? Platform.localHostname)
+            .replaceAll(RegExp(r'\.local$'), '');
+        final system = Platform.isMacOS
+            ? 'macOS'
+            : Platform.isWindows
+                ? 'Windows'
+                : Platform.isLinux
+                    ? 'Linux'
+                    : '';
+        final pill = Container(
+            height: 24,
+            padding: const EdgeInsets.symmetric(horizontal: NlSpace.s3),
+            decoration: BoxDecoration(
+                color: ready ? nl.okSoft : nl.warnSoft,
+                borderRadius: BorderRadius.circular(NlRadius.pill)),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              if (ready) ...[
+                Container(
+                    width: 6,
+                    height: 6,
+                    decoration:
+                        BoxDecoration(shape: BoxShape.circle, color: nl.ok)),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                  ready
+                      ? nikoText('可以被控制', 'Ready to be controlled')
+                      : nikoText('还不能被控制', 'Not ready yet'),
+                  style: NlType.text(NlType.s2,
+                      weight: FontWeight.w500,
+                      color: ready ? nl.okText : nl.warnText)),
+            ]));
+        return NlPanel(
+            padding: const EdgeInsets.all(NlSpace.s6),
+            child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 252),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(children: [
+                        Expanded(
+                            child: Text(nikoText('本机', 'This computer'),
+                                style: NlType.text(NlType.s5,
+                                    weight: FontWeight.w600, color: nl.fg))),
+                        if (state != _ServerState.unknown) pill,
+                      ]),
+                      const SizedBox(height: NlSpace.s4),
+                      Text(nikoText('设备代码', 'Device code'),
+                          style: NlType.text(NlType.s2, color: nl.fg3)),
+                      Row(children: [
+                        Flexible(
+                            child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                    id.isEmpty ? '—' : nikoGroupedId(id),
+                                    key: const Key('nikodesk-local-id'),
+                                    style: NlType.text(34,
+                                            weight: FontWeight.w600,
+                                            color: nl.fg)
+                                        .copyWith(
+                                            height: 1.25,
+                                            // Figures keep their own spacing;
+                                            // tracking would push the first
+                                            // digit outside its box.
+                                            letterSpacing: 0,
+                                            fontFeatures: const [
+                                          FontFeature.tabularFigures()
+                                        ])))),
+                        const SizedBox(width: NlSpace.s1),
+                        NlIconButton(
+                            icon: NlIcons.copy,
+                            tooltip:
+                                nikoText('复制本机设备代码', 'Copy this device code'),
+                            onPressed: id.isEmpty
+                                ? null
+                                : () => _copy(id, nikoText('设备代码', 'device code'))),
+                      ]),
+                      if (host.isNotEmpty)
+                        Text(system.isEmpty ? host : '$host，$system',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: NlType.text(NlType.s2, color: nl.fg3)),
-                        const SizedBox(height: 2),
-                        Row(children: [
-                          Expanded(
-                              // Ten-digit and custom IDs step down a size
-                              // before they wrap.
-                              child: LayoutBuilder(
-                                  builder: (context, box) => Text(
-                                      id.isEmpty ? '—' : id,
-                                      style: NlType.monoText(
-                                          _idSize(context, id, box.maxWidth),
-                                          weight: FontWeight.w500,
-                                          color: nl.fg)))),
-                          const SizedBox(width: NlSpace.s1),
+                      const SizedBox(height: NlSpace.s4),
+                      Text(nikoText('临时密码', 'One-time password'),
+                          style: NlType.text(NlType.s2, color: nl.fg3)),
+                      Row(children: [
+                        Expanded(
+                            child: Text(
+                                password ??
+                                    nikoText('没有临时密码', 'No one-time password'),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: password == null
+                                    ? NlType.text(NlType.s3, color: nl.fg3)
+                                    : NlType.text(NlType.s6,
+                                            weight: FontWeight.w600,
+                                            color: nl.fg)
+                                        .copyWith(
+                                            letterSpacing: _showPassword ? .5 : 2,
+                                            fontFeatures: const [
+                                            FontFeature.tabularFigures()
+                                          ]))),
+                        if (password != null) ...[
+                          NlIconButton(
+                              icon: _showPassword ? NlIcons.eyeOff : NlIcons.eye,
+                              tooltip: _showPassword
+                                  ? nikoText('隐藏临时密码', 'Hide one-time password')
+                                  : nikoText('显示临时密码', 'Show one-time password'),
+                              onPressed: () =>
+                                  setState(() => _showPassword = !_showPassword)),
                           NlIconButton(
                               icon: NlIcons.copy,
-                              tooltip:
-                                  nikoText('复制本机设备 ID', 'Copy local device ID'),
-                              onPressed: id.isEmpty
-                                  ? null
-                                  : () =>
-                                      _copy(id, nikoText('设备 ID', 'device ID'))),
-                        ]),
-                        Padding(
-                            padding: const EdgeInsets.only(
-                                top: NlSpace.s2,
-                                bottom: NlSpace.s2,
-                                right: NlSpace.s2),
-                            child: Divider(height: 1, color: nl.line)),
-                        Text(nikoText('临时密码', 'One-time password'),
-                            style: NlType.text(NlType.s2, color: nl.fg3)),
-                        const SizedBox(height: 2),
-                        Row(children: [
-                          Expanded(
-                              child: Text(
-                                  password ??
-                                      nikoText(
-                                          '未设置临时密码', 'No temporary password'),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: password == null
-                                      ? NlType.text(NlType.s3, color: nl.fg3)
-                                      : NlType.monoText(NlType.s5,
-                                              weight: FontWeight.w500,
-                                              color: nl.fg)
-                                          .copyWith(
-                                              letterSpacing: NlType.s5 * .12))),
-                          if (password != null) ...[
-                            NlIconButton(
-                                icon: _showPassword ? NlIcons.eyeOff : NlIcons.eye,
-                                tooltip: _showPassword
-                                    ? nikoText('隐藏临时密码', 'Hide temporary password')
-                                    : nikoText('显示临时密码', 'Show temporary password'),
-                                onPressed: () => setState(
-                                    () => _showPassword = !_showPassword)),
-                            NlIconButton(
-                                icon: NlIcons.copy,
-                                tooltip:
-                                    nikoText('复制临时密码', 'Copy temporary password'),
-                                onPressed: () =>
-                                    _copy(raw, nikoText('密码', 'password'))),
-                          ],
-                        ]),
-                      ])),
-              const SizedBox(height: NlSpace.s2),
-              Align(
-                  alignment: Alignment.centerLeft,
-                  child: NlButton.quiet(
-                      small: true,
-                      icon: NlIcons.keyRound,
-                      onPressed: _setPermanentPassword,
-                      label: nikoText('设置永久密码', 'Set permanent password'))),
-              const SizedBox(height: NlSpace.s5),
-              NlSectionLabel(nikoText('自检', 'Health')),
-              NlListRow(
-                  dense: true,
-                  divider: false,
-                  leading: NlLed(_serverLed(state)),
-                  title: nikoText('私有服务器', 'Private server'),
-                  trailing: Text(_serverStatusText(state),
-                      style: NlType.text(NlType.s2,
-                          color: state == _ServerState.ready
-                              ? nl.okText
-                              : nl.warnText)),
-                  onTap: () {
-                    _openSettings(NikoSettingsSection.server);
-                    closeDrawer();
-                  }),
-              if (Platform.isMacOS) ...[
-                _permissionRow(nl, nikoText('屏幕录制', 'Screen recording'),
-                    nikoText('被控画面必需', 'Required to be controlled'),
-                    _canScreen, _openGuide),
-                _permissionRow(nl, nikoText('辅助功能', 'Accessibility'),
-                    nikoText('远端键鼠必需', 'Required for remote input'),
-                    _canAccessibility, _openGuide),
-              ],
-              if (_native) const NikoVoiceCleanupEntryPoint(),
-              if (_native) const NikoTunnelCleanupEntryPoint(),
-              const SizedBox(height: NlSpace.s5),
-              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Icon(NlIcons.shieldCheck, size: 12, color: nl.fg3),
-                const SizedBox(width: NlSpace.s1),
-                Flexible(
-                    child: Text(
-                        nikoText('私有服务器 · 端到端加密',
-                            'Private server · End-to-end encrypted'),
-                        textAlign: TextAlign.center,
-                        style: NlType.text(NlType.s1, color: nl.fg3))),
-              ]),
-            ]);
+                              tooltip: nikoText('复制临时密码', 'Copy one-time password'),
+                              onPressed: () =>
+                                  _copy(raw, nikoText('密码', 'password'))),
+                        ],
+                      ]),
+                      for (final (text, action, onTap) in missing) ...[
+                        const SizedBox(height: NlSpace.s3),
+                        Container(
+                            padding: const EdgeInsets.fromLTRB(
+                                NlSpace.s3, NlSpace.s2, NlSpace.s2, NlSpace.s2),
+                            decoration: BoxDecoration(
+                                color: nl.warnSoft,
+                                borderRadius: BorderRadius.circular(NlRadius.r2)),
+                            child: Row(children: [
+                              Icon(NlIcons.triangleAlert,
+                                  size: 15, color: nl.warnText),
+                              const SizedBox(width: NlSpace.s2),
+                              Expanded(
+                                  child: Text(text,
+                                      style: NlType.text(NlType.s2, color: nl.fg))),
+                              NlButton.quiet(
+                                  small: true, label: action, onPressed: onTap),
+                            ])),
+                      ],
+                      const SizedBox(height: NlSpace.s4),
+                      Divider(height: 1, color: nl.line),
+                      const SizedBox(height: NlSpace.s2),
+                      Wrap(
+                          spacing: NlSpace.s1,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            NlButton.quiet(
+                                small: true,
+                                icon: NlIcons.keyRound,
+                                onPressed: _setPermanentPassword,
+                                label: nikoText('设置固定密码', 'Set a fixed password')),
+                          ]),
+                      if (_native) const NikoVoiceCleanupEntryPoint(),
+                      if (_native) const NikoTunnelCleanupEntryPoint(),
+                    ])));
       });
 
   Future<void> _openGuide() async {
     setState(() => _guide = true);
   }
-
-  Widget _permissionRow(NlColors nl, String title, String reason, bool granted,
-          Future<void> Function() request) =>
-      NlListRow(
-          dense: true,
-          leading: NlLed(granted ? NlLedState.ok : NlLedState.warn),
-          title: title,
-          subtitle: granted ? null : reason,
-          trailing: granted
-              ? Text(nikoText('已授权', 'Allowed'),
-                  style: NlType.text(NlType.s2, color: nl.okText))
-              : NlButton.ghost(
-                  small: true,
-                  onPressed: request,
-                  label: nikoText('授权', 'Grant')));
-}
-
-/// The largest local ID size at which [id] fits [width] on one line; the
-/// smallest one otherwise.
-double _idSize(BuildContext context, String id, double width) {
-  const sizes = [NlType.s7, NlType.s6, NlType.s5];
-  for (final size in sizes) {
-    final painter = TextPainter(
-        text: TextSpan(
-            text: id, style: NlType.monoText(size, weight: FontWeight.w500)),
-        textDirection: TextDirection.ltr,
-        textScaler: MediaQuery.textScalerOf(context),
-        maxLines: 1)
-      ..layout();
-    final fits = painter.width <= width;
-    painter.dispose();
-    if (fits) return size;
-  }
-  return sizes.last;
 }
 
 enum _ServerState { unknown, unconfigured, paused, ready, registering, notReady }

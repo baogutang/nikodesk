@@ -203,9 +203,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining(nikoGroupedId(_ownId)), findsNothing);
     expect(find.text('HOME-PC'), findsOneWidget);
-    expect(find.text('Windows · ${nikoGroupedId(_otherId)}'), findsOneWidget);
+    expect(find.textContaining('Windows'), findsOneWidget);
     expect(find.text('Named'), findsOneWidget);
-    expect(find.text(nikoGroupedId('555666777')), findsOneWidget);
+    expect(find.textContaining(nikoGroupedId('555666777')), findsOneWidget);
     // Unchanged session times are not reread on the next refresh.
     await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 3200)));
@@ -215,9 +215,6 @@ void main() {
 
     // Typing this computer's ID into quick connect is refused before any
     // password check; the dispatcher alone would ask for the password first.
-    final quick = find.byKey(const Key('nikodesk-quick-connect'));
-    await tester.ensureVisible(quick);
-    await _tapAndSettle(tester, quick);
     await tester.enterText(
         find.byKey(const Key('nikodesk-hero-id')), '987 654 321');
     await tester.enterText(find.byKey(const Key('nikodesk-hero-password')), '');

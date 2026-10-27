@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>家里的 Windows：NikoDesk 远程会话</title>
+<meta name="description" content="NikoDesk 3.0 样稿：远程会话窗口，顶部工具条，连接中、输入密码、连不上、管理员确认和锁屏提示。">
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="app.css">
+<script src="comp.js" defer></script>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="display:none">
+<symbol id="i-remote" viewBox="0 0 24 24"><path d="M13 3H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-3"/><path d="M8 21h8"/><path d="M12 17v4"/><path d="m17 8 5-5"/><path d="M17 3h5v5"/></symbol>
+<symbol id="i-devices" viewBox="0 0 24 24"><path d="M18 8V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h8"/><path d="M10 19v-4"/><path d="M7 19h5"/><rect width="6" height="10" x="16" y="12" rx="2"/></symbol>
+<symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></symbol>
+<symbol id="i-laptop" viewBox="0 0 24 24"><path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/></symbol>
+<symbol id="i-server" viewBox="0 0 24 24"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 6h.01"/><path d="M6 18h.01"/></symbol>
+<symbol id="i-tablet" viewBox="0 0 24 24"><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M12 18h.01"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></symbol>
+<symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+<symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+<symbol id="i-star" viewBox="0 0 24 24"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></symbol>
+<symbol id="i-keyboard" viewBox="0 0 24 24"><path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/><path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/></symbol>
+<symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+<symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+<symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="i-up" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></symbol>
+<symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+<symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+<symbol id="i-send" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+<symbol id="i-receive" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></symbol>
+<symbol id="i-pointer" viewBox="0 0 24 24"><path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"/></symbol>
+<symbol id="i-clipboard" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
+<symbol id="i-sound" viewBox="0 0 24 24"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/></symbol>
+<symbol id="i-key" viewBox="0 0 24 24"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5"/></symbol>
+<symbol id="i-power" viewBox="0 0 24 24"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></symbol>
+<symbol id="i-camera" viewBox="0 0 24 24"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect width="14" height="12" x="2" y="6" rx="2"/></symbol>
+<symbol id="i-terminal" viewBox="0 0 24 24"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></symbol>
+<symbol id="i-tunnel" viewBox="0 0 24 24"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><path d="M8 12h8"/></symbol>
+<symbol id="i-folder-plus" viewBox="0 0 24 24"><path d="M12 10v6"/><path d="M9 13h6"/><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+<symbol id="i-fit" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
+</svg>
+<main class="session" data-region="session" aria-label="远程会话：家里的 Windows">
+  <figure class="remote"><img src="img/p1015.jpg" alt="家里的 Windows 的屏幕" width="1600" height="1000"></figure>
+  <p class="credit-float">照片：<a href="https://unsplash.com/photos/-oWyJoSqBRM">Alexey Topolyanskiy</a>，Unsplash</p>
+
+  <div class="toolbar" role="toolbar" aria-label="会话工具">
+    <button class="peer" type="button" popovertarget="screen-menu">家里的 Windows<small>显示器 1</small><svg class="icon" aria-hidden="true"><use href="#i-down"/></svg></button>
+    <span class="link-state"><span class="live" data-live="on">中转</span>32 ms</span>
+    <span class="sep" aria-hidden="true"></span>
+    <button class="tool" type="button" popovertarget="display-menu"><svg class="icon" aria-hidden="true"><use href="#i-fit"/></svg><span class="label-text">显示</span></button>
+    <button class="tool" type="button"><svg class="icon" aria-hidden="true"><use href="#i-keyboard"/></svg><span class="label-text">键盘</span></button>
+    <button class="tool" type="button"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg><span class="label-text">文件</span></button>
+    <button class="tool" type="button"><svg class="icon" aria-hidden="true"><use href="#i-chat"/></svg><span class="label-text">聊天</span></button>
+    <button class="tool" type="button" popovertarget="more-menu"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg><span class="label-text">更多</span></button>
+    <span class="sep" aria-hidden="true"></span>
+    <button class="tool" type="button" aria-label="全屏"><svg class="icon" aria-hidden="true"><use href="#i-fit"/></svg></button>
+    <button class="tool tool-end" type="button"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg><span class="label-text">断开</span></button>
+  </div>
+
+  <div class="menu" id="display-menu" popover>
+    <p class="note">画面</p>
+    <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>流畅（75 帧/秒）</button>
+    <button type="button"><svg class="icon" aria-hidden="true"></svg>平衡</button>
+    <button type="button"><svg class="icon" aria-hidden="true"></svg>清晰</button>
+    <hr>
+    <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-fit"/></svg>适应窗口</button>
+    <button type="button"><svg class="icon" aria-hidden="true"></svg>原始大小</button>
+  </div>
+  <div class="menu" id="screen-menu" popover>
+    <p class="note">对方有 2 个显示器</p>
+    <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>显示器 1（3840 × 2160）</button>
+    <button type="button"><svg class="icon" aria-hidden="true"></svg>显示器 2（1920 × 1080）</button>
+    <button type="button"><svg class="icon" aria-hidden="true"></svg>同时看两个</button>
+    <hr>
+    <p class="note">画面 75 帧/秒，H.265 硬件解码</p>
+  </div>
+  <div class="menu" id="more-menu" popover>
+    <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>锁定对方屏幕</button>
+    <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-power"/></svg>重启对方电脑</button>
+    <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg>打开隐私屏</button>
+    <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"/></svg>同步剪贴板</button>
+    <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-sound"/></svg>传输声音</button>
+  </div>
+
+  <div class="banner" data-show="uac" role="status">
+    <svg class="icon icon-l" aria-hidden="true"><use href="#i-shield"/></svg>
+    <div>
+      <b>对方弹出了管理员确认窗口</b>
+      <p>这台 Windows 用的是便携版，远程看不到也点不了这个窗口。请在那台电脑前点“是”，或者在那台电脑上安装正式版 NikoDesk。</p>
+    </div>
+    <button class="btn btn-quiet" type="button">知道了</button>
+  </div>
+
+  <div class="banner" data-show="locked" role="status">
+    <svg class="icon icon-l" aria-hidden="true"><use href="#i-lock"/></svg>
+    <div>
+      <b>对方已锁屏</b>
+      <p>这台 Windows 用的是便携版，锁屏后无法远程解锁。要有人在那台电脑前登录；装了正式版就能远程输入密码解锁。</p>
+    </div>
+    <button class="btn btn-quiet" type="button">断开</button>
+  </div>
+
+  <div class="overlay" data-show="connecting">
+    <div class="panel" role="status" aria-live="polite">
+      <div class="shot"><img src="img/p1015.jpg" alt="" width="1600" height="1000"><span class="chip">上次画面</span></div>
+      <h2>正在连接家里的 Windows</h2>
+      <ol class="steps">
+        <li data-step="done"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>找到对方</li>
+        <li data-step="now"><span class="spinner keep-motion" aria-hidden="true"></span>建立加密连接</li>
+        <li data-step="next"><svg class="icon" aria-hidden="true"></svg>接收画面</li>
+      </ol>
+      <div class="actions"><button class="btn" type="button">取消</button></div>
+    </div>
+  </div>
+
+  <div class="overlay" data-show="password">
+    <form class="panel" action="session.html" method="get" aria-labelledby="pw-h">
+      <h2 id="pw-h">输入家里的 Windows 的密码</h2>
+      <div class="field">
+        <label for="pw">密码</label>
+        <input class="input" id="pw" name="pw" type="password" autocomplete="current-password" required aria-describedby="pw-help">
+        <p class="help" id="pw-help">对方首页上的临时密码，或者对方设置的固定密码。</p>
+      </div>
+      <label class="check"><input type="checkbox" name="remember">在本机记住这个密码</label>
+      <div class="actions"><button class="btn" type="button">取消</button><button class="btn btn-primary" type="submit">连接</button></div>
+    </form>
+  </div>
+
+  <div class="overlay" data-show="failed">
+    <div class="panel" role="alert">
+      <div class="shot" data-off><img src="img/p1015.jpg" alt="" width="1600" height="1000"><span class="chip live">离线</span></div>
+      <h2>连不上家里的 Windows</h2>
+      <p>对方不在线：那台电脑的 NikoDesk 没有运行，或者电脑关机、睡眠了。</p>
+      <div class="actions"><button class="btn" type="button">关闭</button><button class="btn" type="button">网络唤醒</button><button class="btn btn-primary" type="button">重试</button></div>
+    </div>
+  </div>
+
+  <div class="keys" role="toolbar" aria-label="特殊按键">
+    <button class="btn" type="button">Esc</button>
+    <button class="btn" type="button">Tab</button>
+    <button class="btn" type="button" aria-pressed="false">Ctrl</button>
+    <button class="btn" type="button" aria-pressed="false">Alt</button>
+    <button class="btn" type="button" aria-pressed="false">Win</button>
+    <span class="sep" aria-hidden="true"></span>
+    <button class="btn" type="button" aria-label="向左"><svg class="icon" aria-hidden="true"><use href="#i-left"/></svg></button>
+    <button class="btn" type="button" aria-label="向上"><svg class="icon" aria-hidden="true"><use href="#i-up"/></svg></button>
+    <button class="btn" type="button" aria-label="向下"><svg class="icon" aria-hidden="true"><use href="#i-down"/></svg></button>
+    <button class="btn" type="button" aria-label="向右"><svg class="icon" aria-hidden="true"><use href="#i-right"/></svg></button>
+    <span class="sep" aria-hidden="true"></span>
+    <button class="btn" type="button"><svg class="icon" aria-hidden="true"><use href="#i-pointer"/></svg>触控板模式</button>
+    <button class="btn" type="button"><svg class="icon" aria-hidden="true"><use href="#i-keyboard"/></svg>键盘</button>
+  </div>
+</main>
+</body>
+</html>

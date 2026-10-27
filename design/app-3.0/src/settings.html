@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NikoDesk 设置</title>
+<meta name="description" content="NikoDesk 3.0 样稿：设置，密码、连接方式、后台服务和更新。">
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="app.css">
+<script src="comp.js" defer></script>
+</head>
+<body>
+<!-- icons -->
+<a class="skip" href="#main">跳到内容</a>
+<div class="app">
+  <!-- side:settings -->
+  <main class="main" id="main">
+    <div class="page">
+      <div class="page-head"><h1>设置</h1></div>
+      <div class="settings">
+        <nav class="subnav" aria-label="设置分类">
+          <a href="#general" aria-current="true">通用</a>
+          <a href="#security">密码与安全</a>
+          <a href="#sessions">会话</a>
+          <a href="#service">后台服务</a>
+          <a href="#network">服务器</a>
+          <a href="#update">更新</a>
+          <a href="#about">关于</a>
+        </nav>
+        <div class="groups">
+          <section class="card group" id="general" aria-labelledby="general-h">
+            <h2 id="general-h">通用</h2>
+            <div>
+              <div class="row"><label for="lang"><b>界面语言</b></label><div class="select-wrap"><select class="input select" id="lang"><option>跟随系统</option><option>简体中文</option><option>English</option></select><svg class="icon" aria-hidden="true"><use href="#i-down"/></svg></div></div>
+              <div class="row"><label for="theme"><b>外观</b></label><div class="select-wrap"><select class="input select" id="theme"><option>跟随系统</option><option>浅色</option><option>深色</option></select><svg class="icon" aria-hidden="true"><use href="#i-down"/></svg></div></div>
+              <div class="row"><label for="autostart"><span><b>开机后自动运行</b><small>登录后在菜单栏待命，别人才能随时连进来。</small></span></label><span class="switch"><input type="checkbox" role="switch" id="autostart" checked><span></span></span></div>
+            </div>
+          </section>
+
+          <section class="card group" id="security" aria-labelledby="security-h">
+            <h2 id="security-h">密码与安全</h2>
+            <div>
+              <div class="row"><span><b>固定密码</b><small>设置后，可以不看本机屏幕上的临时密码直接连进来。</small></span><div class="end"><span class="value">未设置</span><button class="btn" type="button">设置</button></div></div>
+              <div class="row"><label for="pw-len"><b>临时密码长度</b></label><div class="select-wrap"><select class="input select" id="pw-len"><option>6 位</option><option selected>8 位</option><option>10 位</option></select><svg class="icon" aria-hidden="true"><use href="#i-down"/></svg></div></div>
+              <div class="row"><label for="confirm"><span><b>连接时需要在本机点允许</b><small>开着时，有人在电脑前才能连上。</small></span></label><span class="switch"><input type="checkbox" role="switch" id="confirm"><span></span></span></div>
+              <div class="row"><label for="twofa"><span><b>两步验证</b><small>用密码连接时，还要输入验证器 App 上的 6 位数字。</small></span></label><span class="switch"><input type="checkbox" role="switch" id="twofa"><span></span></span></div>
+            </div>
+          </section>
+
+          <section class="card group" id="sessions" aria-labelledby="sessions-h">
+            <h2 id="sessions-h">会话</h2>
+            <div>
+              <div class="row"><label for="lock-after"><span><b>结束控制后锁定对方屏幕</b><small class="warn">对方是 Windows 便携版时，锁上后无法再远程解锁，要有人在那台电脑前登录。</small></span></label><span class="switch"><input type="checkbox" role="switch" id="lock-after" checked><span></span></span></div>
+              <div class="row"><label for="picture"><b>默认画面</b></label><div class="select-wrap"><select class="input select" id="picture"><option>流畅</option><option>平衡</option><option>清晰</option></select><svg class="icon" aria-hidden="true"><use href="#i-down"/></svg></div></div>
+              <div class="row"><label for="texture"><span><b>使用纹理渲染</b><small>画面异常时关掉它再连一次。</small></span></label><span class="switch"><input type="checkbox" role="switch" id="texture" checked><span></span></span></div>
+            </div>
+          </section>
+
+          <section class="card group" id="service" aria-labelledby="service-h">
+            <h2 id="service-h">后台服务</h2>
+            <div>
+              <div class="row"><span><b>系统后台服务</b><small>让本机在登录窗口、锁屏和系统确认框出现时也能被控制。</small></span><div class="end"><span class="live" data-live="on">正在运行</span><button class="btn btn-quiet" type="button">卸载</button></div></div>
+              <div class="row"><label for="idle-update"><span><b>空闲时自动安装更新</b><small>没有远程会话时安装，装完重新打开 NikoDesk。</small></span></label><span class="switch"><input type="checkbox" role="switch" id="idle-update" checked><span></span></span></div>
+            </div>
+          </section>
+
+          <section class="card group" id="network" aria-labelledby="network-h">
+            <h2 id="network-h">服务器</h2>
+            <div>
+              <div class="row"><span><b>私有服务器</b><small class="num">desk.example.net</small></span><div class="end"><span class="live" data-live="on">已连接</span><button class="btn" type="button">修改</button></div></div>
+            </div>
+          </section>
+
+          <section class="card group" id="update" aria-labelledby="update-h">
+            <h2 id="update-h">更新</h2>
+            <div>
+              <div class="row"><span><b>当前版本 3.0.0</b><small>上次检查：今天 09:30，已是最新。</small></span><button class="btn" type="button">检查更新</button></div>
+            </div>
+          </section>
+
+          <section class="card group" id="about" aria-labelledby="about-h">
+            <h2 id="about-h">关于</h2>
+            <div>
+              <div class="row"><span><b>诊断信息</b><small>打包最近的日志，不含密码和设备列表。</small></span><button class="btn" type="button">导出</button></div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

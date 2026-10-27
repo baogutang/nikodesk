@@ -9,7 +9,7 @@ import 'unattended_install_native.dart';
 import 'unattended_password_dialog.dart';
 import 'ui.dart';
 
-String _phaseText(NikoUnattendedInstall model) {
+String nikoUnattendedPhaseText(NikoUnattendedInstall model) {
   if (model.operationConfirmed) {
     return switch (model.reply!.action) {
       'stop' => nikoText('服务已停用', 'Service stopped and disabled'),
@@ -68,7 +68,7 @@ String _phaseText(NikoUnattendedInstall model) {
   };
 }
 
-String _feedbackText(String reason) => switch (reason) {
+String nikoUnattendedFeedbackText(String reason) => switch (reason) {
       'unsupported' => nikoText('本机暂不支持此安装流程。请在 Windows 上以普通登录用户运行 NikoDesk。',
           'This installation flow is unavailable here. Run NikoDesk on Windows as the ordinary signed-in user.'),
       'busy' => nikoText('已有安装任务，请更新状态以恢复原任务。',
@@ -95,12 +95,18 @@ class NikoUnattendedInstallView extends StatefulWidget {
   final Future<String?> Function()? pickSetup;
   final String? initialSetup;
   final Duration pollInterval;
+
+  /// Inside the setup's assistant: the installer is the one beside this
+  /// app, the service starts once verified, and the assistant explains the
+  /// rest and shows the result itself.
+  final bool assistant;
   const NikoUnattendedInstallView(
       {super.key,
       this.model,
       this.pickSetup,
       this.initialSetup,
-      this.pollInterval = const Duration(seconds: 2)});
+      this.pollInterval = const Duration(seconds: 2),
+      this.assistant = false});
   @override
   State<NikoUnattendedInstallView> createState() => _InstallViewState();
 }
@@ -120,6 +126,7 @@ class _InstallViewState extends State<NikoUnattendedInstallView>
   @override
   void initState() {
     super.initState();
+    _start = widget.assistant;
     if (widget.initialSetup != null &&
         nikoSelectedWindowsSetup(widget.initialSetup!)) {
       _setup = widget.initialSetup;
@@ -367,24 +374,29 @@ class _InstallViewState extends State<NikoUnattendedInstallView>
       animation: _model,
       builder: (context, _) =>
           Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text(nikoText('Windows 无人值守', 'Windows unattended access'),
-                style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(nikoText(
-                '安装独立的 NikoDesk Windows 服务并生成新的机器身份，可用于登录前的无人值守连接；它与便携版窗口的设备身份不同。安装可能需要 Windows 系统确认（UAC）。',
-                'Install a separate NikoDesk Windows service with a new machine identity for unattended access, including before sign-in. Its identity differs from the portable app. Windows may request administrator confirmation (UAC).')),
-            const SizedBox(height: 8),
+            if (!widget.assistant) ...[
+              Text(nikoText('Windows 无人值守', 'Windows unattended access'),
+                  style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Text(nikoText(
+                  '安装独立的 NikoDesk Windows 服务并生成新的机器身份，可用于登录前的无人值守连接；它与便携版窗口的设备身份不同。安装可能需要 Windows 系统确认（UAC）。',
+                  'Install a separate NikoDesk Windows service with a new machine identity for unattended access, including before sign-in. Its identity differs from the portable app. Windows may request administrator confirmation (UAC).')),
+              const SizedBox(height: 8),
+            ],
             if (!_model.supported || _model.feedback == 'unsupported')
               Text(nikoText('此安装流程仅支持 Windows 本机的 NikoDesk。请使用普通登录用户打开应用。',
                   'This installation flow is available only in NikoDesk on Windows. Open the app as the ordinary signed-in user.'))
             else ...[
-              Text(nikoText(
-                  '请选择专用安装程序并设置服务密码。已有安装需填写原密码，并保持原来的功能选项。安装期间更换私服需先取消任务。未经确认不会安装；安装后默认不立即启动，Windows 下次启动时自动运行。',
-                  'Choose the dedicated installer and set a service password. To verify an existing installation, enter its current password and keep its original feature choices. Cancel before changing servers during installation. Installation requires confirmation; immediate startup is off by default, while startup with Windows is enabled.')),
-              const SizedBox(height: 12),
-              if (!_model.hasJob ||
-                  _model.canRetryWithoutLaunch ||
-                  _model.canManage) ...[
+              if (!widget.assistant) ...[
+                Text(nikoText(
+                    '请选择专用安装程序并设置服务密码。已有安装需填写原密码，并保持原来的功能选项。安装期间更换私服需先取消任务。未经确认不会安装；安装后默认不立即启动，Windows 下次启动时自动运行。',
+                    'Choose the dedicated installer and set a service password. To verify an existing installation, enter its current password and keep its original feature choices. Cancel before changing servers during installation. Installation requires confirmation; immediate startup is off by default, while startup with Windows is enabled.')),
+                const SizedBox(height: 12),
+              ],
+              if (!widget.assistant &&
+                  (!_model.hasJob ||
+                      _model.canRetryWithoutLaunch ||
+                      _model.canManage)) ...[
                 OutlinedButton(
                     key: const Key('unattended-choose-setup'),
                     style: OutlinedButton.styleFrom(
@@ -480,24 +492,26 @@ class _InstallViewState extends State<NikoUnattendedInstallView>
                             _password.text.isNotEmpty
                         ? _begin
                         : null,
-                    child:
-                        Text(nikoText('申请本机安装', 'Request local installation'))),
+                    child: Text(widget.assistant
+                        ? nikoText('安装', 'Install')
+                        : nikoText('申请本机安装', 'Request local installation'))),
               ],
               const SizedBox(height: 12),
               Semantics(
                   liveRegion: true,
-                  child: Text(_phaseText(_model),
+                  child: Text(nikoUnattendedPhaseText(_model),
                       key: const Key('unattended-state'),
                       style: Theme.of(context).textTheme.titleSmall)),
-              if (!_model.hasJob && !_model.uncertain)
+              if (!widget.assistant && !_model.hasJob && !_model.uncertain)
                 Text(nikoText('这不是对系统服务是否已安装的判断。',
                     'This does not determine whether a system service is already installed.')),
               if (_model.differentServer)
                 Text(nikoText('这是此前私服下的安装任务，仍可查询或取消原任务。',
                     'This task belongs to a previous private server. You can still query or cancel the original task.')),
-              if (_feedbackText(_model.feedback).isNotEmpty)
-                Text(_feedbackText(_model.feedback)),
-              if (_model.operationConfirmed &&
+              if (nikoUnattendedFeedbackText(_model.feedback).isNotEmpty)
+                Text(nikoUnattendedFeedbackText(_model.feedback)),
+              if (!widget.assistant &&
+                  _model.operationConfirmed &&
                   _model.reply!.action != 'remove') ...[
                 SelectableText(
                     '${nikoText('无人值守机器 ID', 'Unattended machine ID')}: ${_model.reply!.machineId}'),
@@ -517,7 +531,26 @@ class _InstallViewState extends State<NikoUnattendedInstallView>
               if (_model.reply?.installRecovered == true)
                 Text(nikoText('请设置新服务密码后重新安装。',
                     'Set a new service password, then install again.')),
-              if (_model.canManage) ...[
+              if (_model.canManage && widget.assistant) ...[
+                const SizedBox(height: 16),
+                Text(nikoText('已经装过 NikoDesk 服务？用升级保留原来的设备代码和密码。',
+                    'Installed the NikoDesk service before? Upgrade it to keep its device code and password.')),
+                const SizedBox(height: 8),
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  for (final item in [
+                    ('upgrade', nikoText('升级已安装的服务', 'Upgrade the installed service')),
+                    ('repair', nikoText('修复', 'Repair')),
+                  ])
+                    OutlinedButton(
+                        key: Key('unattended-${item.$1}'),
+                        style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(48, 48)),
+                        onPressed:
+                            _setup == null ? null : () => _manage(item.$1),
+                        child: Text(item.$2))
+                ]),
+              ],
+              if (_model.canManage && !widget.assistant) ...[
                 const SizedBox(height: 12),
                 Text(
                     nikoText(

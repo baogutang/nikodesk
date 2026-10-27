@@ -74,7 +74,7 @@ class _ConnectPasswordDialogState extends State<_ConnectPasswordDialog> {
                   Text(widget.alias.isEmpty ? widget.id : widget.alias,
                       style: const TextStyle(fontWeight: FontWeight.w700)),
                   Text(
-                      '${widget.id} · ${widget.fileTransfer ? nikoText('文件传输', 'Files') : nikoText('远程控制', 'Control')}',
+                      '${widget.id}$nikoSep${widget.fileTransfer ? nikoText('文件传输', 'Files') : nikoText('远程控制', 'Control')}',
                       style: TextStyle(
                           fontSize: 12,
                           color:

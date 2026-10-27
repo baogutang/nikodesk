@@ -5,8 +5,9 @@
 //! pixel buffers; the option `nikodesk-native-decoder` = "N" turns it off.
 //! A stream it cannot decode goes to ffmpeg's decoder, as before.
 //! On iOS, which has no such texture, it is on and each picture is converted
-//! to RGB for the ordinary path (`picture_to_rgb`).
-#[cfg(target_os = "ios")]
+//! to RGB for the ordinary path (`picture_to_rgb`); the Mac converts one only
+//! for a device thumbnail.
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 use crate::ImageRgb;
 use crate::ImageTexture;
 use hbb_common::{anyhow::bail, config::LocalConfig, log, ResultType};
@@ -26,7 +27,7 @@ extern "C" {
     fn NVDError(decoder: *mut c_void) -> i32;
     fn NVDSize(picture: *mut c_void, width: *mut u32, height: *mut u32);
     fn NVDRelease(decoder: *mut c_void);
-    #[cfg(target_os = "ios")]
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
     fn NVDToARGB(picture: *mut c_void, dst: *mut u8, stride: usize) -> bool;
 }
 
@@ -61,8 +62,9 @@ pub fn picture_size(picture: *mut c_void) -> (usize, usize) {
     (width as _, height as _)
 }
 
-/// Fills `rgb` with `picture` as ARGB, for the iOS path. Call it before the next `decode`.
-#[cfg(target_os = "ios")]
+/// Fills `rgb` with `picture` as ARGB, for the iOS path and the Mac's device
+/// thumbnails. Call it before the next `decode`.
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 pub fn picture_to_rgb(picture: *mut c_void, rgb: &mut ImageRgb) -> ResultType<()> {
     let (w, h) = picture_size(picture);
     let align = rgb.align().max(1);

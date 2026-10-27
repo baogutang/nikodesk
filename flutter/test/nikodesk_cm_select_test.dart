@@ -110,7 +110,7 @@ void main() {
                               value: 'a',
                               options: const [
                                 NlSelectOption('a',
-                                    'MacBook Pro Microphone · 48 kHz · f32 · stereo')
+                                    'MacBook Pro Microphone, 48 kHz, f32, stereo')
                               ],
                               onChanged: (_) {})))))));
       expect(tester.takeException(), isNull);
@@ -134,10 +134,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(_approve(tester, 'niko-voice-approve'), isNull);
     await _pick(tester, 'niko-voice-capture-device', 'Test microphone');
-    await _pick(tester, 'niko-voice-capture-format', '48 kHz · f32 · 单声道');
+    await _pick(tester, 'niko-voice-capture-format', '48 kHz，f32，单声道');
     await _pick(tester, 'niko-voice-playback-device', 'Test speaker');
     expect(_approve(tester, 'niko-voice-approve'), isNull);
-    await _pick(tester, 'niko-voice-playback-format', '48 kHz · f32 · 双声道');
+    await _pick(tester, 'niko-voice-playback-format', '48 kHz，f32，双声道');
     expect(_approve(tester, 'niko-voice-approve'), isNotNull);
 
     model.applyCatalog(parsedVoiceCatalog(roster: '2'));
@@ -172,7 +172,7 @@ void main() {
         })));
     await tester.pumpAndSettle();
     await _pick(tester, 'niko-camera-device', 'Camera name');
-    await _pick(tester, 'niko-camera-format', '1280 × 720 · 15.0–60.0 FPS');
+    await _pick(tester, 'niko-camera-format', '1280 × 720，15.0–60.0 FPS');
     final approve = find.widgetWithText(FilledButton, '选择并授权此会话');
     expect(tester.widget<FilledButton>(approve).onPressed, isNull);
     await tester.enterText(find.byKey(const ValueKey('niko-camera-fps')), '14');

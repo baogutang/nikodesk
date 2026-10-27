@@ -633,8 +633,10 @@ class NikoReleaseInfo {
 
   NikoReleaseAsset? assetFor(String platform) {
     final prefix = 'NikoDesk-$platform';
+    // Windows releases carry the installer from 3.0; earlier ones the
+    // portable executable or its folder.
     final extensions = platform.startsWith('windows')
-        ? ['.exe', '.zip']
+        ? ['-setup.exe', '.exe', '.zip']
         : platform.startsWith('android')
             ? ['.apk']
             : ['.zip'];

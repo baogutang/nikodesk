@@ -296,7 +296,7 @@ class _CameraPanelState extends State<NikoCameraCapabilityPanel> {
   }
 
   String _formatLabel(NikoCameraFormat format) =>
-      '${format.width} × ${format.height}${format.schema == 'windows-native-v1' ? ' · ${format.fpsNum}/${format.fpsDen} FPS' : ' · ${format.minFpsMilli! / 1000}–${format.maxFpsMilli! / 1000} FPS'}';
+      '${format.width} × ${format.height}${format.schema == 'windows-native-v1' ? '$nikoSep${format.fpsNum}/${format.fpsDen} FPS' : '$nikoSep${format.minFpsMilli! / 1000}–${format.maxFpsMilli! / 1000} FPS'}';
   String _deviceName(NikoCameraDevice device) =>
       device.name.isEmpty ? nikoText('未命名摄像头', 'Unnamed camera') : device.name;
 
@@ -353,7 +353,7 @@ class _CameraPanelState extends State<NikoCameraCapabilityPanel> {
       Text(nikoCameraReason(widget.status.reason)),
       if (widget.status.selection case final selection?)
         Text(
-            '${selection.width} × ${selection.height} · ${selection.fpsNum}/${selection.fpsDen} FPS'),
+            '${selection.width} × ${selection.height}$nikoSep${selection.fpsNum}/${selection.fpsDen} FPS'),
       if ((_cleanupUnconfirmed || widget.cleanupUnconfirmed) &&
           phase == 'Pending')
         Text(nikoText('上次停止结果未确认，选择与启动已暂停。',

@@ -284,7 +284,7 @@ extern "C" void NVDRelease(void *decoder) {
     delete d;
 }
 
-// For the iOS RGB path: NV12 to ARGB8888 in libyuv's byte order (B, G, R, A),
+// For the iOS RGB path and the Mac's device thumbnails: NV12 to ARGB8888 in libyuv's byte order (B, G, R, A),
 // BT.601 video range as the encoder wrote it.
 extern "C" bool NVDToARGB(void *picture, uint8_t *dst, size_t stride) {
     CVPixelBufferRef buffer = static_cast<CVPixelBufferRef>(picture);

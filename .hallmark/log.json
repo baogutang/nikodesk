@@ -1,0 +1,30 @@
+[
+ {
+  "mode": "redesign",
+  "depth": "full",
+  "scope": "app",
+  "shape": "app screen",
+  "theme": "brand",
+  "axes": "light/grotesk-sans/chromatic-blue",
+  "nav": "project sidebar, four destinations; bottom tabs under 60rem",
+  "footer": "none (app)",
+  "hero": "none (app)",
+  "imagery": "product built (comps)",
+  "photos": [],
+  "entry": "design/app-3.0/index.html",
+  "fingerprint": "app/sidebar/table-lists/well+card/restrained/system-face",
+  "sections": [
+   "home",
+   "devices",
+   "history",
+   "settings",
+   "session",
+   "files",
+   "host"
+  ],
+  "signature": "this computer's code set large beside the field for the other one",
+  "waived": [],
+  "prompt": "remote desktop app for controlling your own computers from Mac, Windows, iPad and Android; ToDesk as reference, logo and name kept",
+  "date": "2026-10-27"
+ }
+]

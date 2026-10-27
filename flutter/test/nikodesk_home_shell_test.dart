@@ -90,11 +90,12 @@ void main() {
         true));
     await loadShell(tester, shell(gateway));
     expect(find.text('NikoDesk'), findsOneWidget);
-    expect(find.text('1000000001'), findsOneWidget);
-    expect(find.text('设置永久密码'), findsOneWidget);
-    expect(find.text('已就绪'), findsOneWidget);
-    // Granted permissions read like the server's state, not as a code.
-    expect(find.text('已授权'), findsNWidgets(Platform.isMacOS ? 2 : 0));
+    expect(find.text('1 000 000 001'), findsOneWidget);
+    expect(find.text('设置固定密码'), findsOneWidget);
+    // Ready reads as a state in words; nothing missing means no warnings.
+    expect(find.text('可以被控制'), findsOneWidget);
+    expect(find.text('去授权'), findsNothing);
+    expect(find.text('private.example'), findsOneWidget);
     expect(find.text('OK'), findsNothing);
     expect(find.byType(BackdropFilter, skipOffstage: false), findsNothing);
     await tester.pumpWidget(const SizedBox());
@@ -194,10 +195,6 @@ void main() {
       await loadShell(tester, shell(gateway, deviceId: id),
           size: scale == 1 ? const Size(1100, 800) : const Size(800, 600),
           scale: scale);
-      if (scale == 2) {
-        await tester.tap(find.byTooltip('打开导航'));
-        await tester.pumpAndSettle();
-      }
       final paragraph = tester.renderObject<RenderParagraph>(find.text(id));
       expect(paragraph.didExceedMaxLines, isFalse);
       expect(paragraph.textScaler.scale(19), 19 * scale);
@@ -224,7 +221,11 @@ void main() {
     await loadShell(tester, shell(gateway));
     expect(find.text('我的设备'), findsOneWidget);
 
-    await tester.tap(find.text('会话'));
+    await tester.tap(find.text('设备'));
+    await tester.pumpAndSettle();
+    expect(find.text('添加设备'), findsWidgets);
+
+    await tester.tap(find.text('会话记录'));
     await tester.pumpAndSettle();
     expect(find.text('还没有连接记录'), findsOneWidget);
 
@@ -232,13 +233,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('语言'), findsOneWidget);
 
-    await tester.tap(find.text('高级设置'));
+    // Advanced settings live in settings now, not in the sidebar.
+    await tester.tap(find.byKey(const Key('nikodesk-settings-nav-advanced')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('打开高级设置'));
     await tester.pumpAndSettle();
     // Widget tests never construct the upstream page (it reads native
     // options); the shell shows an explicit placeholder instead.
     expect(find.textContaining('高级设置仅在应用内提供'), findsOneWidget);
 
-    await tester.tap(find.text('设备'));
+    await tester.tap(find.text('远程控制'));
     await tester.pumpAndSettle();
     expect(find.text('我的设备'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
@@ -282,7 +286,7 @@ void main() {
           file = isFileTransfer;
           usedPassword = password;
         }));
-    await tester.tap(find.text('会话'));
+    await tester.tap(find.text('会话记录'));
     await tester.pumpAndSettle();
     expect(find.text('Office'), findsOneWidget);
     await tester.tap(find.text('传文件'));
@@ -302,24 +306,24 @@ void main() {
     final gateway = _ServerDouble(
         const ServerSnapshot(PrivateServerConfig('', '', ''), null, false));
     await loadShell(tester, shell(gateway));
-    await tester.tap(find.text('私有服务器'));
+    await tester.tap(find.text('未配置私有服务器'));
     await tester.pumpAndSettle();
     expect(find.text('配置服务器'), findsOneWidget);
     await tester.runAsync(() async {
-      await tester.tap(find.text('会话'));
+      await tester.tap(find.text('会话记录'));
       await tester.pump();
       await Future<void>.delayed(const Duration(milliseconds: 150));
     });
     await tester.pumpAndSettle();
     expect(find.text('还没有连接记录'), findsOneWidget);
-    await tester.tap(find.text('设备'));
+    await tester.tap(find.text('远程控制'));
     await tester.pump();
     await tester.runAsync(() => sessionLog.record(SessionLogEntry(
         id: '234567',
         alias: 'Newly initiated',
         startedAt: DateTime.utc(2026, 9, 30))));
     await tester.runAsync(() async {
-      await tester.tap(find.text('会话'));
+      await tester.tap(find.text('会话记录'));
       await tester.pump();
       for (var i = 0; i < 20; i++) {
         await tester.pump();
@@ -352,8 +356,8 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.tap(find.byTooltip('打开导航'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('会话').first);
-    await tester.tap(find.text('会话').first);
+    await tester.ensureVisible(find.text('会话记录').first);
+    await tester.tap(find.text('会话记录').first);
     await tester.pumpAndSettle();
     expect(find.text('还没有连接记录'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -368,8 +372,12 @@ void main() {
         PrivateServerConfig('test.invalid:21116', 'test.invalid:21117',
             base64Encode(List.filled(32, 1))), 1, true));
     await loadShell(tester, shell(gateway), size: const Size(800, 600), scale: 1.5);
+    // The connect panel leads the home; the favorite is on the same page,
+    // one scroll down, and connects from its tile.
+    expect(find.byKey(const Key('nikodesk-hero-id')), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('nikodesk-device-connect-123456')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('nikodesk-device-connect-123456')).hitTestable(), findsOneWidget);
-    expect(find.byKey(const Key('nikodesk-hero-password')), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
@@ -411,11 +419,10 @@ void main() {
       expect(NlColors.maybeOf(page), same(NlColors.forBrightness(brightness)));
       expect(find.byType(NlMark), findsOneWidget);
       expect(find.text('我的设备'), findsOneWidget);
-      expect(find.text('READY'), findsOneWidget);
       expect(find.text('private.example'), findsOneWidget);
-      await tester.tap(find.text('会话'));
+      await tester.tap(find.text('会话记录'));
       await tester.pumpAndSettle();
-      expect(find.text('会话记录'), findsOneWidget);
+      expect(find.text('会话记录'), findsWidgets);
       expect(find.text('还没有连接记录'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
@@ -470,9 +477,11 @@ void main() {
     expect(find.widgetWithText(NlSidebarItem, '外观'), findsOneWidget);
     await tester.tap(find.byKey(const Key('nikodesk-settings-nav-appearance')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('nikodesk-preset-orbit')), findsOneWidget);
+    // One look: the appearance page offers light, dark and system only.
+    expect(find.byKey(const Key('nikodesk-preset-orbit')), findsNothing);
+    expect(find.text('深色'), findsOneWidget);
     await tester.runAsync(() async {
-      await tester.tap(find.text('会话'));
+      await tester.tap(find.text('会话记录'));
       for (var i = 0; i < 20; i++) {
         await tester.pump();
         await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -508,7 +517,7 @@ void main() {
             screenRecordingProbe: () => false,
             accessibilityProbe: () => true));
     expect(find.text('让这台 Mac 可以被远程控制'), findsOneWidget);
-    expect(find.text('1000000001'), findsNothing);
+    expect(find.text('1 000 000 001'), findsNothing);
     await tester.tap(find.text('跳过，进入 NikoDesk'));
     // The device page reads its store from disk once it is shown.
     await tester.runAsync(() async {
@@ -523,8 +532,8 @@ void main() {
     });
     await tester.pumpAndSettle();
     expect(find.text('让这台 Mac 可以被远程控制'), findsNothing);
-    expect(find.text('1000000001'), findsOneWidget);
-    await tester.tap(find.text('授权'));
+    expect(find.text('1 000 000 001'), findsOneWidget);
+    await tester.tap(find.text('去授权').first);
     await tester.pumpAndSettle();
     expect(find.text('让这台 Mac 可以被远程控制'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());

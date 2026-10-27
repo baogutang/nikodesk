@@ -2,12 +2,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// Colour presets of the NikoDesk design system (UI 2.1, 2026-10-23).
-/// Orbit is the default: white and light-grey surfaces with system blue.
-/// Clay is the warm alternative: ivory and terracotta. Each has a light and
-/// a dark palette; every text pair meets WCAG AA
-/// (test/nikodesk_nightline_test.dart keeps the table).
-enum NlPreset { orbit, clay }
+/// The NikoDesk design system has one look (3.0, DESIGN.md) with a light
+/// and a dark palette; every text pair meets WCAG AA
+/// (test/nikodesk_nightline_test.dart keeps the table). The 2.x "clay"
+/// preset was retired; a saved "clay" option now loads this look.
+enum NlPreset { orbit }
 
 /// Semantic colour tokens. Pages read them through [NlColors.of]; nothing
 /// outside this file writes a colour literal for design-system surfaces.
@@ -117,223 +116,137 @@ class NlColors extends ThemeExtension<NlColors> {
     required this.glow,
   });
 
-  static const _orbitTiles = [
-    Color(0xFF0A84FF),
-    Color(0xFF5E5CE6),
-    Color(0xFFAF52DE),
-    Color(0xFFFF375F),
-    Color(0xFFFF9500),
-    Color(0xFF30B0C7),
-    Color(0xFF34C759),
-    Color(0xFF8E8E93),
-  ];
-  static const _clayTiles = [
-    Color(0xFFC96442),
-    Color(0xFF6F8F62),
-    Color(0xFF5B7A99),
-    Color(0xFFC08A2E),
-    Color(0xFF8E5E7E),
-    Color(0xFF4E8C88),
-    Color(0xFFA8553A),
-    Color(0xFF8A8577),
-  ];
+  // One neutral for every device mark: devices are told apart by their
+  // names and pictures, never by colour.
+  static const _lightTiles = [Color(0xFF656970)];
+  static const _darkTiles = [Color(0xFF8E929A)];
 
+  // Card: a hairline ring (see [ring]) and one soft drop. Menus and dialogs
+  // float on a wider shadow. Dark surfaces rely on lightness and the ring.
   static const _lightShadow1 = [
-    BoxShadow(color: Color(0x0F000000), offset: Offset(0, 1), blurRadius: 3, spreadRadius: -1),
+    BoxShadow(color: Color(0x0F191D24), offset: Offset(0, 1), blurRadius: 2),
   ];
   static const _lightShadow2 = [
-    BoxShadow(color: Color(0x0F000000), spreadRadius: 1),
-    BoxShadow(color: Color(0x1A000000), offset: Offset(0, 10), blurRadius: 30, spreadRadius: -6),
-    BoxShadow(color: Color(0x0D000000), offset: Offset(0, 2), blurRadius: 6, spreadRadius: -1),
+    BoxShadow(color: Color(0x0F191D24), spreadRadius: 1),
+    BoxShadow(
+        color: Color(0x29191D24),
+        offset: Offset(0, 8),
+        blurRadius: 24,
+        spreadRadius: -6),
   ];
   static const _lightShadow3 = [
-    BoxShadow(color: Color(0x0F000000), spreadRadius: 1),
-    BoxShadow(color: Color(0x2E000000), offset: Offset(0, 24), blurRadius: 60, spreadRadius: -12),
-    BoxShadow(color: Color(0x14000000), offset: Offset(0, 8), blurRadius: 20, spreadRadius: -6),
+    BoxShadow(color: Color(0x0F191D24), spreadRadius: 1),
+    BoxShadow(
+        color: Color(0x33191D24),
+        offset: Offset(0, 20),
+        blurRadius: 48,
+        spreadRadius: -12),
   ];
   static const _darkShadow2 = [
     BoxShadow(color: Color(0x14FFFFFF), spreadRadius: 1),
-    BoxShadow(color: Color(0x99000000), offset: Offset(0, 12), blurRadius: 32, spreadRadius: -4),
+    BoxShadow(
+        color: Color(0x80000000),
+        offset: Offset(0, 12),
+        blurRadius: 32,
+        spreadRadius: -4),
   ];
   static const _darkShadow3 = [
-    BoxShadow(color: Color(0x1FFFFFFF), spreadRadius: 1),
-    BoxShadow(color: Color(0xB3000000), offset: Offset(0, 24), blurRadius: 64, spreadRadius: -8),
+    BoxShadow(color: Color(0x1AFFFFFF), spreadRadius: 1),
+    BoxShadow(
+        color: Color(0x99000000),
+        offset: Offset(0, 24),
+        blurRadius: 64,
+        spreadRadius: -8),
   ];
 
+  /// NikoDesk 3.0 (DESIGN.md): a tinted window canvas, raised white
+  /// surfaces and the logo blue as the only accent, all tinted to hue 259.
   static const orbitLight = NlColors(
     brightness: Brightness.light,
     preset: NlPreset.orbit,
-    page: Color(0xFFECECEF),
-    bg: Color(0xFFFFFFFF),
-    bg2: Color(0xFFF2F2F5),
-    surface: Color(0xFFF5F5F7),
-    surface2: Color(0xFFEBEBEF),
-    overlay: Color(0xFFFFFFFF),
-    line: Color(0xFFE5E5EA),
-    line2: Color(0xFFD1D1D6),
-    ring: Color(0xFFE5E5EA),
-    fg: Color(0xFF1D1D1F),
-    fg2: Color(0xFF55555A),
-    fg3: Color(0xFF68686E),
-    accent: Color(0xFF0071E3),
-    accentFill: Color(0xFF0071E3),
-    accentHover: Color(0xFF0066CC),
-    onAccent: Color(0xFFFFFFFF),
-    accentText: Color(0xFF0066CC),
-    accentSoft: Color(0x1A0A84FF),
-    accent2: Color(0xFF5E5CE6),
-    ok: Color(0xFF28A745),
-    okText: Color(0xFF1A7F37),
-    okSoft: Color(0x1F34C759),
-    warn: Color(0xFFF29900),
-    warnText: Color(0xFF8A5300),
-    warnSoft: Color(0x1FFF9F0A),
-    danger: Color(0xFFE0352B),
-    dangerText: Color(0xFFC8001A),
-    dangerSoft: Color(0x1AFF3B30),
-    dangerFill: Color(0xFFD70015),
-    dangerHover: Color(0xFFC20013),
-    onDanger: Color(0xFFFFFFFF),
-    scrim: Color(0x3D0B0B0F),
-    hover: Color(0x0A000000),
-    selected: Color(0x12000000),
-    tiles: _orbitTiles,
+    page: Color(0xFFF0F3F7),
+    bg: Color(0xFFF0F3F7),
+    bg2: Color(0xFFF0F3F7),
+    surface: Color(0xFFFDFEFF),
+    surface2: Color(0xFFEBEDF1),
+    overlay: Color(0xFFFDFEFF),
+    line: Color(0xFFE0E3E7),
+    line2: Color(0xFFC7CBD0),
+    ring: Color(0x14191D24),
+    fg: Color(0xFF191D24),
+    fg2: Color(0xFF51565D),
+    fg3: Color(0xFF656970),
+    accent: Color(0xFF2073EE),
+    accentFill: Color(0xFF076DF1),
+    accentHover: Color(0xFF005BD4),
+    onAccent: Color(0xFFFCFDFE),
+    accentText: Color(0xFF0260D9),
+    accentSoft: Color(0x17076DF1),
+    accent2: Color(0xFF0260D9),
+    ok: Color(0xFF21763C),
+    okText: Color(0xFF21763C),
+    okSoft: Color(0xFFDCF7E1),
+    warn: Color(0xFFDA950B),
+    warnText: Color(0xFF915C08),
+    warnSoft: Color(0xFFFFEECF),
+    danger: Color(0xFFCC2827),
+    dangerText: Color(0xFFBE2323),
+    dangerSoft: Color(0xFFFFE7E4),
+    dangerFill: Color(0xFFBE2323),
+    dangerHover: Color(0xFFA91518),
+    onDanger: Color(0xFFFCFDFE),
+    scrim: Color(0x52191D24),
+    hover: Color(0x0A191D24),
+    selected: Color(0x12191D24),
+    tiles: _lightTiles,
     shadow1: _lightShadow1,
     shadow2: _lightShadow2,
     shadow3: _lightShadow3,
-    glow: [BoxShadow(color: Color(0x590071E3), blurRadius: 6)],
+    glow: [],
   );
 
   static const orbitDark = NlColors(
     brightness: Brightness.dark,
     preset: NlPreset.orbit,
-    page: Color(0xFF111113),
-    bg: Color(0xFF1C1C1E),
-    bg2: Color(0xFF222225),
-    surface: Color(0xFF2A2A2D),
-    surface2: Color(0xFF323236),
-    overlay: Color(0xFF2C2C2F),
-    line: Color(0xFF37373A),
-    line2: Color(0xFF4A4A4E),
-    ring: Color(0x14FFFFFF),
-    fg: Color(0xFFF5F5F7),
-    fg2: Color(0xFFBDBDC3),
-    fg3: Color(0xFFA0A0A7),
-    accent: Color(0xFF0A84FF),
-    accentFill: Color(0xFF0A6CDC),
-    accentHover: Color(0xFF0961C6),
-    onAccent: Color(0xFFFFFFFF),
-    accentText: Color(0xFF4DA3FF),
-    accentSoft: Color(0x2E0A84FF),
-    accent2: Color(0xFF7D7AFF),
-    ok: Color(0xFF30D158),
-    okText: Color(0xFF3DD467),
-    okSoft: Color(0x2430D158),
-    warn: Color(0xFFFF9F0A),
-    warnText: Color(0xFFFFB340),
-    warnSoft: Color(0x24FF9F0A),
-    danger: Color(0xFFFF453A),
-    dangerText: Color(0xFFFF7A70),
-    dangerSoft: Color(0x29FF453A),
-    dangerFill: Color(0xFFD93A30),
-    dangerHover: Color(0xFFC3342B),
-    onDanger: Color(0xFFFFFFFF),
-    scrim: Color(0x99000000),
-    hover: Color(0x0FFFFFFF),
-    selected: Color(0x1AFFFFFF),
-    tiles: _orbitTiles,
-    shadow1: [],
-    shadow2: _darkShadow2,
-    shadow3: _darkShadow3,
-    glow: [BoxShadow(color: Color(0x730A84FF), blurRadius: 8)],
-  );
-
-  static const clayLight = NlColors(
-    brightness: Brightness.light,
-    preset: NlPreset.clay,
-    page: Color(0xFFEDEBE4),
-    bg: Color(0xFFFAF9F5),
-    bg2: Color(0xFFF3F1EA),
-    surface: Color(0xFFFFFFFF),
-    surface2: Color(0xFFF0EEE6),
-    overlay: Color(0xFFFFFFFF),
-    line: Color(0xFFE8E6DC),
-    line2: Color(0xFFD9D6CA),
-    ring: Color(0xFFE8E6DC),
-    fg: Color(0xFF1F1E1D),
-    fg2: Color(0xFF5A5954),
-    fg3: Color(0xFF6B6A64),
-    accent: Color(0xFFC96442),
-    accentFill: Color(0xFFB65234),
-    accentHover: Color(0xFFA44A2F),
-    onAccent: Color(0xFFFFFFFF),
-    accentText: Color(0xFFA64A2C),
-    accentSoft: Color(0x1FC96442),
-    accent2: Color(0xFF5B7A99),
-    ok: Color(0xFF3F8A5C),
-    okText: Color(0xFF2B6B45),
-    okSoft: Color(0x1F3F8A5C),
-    warn: Color(0xFFD08C1F),
-    warnText: Color(0xFF8A5A00),
-    warnSoft: Color(0x1FD08C1F),
-    danger: Color(0xFFC4412D),
-    dangerText: Color(0xFFB3361F),
-    dangerSoft: Color(0x1AC4412D),
-    dangerFill: Color(0xFFB83A2A),
-    dangerHover: Color(0xFFA63426),
-    onDanger: Color(0xFFFFFFFF),
-    scrim: Color(0x3D1F1E1D),
-    hover: Color(0x0A1F1E1D),
-    selected: Color(0x141F1E1D),
-    tiles: _clayTiles,
-    shadow1: _lightShadow1,
-    shadow2: _lightShadow2,
-    shadow3: _lightShadow3,
-    glow: [BoxShadow(color: Color(0x59C96442), blurRadius: 6)],
-  );
-
-  static const clayDark = NlColors(
-    brightness: Brightness.dark,
-    preset: NlPreset.clay,
-    page: Color(0xFF141413),
-    bg: Color(0xFF262624),
-    bg2: Color(0xFF1F1E1D),
-    surface: Color(0xFF30302E),
-    surface2: Color(0xFF3A3936),
-    overlay: Color(0xFF30302E),
-    line: Color(0xFF3E3D39),
-    line2: Color(0xFF52504B),
-    ring: Color(0x14FFFFFF),
-    fg: Color(0xFFF5F4EF),
-    fg2: Color(0xFFC6C3BA),
-    fg3: Color(0xFFABA89F),
-    accent: Color(0xFFD97757),
-    accentFill: Color(0xFFB5532F),
-    accentHover: Color(0xFFA34B2A),
-    onAccent: Color(0xFFFFFFFF),
-    accentText: Color(0xFFE8A086),
-    accentSoft: Color(0x2ED97757),
-    accent2: Color(0xFF8FA8C4),
-    ok: Color(0xFF5DBB86),
-    okText: Color(0xFF7AD3A5),
-    okSoft: Color(0x245DBB86),
-    warn: Color(0xFFE5A54B),
-    warnText: Color(0xFFF0BB66),
-    warnSoft: Color(0x24E5A54B),
-    danger: Color(0xFFE5664F),
-    dangerText: Color(0xFFF2907F),
-    dangerSoft: Color(0x29E5664F),
-    dangerFill: Color(0xFFC2412F),
-    dangerHover: Color(0xFFAF3A2A),
-    onDanger: Color(0xFFFFFFFF),
-    scrim: Color(0x99000000),
-    hover: Color(0x0FFFFFFF),
+    page: Color(0xFF0A0C11),
+    bg: Color(0xFF0A0C11),
+    bg2: Color(0xFF0A0C11),
+    surface: Color(0xFF13161B),
+    surface2: Color(0xFF1C1F25),
+    overlay: Color(0xFF181C21),
+    line: Color(0xFF2A2E34),
+    line2: Color(0xFF3F4349),
+    ring: Color(0x1AFFFFFF),
+    fg: Color(0xFFEAEDF2),
+    fg2: Color(0xFFADB1B9),
+    fg3: Color(0xFF8E929A),
+    accent: Color(0xFF5396FF),
+    accentFill: Color(0xFF146AE3),
+    accentHover: Color(0xFF055BCC),
+    onAccent: Color(0xFFFCFDFE),
+    accentText: Color(0xFF73ABFF),
+    accentSoft: Color(0x2E2073EE),
+    accent2: Color(0xFF73ABFF),
+    ok: Color(0xFF69BA7C),
+    okText: Color(0xFF69BA7C),
+    okSoft: Color(0xFF122D19),
+    warn: Color(0xFFDAA75D),
+    warnText: Color(0xFFDAA75D),
+    warnSoft: Color(0xFF38280A),
+    danger: Color(0xFFED756A),
+    dangerText: Color(0xFFF2897E),
+    dangerSoft: Color(0xFF3B1C19),
+    dangerFill: Color(0xFFB32322),
+    dangerHover: Color(0xFF9E1618),
+    onDanger: Color(0xFFFCFDFE),
+    scrim: Color(0x8F000000),
+    hover: Color(0x0DFFFFFF),
     selected: Color(0x17FFFFFF),
-    tiles: _clayTiles,
+    tiles: _darkTiles,
     shadow1: [],
     shadow2: _darkShadow2,
     shadow3: _darkShadow3,
-    glow: [BoxShadow(color: Color(0x73D97757), blurRadius: 8)],
+    glow: [],
   );
 
   /// The preset of the running window; NikoAppearance loads it from the
@@ -344,12 +257,7 @@ class NlColors extends ThemeExtension<NlColors> {
   static NlColors get light => palette(active, Brightness.light);
 
   static NlColors palette(NlPreset preset, Brightness brightness) =>
-      switch ((preset, brightness)) {
-        (NlPreset.orbit, Brightness.light) => orbitLight,
-        (NlPreset.orbit, Brightness.dark) => orbitDark,
-        (NlPreset.clay, Brightness.light) => clayLight,
-        (NlPreset.clay, Brightness.dark) => clayDark,
-      };
+      brightness == Brightness.dark ? orbitDark : orbitLight;
 
   static NlColors forBrightness(Brightness brightness) =>
       palette(active, brightness);
@@ -364,6 +272,15 @@ class NlColors extends ThemeExtension<NlColors> {
       maybeOf(context) ?? forBrightness(Theme.of(context).brightness);
 
   bool get isDark => brightness == Brightness.dark;
+
+  /// The one committed surface: the home connect panel in the logo blue,
+  /// with white type, a white field and a white button labelled in [brand].
+  Color get brand => isDark ? const Color(0xFF00398D) : const Color(0xFF005BD4);
+  Color get brandInk => const Color(0xFFFCFDFE);
+  Color get brandInk2 =>
+      isDark ? const Color(0xFFBED2F2) : const Color(0xFFD2E3FD);
+  Color get brandTrack =>
+      isDark ? const Color(0xFF002A70) : const Color(0xFF004AB3);
 
   /// Elevation 1 is the [ring] hairline plus [shadow1]; 2 and 3 float.
   List<BoxShadow> shadow(int level) => switch (level) {
@@ -532,12 +449,18 @@ class NlColors extends ThemeExtension<NlColors> {
 }
 
 /// Floating session chrome (dock, telemetry HUD, privacy chip) over remote
-/// video. It stays dark glass in every preset and mode.
+/// video. It stays a dark HUD in both modes because it sits on any picture.
 class NlDock {
-  static const background = Color(0xE61C1C1E);
+  static const background = Color(0xFF171B21);
   static const line = Color(0x1FFFFFFF);
   static const hover = Color(0x1AFFFFFF);
-  static const separator = Color(0x1FFFFFFF);
+  static const separator = Color(0x29FFFFFF);
+  static const ink = Color(0xFFE8EBF1);
+  static const ink2 = Color(0xFFADB1B9);
+  static const danger = Color(0xFFF47C70);
+
+  /// State chips laid over remote pictures and device screens.
+  static const chip = Color(0xC7121519);
 }
 
 /// Seven type sizes; UI text in Inter, numbers, IDs and labels in
@@ -610,9 +533,9 @@ class NlType {
 /// dialogs, pills.
 class NlRadius {
   static const r1 = 4.0;
-  static const r2 = 8.0;
-  static const r3 = 12.0;
-  static const r4 = 16.0;
+  static const r2 = 6.0;
+  static const r3 = 10.0;
+  static const r4 = 12.0;
   static const pill = 999.0;
   static const all = [r1, r2, r3, r4, pill];
 }

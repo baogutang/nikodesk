@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>家里的 Windows：NikoDesk 远程会话</title>
+<meta name="description" content="NikoDesk 3.0 样稿：远程会话窗口，顶部工具条，连接中、输入密码、连不上、管理员确认和锁屏提示。">
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="app.css">
+<script src="comp.js" defer></script>
+</head>
+<body>
+<!-- icons -->
+<main class="session" data-region="session" aria-label="远程会话：家里的 Windows">
+  <figure class="remote"><img src="img/p1015.jpg" alt="家里的 Windows 的屏幕" width="1600" height="1000"></figure>
+  <p class="credit-float">照片：<a href="https://unsplash.com/photos/-oWyJoSqBRM">Alexey Topolyanskiy</a>，Unsplash</p>
+
+  <div class="toolbar" role="toolbar" aria-label="会话工具">
+    <button class="peer" type="button" popovertarget="screen-menu">家里的 Windows<small>显示器 1</small><svg class="icon" aria-hidden="true"><use href="#i-down"/></svg></button>
+    <span class="link-state"><span class="live" data-live="on">中转</span>32 ms</span>
+    <span class="sep" aria-hidden="true"></span>
+    <button class="tool" type="button" popovertarget="display-menu"><svg class="icon" aria-hidden="true"><use href="#i-fit"/></svg><span class="label-text">显示</span></button>
+    <button class="tool" type="button"><svg class="icon" aria-hidden="true"><use href="#i-keyboard"/></svg><span class="label-text">键盘</span></button>
+    <button class="tool" type="button"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg><span class="label-text">文件</span></button>
+    <button class="tool" type="button"><svg class="icon" aria-hidden="true"><use href="#i-chat"/></svg><span class="label-text">聊天</span></button>
+    <button class="tool" type="button" popovertarget="more-menu"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg><span class="label-text">更多</span></button>
+    <span class="sep" aria-hidden="true"></span>
+    <button class="tool" type="button" aria-label="全屏"><svg class="icon" aria-hidden="true"><use href="#i-fit"/></svg></button>
+    <button class="tool tool-end" type="button"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg><span class="label-text">断开</span></button>
+  </div>
+
+  <div class="menu" id="display-menu" popover>
+    <p class="note">画面</p>
+    <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>流畅（75 帧/秒）</button>
+    <button type="button"><svg class="icon" aria-hidden="true"></svg>平衡</button>
+    <button type="button"><svg class="icon" aria-hidden="true"></svg>清晰</button>
+    <hr>
+    <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-fit"/></svg>适应窗口</button>
+    <button type="button"><svg class="icon" aria-hidden="true"></svg>原始大小</button>
+  </div>
+  <div class="menu" id="screen-menu" popover>
+    <p class="note">对方有 2 个显示器</p>
+    <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>显示器 1（3840 × 2160）</button>
+    <button type="button"><svg class="icon" aria-hidden="true"></svg>显示器 2（1920 × 1080）</button>
+    <button type="button"><svg class="icon" aria-hidden="true"></svg>同时看两个</button>
+    <hr>
+    <p class="note">画面 75 帧/秒，H.265 硬件解码</p>
+  </div>
+  <div class="menu" id="more-menu" popover>
+    <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>锁定对方屏幕</button>
+    <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-power"/></svg>重启对方电脑</button>
+    <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg>打开隐私屏</button>
+    <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"/></svg>同步剪贴板</button>
+    <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-sound"/></svg>传输声音</button>
+  </div>
+
+  <div class="banner" data-show="uac" role="status">
+    <svg class="icon icon-l" aria-hidden="true"><use href="#i-shield"/></svg>
+    <div>
+      <b>对方弹出了管理员确认窗口</b>
+      <p>这台 Windows 用的是便携版，远程看不到也点不了这个窗口。请在那台电脑前点“是”，或者在那台电脑上安装正式版 NikoDesk。</p>
+    </div>
+    <button class="btn btn-quiet" type="button">知道了</button>
+  </div>
+
+  <div class="banner" data-show="locked" role="status">
+    <svg class="icon icon-l" aria-hidden="true"><use href="#i-lock"/></svg>
+    <div>
+      <b>对方已锁屏</b>
+      <p>这台 Windows 用的是便携版，锁屏后无法远程解锁。要有人在那台电脑前登录；装了正式版就能远程输入密码解锁。</p>
+    </div>
+    <button class="btn btn-quiet" type="button">断开</button>
+  </div>
+
+  <div class="overlay" data-show="connecting">
+    <div class="panel" role="status" aria-live="polite">
+      <div class="shot"><img src="img/p1015.jpg" alt="" width="1600" height="1000"><span class="chip">上次画面</span></div>
+      <h2>正在连接家里的 Windows</h2>
+      <ol class="steps">
+        <li data-step="done"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>找到对方</li>
+        <li data-step="now"><span class="spinner keep-motion" aria-hidden="true"></span>建立加密连接</li>
+        <li data-step="next"><svg class="icon" aria-hidden="true"></svg>接收画面</li>
+      </ol>
+      <div class="actions"><button class="btn" type="button">取消</button></div>
+    </div>
+  </div>
+
+  <div class="overlay" data-show="password">
+    <form class="panel" action="session.html" method="get" aria-labelledby="pw-h">
+      <h2 id="pw-h">输入家里的 Windows 的密码</h2>
+      <div class="field">
+        <label for="pw">密码</label>
+        <input class="input" id="pw" name="pw" type="password" autocomplete="current-password" required aria-describedby="pw-help">
+        <p class="help" id="pw-help">对方首页上的临时密码，或者对方设置的固定密码。</p>
+      </div>
+      <label class="check"><input type="checkbox" name="remember">在本机记住这个密码</label>
+      <div class="actions"><button class="btn" type="button">取消</button><button class="btn btn-primary" type="submit">连接</button></div>
+    </form>
+  </div>
+
+  <div class="overlay" data-show="failed">
+    <div class="panel" role="alert">
+      <div class="shot" data-off><img src="img/p1015.jpg" alt="" width="1600" height="1000"><span class="chip live">离线</span></div>
+      <h2>连不上家里的 Windows</h2>
+      <p>对方不在线：那台电脑的 NikoDesk 没有运行，或者电脑关机、睡眠了。</p>
+      <div class="actions"><button class="btn" type="button">关闭</button><button class="btn" type="button">网络唤醒</button><button class="btn btn-primary" type="button">重试</button></div>
+    </div>
+  </div>
+
+  <div class="keys" role="toolbar" aria-label="特殊按键">
+    <button class="btn" type="button">Esc</button>
+    <button class="btn" type="button">Tab</button>
+    <button class="btn" type="button" aria-pressed="false">Ctrl</button>
+    <button class="btn" type="button" aria-pressed="false">Alt</button>
+    <button class="btn" type="button" aria-pressed="false">Win</button>
+    <span class="sep" aria-hidden="true"></span>
+    <button class="btn" type="button" aria-label="向左"><svg class="icon" aria-hidden="true"><use href="#i-left"/></svg></button>
+    <button class="btn" type="button" aria-label="向上"><svg class="icon" aria-hidden="true"><use href="#i-up"/></svg></button>
+    <button class="btn" type="button" aria-label="向下"><svg class="icon" aria-hidden="true"><use href="#i-down"/></svg></button>
+    <button class="btn" type="button" aria-label="向右"><svg class="icon" aria-hidden="true"><use href="#i-right"/></svg></button>
+    <span class="sep" aria-hidden="true"></span>
+    <button class="btn" type="button"><svg class="icon" aria-hidden="true"><use href="#i-pointer"/></svg>触控板模式</button>
+    <button class="btn" type="button"><svg class="icon" aria-hidden="true"><use href="#i-keyboard"/></svg>键盘</button>
+  </div>
+</main>
+</body>
+</html>

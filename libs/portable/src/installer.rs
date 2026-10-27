@@ -196,7 +196,10 @@ pub(super) fn run() -> Result<(), String> {
     validate(&reader)?;
     let base = dirs::data_local_dir()
         .ok_or("Cannot locate the current user's application data")?
-        .join("NikoDeskInstallers");
+        // The per-user program folder; the GUI registers this copy as the
+        // installed program once its service is installed.
+        .join("Programs")
+        .join("NikoDesk");
     let directory = new_directory(&base)?;
     extract(&reader, &directory)?;
     // Keep this new directory for explicit retry; never overwrite or delete a running client.

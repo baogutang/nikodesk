@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NikoDesk 远程控制</title>
+<meta name="description" content="NikoDesk 3.0 样稿：首页，本机设备代码和临时密码，输入对方设备代码发起连接，我的设备按上次的屏幕画面排开。">
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="app.css">
+<script src="comp.js" defer></script>
+</head>
+<body>
+<!-- icons -->
+<a class="skip" href="#main">跳到内容</a>
+<div class="app">
+  <!-- side:home -->
+  <main class="main" id="main">
+    <div class="page">
+      <div class="home-top">
+        <section class="launch" aria-labelledby="launch-h">
+          <div class="launch-head">
+            <h1 id="launch-h">控制另一台设备</h1>
+            <div class="seg seg-on-brand" role="tablist" aria-label="连接方式">
+              <button type="button" role="tab" aria-selected="true"><svg class="icon" aria-hidden="true"><use href="#i-remote"/></svg>远程控制</button>
+              <button type="button" role="tab" aria-selected="false" tabindex="-1"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg>文件传输</button>
+              <button type="button" role="tab" aria-selected="false" tabindex="-1"><svg class="icon" aria-hidden="true"><use href="#i-camera"/></svg>摄像头</button>
+              <button type="button" role="tab" aria-selected="false" tabindex="-1"><svg class="icon" aria-hidden="true"><use href="#i-terminal"/></svg>终端</button>
+            </div>
+          </div>
+          <form class="connect" action="session.html" method="get">
+            <div class="field">
+              <label for="peer">对方设备代码</label>
+              <div class="connect-row">
+                <input class="input input-xl" id="peer" name="peer" inputmode="numeric" autocomplete="off" placeholder="123 456 789" aria-describedby="peer-help">
+                <div class="split-btn">
+                  <button class="btn btn-xl btn-on-brand" type="submit">连接</button>
+                  <button class="btn btn-xl btn-on-brand btn-more" type="button" popovertarget="connect-options" aria-label="连接选项"><svg class="icon" aria-hidden="true"><use href="#i-down"/></svg></button>
+                </div>
+              </div>
+              <p class="launch-help" id="peer-help">对方 NikoDesk 首页上的 9 到 10 位数字。连过的设备在下面点一下就能连。</p>
+            </div>
+          </form>
+          <div class="resume">
+            <span>上次连接 <b>家里的 Windows</b>，10 分钟前结束</span>
+            <a class="btn btn-ghost-on-brand" href="session.html"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>重新连接</a>
+          </div>
+          <div class="menu" id="connect-options" popover>
+            <p class="note">这次连接</p>
+            <label class="check"><input type="checkbox" name="view-only">只看不操作</label>
+            <label class="check"><input type="checkbox" name="privacy">连上后打开隐私屏</label>
+            <label class="check"><input type="checkbox" name="lock-after" checked>结束后锁定对方屏幕</label>
+          </div>
+        </section>
+
+        <section class="card self" data-region="self" aria-labelledby="self-h">
+          <div class="card-head">
+            <h2 id="self-h">本机</h2>
+            <span class="pill" data-tone="ok" data-show="full" role="status"><span class="live" data-live="on">可以被控制</span></span>
+            <span class="pill" data-tone="warn" data-show="warn" role="status">还不能被控制</span>
+          </div>
+          <div class="kv">
+            <span class="label" id="code-l">设备代码</span>
+            <div class="code-row">
+              <span class="code" aria-labelledby="code-l">590 216 734</span>
+              <button class="icon-btn" type="button" data-copy="590216734" aria-label="复制设备代码"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg></button>
+            </div>
+            <span class="device-name">Studio 的 Mac mini，macOS 15.6</span>
+          </div>
+          <div class="kv">
+            <span class="label" id="pass-l">临时密码</span>
+            <div class="code-row">
+              <span class="secret" id="secret" data-secret="k7m2q9xd" aria-labelledby="pass-l">••••••••</span>
+              <button class="icon-btn" type="button" data-reveal-secret="secret" aria-pressed="false" aria-label="显示密码"><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg></button>
+              <button class="icon-btn" type="button" aria-label="换一个临时密码"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg></button>
+              <button class="icon-btn" type="button" data-copy="k7m2q9xd" aria-label="复制临时密码"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg></button>
+            </div>
+          </div>
+          <p class="self-warn"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg><span>没有授权“屏幕录制”，别人连进来只能看到黑屏。<a href="settings.html#service">去授权</a></span></p>
+          <div class="self-foot rule-top">
+            <label class="check"><span class="switch"><input type="checkbox" role="switch" checked><span></span></span>接受别人连接</label>
+            <a href="settings.html#security">设置固定密码</a>
+          </div>
+        </section>
+      </div>
+
+      <section class="devices" data-region="devices" aria-labelledby="dev-h">
+        <div class="section-head">
+          <h2 id="dev-h">我的设备<span class="count">7</span></h2>
+          <div class="tools">
+            <div class="seg" role="tablist" aria-label="筛选设备">
+              <button type="button" role="tab" aria-selected="true">全部</button>
+              <button type="button" role="tab" aria-selected="false" tabindex="-1">在线</button>
+              <button type="button" role="tab" aria-selected="false" tabindex="-1">收藏</button>
+            </div>
+            <a class="btn btn-quiet" href="devices.html">管理设备</a>
+          </div>
+        </div>
+
+        <div class="tiles" data-show="full">
+          <article class="tile">
+            <div class="shot"><img src="img/p1015.jpg" alt="" width="1600" height="1000"><span class="chip live" data-live="on">在线</span><span class="go-label" aria-hidden="true">连接</span></div>
+            <div class="tile-body"><span><b>家里的 Windows</b><small>Windows 11，10 分钟前</small></span><button class="icon-btn" type="button" popovertarget="tile-menu" aria-label="家里的 Windows 的更多操作"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg></button></div>
+            <a class="go" href="session.html" aria-label="连接家里的 Windows"></a>
+          </article>
+          <article class="tile">
+            <div class="shot"><img src="img/p1043.jpg" alt="" width="1600" height="1000"><span class="chip live" data-live="on">在线</span><span class="go-label" aria-hidden="true">连接</span></div>
+            <div class="tile-body"><span><b>办公室 Mac mini</b><small>macOS 15，昨天</small></span><button class="icon-btn" type="button" popovertarget="tile-menu" aria-label="办公室 Mac mini 的更多操作"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg></button></div>
+            <a class="go" href="session.html" aria-label="连接办公室 Mac mini"></a>
+          </article>
+          <article class="tile">
+            <div class="shot"><img src="img/p1067.jpg" alt="" width="1600" height="1000"><span class="chip live" data-live="on">在线</span><span class="go-label" aria-hidden="true">连接</span></div>
+            <div class="tile-body"><span><b>公司的工作站</b><small>Windows 11，10 月 25 日</small></span><button class="icon-btn" type="button" popovertarget="tile-menu" aria-label="公司的工作站的更多操作"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg></button></div>
+            <a class="go" href="session.html" aria-label="连接公司的工作站"></a>
+          </article>
+          <article class="tile">
+            <div class="shot" data-off><img src="img/p1018.jpg" alt="" width="1600" height="1000"><span class="chip live">离线</span></div>
+            <div class="tile-body"><span><b>爸妈的笔记本</b><small>Windows 10，9 月 30 日</small></span><button class="icon-btn" type="button" popovertarget="tile-menu" aria-label="爸妈的笔记本的更多操作"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg></button></div>
+            <a class="go" href="session.html?session=failed" aria-label="连接爸妈的笔记本"></a>
+          </article>
+          <article class="tile">
+            <div class="shot"><span class="none"><svg class="icon icon-xl" aria-hidden="true"><use href="#i-server"/></svg>这台设备没有屏幕画面</span><span class="chip live" data-live="on">在线</span></div>
+            <div class="tile-body"><span><b>客厅 NAS</b><small>Linux，3 天前</small></span><button class="icon-btn" type="button" popovertarget="tile-menu" aria-label="客厅 NAS 的更多操作"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg></button></div>
+            <a class="go" href="files.html" aria-label="向客厅 NAS 传输文件"></a>
+          </article>
+          <article class="tile">
+            <div class="shot"><span class="none"><svg class="icon icon-xl" aria-hidden="true"><use href="#i-monitor"/></svg>还没连接过，暂无画面</span></div>
+            <div class="tile-body"><span><b>会议室电脑</b><small>540 221 096，从未连接</small></span><button class="icon-btn" type="button" popovertarget="tile-menu" aria-label="会议室电脑的更多操作"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg></button></div>
+            <a class="go" href="session.html?session=password" aria-label="连接会议室电脑"></a>
+          </article>
+          <article class="tile">
+            <div class="shot"><span class="none"><svg class="icon icon-xl" aria-hidden="true"><use href="#i-tablet"/></svg>只能控制别人，不能被控制</span></div>
+            <div class="tile-body"><span><b>测试用 Android 平板</b><small>Android 14</small></span><button class="icon-btn" type="button" popovertarget="tile-menu" aria-label="测试用 Android 平板的更多操作"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg></button></div>
+          </article>
+          <article class="tile tile-add">
+            <div class="shot"><span class="none"><svg class="icon icon-xl" aria-hidden="true"><use href="#i-plus"/></svg>添加设备</span></div>
+            <div class="tile-body"><span><b>用设备代码添加</b><small>起个好记的名字</small></span></div>
+            <a class="go" href="#add" data-open="add" aria-label="添加设备"></a>
+          </article>
+        </div>
+        <div class="tiles" data-show="loading" role="status" aria-label="正在读取我的设备">
+          <div class="tile-ghost"><i></i><i></i><i></i></div><div class="tile-ghost"><i></i><i></i><i></i></div><div class="tile-ghost"><i></i><i></i><i></i></div><div class="tile-ghost"><i></i><i></i><i></i></div>
+        </div>
+        <div data-show="empty" class="empty">
+          <h3>还没有设备</h3>
+          <p>在上面输入对方的设备代码连接一次，它就会带着屏幕画面出现在这里。</p>
+          <a class="btn" href="#peer">输入设备代码</a>
+        </div>
+        <div data-show="error" class="failed" role="alert">
+          <div class="failed-head"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg><h3>读不到我的设备</h3></div>
+          <p>设备列表被别的 NikoDesk 窗口占用了。关掉其他 NikoDesk 窗口后再读一次。</p>
+          <button class="btn" type="button">再读一次</button>
+        </div>
+      </section>
+
+      <div class="menu" id="tile-menu" popover>
+        <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-remote"/></svg>连接</button>
+        <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg>传输文件</button>
+        <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-terminal"/></svg>打开终端</button>
+        <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-power"/></svg>网络唤醒</button>
+        <hr>
+        <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-star"/></svg>收藏</button>
+        <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg>重命名和分组</button>
+      </div>
+
+      <p class="credits">示例画面里的照片来自 Unsplash：<a href="https://unsplash.com/photos/-oWyJoSqBRM">Alexey Topolyanskiy</a>、<a href="https://unsplash.com/photos/mWRR1xj95hg">Christian Joudrey</a>、<a href="https://unsplash.com/photos/-icmOdYWXuQ">Kevin Young</a>、<a href="https://unsplash.com/photos/Kt5hRENuotI">Andrew Ridley</a>。</p>
+    </div>
+  </main>
+</div>
+
+<dialog class="dialog" id="add" aria-labelledby="add-h">
+  <form method="dialog">
+    <h2 id="add-h">添加设备</h2>
+    <div class="field">
+      <label for="add-code">设备代码</label>
+      <input class="input" id="add-code" name="code" inputmode="numeric" autocomplete="off" required placeholder="123 456 789" aria-describedby="add-code-help">
+      <p class="help" id="add-code-help">对方 NikoDesk 首页上的那串数字。</p>
+    </div>
+    <div class="field">
+      <label for="add-name">名称（可不填）</label>
+      <input class="input" id="add-name" name="name" autocomplete="off" placeholder="书房的电脑">
+    </div>
+    <div class="actions">
+      <button class="btn" type="button" data-close>取消</button>
+      <button class="btn btn-primary" type="submit">添加</button>
+    </div>
+  </form>
+</dialog>
+</body>
+</html>

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NikoDesk 3.0 界面样稿</title>
+<meta name="description" content="NikoDesk 3.0 全端界面重做的样稿目录：每个界面和它的各种状态，浅色和深色。">
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="app.css">
+<script src="comp.js" defer></script>
+</head>
+<body>
+<!-- icons -->
+<main class="review" id="main">
+  <h1>NikoDesk 3.0 界面样稿</h1>
+  <p>每一行是一个界面。点状态名看对应的样子；每个链接都有深色版。iPad 和手机用窄窗口或“控制端”打开。</p>
+  <ul>
+    <li><h2><a href="home.html">首页（远程控制）</a></h2><div class="links"><a href="home.html?devices=loading">读取中</a><a href="home.html?devices=empty">没有记录</a><a href="home.html?devices=error">读取失败</a><a href="home.html?role=controller">控制端（iPad、手机）</a><a href="home.html?self=warn">本机缺授权</a><a href="home.html?mode=dark">深色</a></div></li>
+    <li><h2><a href="devices.html">设备</a></h2><div class="links"><a href="devices.html?state=loading">读取中</a><a href="devices.html?state=empty">空列表</a><a href="devices.html?state=error">读取失败</a><a href="devices.html?mode=dark">深色</a></div></li>
+    <li><h2><a href="history.html">会话记录</a></h2><div class="links"><a href="history.html?state=loading">读取中</a><a href="history.html?state=empty">没有记录</a><a href="history.html?state=error">读取失败</a><a href="history.html?mode=dark">深色</a></div></li>
+    <li><h2><a href="settings.html">设置</a></h2><div class="links"><a href="settings.html#sessions">会话</a><a href="settings.html#service">后台服务</a><a href="settings.html?mode=dark">深色</a></div></li>
+    <li><h2><a href="session.html">远程会话</a></h2><div class="links"><a href="session.html?state=connecting">连接中</a><a href="session.html?state=password">输入密码</a><a href="session.html?state=failed">连不上</a><a href="session.html?state=uac">管理员确认</a><a href="session.html?state=locked">对方锁屏</a><a href="session.html?device=touch">iPad 按键条</a><a href="session.html?mode=dark">深色</a></div></li>
+    <li><h2><a href="files.html">文件传输</a></h2><div class="links"><a href="files.html?state=loading">读取中</a><a href="files.html?state=empty">空文件夹</a><a href="files.html?state=error">没有权限</a><a href="files.html?mode=dark">深色</a></div></li>
+    <li><h2><a href="host.html">被控电脑上的小窗口</a></h2><div class="links"><a href="host.html?state=request">有人请求控制</a><a href="host.html?mode=dark">深色</a></div></li>
+  </ul>
+</main>
+</body>
+</html>

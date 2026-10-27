@@ -215,8 +215,8 @@ class _NikoPeerPreferencesViewState extends State<NikoPeerPreferencesView> {
                           },
                     title: Text(item.alias.isEmpty ? item.id : item.alias),
                     subtitle: Text(item.targetExists
-                        ? nikoText('${item.id} · 已有偏好，跳过',
-                            '${item.id} · Already configured; skipped')
+                        ? nikoText('${item.id}，已有偏好，跳过',
+                            '${item.id}: already configured, skipped')
                         : item.fieldCount == 0
                             ? nikoText(
                                 '可导入设备记录', 'Device record available to import')

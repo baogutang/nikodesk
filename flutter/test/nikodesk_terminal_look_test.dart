@@ -47,12 +47,10 @@ void main() {
     expect(found.style.height, const TerminalStyle().height);
   });
 
-  test('every ANSI colour reads on its background in all four palettes', () {
+  test('every ANSI colour reads on its background in both palettes', () {
     for (final nl in [
       NlColors.orbitLight,
       NlColors.orbitDark,
-      NlColors.clayLight,
-      NlColors.clayDark,
     ]) {
       final t = nikoTerminalTheme(nl);
       final colours = {

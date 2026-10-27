@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>与家里的 Windows 传输文件：NikoDesk</title>
+<meta name="description" content="NikoDesk 3.0 样稿：文件传输窗口，左边本机，右边对方，拖进来就发送，下面是传输队列。">
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="app.css">
+<script src="comp.js" defer></script>
+</head>
+<body>
+<!-- icons -->
+<main class="transfer" aria-label="文件传输">
+  <header class="transfer-head">
+    <h1>与家里的 Windows 传输文件</h1>
+    <div class="meta">
+      <span class="live" data-live="on" role="status">已连接</span>
+      <span class="num">经私有服务器中转，约 4.2 MB/s</span>
+    </div>
+  </header>
+
+  <div class="panes">
+    <section class="card pane" aria-labelledby="local-h">
+      <div class="pane-head"><h2 id="local-h"><svg class="icon" aria-hidden="true"><use href="#i-laptop"/></svg>本机</h2><span class="quiet num">选中 2 项，共 18.4 MB</span></div>
+      <nav class="crumbs" aria-label="本机路径">
+        <button type="button">我的 Mac</button><svg class="icon" aria-hidden="true"><use href="#i-right"/></svg>
+        <button type="button">文稿</button><svg class="icon" aria-hidden="true"><use href="#i-right"/></svg>
+        <button type="button" aria-current="location">报表</button>
+        <span class="tools">
+          <button class="icon-btn" type="button" aria-label="刷新"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg></button>
+          <button class="icon-btn" type="button" aria-label="新建文件夹"><svg class="icon" aria-hidden="true"><use href="#i-folder-plus"/></svg></button>
+        </span>
+      </nav>
+      <div class="scroll">
+        <table class="table">
+          <thead><tr><th class="pick"><span class="visually-hidden">选择</span></th><th>名称</th><th class="opt">大小</th><th class="opt">修改时间</th></tr></thead>
+          <tbody>
+            <tr><td class="pick"><input type="checkbox" aria-label="选择 2025 年度"></td><td><div class="who"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg><b>2025 年度</b></div></td><td class="opt quiet">文件夹</td><td class="opt quiet num">10 月 2 日</td></tr>
+            <tr aria-selected="true"><td class="pick"><input type="checkbox" checked aria-label="选择 十月报表.xlsx"></td><td><div class="who"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg><b>十月报表.xlsx</b></div></td><td class="opt quiet num">2.1 MB</td><td class="opt quiet num">今天 11:20</td></tr>
+            <tr aria-selected="true"><td class="pick"><input type="checkbox" checked aria-label="选择 现场照片.zip"></td><td><div class="who"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg><b>现场照片.zip</b></div></td><td class="opt quiet num">16.3 MB</td><td class="opt quiet num">昨天 18:02</td></tr>
+            <tr><td class="pick"><input type="checkbox" aria-label="选择 说明.txt"></td><td><div class="who"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg><b>说明.txt</b></div></td><td class="opt quiet num">4 KB</td><td class="opt quiet num">9 月 28 日</td></tr>
+            <tr><td class="pick"><input type="checkbox" aria-label="选择 合同扫描件.pdf"></td><td><div class="who"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg><b>合同扫描件.pdf</b></div></td><td class="opt quiet num">1.4 MB</td><td class="opt quiet num">9 月 12 日</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="drop"><svg class="icon" aria-hidden="true"><use href="#i-send"/></svg>把文件拖到右边，或者选中后点“发送”</p>
+    </section>
+
+    <div class="bridge" role="group" aria-label="传输方向">
+      <button class="btn btn-primary" type="button"><svg class="icon" aria-hidden="true"><use href="#i-send"/></svg>发送</button>
+      <button class="btn" type="button" disabled aria-describedby="recv-why"><svg class="icon" aria-hidden="true"><use href="#i-receive"/></svg>接收</button>
+      <span class="visually-hidden" id="recv-why">先在右边选中对方的文件。</span>
+    </div>
+
+    <section class="card pane" aria-labelledby="remote-h" data-region="remote-files">
+      <div class="pane-head"><h2 id="remote-h"><svg class="icon" aria-hidden="true"><use href="#i-monitor"/></svg>家里的 Windows</h2><span class="quiet num">C 盘剩余 182 GB</span></div>
+      <nav class="crumbs" aria-label="对方路径">
+        <button type="button">C:</button><svg class="icon" aria-hidden="true"><use href="#i-right"/></svg>
+        <button type="button">用户</button><svg class="icon" aria-hidden="true"><use href="#i-right"/></svg>
+        <button type="button" aria-current="location">桌面</button>
+        <span class="tools">
+          <button class="icon-btn" type="button" aria-label="刷新"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg></button>
+          <button class="icon-btn" type="button" aria-label="新建文件夹"><svg class="icon" aria-hidden="true"><use href="#i-folder-plus"/></svg></button>
+        </span>
+      </nav>
+      <div class="scroll">
+        <div data-show="full">
+          <table class="table">
+            <thead><tr><th class="pick"><span class="visually-hidden">选择</span></th><th>名称</th><th class="opt">大小</th><th class="opt">修改时间</th></tr></thead>
+            <tbody>
+              <tr><td class="pick"><input type="checkbox" aria-label="选择 下载"></td><td><div class="who"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg><b>下载</b></div></td><td class="opt quiet">文件夹</td><td class="opt quiet num">今天 08:15</td></tr>
+              <tr><td class="pick"><input type="checkbox" aria-label="选择 孩子的作业"></td><td><div class="who"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg><b>孩子的作业</b></div></td><td class="opt quiet">文件夹</td><td class="opt quiet num">10 月 26 日</td></tr>
+              <tr><td class="pick"><input type="checkbox" aria-label="选择 打印机驱动.exe"></td><td><div class="who"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg><b>打印机驱动.exe</b></div></td><td class="opt quiet num">48.0 MB</td><td class="opt quiet num">10 月 20 日</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div data-show="loading" class="skeleton" role="status" aria-label="正在读取对方的文件夹"><i></i><i></i><i></i><i></i></div>
+        <div data-show="empty" class="empty"><h3>这个文件夹是空的</h3><p>把左边选中的文件发送过来，或者回到上一级。</p><button class="btn" type="button">上一级</button></div>
+        <div data-show="error" class="failed" role="alert">
+          <div class="failed-head"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg><h3>没有权限打开这个文件夹</h3></div>
+          <p>对方的 Windows 不让 NikoDesk 读这里。换一个文件夹；装了正式版的 NikoDesk 能读更多位置。</p>
+          <button class="btn" type="button">上一级</button>
+        </div>
+      </div>
+      <p class="drop"><svg class="icon" aria-hidden="true"><use href="#i-receive"/></svg>选中对方的文件后点“接收”，存到左边当前文件夹</p>
+    </section>
+  </div>
+
+  <section class="card queue" aria-labelledby="queue-h">
+    <div class="section-head"><h2 id="queue-h">传输队列</h2><button class="btn btn-quiet" type="button">清除已完成</button></div>
+    <table class="table">
+      <tbody>
+        <tr><td><div class="who"><svg class="icon" aria-hidden="true"><use href="#i-send"/></svg><b>现场照片.zip</b></div></td><td class="opt"><progress value="62" max="100" aria-label="现场照片.zip 已发送 62%">62%</progress></td><td class="quiet num">10.1 / 16.3 MB，还要 2 秒</td><td><button class="btn btn-quiet" type="button">取消</button></td></tr>
+        <tr><td><div class="who"><svg class="icon" aria-hidden="true"><use href="#i-send"/></svg><b>十月报表.xlsx</b></div></td><td class="opt"><progress value="100" max="100" aria-label="十月报表.xlsx 已发送">100%</progress></td><td class="quiet">已发送到桌面</td><td><button class="btn btn-quiet" type="button">打开位置</button></td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+</body>
+</html>
