@@ -21,26 +21,26 @@
 
 ## 当前状态
 
-当前正式版为 **[NikoDesk v3.0.0](https://github.com/baogutang/nikodesk/releases/tag/v3.0.0)**（产品版本 `3.0.0`、构建号 `28`）。主要变化：
+当前正式版为 **[NikoDesk v3.0.1](https://github.com/baogutang/nikodesk/releases/tag/v3.0.1)**（产品版本 `3.0.1`、构建号 `29`）。它修复了 Windows 安装程序：3.0.0 的安装程序在不少电脑上会停在“Cannot create installer directory”。3.0 的主要变化：
 
 - 全端新界面：首页由连接面板领头，常用的设备带着上次的画面；设备、会话记录和设置统一成一套样式；
 - Windows 只提供安装版：NikoDesk 作为后台服务运行，锁屏、登录界面和管理员确认窗口都能远程操作；开始菜单有入口，在“设置 → 应用”里卸载；
 - 控制 Windows 便携版时，不再出现永远不会成功的“请求提升权限”，会话结束锁屏前也会提醒；
 - iPad 和 iPhone 版在免费 Apple ID 签名过期前 2 天提醒。
 
-详见 [3.0.0 版本说明](docs/RELEASE-3.0.0.md)，上一版见 [2.2.0 版本说明](docs/RELEASE-2.2.0.md)。
+详见 [3.0.1 版本说明](docs/RELEASE-3.0.1.md)和 [3.0.0 版本说明](docs/RELEASE-3.0.0.md)，上一版见 [2.2.0 版本说明](docs/RELEASE-2.2.0.md)。
 
 **Windows：安装版会有新的设备代码和密码。**它的后台服务生成自己的机器身份；在其他设备上改用安装向导最后显示的代码。便携版的设备列表和设置会保留。
 
 **从 1.0.x 升级被控 Mac，请在电脑前操作。** 签名换成固定证书后，屏幕录制和辅助功能需要重新授权一次，启动时的权限引导会带你完成。授权完成前，远程连接看不到画面，也不能操作。之后的版本保持同一签名，不需要再授权。
 
-**从 2.x 升级**：3.0.0 用同一个证书签名，授权应当保留。同证书升级还没有在真机上演练过；如果升级后显示未授权，在系统设置里把 NikoDesk 的开关关掉再打开。
+**从 2.x 升级**：3.0 用同一个证书签名，授权应当保留。同证书升级还没有在真机上演练过；如果升级后显示未授权，在系统设置里把 NikoDesk 的开关关掉再打开。
 
 安装包由打标签源码的三端 CI 构建生成，附带 `SHA256SUMS` 和它的发布签名 `SHA256SUMS.sig`。滚动更新的 **[nightly 预览](https://github.com/baogutang/nikodesk/releases/tag/nightly)** 跟随 `main`，[历史版本](https://github.com/baogutang/nikodesk/releases)保留各自的改动记录。
 
 | 渠道 | macOS ARM64 | Windows x64 | Android ARM64 |
 |---|---|---|---|
-| [v3.0.0](https://github.com/baogutang/nikodesk/releases/tag/v3.0.0) / [nightly 预览](https://github.com/baogutang/nikodesk/releases/tag/nightly) | DMG + 更新 ZIP，固定 NikoDesk 证书签名（自签名，无 Apple 公证；首次打开见“快速开始”） | 安装包（`NikoDesk-windows-x64-setup.exe`），带后台服务。未签名：SmartScreen 提示时点“更多信息 → 仍要运行”。还没有在真机上安装过，见下文。 | 控制端 APK（`io.nikodesk.android`），使用专用 NikoDesk 发行密钥签名，并对照固定证书指纹校验 |
+| [v3.0.1](https://github.com/baogutang/nikodesk/releases/tag/v3.0.1) / [nightly 预览](https://github.com/baogutang/nikodesk/releases/tag/nightly) | DMG + 更新 ZIP，固定 NikoDesk 证书签名（自签名，无 Apple 公证；首次打开见“快速开始”） | 安装包（`NikoDesk-windows-x64-setup.exe`），带后台服务。未签名：SmartScreen 提示时点“更多信息 → 仍要运行”。还没有在真机上安装过，见下文。 | 控制端 APK（`io.nikodesk.android`），使用专用 NikoDesk 发行密钥签名，并对照固定证书指纹校验 |
 | [v1.0.0](https://github.com/baogutang/nikodesk/releases/tag/v1.0.0) | 仅保留归档 ZIP | 已移除（拒绝启动） | 已移除（拒绝启动） |
 
 **实际验证过的内容：** 在开发者的 Mac 上，两个相互隔离的 NikoDesk 身份经由自建 RustDesk 服务器中继运行过真实会话——带视频的密码认证、双向文件传输（经 SHA-256 校验）、含重放拒绝的 TOTP 双重验证、两端的会话审计记录、远程终端（请求 → 本机批准 → 命令输出）、端口隧道（数据经隧道验证）、画质模式（可测量的码率/帧率变化）。这些都是同机、同用户会话。Android 16 上已用本地构建、测试签名的 1.0.8 源码包完成**真实跨设备会话**：手机经私服控制开发者的 Mac——密码登录、HEVC 画面与触控（拖动/双指缩放）全部工作，这是项目首次验证的真实 Android 跨设备会话（此前依次修复了必现秒退、空命名空间派发与符号链接存储拒绝三个阻断）。这项会话证据来自 1.0.8 源码的测试包；正式 APK 由对应版本源码经 CI 构建；Android 文件传输、隧道、扩展能力与旧版本升级仍属单独验收项，未测试的组合保持不作宣称。
@@ -145,7 +145,7 @@
 
 ## 快速开始
 
-1. 从 **[v3.0.0](https://github.com/baogutang/nikodesk/releases/tag/v3.0.0)** 下载，并对照其 `SHA256SUMS` 校验。
+1. 从 **[v3.0.1](https://github.com/baogutang/nikodesk/releases/tag/v3.0.1)** 下载，并对照其 `SHA256SUMS` 校验。
    - macOS：把 DMG 里完整的 `NikoDesk.app` 拖进“应用程序”。它用固定的 NikoDesk 证书签名（自签名），没有 Apple 公证，第一次打开会被系统拦下：到“系统设置 → 隐私与安全性”点“仍要打开”（macOS 14 及更早也可以右键 → 打开）。
    - Windows：以普通用户运行 `NikoDesk-windows-x64-setup.exe`（SmartScreen 提示时点“更多信息 → 仍要运行”），确认私服、设置服务密码，在 Windows 的管理员确认窗口点“是”。之后 NikoDesk 作为后台服务运行，开始菜单里有入口，在“设置 → 应用”里卸载。
    - Android 沿用相同发行包名和证书，构建号为 28。Android 16 上用 1.0.8 源码的测试签名构建验证过密码登录、画面和触控，记录保留在该版本说明中。
@@ -161,7 +161,7 @@
 
 - **没有安装系统后台服务**：下载并校验后提醒你手动安装。退出 NikoDesk，替换“应用程序”中的应用，再打开。
 - **安装了系统后台服务**：在 **设置 → 无人值守** 安装，需要输入一次管理员密码。之后可以选择“空闲时自动安装”：没有远控会话时安装并重新打开 NikoDesk。替换后复查不通过会自动放回旧版本，也可以手动“恢复上一个版本”。这个服务只接受用 NikoDesk 证书签名的安装包，只运行自己在 root 私有目录中的副本。
-- **从旧版本升级**：1.0.11 及更早版本不会自动安装 2.x 或 3.0，请从发布页手动下载。2.x 只有装了系统后台服务并选择“空闲时自动安装”时，才会自动安装 3.0.0；否则提醒你手动安装。
+- **从旧版本升级**：1.0.11 及更早版本不会自动安装 2.x 或 3.0，请从发布页手动下载。2.x 只有装了系统后台服务并选择“空闲时自动安装”时，才会自动安装 3.0.1；否则提醒你手动安装。
 - **Windows 与 Android**：手动安装。Windows 上运行新版安装包并选“升级已安装的服务”，设备代码和密码保持不变；Android 按递增构建号升级。
 
 SHA256 用来核对文件是否一致；发布签名证明清单出自持有发布私钥的维护者。两者都不等于 Apple 公证。

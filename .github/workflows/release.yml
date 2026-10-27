@@ -389,6 +389,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test --locked -p rustdesk-portable-packer --features nikodesk
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # The setup bootstrap's own tests; they never read the embedded payload.
+          $payload = Join-Path $env:RUNNER_TEMP 'installer-test-payload.bin'
+          [System.IO.File]::WriteAllBytes($payload, [byte[]]@())
+          $env:NIKODESK_INSTALLER_PAYLOAD = $payload
+          cargo test --locked -p rustdesk-portable-packer --features nikodesk-installer installer::
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   # Minutes instead of the full build: the packaging scripts are checked
   # against Windows file semantics on their own.

@@ -108,6 +108,9 @@ fn ensure_directories(path: &Path) -> Result<(), String> {
     match fs::create_dir(path) {
         Ok(()) => ordinary_directory(path),
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => ordinary_directory(path),
+        // Windows can answer "access denied", not "already exists", for an
+        // existing drive root such as C:\ when the account is not an administrator.
+        Err(_) if path.is_dir() => ordinary_directory(path),
         Err(_) => {
             Err("Cannot create installer directory. Check disk space and permissions.".into())
         }
@@ -318,6 +321,18 @@ mod tests {
         let mut conflict = reader();
         conflict.files.push(file("data", b"conflict"));
         assert!(validate(&conflict).is_err());
+    }
+    #[cfg(windows)]
+    #[test]
+    fn installer_workspace_is_created_under_the_real_local_app_data() {
+        let base = dirs::data_local_dir()
+            .unwrap()
+            .join(format!("NikoDesk-installer-test-{}", std::process::id()));
+        assert!(!base.to_string_lossy().starts_with(r"\\?\"));
+        let directory = new_directory(&base).unwrap();
+        extract(&reader(), &directory).unwrap();
+        assert!(directory.join("data/flutter_assets/test.txt").is_file());
+        fs::remove_dir_all(base).unwrap();
     }
     #[cfg(unix)]
     #[test]
