@@ -13,6 +13,7 @@ import 'home_board.dart';
 import 'home_chrome.dart';
 import 'nightline.dart';
 import 'policy.dart';
+import 'probe_boot.dart';
 import 'server_gateway.dart';
 import 'server_scope.dart';
 import 'server_settings.dart';
@@ -62,6 +63,11 @@ class _NikoMobileHomeState extends State<NikoMobileHome> {
       _board.view = NikoDeviceView.list;
     }
     NikoServerScope.changes.addListener(_scopeChanged);
+    if (const bool.fromEnvironment('NIKODESK_PROBE') && _native) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(nikoProbeBoot(context));
+      });
+    }
     if (_native) {
       _links = listenUniLinks();
       WidgetsBinding.instance.addPostFrameCallback((_) {

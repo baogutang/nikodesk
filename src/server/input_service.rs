@@ -1369,6 +1369,14 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
     if EXITING.load(Ordering::SeqCst) {
         return;
     }
+    #[cfg(feature = "nikodesk-dev-profile")]
+    if evt.mask & MOUSE_TYPE_MASK == MOUSE_TYPE_DOWN {
+        log::info!("dev input {}", get_time());
+    }
+    #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+    if evt.mask & MOUSE_TYPE_MASK == MOUSE_TYPE_DOWN {
+        crate::nikodesk::note_press();
+    }
 
     #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
@@ -1630,6 +1638,10 @@ pub async fn lock_screen() {
             handle_key(&key_event);
         });
     } else if #[cfg(target_os = "macos")] {
+        #[cfg(feature = "nikodesk")]
+        if crate::nikodesk::screen_lock::lock() {
+            return;
+        }
         // CGSession -suspend not real lock screen, it is user switch
         std::thread::spawn(|| {
             let mut key_event = KeyEvent::new();

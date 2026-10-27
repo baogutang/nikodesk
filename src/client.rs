@@ -2866,6 +2866,8 @@ impl VideoHandler {
             crate::nikodesk::video_metrics::clear_decoder();
             self.reset(Some(format));
         }
+        #[cfg(feature = "nikodesk-probe")]
+        let (probe_bytes, probe_start) = (hbb_common::protobuf::Message::compute_size(&vf) as usize, std::time::Instant::now());
         match &vf.union {
             Some(frame) => {
                 #[cfg(feature = "nikodesk")]
@@ -2876,6 +2878,15 @@ impl VideoHandler {
                     &mut self.texture,
                     pixelbuffer,
                     chroma,
+                );
+                #[cfg(feature = "nikodesk-probe")]
+                crate::nikodesk::probe::frame(
+                    probe_bytes,
+                    probe_start.elapsed(),
+                    res.as_ref().is_ok_and(|output| *output),
+                    &format!("{format:?}"),
+                    self.decoder.niko_backend().0,
+                    crate::nikodesk::probe::pts_of(&vf),
                 );
                 #[cfg(feature = "nikodesk")]
                 {

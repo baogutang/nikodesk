@@ -4,6 +4,10 @@
 //! The app turns it on with `set_output_check` once its texture plugin takes
 //! pixel buffers; the option `nikodesk-native-decoder` = "N" turns it off.
 //! A stream it cannot decode goes to ffmpeg's decoder, as before.
+//! On iOS, which has no such texture, it is on and each picture is converted
+//! to RGB for the ordinary path (`picture_to_rgb`).
+#[cfg(target_os = "ios")]
+use crate::ImageRgb;
 use crate::ImageTexture;
 use hbb_common::{anyhow::bail, config::LocalConfig, log, ResultType};
 use std::{ffi::c_void, sync::OnceLock};
@@ -22,6 +26,8 @@ extern "C" {
     fn NVDError(decoder: *mut c_void) -> i32;
     fn NVDSize(picture: *mut c_void, width: *mut u32, height: *mut u32);
     fn NVDRelease(decoder: *mut c_void);
+    #[cfg(target_os = "ios")]
+    fn NVDToARGB(picture: *mut c_void, dst: *mut u8, stride: usize) -> bool;
 }
 
 const OPTION: &str = "nikodesk-native-decoder";
@@ -43,7 +49,9 @@ pub fn set_output_check(check: fn() -> bool) {
 }
 
 pub fn wanted() -> bool {
-    OUTPUT_CHECK.get().is_some_and(|check| check()) && LocalConfig::get_option(OPTION) != "N"
+    // iOS has no texture path; its pictures are converted to RGB instead.
+    let texture = cfg!(target_os = "ios") || OUTPUT_CHECK.get().is_some_and(|check| check());
+    texture && LocalConfig::get_option(OPTION) != "N"
 }
 
 /// The size of a picture handed out by `decode`.
@@ -51,6 +59,22 @@ pub fn picture_size(picture: *mut c_void) -> (usize, usize) {
     let (mut width, mut height) = (0, 0);
     unsafe { NVDSize(picture, &mut width, &mut height) };
     (width as _, height as _)
+}
+
+/// Fills `rgb` with `picture` as ARGB, for the iOS path. Call it before the next `decode`.
+#[cfg(target_os = "ios")]
+pub fn picture_to_rgb(picture: *mut c_void, rgb: &mut ImageRgb) -> ResultType<()> {
+    let (w, h) = picture_size(picture);
+    let align = rgb.align().max(1);
+    let stride = (w * 4 + align - 1) & !(align - 1);
+    rgb.w = w;
+    rgb.h = h;
+    rgb.raw.resize(h * stride, 0);
+    if unsafe { NVDToARGB(picture, rgb.raw.as_mut_ptr(), stride) } {
+        Ok(())
+    } else {
+        bail!("VideoToolbox picture conversion failed")
+    }
 }
 
 pub enum Decoded {

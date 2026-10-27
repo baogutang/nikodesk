@@ -35,6 +35,9 @@ nikodesk = ["scrap/nikodesk", "dep:nikodesk-cpal", "dep:security-framework", "de
 # Development only: lets NIKODESK_DEV_PROFILE select a second, separate local
 # identity for end-to-end tests. Never enable this in a packaged build.
 nikodesk-dev-profile = ["nikodesk"]
+# Development only: a controller that measures click-to-picture latency when
+# NIKODESK_PROBE_PLAN is set (src/nikodesk/probe.rs). Never in a packaged build.
+nikodesk-probe = ["nikodesk"]
 inline = []
 use_samplerate = ["samplerate", "libsamplerate-sys"]
 use_rubato = ["rubato"]

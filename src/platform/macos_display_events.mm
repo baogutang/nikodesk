@@ -2,10 +2,12 @@
 // server reports them, so the video service can follow a change at once
 // instead of at its next periodic display check. Both sources deliver on the
 // main run loop; in a process that does not run one the counters stay put
-// and the periodic check remains the only path.
+// and the periodic check remains the only path. It also reads the lock state
+// on demand and asks loginwindow to lock (src/nikodesk/screen_lock.rs).
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
 #include <atomic>
+#include <dlfcn.h>
 #include <initializer_list>
 
 namespace {
@@ -59,3 +61,16 @@ extern "C" bool NikoDisplayEventsRegistered() { return gRegistered.load(std::mem
 extern "C" uint64_t NikoDisplayEventsGeneration() { return gDisplayGeneration.load(std::memory_order_acquire); }
 extern "C" uint64_t NikoLockEventsGeneration() { return gLockGeneration.load(std::memory_order_acquire); }
 extern "C" int NikoScreenLockedState() { return gLocked.load(std::memory_order_acquire); }
+
+// A fresh reading, for a caller that cannot wait for the notification.
+extern "C" int NikoScreenLockedNow() { return SessionLocked(); }
+
+// loginwindow's immediate lock, the one behind the Apple menu's Lock Screen.
+// The function is private, so it is looked up at run time; -1 when missing.
+extern "C" int NikoLockScreenImmediate() {
+    static int (*lock)() = [] {
+        void *login = dlopen("/System/Library/PrivateFrameworks/login.framework/Versions/Current/login", RTLD_LAZY);
+        return login ? (int (*)())dlsym(login, "SACLockScreenImmediate") : nullptr;
+    }();
+    return lock ? lock() : -1;
+}

@@ -26,6 +26,7 @@ import '../../models/input_model.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../utils/image.dart';
+import '../../nikodesk/default_picture.dart';
 import '../../nikodesk/mobile_session_guide.dart';
 import '../../nikodesk/mobile_control_bar.dart';
 import '../../nikodesk/mobile_display_options.dart';
@@ -156,6 +157,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       _disableAndroidSoftKeyboard(
           isKeyboardVisible: keyboardVisibilityController.isVisible);
       if (const bool.fromEnvironment('NIKODESK')) {
+        // The measuring build sets the picture its plan asks for.
+        if (isIOS && !const bool.fromEnvironment('NIKODESK_PROBE') &&
+            mounted && peerId == widget.id) {
+          unawaited(nikoApplyDefaultPicture(gFFI, nikoLocalRefreshRate(context)));
+        }
         if (mounted && peerId == widget.id && !_nikoGuideScheduled) {
           _nikoGuideScheduled = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {

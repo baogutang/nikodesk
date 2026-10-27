@@ -36,6 +36,7 @@ import 'package:flutter_hbb/models/user_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/nikodesk/session_success.dart';
 import 'package:flutter_hbb/nikodesk/metrics.dart';
+import 'package:flutter_hbb/nikodesk/pointer_start.dart';
 import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/terminal_model.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
@@ -3960,7 +3961,12 @@ class CursorModel with ChangeNotifier {
     if (updateCursorPos) {
       _x = x + 1;
       _y = y + 1;
-      parent.target?.inputModel.moveMouse(x, y);
+      final start = nikoPointerStart(parent.target?.ffiModel.displaysRect());
+      if (start != null) {
+        _x = start.dx;
+        _y = start.dy;
+      }
+      parent.target?.inputModel.moveMouse(start?.dx ?? x, start?.dy ?? y);
     }
     parent.target?.canvasModel.resetOffset();
     notifyListeners();
@@ -3972,7 +3978,8 @@ class CursorModel with ChangeNotifier {
     _displayOriginY = y;
     _x = xCursor;
     _y = yCursor;
-    parent.target?.inputModel.moveMouse(x, y);
+    final start = nikoPointerStart(parent.target?.ffiModel.displaysRect());
+    parent.target?.inputModel.moveMouse(start?.dx ?? x, start?.dy ?? y);
     notifyListeners();
   }
 

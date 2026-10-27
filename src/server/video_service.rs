@@ -885,6 +885,8 @@ fn run(vs: VideoService) -> ResultType<()> {
             Ok(frame) => {
                 #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
                 let dev_capture = dev_capture.elapsed();
+                #[cfg(feature = "nikodesk-dev-profile")]
+                let dev_captured_wall = hbb_common::get_time();
                 repeat_encode_counter = 0;
                 if frame.valid() {
                     let screenshot_key = (vs.source, display_idx);
@@ -953,6 +955,8 @@ fn run(vs: VideoService) -> ResultType<()> {
                     )?;
                     #[cfg(feature = "nikodesk-dev-profile")]
                     dev_stages.add(dev_capture, dev_convert, dev_encode.elapsed());
+                    #[cfg(feature = "nikodesk-dev-profile")]
+                    log::info!("dev frame pts={} captured={} sent={}", ms, dev_captured_wall, hbb_common::get_time());
                     #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
                     host_stats.add(dev_capture, dev_convert, dev_encode.elapsed());
                     #[cfg(all(feature = "nikodesk", not(any(target_os = "android", target_os = "ios"))))]
@@ -1089,6 +1093,13 @@ fn run(vs: VideoService) -> ResultType<()> {
         log::trace!("{:?} {:?}", time::Instant::now(), elapsed);
         #[cfg(all(feature = "nikodesk", target_os = "macos"))]
         let elapsed = spf.saturating_sub(crate::nikodesk::frame_pause(&mut frame_due, now, Instant::now(), spf));
+        #[cfg(all(feature = "nikodesk", target_os = "macos"))]
+        if crate::nikodesk::press_wake_recent() {
+            std::thread::sleep(Duration::from_millis(4));
+        } else if elapsed < spf {
+            std::thread::sleep(spf - elapsed);
+        }
+        #[cfg(not(all(feature = "nikodesk", target_os = "macos")))]
         if elapsed < spf {
             std::thread::sleep(spf - elapsed);
         }

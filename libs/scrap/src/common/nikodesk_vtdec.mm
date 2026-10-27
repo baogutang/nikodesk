@@ -7,6 +7,7 @@
 #import <CoreMedia/CoreMedia.h>
 #import <CoreVideo/CoreVideo.h>
 #import <Foundation/Foundation.h>
+#import <Accelerate/Accelerate.h>
 #import <VideoToolbox/VideoToolbox.h>
 #include <algorithm>
 #include <cmath>
@@ -127,9 +128,14 @@ bool Start(Decoder *d) {
         d->format = nullptr;
         return false;
     }
+#if TARGET_OS_IPHONE
+    // iOS decodes in hardware by default; the key only exists from iOS 17.
+    NSDictionary *specification = @{};
+#else
     NSDictionary *specification = @{
         (__bridge NSString *)kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder: @YES,
     };
+#endif
     NSDictionary *attributes = @{
         (__bridge NSString *)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange),
         (__bridge NSString *)kCVPixelBufferIOSurfacePropertiesKey: @{},
@@ -244,12 +250,21 @@ extern "C" int32_t NVDDecode(void *decoder, const uint8_t *data, size_t length, 
 extern "C" bool NVDHardware(void *decoder) {
     Decoder *d = static_cast<Decoder *>(decoder);
     if (!d->session) return false;
+#if TARGET_OS_IPHONE
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunguarded-availability-new"
+    // Weakly linked: null before iOS 17, where the answer is unknown.
+    if (&kVTDecompressionPropertyKey_UsingHardwareAcceleratedVideoDecoder == nullptr) return false;
+#endif
     CFBooleanRef value = nullptr;
     bool hardware = VTSessionCopyProperty(d->session, kVTDecompressionPropertyKey_UsingHardwareAcceleratedVideoDecoder,
                         kCFAllocatorDefault, &value) == noErr &&
         value && CFBooleanGetValue(value);
     if (value) CFRelease(value);
     return hardware;
+#if TARGET_OS_IPHONE
+#pragma clang diagnostic pop
+#endif
 }
 
 extern "C" int32_t NVDError(void *decoder) {
@@ -267,4 +282,32 @@ extern "C" void NVDRelease(void *decoder) {
     Stop(d);
     if (d->picture) CVPixelBufferRelease(d->picture);
     delete d;
+}
+
+// For the iOS RGB path: NV12 to ARGB8888 in libyuv's byte order (B, G, R, A),
+// BT.601 video range as the encoder wrote it.
+extern "C" bool NVDToARGB(void *picture, uint8_t *dst, size_t stride) {
+    CVPixelBufferRef buffer = static_cast<CVPixelBufferRef>(picture);
+    if (CVPixelBufferLockBaseAddress(buffer, kCVPixelBufferLock_ReadOnly) != kCVReturnSuccess) return false;
+    size_t width = CVPixelBufferGetWidth(buffer);
+    size_t height = CVPixelBufferGetHeight(buffer);
+    vImage_Buffer yp = {CVPixelBufferGetBaseAddressOfPlane(buffer, 0), height, width,
+        CVPixelBufferGetBytesPerRowOfPlane(buffer, 0)};
+    vImage_Buffer cbcr = {CVPixelBufferGetBaseAddressOfPlane(buffer, 1), height / 2, width / 2,
+        CVPixelBufferGetBytesPerRowOfPlane(buffer, 1)};
+    vImage_Buffer out = {dst, height, width, stride};
+    vImage_YpCbCrPixelRange range = {16, 128, 235, 240, 255, 0, 255, 0};
+    vImage_YpCbCrToARGB info;
+    vImage_Error error = vImageConvert_YpCbCrToARGB_GenerateConversion(kvImage_YpCbCrToARGBMatrix_ITU_R_601_4,
+        &range, &info, kvImage420Yp8_CbCr8, kvImageARGB8888, kvImageNoFlags);
+    if (error == kvImageNoError)
+        error = vImageConvert_420Yp8_CbCr8ToARGB8888(&yp, &cbcr, &out, &info, nullptr, 255, kvImageNoFlags);
+    if (error == kvImageNoError) {
+        for (size_t y = 0; y < height; y++) {
+            uint32_t *row = reinterpret_cast<uint32_t *>(dst + y * stride);
+            for (size_t x = 0; x < width; x++) row[x] = __builtin_bswap32(row[x]);
+        }
+    }
+    CVPixelBufferUnlockBaseAddress(buffer, kCVPixelBufferLock_ReadOnly);
+    return error == kvImageNoError;
 }

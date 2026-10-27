@@ -233,6 +233,14 @@ fn main() {
 
     // there is problem with cfg(target_os) in build.rs, so use our workaround
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+    if target_os == "ios" && env::var_os("CARGO_FEATURE_NIKODESK").is_some() && env::var_os("CARGO_FEATURE_HWCODEC").is_some() {
+        cc::Build::new().cpp(true).flag("-std=c++17").flag("-fobjc-arc").flag("-fblocks")
+            .file("src/common/nikodesk_vtdec.mm").compile("nikodesk_vtdec");
+        println!("cargo:rerun-if-changed=src/common/nikodesk_vtdec.mm");
+        for framework in ["VideoToolbox", "CoreMedia", "CoreVideo", "Accelerate", "Foundation"] {
+            println!("cargo:rustc-link-lib=framework={framework}");
+        }
+    }
     if target_os == "macos" && env::var_os("CARGO_FEATURE_NIKODESK").is_some() {
         cc::Build::new().cpp(true).flag("-std=c++17").flag("-fobjc-arc").flag("-fblocks")
             .file("src/common/privacy_capture.mm").compile("nikodesk_privacy_capture");
@@ -250,7 +258,7 @@ fn main() {
             cc::Build::new().cpp(true).flag("-std=c++17").flag("-fobjc-arc").flag("-fblocks")
                 .file("src/common/nikodesk_vtdec.mm").compile("nikodesk_vtdec");
             println!("cargo:rerun-if-changed=src/common/nikodesk_vtdec.mm");
-            for framework in ["VideoToolbox", "CoreMedia", "CoreVideo"] {
+            for framework in ["VideoToolbox", "CoreMedia", "CoreVideo", "Accelerate"] {
                 println!("cargo:rustc-link-lib=framework={framework}");
             }
         }

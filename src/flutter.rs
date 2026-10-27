@@ -1041,6 +1041,8 @@ impl InvokeUiSession for FlutterHandler {
     #[inline]
     #[cfg(any(target_os = "android", target_os = "ios"))]
     fn on_rgba(&self, display: usize, rgba: &mut scrap::ImageRgb) {
+        #[cfg(feature = "nikodesk-probe")]
+        crate::nikodesk::probe::decoded(rgba);
         self.on_rgba_soft_render(display, rgba);
     }
 
@@ -1379,6 +1381,8 @@ impl FlutterHandler {
             if rgba_data.valid {
                 #[cfg(feature = "nikodesk")]
                 crate::nikodesk::video_metrics::count(crate::nikodesk::video_metrics::Counter::SoftBusy);
+                #[cfg(feature = "nikodesk-probe")]
+                crate::nikodesk::probe::dropped();
                 return;
             } else {
                 rgba_data.valid = true;
@@ -1392,6 +1396,8 @@ impl FlutterHandler {
             rgba_write_lock.insert(display, rgba_data);
         }
         drop(rgba_write_lock);
+        #[cfg(feature = "nikodesk-probe")]
+        crate::nikodesk::probe::accepted();
 
         let mut is_sent = false;
         let is_multi_sessions = self.is_multi_ui_session();
@@ -1617,6 +1623,10 @@ pub fn session_start_(
                 crate::client::nikodesk_tunnel_cleanup::start_thread(&session, round)
                     .map_err(|reason| anyhow!(reason))?;
                 return Ok(());
+            }
+            #[cfg(feature = "nikodesk-probe")]
+            if !session.is_file_transfer() && !session.is_terminal() && !session.is_view_camera() {
+                crate::nikodesk::probe::start(*session_id);
             }
             std::thread::spawn(move || {
                 let round = session.connection_round_state.lock().unwrap().new_round();
@@ -1938,6 +1948,8 @@ pub extern "C" fn session_get_rgba(session_uuid_str: *const char, display: usize
 }
 
 pub fn session_next_rgba(session_id: SessionID, display: usize) {
+    #[cfg(feature = "nikodesk-probe")]
+    crate::nikodesk::probe::handed();
     if let Some(s) = sessions::get_session_by_session_id(&session_id) {
         return s.ui_handler.next_rgba(display);
     }

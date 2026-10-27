@@ -95,6 +95,11 @@ int nikoSmoothFps(double? localRefreshRate) =>
         ? 60
         : localRefreshRate.round().clamp(60, nikoMaxFps);
 
+/// No picture mode was ever chosen for this device and the quality is still
+/// the default balanced one, which the session holds to 30 frames a second.
+bool nikoPictureUnchosen({required String? savedMode, required String? quality}) =>
+    (savedMode == null || savedMode.isEmpty) && quality == 'balanced';
+
 class PictureRequest {
   final PictureMode mode;
   final String imageQuality;

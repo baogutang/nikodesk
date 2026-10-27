@@ -103,6 +103,9 @@ pub(crate) mod mac_menu_bar;
 #[cfg(target_os = "macos")]
 #[path = "nikodesk/display_events.rs"]
 pub(crate) mod display_events;
+#[cfg(target_os = "macos")]
+#[path = "nikodesk/screen_lock.rs"]
+pub(crate) mod screen_lock;
 #[cfg(all(target_os = "macos", feature = "flutter"))]
 #[path = "nikodesk/texture_render.rs"]
 pub(crate) mod texture_render;
@@ -127,6 +130,9 @@ pub(crate) mod tunnel_wire;
 pub(crate) mod tunnel_actor;
 #[path = "nikodesk/video_metrics.rs"]
 pub(crate) mod video_metrics;
+#[cfg(feature = "nikodesk-probe")]
+#[path = "nikodesk/probe.rs"]
+pub(crate) mod probe;
 #[path = "nikodesk/host_video_stats.rs"]
 pub(crate) mod host_video_stats;
 #[path = "nikodesk/crash_record.rs"]
@@ -315,6 +321,31 @@ pub(crate) fn dev_auto_approves(kind: &str, request: &str) -> bool {
     }
     answered.push(key);
     true
+}
+
+/// A press from the controller makes the macOS video loop poll every few
+/// milliseconds for a moment instead of once per frame, so the picture the
+/// press changes is captured without waiting out a frame interval. Measured
+/// 2026-10-26: capture wait 47 ms -> 33 ms median, against paired controls.
+#[cfg(all(feature = "nikodesk", target_os = "macos"))]
+static LAST_PRESS_MS: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
+#[cfg(all(feature = "nikodesk", target_os = "macos"))]
+pub(crate) fn note_press() {
+    LAST_PRESS_MS.store(hbb_common::get_time(), std::sync::atomic::Ordering::Relaxed);
+}
+
+#[cfg(all(feature = "nikodesk", target_os = "macos"))]
+pub(crate) fn press_wake_recent() -> bool {
+    // Development builds can switch the wake off, for CPU and latency A/B runs.
+    #[cfg(feature = "nikodesk-dev-profile")]
+    {
+        static OFF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        if *OFF.get_or_init(|| std::env::var_os("NIKODESK_DEV_NO_WAKE").is_some()) {
+            return false;
+        }
+    }
+    hbb_common::get_time() - LAST_PRESS_MS.load(std::sync::atomic::Ordering::Relaxed) < 200
 }
 
 /// Where the controlled side spends its time per frame, for local measurement

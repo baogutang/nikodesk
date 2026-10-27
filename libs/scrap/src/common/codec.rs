@@ -120,7 +120,7 @@ pub struct Decoder {
     valid: bool,
     #[cfg(feature = "hwcodec")]
     i420: Vec<u8>,
-    #[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+    #[cfg(all(feature = "nikodesk", feature = "hwcodec", any(target_os = "macos", target_os = "ios")))]
     niko_vt: Option<crate::nikodesk_vtdec::VtDecoder>,
 }
 
@@ -611,7 +611,7 @@ impl Decoder {
         } else {
             log::info!("create {format:?} decoder success");
         }
-        #[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+        #[cfg(all(feature = "nikodesk", feature = "hwcodec", any(target_os = "macos", target_os = "ios")))]
         let niko_vt = (valid
             && matches!(format, CodecFormat::H264 | CodecFormat::H265)
             && crate::nikodesk_vtdec::wanted())
@@ -637,7 +637,7 @@ impl Decoder {
             valid,
             #[cfg(feature = "hwcodec")]
             i420: vec![],
-            #[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+            #[cfg(all(feature = "nikodesk", feature = "hwcodec", any(target_os = "macos", target_os = "ios")))]
             niko_vt,
         }
     }
@@ -657,8 +657,11 @@ impl Decoder {
         if self.av1.is_some() { return ("aom-av1", Some(false)); }
         #[cfg(feature = "vram")]
         if self.h264_vram.is_some() || self.h265_vram.is_some() { return ("vram", Some(true)); }
-        #[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
-        if let Some(vt) = self.niko_vt.as_ref().filter(|vt| vt.started()) { return ("videotoolbox-texture", Some(vt.hardware())); }
+        #[cfg(all(feature = "nikodesk", feature = "hwcodec", any(target_os = "macos", target_os = "ios")))]
+        if let Some(vt) = self.niko_vt.as_ref().filter(|vt| vt.started()) {
+            let name = if cfg!(target_os = "ios") { "videotoolbox" } else { "videotoolbox-texture" };
+            return (name, Some(vt.hardware()));
+        }
         #[cfg(feature = "hwcodec")]
         if let Some(decoder) = self.h264_ram.as_ref().or(self.h265_ram.as_ref()) {
             let hardware = decoder.info.hwdevice != hwcodec::ffmpeg::AVHWDeviceType::AV_HWDEVICE_TYPE_NONE;
@@ -709,7 +712,7 @@ impl Decoder {
                     *_pixelbuffer = false;
                     return Decoder::handle_vram_video_frame(decoder, h264s, _texture);
                 }
-                #[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+                #[cfg(all(feature = "nikodesk", feature = "hwcodec", any(target_os = "macos", target_os = "ios")))]
                 if self.niko_vt.is_some() {
                     return self.niko_handle_vt_video_frame(h264s, rgb, _texture, _pixelbuffer);
                 }
@@ -727,7 +730,7 @@ impl Decoder {
                     *_pixelbuffer = false;
                     return Decoder::handle_vram_video_frame(decoder, h265s, _texture);
                 }
-                #[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+                #[cfg(all(feature = "nikodesk", feature = "hwcodec", any(target_os = "macos", target_os = "ios")))]
                 if self.niko_vt.is_some() {
                     return self.niko_handle_vt_video_frame(h265s, rgb, _texture, _pixelbuffer);
                 }
@@ -833,9 +836,10 @@ impl Decoder {
         return Ok(ret);
     }
 
-    // Pictures from VideoToolbox go out in `texture` with `pixelbuffer` false;
-    // frames it cannot take go to ffmpeg's decoder and out in `rgb`.
-    #[cfg(all(feature = "nikodesk", feature = "hwcodec", target_os = "macos"))]
+    // Pictures from VideoToolbox go out in `texture` with `pixelbuffer` false
+    // (on iOS, converted, in `rgb`); frames it cannot take go to ffmpeg's
+    // decoder and out in `rgb`.
+    #[cfg(all(feature = "nikodesk", feature = "hwcodec", any(target_os = "macos", target_os = "ios")))]
     fn niko_handle_vt_video_frame(
         &mut self,
         frames: &EncodedVideoFrames,
@@ -851,7 +855,12 @@ impl Decoder {
             };
             match vt.decode(&frame.data, texture)? {
                 Decoded::Picture => {
-                    *pixelbuffer = false;
+                    #[cfg(target_os = "ios")]
+                    crate::nikodesk_vtdec::picture_to_rgb(texture.texture, rgb)?;
+                    #[cfg(not(target_os = "ios"))]
+                    {
+                        *pixelbuffer = false;
+                    }
                     ret = true;
                 }
                 Decoded::Nothing => {}

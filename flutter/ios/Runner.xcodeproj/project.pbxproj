@@ -387,6 +387,14 @@
 					"-framework",
 					"\"AVFoundation\"",
 					"-framework",
+					"\"VideoToolbox\"",
+					"-framework",
+					"\"CoreMedia\"",
+					"-framework",
+					"\"CoreVideo\"",
+					"-framework",
+					"\"Accelerate\"",
+					"-framework",
 					"\"AVKit\"",
 					"-framework",
 					"\"DKImagePickerController\"",
@@ -433,7 +441,7 @@
 					"-framework",
 					"\"wakelock_plus\"",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.nikodesk.ios;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.nikodesk.ios$(NIKO_IOS_BUNDLE_SUFFIX)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRIP_STYLE = "non-global";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
@@ -582,6 +590,14 @@
 					"-framework",
 					"\"AVFoundation\"",
 					"-framework",
+					"\"VideoToolbox\"",
+					"-framework",
+					"\"CoreMedia\"",
+					"-framework",
+					"\"CoreVideo\"",
+					"-framework",
+					"\"Accelerate\"",
+					"-framework",
 					"\"AVKit\"",
 					"-framework",
 					"\"DKImagePickerController\"",
@@ -628,7 +644,7 @@
 					"-framework",
 					"\"wakelock_plus\"",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.nikodesk.ios;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.nikodesk.ios$(NIKO_IOS_BUNDLE_SUFFIX)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRIP_STYLE = "non-global";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
@@ -669,6 +685,14 @@
 					"-framework",
 					"\"AVFoundation\"",
 					"-framework",
+					"\"VideoToolbox\"",
+					"-framework",
+					"\"CoreMedia\"",
+					"-framework",
+					"\"CoreVideo\"",
+					"-framework",
+					"\"Accelerate\"",
+					"-framework",
 					"\"AVKit\"",
 					"-framework",
 					"\"DKImagePickerController\"",
@@ -715,7 +739,7 @@
 					"-framework",
 					"\"wakelock_plus\"",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.nikodesk.ios;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.nikodesk.ios$(NIKO_IOS_BUNDLE_SUFFIX)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRIP_STYLE = "non-global";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
